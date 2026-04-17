@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# TODO: implement workspace-specific behavior.
+# TODO: implement block-specific start behavior.

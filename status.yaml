@@ -1,3 +1,0 @@
-phase: design             # design | running | paused | completed
-active_subspace: null     # which subspace is currently executing
-last_updated: null
