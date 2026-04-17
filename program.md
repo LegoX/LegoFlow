@@ -53,19 +53,59 @@ config: {}
 status: {}
 outputs: {}
 artifacts: []
-children: {}
+memory: {}
+subspace: {}
 ```
 
 ### Field Meaning
 - `repo`: optional attached code repository or repo collection for this `WorkSpace`
 - `program`: the rule document that defines how this `WorkSpace` should be interpreted and extended
-- `inputs`: dependencies required before the scope can run
+- `inputs`: dependencies required before the scope can run; in the filesystem this is represented by `inputs/index.yaml` plus optional supporting files
 - `config`: editable settings and local policy
 - `status`: current runtime state
-- `outputs`: structured results produced by this scope
+- `outputs`: structured logical results produced by this scope; in the filesystem this is represented by `outputs/index.yaml` plus optional supporting files
 - `summary`: human-facing summary of what happened and what is next
-- `artifacts`: archived files or object references
-- `children`: nested `WorkSpace` nodes
+- `artifacts`: archived files or object references stored in a directory parallel to `outputs/`
+- `memory`: long-form notes, reports, and decision history behind the short `summary`
+- `subspace`: nested `WorkSpace` nodes
+
+## Default WorkSpace Filesystem
+
+```text
+<workspace_dir>/
+├── associated_repo/
+├── program.md
+├── summary.md
+├── config.yaml
+├── status.yaml
+├── inputs/
+│   └── index.yaml
+├── outputs/
+│   └── index.yaml
+├── artifacts/
+│   ├── index.yaml
+│   └── files/
+├── memory/
+│   ├── README.md
+│   ├── notes.md
+│   ├── decisions.md
+│   └── reports/
+├── scripts/
+│   ├── start.sh
+│   ├── status.sh
+│   ├── archive.sh
+│   └── clean.sh
+└── subspace/
+```
+
+### Filesystem Rules
+- `inputs/` and `outputs/` are directories, not single yaml files
+- `inputs/index.yaml` is the entry point for dependency inputs
+- `outputs/index.yaml` is the entry point for logical results
+- `artifacts/` stays parallel to `outputs/`, because result semantics and stored evidence are different concerns
+- `scripts/` contains the execution hooks for starting, checking, archiving, and cleaning the current `WorkSpace`
+- `associated_repo/` should exist only when the current `WorkSpace` really has an attached repository
+- `inputs/index.yaml` and `outputs/index.yaml` should follow the standard templates described in `what_is_workspace.md`
 
 For the detailed `WorkSpace` authoring contract, see `program.md`.
 
@@ -74,9 +114,8 @@ For the root `WorkSpace`, `repo` may point to multiple concrete work areas owned
 
 ```yaml
 repo:
-  - path: /mnt/haoli/code/SWE-Lego-Live/data_composer
-  - path: /mnt/haoli/code/SWE-Lego-Live/SWE-gen
-  - path: /mnt/haoli/code/SWE-Lego-Live/training
+  - path: ../SWE-gen-orig
+  - path: ../harbor
 ```
 
 Each attached repo may also own its own local `program.md`.

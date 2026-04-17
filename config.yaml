@@ -1,0 +1,11 @@
+seed_repos:
+  - owner/repo: ""       # GitHub repos to farm PRs from, e.g. "axios/axios"
+    description: ""
+
+base_model: ""           # Base model for training, e.g. "Qwen/Qwen2.5-Coder-7B-Instruct"
+
+agent_config:
+  name: claude-code
+  model: anthropic/claude-opus-4-6
+
+external_data_sources: []  # Optional external datasets to mix in, e.g. "swebench@verified"

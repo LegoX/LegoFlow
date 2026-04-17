@@ -72,6 +72,7 @@ subspace: {}
 ### `inputs`
 - Dependency inputs required before this `WorkSpace` can run
 - Focus on upstream dependencies and prerequisite artifacts
+- In the filesystem, `inputs` is usually represented as a directory with `inputs/index.yaml` as the entry point
 - Examples:
   - seed issue list
   - dataset version
@@ -89,10 +90,13 @@ subspace: {}
 ### `outputs`
 - Structured results produced by this `WorkSpace`
 - This should contain direct logical results, not the explanation of those results
+- In the filesystem, `outputs` is usually represented as a directory with `outputs/index.yaml` as the entry point
 
 ### `artifacts`
 - Archived file or object references
 - Use this to record the stored evidence for outputs
+- `artifacts` should stay parallel to `outputs`, not nested under it
+- `outputs` answers what the result is; `artifacts` answers where the evidence or raw files are stored
 - Each artifact entry should ideally include:
   - `type`
   - `path` or `uri`
@@ -106,6 +110,174 @@ subspace: {}
 - Use this for detailed notes, decisions, reports, postmortems, design records, and accumulated context
 - `summary` is the short surface; `memory` is the expanded internal explanation
 - In the actual filesystem, `memory` may be implemented as a directory containing multiple markdown files
+
+### `scripts/`
+- `scripts/` is the executable interface of the current `WorkSpace`
+- Use this directory for startup, status checking, archival, and cleanup scripts
+- Typical entrypoints are:
+  - `scripts/start.sh`
+  - `scripts/status.sh`
+  - `scripts/archive.sh`
+  - `scripts/clean.sh`
+
+## Standard Index Templates
+
+### `inputs/index.yaml`
+Use `inputs/index.yaml` as the single entry point for dependency inputs. A recommended shape is:
+
+```yaml
+version: 1
+
+primary_inputs: []
+
+inputs: {}
+
+notes: []
+```
+
+Recommended meaning:
+- `version`: schema version for the index file
+- `primary_inputs`: the most important input keys for this node
+- `inputs`: structured map of named inputs
+- `notes`: optional human notes about missing, optional, or delayed inputs
+
+Example:
+
+```yaml
+version: 1
+
+primary_inputs:
+  - generated_tasks
+  - external_datasets
+
+inputs:
+  generated_tasks:
+    type: workspace_output
+    source: swe_gen.outputs.generated_tasks
+    required: true
+    description: generated SWE tasks from SWE-gen
+
+  external_datasets:
+    type: local_file
+    path: inputs/external_datasets.yaml
+    required: false
+    description: optional external datasets for composition
+
+notes:
+  - generated_tasks is the required input for the next run
+```
+
+### `outputs/index.yaml`
+Use `outputs/index.yaml` as the single entry point for logical outputs. A recommended shape is:
+
+```yaml
+version: 1
+
+primary_outputs: []
+
+outputs: {}
+
+notes: []
+```
+
+Recommended meaning:
+- `version`: schema version for the index file
+- `primary_outputs`: the most important output keys for downstream readers
+- `outputs`: structured map of logical outputs
+- `notes`: optional human notes about output quality, limitations, or follow-up actions
+
+Example:
+
+```yaml
+version: 1
+
+primary_outputs:
+  - dataset_version
+  - run_summary
+
+outputs:
+  dataset_version:
+    type: logical_result
+    path: outputs/dataset_version.yaml
+    description: current curated dataset version
+
+  run_summary:
+    type: logical_result
+    path: outputs/run_summary.yaml
+    description: summary of the latest successful run
+
+notes:
+  - raw evidence for these outputs should be stored in artifacts/
+```
+
+### `artifacts/index.yaml`
+Use `artifacts/index.yaml` as the single entry point for archived evidence and stored files. A recommended shape is:
+
+```yaml
+version: 1
+
+primary_artifacts: []
+
+artifacts: {}
+
+notes: []
+```
+
+Recommended meaning:
+- `version`: schema version for the index file
+- `primary_artifacts`: the most important artifact keys for debugging, audit, or export
+- `artifacts`: structured map of archived files, directories, or object references
+- `notes`: optional human notes about retention, provenance, or cleanup
+
+Example:
+
+```yaml
+version: 1
+
+primary_artifacts:
+  - dataset_manifest
+  - raw_log
+
+artifacts:
+  dataset_manifest:
+    type: file
+    path: artifacts/files/manifest.json
+    producer: data_composer
+    description: dataset manifest for the latest successful run
+
+  raw_log:
+    type: file
+    path: artifacts/files/run.log
+    producer: data_composer
+    description: raw execution log for the latest run
+
+notes:
+  - keep logs for debugging even if they are not part of logical outputs
+```
+
+### `scripts/`
+Use `scripts/` as the executable interface of the current node. A recommended minimal contract is:
+
+```text
+scripts/
+├── start.sh
+├── status.sh
+├── archive.sh
+└── clean.sh
+```
+
+Recommended meaning:
+- `start.sh`: start or trigger the current node
+- `status.sh`: report or refresh current status
+- `archive.sh`: archive outputs and evidence into `artifacts/`
+- `clean.sh`: clean temporary or transient state without removing canonical records
+
+Recommended minimal script header:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+```
 
 ### `subspace`
 - Nested child `WorkSpace` nodes
@@ -122,10 +294,12 @@ Recommended default layout:
 ├── associated_repo/
 ├── program.md
 ├── summary.md
-├── inputs.yaml
 ├── config.yaml
 ├── status.yaml
-├── outputs.yaml
+├── inputs/
+│   └── index.yaml
+├── outputs/
+│   └── index.yaml
 ├── artifacts/
 │   ├── index.yaml
 │   └── files/
@@ -134,6 +308,11 @@ Recommended default layout:
 │   ├── notes.md
 │   ├── decisions.md
 │   └── reports/
+├── scripts/
+│   ├── start.sh
+│   ├── status.sh
+│   ├── archive.sh
+│   └── clean.sh
 └── subspace/
 ```
 
@@ -141,12 +320,13 @@ Recommended default layout:
 - `associated_repo/`: optional associated repo directory for the current `WorkSpace`; create it only if the repo actually exists
 - `program.md`: the local rule document for this `WorkSpace`
 - `summary.md`: the short human-facing summary
-- `inputs.yaml`: dependency inputs for the current node
+- `inputs/`: dependency inputs for the current node; `inputs/index.yaml` is the required entry point
 - `config.yaml`: editable configuration owned by the node
 - `status.yaml`: current runtime state
-- `outputs.yaml`: structured outputs
-- `artifacts/`: archived evidence and artifact indexes
+- `outputs/`: structured logical outputs; `outputs/index.yaml` is the required entry point
+- `artifacts/`: archived evidence and artifact indexes, kept parallel to `outputs/`
 - `memory/`: deeper long-form context behind the current node
+- `scripts/`: execution hooks for launching, checking, archiving, and cleaning the current node
 - `subspace/`: nested child `WorkSpace` directories
 
 ## Default Root WorkSpace Layout For SWE
@@ -157,10 +337,12 @@ SWE-Lego-Live/
 ├── associated_repo/
 ├── program.md
 ├── summary.md
-├── inputs.yaml
 ├── config.yaml
 ├── status.yaml
-├── outputs.yaml
+├── inputs/
+│   └── index.yaml
+├── outputs/
+│   └── index.yaml
 ├── artifacts/
 │   ├── index.yaml
 │   └── files/
@@ -169,15 +351,22 @@ SWE-Lego-Live/
 │   ├── notes.md
 │   ├── decisions.md
 │   └── reports/
+├── scripts/
+│   ├── start.sh
+│   ├── status.sh
+│   ├── archive.sh
+│   └── clean.sh
 └── subspace/
     ├── SWE-gen/
     │   ├── associated_repo/
     │   ├── program.md
     │   ├── summary.md
-    │   ├── inputs.yaml
     │   ├── config.yaml
     │   ├── status.yaml
-    │   ├── outputs.yaml
+    │   ├── inputs/
+    │   │   └── index.yaml
+    │   ├── outputs/
+    │   │   └── index.yaml
     │   ├── artifacts/
     │   │   ├── index.yaml
     │   │   └── files/
@@ -186,15 +375,22 @@ SWE-Lego-Live/
     │   │   ├── notes.md
     │   │   ├── decisions.md
     │   │   └── reports/
+    │   ├── scripts/
+    │   │   ├── start.sh
+    │   │   ├── status.sh
+    │   │   ├── archive.sh
+    │   │   └── clean.sh
     │   └── subspace/
     ├── data_composer/
     │   ├── associated_repo/
     │   ├── program.md
     │   ├── summary.md
-    │   ├── inputs.yaml
     │   ├── config.yaml
     │   ├── status.yaml
-    │   ├── outputs.yaml
+    │   ├── inputs/
+    │   │   └── index.yaml
+    │   ├── outputs/
+    │   │   └── index.yaml
     │   ├── artifacts/
     │   │   ├── index.yaml
     │   │   └── files/
@@ -203,15 +399,22 @@ SWE-Lego-Live/
     │   │   ├── notes.md
     │   │   ├── decisions.md
     │   │   └── reports/
+    │   ├── scripts/
+    │   │   ├── start.sh
+    │   │   ├── status.sh
+    │   │   ├── archive.sh
+    │   │   └── clean.sh
     │   └── subspace/
     ├── training/
     │   ├── associated_repo/
     │   ├── program.md
     │   ├── summary.md
-    │   ├── inputs.yaml
     │   ├── config.yaml
     │   ├── status.yaml
-    │   ├── outputs.yaml
+    │   ├── inputs/
+    │   │   └── index.yaml
+    │   ├── outputs/
+    │   │   └── index.yaml
     │   ├── artifacts/
     │   │   ├── index.yaml
     │   │   └── files/
@@ -220,15 +423,22 @@ SWE-Lego-Live/
     │   │   ├── notes.md
     │   │   ├── decisions.md
     │   │   └── reports/
+    │   ├── scripts/
+    │   │   ├── start.sh
+    │   │   ├── status.sh
+    │   │   ├── archive.sh
+    │   │   └── clean.sh
     │   └── subspace/
     └── harbor/
         ├── associated_repo/
         ├── program.md
         ├── summary.md
-        ├── inputs.yaml
         ├── config.yaml
         ├── status.yaml
-        ├── outputs.yaml
+        ├── inputs/
+        │   └── index.yaml
+        ├── outputs/
+        │   └── index.yaml
         ├── artifacts/
         │   ├── index.yaml
         │   └── files/
@@ -237,6 +447,11 @@ SWE-Lego-Live/
         │   ├── notes.md
         │   ├── decisions.md
         │   └── reports/
+        ├── scripts/
+        │   ├── start.sh
+        │   ├── status.sh
+        │   ├── archive.sh
+        │   └── clean.sh
         └── subspace/
 ```
 
@@ -258,7 +473,8 @@ When a team member defines a `WorkSpace`, they should provide:
 8. `outputs`
 9. `artifacts`
 10. `memory`
-11. Optional `subspace`
+11. `scripts`
+12. Optional `subspace`
 
 ## Required Design Questions
 Each `WorkSpace` design should explicitly answer:
@@ -271,7 +487,8 @@ Each `WorkSpace` design should explicitly answer:
 6. Which outputs are authoritative versus derived?
 7. What should be preserved in `artifacts` for debugging or audit?
 8. What should be preserved in `memory` for long-term context?
-9. What should appear in `summary` so a human can understand the node quickly?
+9. Which script entrypoints does this node need to expose?
+10. What should appear in `summary` so a human can understand the node quickly?
 
 ## Recommended Design Format
 Each module owner should write their `WorkSpace` program using the following format.
@@ -323,6 +540,12 @@ memory:
   path: memory/
   description: <long-form notes, reports, and decisions for this node>
 
+scripts:
+  start: scripts/start.sh
+  status: scripts/status.sh
+  archive: scripts/archive.sh
+  clean: scripts/clean.sh
+
 subspace: {}
 ```
 
@@ -342,7 +565,7 @@ summary: >
   The next step is to launch training on the new mixture.
 
 repo:
-  path: /mnt/haoli/code/SWE-Lego-Live/subspace/data_composer
+  path: ./subspace/data_composer
 
 program: program.md
 
@@ -390,6 +613,12 @@ memory:
   path: memory/
   description: long-form notes and reports for data composition
 
+scripts:
+  start: scripts/start.sh
+  status: scripts/status.sh
+  archive: scripts/archive.sh
+  clean: scripts/clean.sh
+
 subspace: {}
 ```
 
@@ -402,6 +631,8 @@ subspace: {}
 - Treat `program.md` as the rule document for the current node, not as a generic project note.
 - Use `memory` for deep context, not for short status updates that belong in `summary`.
 - Use `subspace` as the only recursive child field name; do not reintroduce `children`.
+- Keep `artifacts/` parallel to `outputs/`; do not hide artifact storage under logical outputs.
+- Use `scripts/` as the executable interface of the node, not as a miscellaneous dump of helper files.
 
 ## Merge Standard
 A `WorkSpace` design is ready to merge only if:
@@ -414,4 +645,5 @@ A `WorkSpace` design is ready to merge only if:
 - its `summary` is readable by humans
 - its `artifacts` are sufficient for audit and debugging
 - its `memory` strategy is clear
+- its `scripts` entrypoints are clear
 - its shape is still a valid `WorkSpace`

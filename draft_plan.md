@@ -6,13 +6,13 @@ In the process of LLM development, it always need quite complicated pipeline fro
 
 Throughout this project, we use software engineering (swe) as an concrete example. However, this is still at the initial stage of design, so let's be abstractive and general enough. With this project, we aim to realize:
 
-- Human readable config: Users can easily learn the current configuration and status for each sub-module. For instance, for the data composer, users know what are the registered datset and data mixtures; for the SWE-gen,
+- Human readable config: Users can easily learn the current configuration and status for each sub-module. For instance, for the data composer, users know what are the registered datasets and data mixtures; for the SWE-gen, users know what seed repos are registered and what teacher model is configured.
 
 - Long-running automatic data curation process: usually data curation is loosely dependent on the rest modules (e.g., training or evaluation). Therefore, you can prepare the seed data (e.g., the repo issues in the context of swe), generate the trajectories with the user-specified teacher model.
 
 - Data composer:
 
-- Automatic Training and Evalaution: the Agent can automatically run the training, monitor the evaluation process. Based on the evaluation result, the agent can adjust the necessary hyper-parameters pre-defined in the config file by human. In addition, the agent can also summarize scientific findings from the experiments, and list them as bullets as key know-hows back to the users
+- Automatic Training and Evaluation: the Agent can automatically run the training, monitor the evaluation process. Based on the evaluation result, the agent can adjust the necessary hyper-parameters pre-defined in the config file by human. In addition, the agent can also summarize scientific findings from the experiments, and list them as bullets as key know-hows back to the users
 
 
 To realize the above goals, I have a rough plan for this overall project, yet you can freely modify or improve my structure as follows:
@@ -41,9 +41,9 @@ This part include four parts
 
 Data Composer, Training Engine, and Evaluation form a closed feedback loop for iterative improvement
 
-### Layer 3: Execution Environment (Habor)
+### Layer 3: Execution Environment (Harbor)
 
-Acts as the execution bridge supporting various coding agents: cc, opencode, openhands, etc. All core components leverage Habor for execution, which runs on the K8S cluster with isolated sandboxes
+Acts as the execution bridge supporting various coding agents: cc, opencode, openhands, etc. All core components leverage Harbor for execution, which runs on the K8S cluster with isolated sandboxes
 
 
 ### Layer 4: Infrastructure
@@ -91,7 +91,7 @@ K8S Cluster with SWE Sandboxes: Kubernetes-orchestrated containerized environmen
              │         │
              ▼         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                            HABOR                                            │
+│                                           HARBOR                                            │
 │                  (Support: cc, opencode, openhands, etc.)                                   │
 └─────────────────────────────────────────────────┬───────────────────────────────────────────┘
                                                   │

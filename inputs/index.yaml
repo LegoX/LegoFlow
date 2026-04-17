@@ -1,0 +1,3 @@
+github_token: ""          # GitHub API token (required for SWE-gen)
+openai_api_key: ""        # OpenAI API key (required for SWE-gen PR evaluation)
+anthropic_api_key: ""     # Anthropic API key (required for SWE-gen Claude Code + Harbor)

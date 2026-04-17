@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workspace.schema.json",
+  "title": "WorkSpace",
+  "description": "Uniform recursive structure for every node in SWE-Lego-Live. See what_is_workspace.md for the full authoring contract.",
+  "type": "object",
+  "required": ["name", "summary", "program"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Stable WorkSpace name matching architecture naming (e.g. swe_gen, data_composer)"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Human-facing summary: what happened, what matters, what should happen next"
+    },
+    "repo": {
+      "description": "Optional attached code repository or list of repos",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["path"],
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+              "path": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
+    "program": {
+      "type": "string",
+      "description": "Path to the rule document for this WorkSpace (typically program.md)"
+    },
+    "inputs": {
+      "type": "object",
+      "description": "Upstream dependencies required before this node can run",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "source": { "type": "string" }
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "description": "Editable runtime settings and node-local policy",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "editable_by": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["human", "agent"] }
+          }
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "description": "Current execution state of this node",
+      "properties": {
+        "phase": { "type": "string", "enum": ["idle", "running", "blocked", "failed", "completed"] }
+      },
+      "additionalProperties": true
+    },
+    "outputs": {
+      "type": "object",
+      "description": "Structured results produced by this node",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "Archived file or object references",
+      "items": {
+        "type": "object",
+        "required": ["type", "path", "producer"],
+        "properties": {
+          "type": { "type": "string" },
+          "path": { "type": "string" },
+          "uri": { "type": "string" },
+          "producer": { "type": "string" },
+          "run_id": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "memory": {
+      "description": "Long-form memory for this WorkSpace (notes, decisions, reports)",
+      "oneOf": [
+        { "type": "object" },
+        {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "description": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "subspace": {
+      "type": "object",
+      "description": "Nested child WorkSpace nodes. Use subspace — never children.",
+      "additionalProperties": { "$ref": "#" }
+    }
+  }
+}
