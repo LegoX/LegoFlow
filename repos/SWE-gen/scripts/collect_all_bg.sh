@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 # Default output is SWE-gen/collected_prs.
 #
 # Example cron:
-#   0 */6 * * * cd /home/ywxzml3j/ywxzml3juser23/SWE-gen && bash scripts/collect_all_bg.sh >> logs/collect_scheduler.log 2>&1
+#   0 */6 * * * cd /path/to/SWE-gen && bash scripts/collect_all_bg.sh >> logs/collect_scheduler.log 2>&1
 
 set -euo pipefail
 
@@ -20,7 +20,7 @@ mkdir -p logs collected_prs
 
 REPO_NUM="${REPO_NUM:-5000}"
 MAX_PRS_PER_REPO="${MAX_PRS_PER_REPO:-100}"
-OUTPUT_DIR="${OUTPUT_DIR:-/home/ywxzml3j/ywxzml3juser23/SWE-gen/collected_prs}"
+OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/artifacts/collected_prs}"
 DISABLE_PROGRESS_BAR="${DISABLE_PROGRESS_BAR:---disable_progress_bar}"
 STAMP="$(date '+%Y%m%d_%H%M%S')"
 LOG_FILE="logs/collect_all_${STAMP}.log"

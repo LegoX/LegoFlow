@@ -18,7 +18,7 @@ load_runtime_env() {
         for token_file in \
             "$PWD/gh_token.txt" \
             "$HOME/gh_token.txt" \
-            "/home/ywxzml3j/ywxzml3juser23/harbor/gh_token.txt"
+            "$HOME/harbor/gh_token.txt"
         do
             if [ -f "$token_file" ]; then
                 GITHUB_TOKENS="$(grep -v '^[[:space:]]*$' "$token_file" | paste -sd, -)"

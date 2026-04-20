@@ -1,22 +1,22 @@
-# End-to-End Pipeline Validation Log
+# 端到端管线验证日志
 
-**Date**: 2026-04-20
-**Environment**: Linux 5.15.0, Python 3.12, Docker available
-**Models**: OPENAI_MODEL=glm-5-urg, ANTHROPIC_MODEL=claude-sonnet-4-6
+**日期**: 2026-04-20
+**环境**: Linux 5.15.0, Python 3.12, Docker
+**模型**: OPENAI_MODEL=glm-5-urg, ANTHROPIC_MODEL=claude-sonnet-4-6
 
-## Objective
+## 目标
 
-Validate that the full SWE-gen pipeline runs correctly with the restructured directory layout.
+验证完整的 SWE-gen 管线在重构后的目录结构下能正确运行。
 
-## Pipeline Steps Executed
+## 执行步骤
 
-### Step 1: PR Collection (skipped for time)
+### Step 1: PR 收集（跳过）
 
-The `collect_prs_wo_image.py` script was invoked but takes significant time for GitHub API searches. Used pre-existing sample PR IDs in `artifacts/collected_prs/python_pr_ids.txt` (10 PRs from tox-dev/tox, AnswerDotAI/RAGatouille, electricitymaps/electricitymaps-contrib, morpheus65535/bazarr).
+`collect_prs_wo_image.py` 脚本需要较长时间调用 GitHub API。本次验证使用 `artifacts/collected_prs/python_pr_ids.txt` 中已有的 10 个 PR（来自 tox-dev/tox, AnswerDotAI/RAGatouille, electricitymaps/electricitymaps-contrib, morpheus65535/bazarr）。
 
-Note: The collection script uses append mode (`a+`) — re-running does NOT overwrite existing PR IDs.
+注意：收集脚本使用 append 模式（`a+`），重复运行不会覆盖已有的 PR ID。
 
-### Step 2: Task Creation
+### Step 2: 任务创建
 
 ```bash
 swegen create \
@@ -27,60 +27,38 @@ swegen create \
   --no-require-issue --min-source-files 1 --max-source-files 10
 ```
 
-**Results:**
-- Processed 3 PRs total (2 filtered/failed, 1 succeeded)
-- First PR (`tox-dev/tox#3814`): validation failed
-- Second PR (`tox-dev/tox#3813`): succeeded
-  - Skeleton generated in 14.6s
-  - Claude Code session completed in 417.0s
-  - NOP validation: reward=0 (expected)
-  - Oracle validation: reward=1 (expected)
+处理了 3 个 PR（2 个过滤/失败，1 个成功）：
+- `tox-dev/tox#3814`：验证失败
+- `tox-dev/tox#3813`：成功（skeleton 14.6s，CC session 417.0s，NOP reward=0，Oracle reward=1）
 - Task ID: `tox-dev__tox-3813`
-- Total elapsed: 15m 28s
+- 总耗时: 15m 28s
 
-### Step 3: Scoring
+### Step 3: 评分
 
 ```bash
 python tools/score_tasks.py --dir artifacts/swe_tasks/py-cc --update-toml
 ```
 
-**Results:**
-- Scored 4 tasks (2 pre-existing samples + 1 new verified + 1 non-verified)
-- Average difficulty: 7.1/10
-- Distribution: 0 easy, 2 medium, 2 hard
-- Completed in <1s
+评分 4 个任务（2 个已有样本 + 1 个新验证 + 1 个未验证），平均难度 7.1/10，耗时 <1s。
 
-### Step 4: Extraction
+### Step 4: 提取
 
 ```bash
 python extract_verified_tasks.py
 ```
 
-**Results:**
-- Extracted 9 verified tasks total (8 original samples + 1 newly created)
-- Python: 2 tasks (ansible__ansible-85652 + tox-dev__tox-3813)
-- All other languages: 1 task each (from initial samples)
-- Output directory: `outputs/`
+提取 9 个已验证任务（8 个原始样本 + 1 个新创建），输出到 `outputs/`。
 
-## Verification Summary
+## 验证总结
 
-| Step | Command | Status | Duration |
-|------|---------|--------|----------|
-| Install | `pip install -e .` | OK | 5s |
-| Collect PRs | `collect_prs_wo_image.py` | Skipped (used samples) | — |
-| Create Task | `swegen create` | 1 task verified | 15m 28s |
-| Score | `score_tasks.py` | 4 tasks scored | <1s |
-| Extract | `extract_verified_tasks.py` | 9 tasks extracted | <1s |
+| 步骤 | 命令 | 状态 | 耗时 |
+|------|------|------|------|
+| 安装 | `pip install -e .` | OK | 5s |
+| 收集 PR | `collect_prs_wo_image.py` | 跳过（使用样本） | — |
+| 创建任务 | `swegen create` | 1 个任务验证通过 | 15m 28s |
+| 评分 | `score_tasks.py` | 4 个任务已评分 | <1s |
+| 提取 | `extract_verified_tasks.py` | 9 个任务已提取 | <1s |
 
-## Issues Encountered
+## 遇到的问题
 
-None. The pipeline ran cleanly with the restructured paths.
-
-## Generated Task Details
-
-**tox-dev__tox-3813:**
-- Difficulty: 7/10 (Hard)
-- Files modified: test schema handling in tox
-- Docker environment: Ubuntu + Python 3.12 + tox
-- NOP reward: 0 (bug confirmed)
-- Oracle reward: 1 (fix verified)
+无。管线在重构后的路径下运行正常。
