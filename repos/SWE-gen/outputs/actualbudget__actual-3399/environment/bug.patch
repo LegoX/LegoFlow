@@ -1,0 +1,1286 @@
+diff --git a/packages/desktop-client/src/components/filters/FiltersMenu.jsx b/packages/desktop-client/src/components/filters/FiltersMenu.jsx
+index 2c379293c..7994eddc6 100644
+--- a/packages/desktop-client/src/components/filters/FiltersMenu.jsx
++++ b/packages/desktop-client/src/components/filters/FiltersMenu.jsx
+@@ -19,7 +19,7 @@ import {
+   getFieldError,
+   unparse,
+   FIELD_TYPES,
+-  getValidOps,
++  TYPE_INFO,
+ } from 'loot-core/src/shared/rules';
+ import { titleFirst } from 'loot-core/src/shared/util';
+ 
+@@ -77,7 +77,7 @@ function ConfigureField({
+   }, [op]);
+ 
+   const type = FIELD_TYPES.get(field);
+-  let ops = getValidOps(field).filter(op => op !== 'isbetween');
++  let ops = TYPE_INFO[type].ops.filter(op => op !== 'isbetween');
+ 
+   // Month and year fields are quite hacky right now! Figure out how
+   // to clean this up later
+@@ -259,7 +259,7 @@ export function FilterButton({ onApply, compact, hover, exclude }) {
+         case 'configure': {
+           const { field } = deserializeField(action.field);
+           const type = FIELD_TYPES.get(field);
+-          const ops = getValidOps(field);
++          const ops = TYPE_INFO[type].ops;
+           return {
+             ...state,
+             fieldsOpen: false,
+diff --git a/packages/desktop-client/src/components/filters/updateFilterReducer.ts b/packages/desktop-client/src/components/filters/updateFilterReducer.ts
+index 977219733..4f6286f83 100644
+--- a/packages/desktop-client/src/components/filters/updateFilterReducer.ts
++++ b/packages/desktop-client/src/components/filters/updateFilterReducer.ts
+@@ -11,7 +11,7 @@ export function updateFilterReducer(
+   switch (action.type) {
+     case 'set-op': {
+       const type = FIELD_TYPES.get(state.field);
+-      let value: RuleConditionEntity['value'] | null = state.value;
++      let value = state.value;
+       if (
+         (type === 'id' || type === 'string') &&
+         (action.op === 'contains' ||
+diff --git a/packages/desktop-client/src/components/modals/EditRuleModal.jsx b/packages/desktop-client/src/components/modals/EditRuleModal.jsx
+index db40fe136..ea6a88279 100644
+--- a/packages/desktop-client/src/components/modals/EditRuleModal.jsx
++++ b/packages/desktop-client/src/components/modals/EditRuleModal.jsx
+@@ -26,9 +26,8 @@ import {
+   unparse,
+   makeValue,
+   FIELD_TYPES,
++  TYPE_INFO,
+   ALLOCATION_METHODS,
+-  isValidOp,
+-  getValidOps,
+ } from 'loot-core/src/shared/rules';
+ import {
+   integerToCurrency,
+@@ -581,15 +580,14 @@ function ConditionsList({
+           if (
+             (prevType === 'string' || prevType === 'number') &&
+             prevType === newCond.type &&
+-            cond.op !== 'isbetween' &&
+-            isValidOp(newCond.field, cond.op)
++            cond.op !== 'isbetween'
+           ) {
+             // Don't clear the value & op if the type is string/number and
+             // the type hasn't changed
+             newCond.op = cond.op;
+             return newInput(makeValue(cond.value, newCond));
+           } else {
+-            newCond.op = getValidOps(newCond.field)[0];
++            newCond.op = TYPE_INFO[newCond.type].ops[0];
+             return newInput(makeValue(null, newCond));
+           }
+         } else if (field === 'op') {
+@@ -656,7 +654,7 @@ function ConditionsList({
+   ) : (
+     <Stack spacing={2} data-testid="condition-list">
+       {conditions.map((cond, i) => {
+-        let ops = getValidOps(cond.field);
++        let ops = TYPE_INFO[cond.type].ops;
+ 
+         // Hack for now, these ops should be the only ones available
+         // for recurring dates
+diff --git a/packages/loot-core/src/server/accounts/rules.test.ts b/packages/loot-core/src/server/accounts/rules.test.ts
+index 00df2b74b..392add3ff 100644
+--- a/packages/loot-core/src/server/accounts/rules.test.ts
++++ b/packages/loot-core/src/server/accounts/rules.test.ts
+@@ -9,6 +9,19 @@ import {
+   RuleIndexer,
+ } from './rules';
+ 
++const fieldTypes = new Map(
++  Object.entries({
++    id: 'id',
++    account: 'id',
++    date: 'date',
++    name: 'string',
++    category: 'string',
++    description: 'id',
++    description2: 'id',
++    amount: 'number',
++  }),
++);
++
+ describe('Condition', () => {
+   test('parses date formats correctly', () => {
+     expect(parseDateString('2020-08-10')).toEqual({
+@@ -31,35 +44,35 @@ describe('Condition', () => {
+   });
+ 
+   test('ops handles null fields', () => {
+-    let cond = new Condition('contains', 'notes', 'foo', null);
+-    expect(cond.eval({ notes: null })).toBe(false);
++    let cond = new Condition('contains', 'name', 'foo', null, fieldTypes);
++    expect(cond.eval({ name: null })).toBe(false);
+ 
+-    cond = new Condition('matches', 'notes', '^fo*$', null);
+-    expect(cond.eval({ notes: null })).toBe(false);
++    cond = new Condition('matches', 'name', '^fo*$', null, fieldTypes);
++    expect(cond.eval({ name: null })).toBe(false);
+ 
+-    cond = new Condition('oneOf', 'notes', ['foo'], null);
+-    expect(cond.eval({ notes: null })).toBe(false);
++    cond = new Condition('oneOf', 'name', ['foo'], null, fieldTypes);
++    expect(cond.eval({ name: null })).toBe(false);
+ 
+     ['gt', 'gte', 'lt', 'lte', 'isapprox'].forEach(op => {
+-      const cond = new Condition(op, 'date', '2020-01-01', null);
++      const cond = new Condition(op, 'date', '2020-01-01', null, fieldTypes);
+       expect(cond.eval({ date: null })).toBe(false);
+     });
+ 
+-    cond = new Condition('is', 'payee', null, null);
+-    expect(cond.eval({ payee: null })).toBe(true);
++    cond = new Condition('is', 'id', null, null, fieldTypes);
++    expect(cond.eval({ id: null })).toBe(true);
+   });
+ 
+   test('ops handles undefined fields', () => {
+     const spy = jest.spyOn(console, 'warn').mockImplementation();
+ 
+-    let cond = new Condition('is', 'payee', null, null);
++    let cond = new Condition('is', 'id', null, null, fieldTypes);
+     // null is strict and won't match undefined
+-    expect(cond.eval({ notes: 'James' })).toBe(false);
++    expect(cond.eval({ name: 'James' })).toBe(false);
+ 
+-    cond = new Condition('contains', 'notes', 'foo', null);
++    cond = new Condition('contains', 'name', 'foo', null, fieldTypes);
+     expect(cond.eval({ date: '2020-01-01' })).toBe(false);
+ 
+-    cond = new Condition('matches', 'notes', '^fo*$', null);
++    cond = new Condition('matches', 'name', '^fo*$', null, fieldTypes);
+     expect(cond.eval({ date: '2020-01-01' })).toBe(false);
+ 
+     spy.mockRestore();
+@@ -67,40 +80,40 @@ describe('Condition', () => {
+ 
+   test('date restricts operators for each type', () => {
+     expect(() => {
+-      new Condition('isapprox', 'date', '2020-08', null);
++      new Condition('isapprox', 'date', '2020-08', null, fieldTypes);
+     }).toThrow('Invalid date value for');
+     expect(() => {
+-      new Condition('gt', 'date', '2020-08', null);
++      new Condition('gt', 'date', '2020-08', null, fieldTypes);
+     }).toThrow('Invalid date value for');
+     expect(() => {
+-      new Condition('gte', 'date', '2020-08', null);
++      new Condition('gte', 'date', '2020-08', null, fieldTypes);
+     }).toThrow('Invalid date value for');
+     expect(() => {
+-      new Condition('lt', 'date', '2020-08', null);
++      new Condition('lt', 'date', '2020-08', null, fieldTypes);
+     }).toThrow('Invalid date value for');
+     expect(() => {
+-      new Condition('lte', 'date', '2020-08', null);
++      new Condition('lte', 'date', '2020-08', null, fieldTypes);
+     }).toThrow('Invalid date value for');
+   });
+ 
+   test('date conditions work with `is` operator', () => {
+-    let cond = new Condition('is', 'date', '2020-08-10', null);
++    let cond = new Condition('is', 'date', '2020-08-10', null, fieldTypes);
+     expect(cond.eval({ date: '2020-08-05' })).toBe(false);
+     expect(cond.eval({ date: '2020-08-10' })).toBe(true);
+ 
+-    cond = new Condition('is', 'date', '2020-08', null);
++    cond = new Condition('is', 'date', '2020-08', null, fieldTypes);
+     expect(cond.eval({ date: '2020-08-05' })).toBe(true);
+     expect(cond.eval({ date: '2020-08-10' })).toBe(true);
+     expect(cond.eval({ date: '2020-09-10' })).toBe(false);
+ 
+-    cond = new Condition('is', 'date', '2020', null);
++    cond = new Condition('is', 'date', '2020', null, fieldTypes);
+     expect(cond.eval({ date: '2020-08-05' })).toBe(true);
+     expect(cond.eval({ date: '2020-08-10' })).toBe(true);
+     expect(cond.eval({ date: '2020-09-10' })).toBe(true);
+     expect(cond.eval({ date: '2019-09-10' })).toBe(false);
+ 
+     // Approximate dates
+-    cond = new Condition('isapprox', 'date', '2020-08-07', null);
++    cond = new Condition('isapprox', 'date', '2020-08-07', null, fieldTypes);
+     expect(cond.eval({ date: '2020-08-04' })).toBe(false);
+     expect(cond.eval({ date: '2020-08-05' })).toBe(true);
+     expect(cond.eval({ date: '2020-08-09' })).toBe(true);
+@@ -117,6 +130,7 @@ describe('Condition', () => {
+         patterns: [{ type: 'day', value: 15 }],
+       },
+       null,
++      fieldTypes,
+     );
+     expect(cond.eval({ date: '2018-03-15' })).toBe(false);
+     expect(cond.eval({ date: '2019-03-15' })).toBe(true);
+@@ -133,6 +147,7 @@ describe('Condition', () => {
+         interval: 3,
+       },
+       null,
++      fieldTypes,
+     );
+     expect(cond.eval({ date: '2019-01-12' })).toBe(true);
+     expect(cond.eval({ date: '2019-04-12' })).toBe(true);
+@@ -149,6 +164,7 @@ describe('Condition', () => {
+         patterns: [{ type: 'day', value: 15 }],
+       },
+       null,
++      fieldTypes,
+     );
+     expect(cond.eval({ date: '2019-03-12' })).toBe(false);
+     expect(cond.eval({ date: '2019-03-13' })).toBe(true);
+@@ -161,134 +177,151 @@ describe('Condition', () => {
+   });
+ 
+   test('date conditions work with comparison operators', () => {
+-    let cond = new Condition('gt', 'date', '2020-08-10', null);
++    let cond = new Condition('gt', 'date', '2020-08-10', null, fieldTypes);
+     expect(cond.eval({ date: '2020-08-11' })).toBe(true);
+     expect(cond.eval({ date: '2020-08-10' })).toBe(false);
+ 
+-    cond = new Condition('gte', 'date', '2020-08-10', null);
++    cond = new Condition('gte', 'date', '2020-08-10', null, fieldTypes);
+     expect(cond.eval({ date: '2020-08-11' })).toBe(true);
+     expect(cond.eval({ date: '2020-08-10' })).toBe(true);
+     expect(cond.eval({ date: '2020-08-09' })).toBe(false);
+ 
+-    cond = new Condition('lt', 'date', '2020-08-10', null);
++    cond = new Condition('lt', 'date', '2020-08-10', null, fieldTypes);
+     expect(cond.eval({ date: '2020-08-09' })).toBe(true);
+     expect(cond.eval({ date: '2020-08-10' })).toBe(false);
+ 
+-    cond = new Condition('lte', 'date', '2020-08-10', null);
++    cond = new Condition('lte', 'date', '2020-08-10', null, fieldTypes);
+     expect(cond.eval({ date: '2020-08-09' })).toBe(true);
+     expect(cond.eval({ date: '2020-08-10' })).toBe(true);
+     expect(cond.eval({ date: '2020-08-11' })).toBe(false);
+   });
+ 
+   test('id works with all operators', () => {
+-    let cond = new Condition('is', 'payee', 'foo', null);
+-    expect(cond.eval({ payee: 'foo' })).toBe(true);
+-    expect(cond.eval({ payee: 'FOO' })).toBe(true);
+-    expect(cond.eval({ payee: 'foo2' })).toBe(false);
+-
+-    cond = new Condition('oneOf', 'payee', ['foo', 'bar'], null);
+-    expect(cond.eval({ payee: 'foo' })).toBe(true);
+-    expect(cond.eval({ payee: 'FOO' })).toBe(true);
+-    expect(cond.eval({ payee: 'Bar' })).toBe(true);
+-    expect(cond.eval({ payee: 'bar2' })).toBe(false);
++    let cond = new Condition('is', 'id', 'foo', null, fieldTypes);
++    expect(cond.eval({ id: 'foo' })).toBe(true);
++    expect(cond.eval({ id: 'FOO' })).toBe(true);
++    expect(cond.eval({ id: 'foo2' })).toBe(false);
++
++    cond = new Condition('oneOf', 'id', ['foo', 'bar'], null, fieldTypes);
++    expect(cond.eval({ id: 'foo' })).toBe(true);
++    expect(cond.eval({ id: 'FOO' })).toBe(true);
++    expect(cond.eval({ id: 'Bar' })).toBe(true);
++    expect(cond.eval({ id: 'bar2' })).toBe(false);
+   });
+ 
+   test('string works with all operators', () => {
+-    let cond = new Condition('is', 'notes', 'foo', null);
+-    expect(cond.eval({ notes: 'foo' })).toBe(true);
+-    expect(cond.eval({ notes: 'FOO' })).toBe(true);
+-    expect(cond.eval({ notes: 'foo2' })).toBe(false);
+-
+-    cond = new Condition('oneOf', 'notes', ['foo', 'bar'], null);
+-    expect(cond.eval({ notes: 'foo' })).toBe(true);
+-    expect(cond.eval({ notes: 'FOO' })).toBe(true);
+-    expect(cond.eval({ notes: 'Bar' })).toBe(true);
+-    expect(cond.eval({ notes: 'bar2' })).toBe(false);
+-
+-    cond = new Condition('contains', 'notes', 'foo', null);
+-    expect(cond.eval({ notes: 'bar foo baz' })).toBe(true);
+-    expect(cond.eval({ notes: 'bar FOOb' })).toBe(true);
+-    expect(cond.eval({ notes: 'foo' })).toBe(true);
+-    expect(cond.eval({ notes: 'foob' })).toBe(true);
+-    expect(cond.eval({ notes: 'bfoo' })).toBe(true);
+-    expect(cond.eval({ notes: 'bfo' })).toBe(false);
+-    expect(cond.eval({ notes: 'f o o' })).toBe(false);
+-
+-    cond = new Condition('matches', 'notes', '^fo*$', null);
+-    expect(cond.eval({ notes: 'bar foo baz' })).toBe(false);
+-    expect(cond.eval({ notes: 'bar FOOb' })).toBe(false);
+-    expect(cond.eval({ notes: 'foo' })).toBe(true);
+-    expect(cond.eval({ notes: 'FOOOO' })).toBe(true);
+-    expect(cond.eval({ notes: 'foob' })).toBe(false);
+-    expect(cond.eval({ notes: 'bfoo' })).toBe(false);
+-    expect(cond.eval({ notes: 'bfo' })).toBe(false);
+-    expect(cond.eval({ notes: 'f o o' })).toBe(false);
++    let cond = new Condition('is', 'name', 'foo', null, fieldTypes);
++    expect(cond.eval({ name: 'foo' })).toBe(true);
++    expect(cond.eval({ name: 'FOO' })).toBe(true);
++    expect(cond.eval({ name: 'foo2' })).toBe(false);
++
++    cond = new Condition('oneOf', 'name', ['foo', 'bar'], null, fieldTypes);
++    expect(cond.eval({ name: 'foo' })).toBe(true);
++    expect(cond.eval({ name: 'FOO' })).toBe(true);
++    expect(cond.eval({ name: 'Bar' })).toBe(true);
++    expect(cond.eval({ name: 'bar2' })).toBe(false);
++
++    cond = new Condition('contains', 'name', 'foo', null, fieldTypes);
++    expect(cond.eval({ name: 'bar foo baz' })).toBe(true);
++    expect(cond.eval({ name: 'bar FOOb' })).toBe(true);
++    expect(cond.eval({ name: 'foo' })).toBe(true);
++    expect(cond.eval({ name: 'foob' })).toBe(true);
++    expect(cond.eval({ name: 'bfoo' })).toBe(true);
++    expect(cond.eval({ name: 'bfo' })).toBe(false);
++    expect(cond.eval({ name: 'f o o' })).toBe(false);
++
++    cond = new Condition('matches', 'name', '^fo*$', null, fieldTypes);
++    expect(cond.eval({ name: 'bar foo baz' })).toBe(false);
++    expect(cond.eval({ name: 'bar FOOb' })).toBe(false);
++    expect(cond.eval({ name: 'foo' })).toBe(true);
++    expect(cond.eval({ name: 'foob' })).toBe(false);
++    expect(cond.eval({ name: 'bfoo' })).toBe(false);
++    expect(cond.eval({ name: 'bfo' })).toBe(false);
++    expect(cond.eval({ name: 'f o o' })).toBe(false);
+   });
+ 
+   test('matches handles invalid regex', () => {
+-    const cond = new Condition('matches', 'notes', 'fo**', null);
+-    expect(cond.eval({ notes: 'foo' })).toBe(false);
++    const cond = new Condition('matches', 'name', 'fo**', null, fieldTypes);
++    expect(cond.eval({ name: 'foo' })).toBe(false);
+   });
+ 
+   test('number validates value', () => {
+-    new Condition('isapprox', 'amount', 34, null);
++    new Condition('isapprox', 'amount', 34, null, fieldTypes);
+ 
+     expect(() => {
+-      new Condition('isapprox', 'amount', 'hello', null);
++      new Condition('isapprox', 'amount', 'hello', null, fieldTypes);
+     }).toThrow('Value must be a number or between amount');
+ 
+     expect(() => {
+-      new Condition('is', 'amount', { num1: 0, num2: 10 }, null);
++      new Condition('is', 'amount', { num1: 0, num2: 10 }, null, fieldTypes);
+     }).toThrow('Invalid number value for');
+ 
+-    new Condition('isbetween', 'amount', { num1: 0, num2: 10 }, null);
++    new Condition(
++      'isbetween',
++      'amount',
++      { num1: 0, num2: 10 },
++      null,
++      fieldTypes,
++    );
+ 
+     expect(() => {
+-      new Condition('isbetween', 'amount', 34.22, null);
++      new Condition('isbetween', 'amount', 34.22, null, fieldTypes);
+     }).toThrow('Invalid between value for');
+     expect(() => {
+-      new Condition('isbetween', 'amount', { num1: 0 }, null);
++      new Condition('isbetween', 'amount', { num1: 0 }, null, fieldTypes);
+     }).toThrow('Value must be a number or between amount');
+   });
+ 
+   test('number works with all operators', () => {
+-    let cond = new Condition('is', 'amount', 155, null);
++    let cond = new Condition('is', 'amount', 155, null, fieldTypes);
+     expect(cond.eval({ amount: 155 })).toBe(true);
+     expect(cond.eval({ amount: 167 })).toBe(false);
+ 
+-    cond = new Condition('isapprox', 'amount', 1535, null);
++    cond = new Condition('isapprox', 'amount', 1535, null, fieldTypes);
+     expect(cond.eval({ amount: 1540 })).toBe(true);
+     expect(cond.eval({ amount: 1300 })).toBe(false);
+     expect(cond.eval({ amount: 1650 })).toBe(true);
+     expect(cond.eval({ amount: 1800 })).toBe(false);
+ 
+-    cond = new Condition('isbetween', 'amount', { num1: 32, num2: 86 }, null);
++    cond = new Condition(
++      'isbetween',
++      'amount',
++      { num1: 32, num2: 86 },
++      null,
++      fieldTypes,
++    );
+     expect(cond.eval({ amount: 30 })).toBe(false);
+     expect(cond.eval({ amount: 32 })).toBe(true);
+     expect(cond.eval({ amount: 80 })).toBe(true);
+     expect(cond.eval({ amount: 86 })).toBe(true);
+     expect(cond.eval({ amount: 90 })).toBe(false);
+ 
+-    cond = new Condition('isbetween', 'amount', { num1: -16, num2: -20 }, null);
++    cond = new Condition(
++      'isbetween',
++      'amount',
++      { num1: -16, num2: -20 },
++      null,
++      fieldTypes,
++    );
+     expect(cond.eval({ amount: -18 })).toBe(true);
+     expect(cond.eval({ amount: -12 })).toBe(false);
+ 
+-    cond = new Condition('gt', 'amount', 1.55, null);
++    cond = new Condition('gt', 'amount', 1.55, null, fieldTypes);
+     expect(cond.eval({ amount: 1.55 })).toBe(false);
+     expect(cond.eval({ amount: 1.67 })).toBe(true);
+     expect(cond.eval({ amount: 1.5 })).toBe(false);
+ 
+-    cond = new Condition('gte', 'amount', 1.55, null);
++    cond = new Condition('gte', 'amount', 1.55, null, fieldTypes);
+     expect(cond.eval({ amount: 1.55 })).toBe(true);
+     expect(cond.eval({ amount: 1.67 })).toBe(true);
+     expect(cond.eval({ amount: 1.5 })).toBe(false);
+ 
+-    cond = new Condition('lt', 'amount', 1.55, null);
++    cond = new Condition('lt', 'amount', 1.55, null, fieldTypes);
+     expect(cond.eval({ amount: 1.55 })).toBe(false);
+     expect(cond.eval({ amount: 1.67 })).toBe(false);
+     expect(cond.eval({ amount: 1.5 })).toBe(true);
+ 
+-    cond = new Condition('lte', 'amount', 1.55, null);
++    cond = new Condition('lte', 'amount', 1.55, null, fieldTypes);
+     expect(cond.eval({ amount: 1.55 })).toBe(true);
+     expect(cond.eval({ amount: 1.67 })).toBe(false);
+     expect(cond.eval({ amount: 1.5 })).toBe(true);
+@@ -297,23 +330,23 @@ describe('Condition', () => {
+ 
+ describe('Action', () => {
+   test('`set` operator sets a field', () => {
+-    const action = new Action('set', 'notes', 'James', null);
+-    const item = { notes: 'Sarah' };
++    const action = new Action('set', 'name', 'James', null, fieldTypes);
++    const item = { name: 'Sarah' };
+     action.exec(item);
+-    expect(item.notes).toBe('James');
++    expect(item.name).toBe('James');
+ 
+     expect(() => {
+-      new Action('set', 'foo', 'James', null);
++      new Action('set', 'foo', 'James', null, new Map());
+     }).toThrow(/invalid field/i);
+ 
+     expect(() => {
+-      new Action(null, 'notes', 'James', null);
++      new Action(null, 'name', 'James', null, fieldTypes);
+     }).toThrow(/invalid action operation/i);
+   });
+ 
+   test('empty account values result in error', () => {
+     expect(() => {
+-      new Action('set', 'account', '', null);
++      new Action('set', 'account', '', null, fieldTypes);
+     }).toThrow(/Field cannot be empty/i);
+   });
+ });
+@@ -322,42 +355,44 @@ describe('Rule', () => {
+   test('executing a rule works', () => {
+     let rule = new Rule({
+       conditionsOp: 'and',
+-      conditions: [{ op: 'is', field: 'notes', value: 'James' }],
+-      actions: [{ op: 'set', field: 'notes', value: 'Sarah' }],
++      conditions: [{ op: 'is', field: 'name', value: 'James' }],
++      actions: [{ op: 'set', field: 'name', value: 'Sarah' }],
++      fieldTypes,
+     });
+ 
+     // This matches
+-    expect(rule.exec({ notes: 'James' })).toEqual({ notes: 'Sarah' });
++    expect(rule.exec({ name: 'James' })).toEqual({ name: 'Sarah' });
+     // It returns updates, not the whole object
+-    expect(rule.exec({ notes: 'James', date: '2018-10-01' })).toEqual({
+-      notes: 'Sarah',
++    expect(rule.exec({ name: 'James', date: '2018-10-01' })).toEqual({
++      name: 'Sarah',
+     });
+     // This does not match
+-    expect(rule.exec({ notes: 'James2' })).toEqual(null);
+-    expect(rule.apply({ notes: 'James2' })).toEqual({ notes: 'James2' });
++    expect(rule.exec({ name: 'James2' })).toEqual(null);
++    expect(rule.apply({ name: 'James2' })).toEqual({ name: 'James2' });
+ 
+     rule = new Rule({
+       conditionsOp: 'and',
+-      conditions: [{ op: 'is', field: 'notes', value: 'James' }],
++      conditions: [{ op: 'is', field: 'name', value: 'James' }],
+       actions: [
+-        { op: 'set', field: 'notes', value: 'Sarah' },
++        { op: 'set', field: 'name', value: 'Sarah' },
+         { op: 'set', field: 'category', value: 'Sarah' },
+       ],
++      fieldTypes,
+     });
+ 
+-    expect(rule.exec({ notes: 'James' })).toEqual({
+-      notes: 'Sarah',
++    expect(rule.exec({ name: 'James' })).toEqual({
++      name: 'Sarah',
+       category: 'Sarah',
+     });
+-    expect(rule.exec({ notes: 'James2' })).toEqual(null);
+-    expect(rule.apply({ notes: 'James2' })).toEqual({ notes: 'James2' });
++    expect(rule.exec({ name: 'James2' })).toEqual(null);
++    expect(rule.apply({ name: 'James2' })).toEqual({ name: 'James2' });
+   });
+ 
+   test('rule with `and` conditionsOp evaluates conditions as AND', () => {
+     const rule = new Rule({
+       conditionsOp: 'and',
+       conditions: [
+-        { op: 'is', field: 'notes', value: 'James' },
++        { op: 'is', field: 'name', value: 'James' },
+         {
+           op: 'isapprox',
+           field: 'date',
+@@ -368,24 +403,25 @@ describe('Rule', () => {
+           },
+         },
+       ],
+-      actions: [{ op: 'set', field: 'notes', value: 'Sarah' }],
++      actions: [{ op: 'set', field: 'name', value: 'Sarah' }],
++      fieldTypes,
+     });
+ 
+-    expect(rule.exec({ notes: 'James', date: '2018-01-12' })).toEqual({
+-      notes: 'Sarah',
++    expect(rule.exec({ name: 'James', date: '2018-01-12' })).toEqual({
++      name: 'Sarah',
+     });
+-    expect(rule.exec({ notes: 'James2', date: '2018-01-12' })).toEqual(null);
+-    expect(rule.exec({ notes: 'James', date: '2018-01-10' })).toEqual({
+-      notes: 'Sarah',
++    expect(rule.exec({ name: 'James2', date: '2018-01-12' })).toEqual(null);
++    expect(rule.exec({ name: 'James', date: '2018-01-10' })).toEqual({
++      name: 'Sarah',
+     });
+-    expect(rule.exec({ notes: 'James', date: '2018-01-15' })).toEqual(null);
++    expect(rule.exec({ name: 'James', date: '2018-01-15' })).toEqual(null);
+   });
+ 
+   test('rule with `or` conditionsOp evaluates conditions as OR', () => {
+     const rule = new Rule({
+       conditionsOp: 'or',
+       conditions: [
+-        { op: 'is', field: 'notes', value: 'James' },
++        { op: 'is', field: 'name', value: 'James' },
+         {
+           op: 'isapprox',
+           field: 'date',
+@@ -396,20 +432,21 @@ describe('Rule', () => {
+           },
+         },
+       ],
+-      actions: [{ op: 'set', field: 'notes', value: 'Sarah' }],
++      actions: [{ op: 'set', field: 'name', value: 'Sarah' }],
++      fieldTypes,
+     });
+ 
+-    expect(rule.exec({ notes: 'James', date: '2018-01-12' })).toEqual({
+-      notes: 'Sarah',
++    expect(rule.exec({ name: 'James', date: '2018-01-12' })).toEqual({
++      name: 'Sarah',
+     });
+-    expect(rule.exec({ notes: 'James2', date: '2018-01-12' })).toEqual({
+-      notes: 'Sarah',
++    expect(rule.exec({ name: 'James2', date: '2018-01-12' })).toEqual({
++      name: 'Sarah',
+     });
+-    expect(rule.exec({ notes: 'James', date: '2018-01-10' })).toEqual({
+-      notes: 'Sarah',
++    expect(rule.exec({ name: 'James', date: '2018-01-10' })).toEqual({
++      name: 'Sarah',
+     });
+-    expect(rule.exec({ notes: 'James', date: '2018-01-15' })).toEqual({
+-      notes: 'Sarah',
++    expect(rule.exec({ name: 'James', date: '2018-01-15' })).toEqual({
++      name: 'Sarah',
+     });
+   });
+ 
+@@ -420,28 +457,29 @@ describe('Rule', () => {
+         conditionsOp: 'and',
+         conditions,
+         actions: [],
++        fieldTypes,
+       });
+     const expectOrder = (rules, ids) =>
+       expect(rules.map(r => r.getId())).toEqual(ids);
+ 
+     let rules = [
+-      rule('id1', [{ op: 'contains', field: 'notes', value: 'sar' }]),
+-      rule('id2', [{ op: 'contains', field: 'notes', value: 'jim' }]),
+-      rule('id3', [{ op: 'is', field: 'notes', value: 'James' }]),
++      rule('id1', [{ op: 'contains', field: 'name', value: 'sar' }]),
++      rule('id2', [{ op: 'contains', field: 'name', value: 'jim' }]),
++      rule('id3', [{ op: 'is', field: 'name', value: 'James' }]),
+     ];
+ 
+     expectOrder(rankRules(rules), ['id1', 'id2', 'id3']);
+ 
+     rules = [
+-      rule('id1', [{ op: 'contains', field: 'notes', value: 'sar' }]),
+-      rule('id2', [{ op: 'oneOf', field: 'notes', value: ['jim', 'sar'] }]),
+-      rule('id3', [{ op: 'is', field: 'notes', value: 'James' }]),
++      rule('id1', [{ op: 'contains', field: 'name', value: 'sar' }]),
++      rule('id2', [{ op: 'oneOf', field: 'name', value: ['jim', 'sar'] }]),
++      rule('id3', [{ op: 'is', field: 'name', value: 'James' }]),
+       rule('id4', [
+-        { op: 'is', field: 'notes', value: 'James' },
++        { op: 'is', field: 'name', value: 'James' },
+         { op: 'gt', field: 'amount', value: 5 },
+       ]),
+       rule('id5', [
+-        { op: 'is', field: 'notes', value: 'James' },
++        { op: 'is', field: 'name', value: 'James' },
+         { op: 'gt', field: 'amount', value: 5 },
+         { op: 'lt', field: 'amount', value: 10 },
+       ]),
+@@ -451,33 +489,35 @@ describe('Rule', () => {
+ 
+   test('iterateIds finds all the ids', () => {
+     const rule = (id, conditions, actions = []) =>
+-      new Rule({ id, conditionsOp: 'and', conditions, actions });
++      new Rule({ id, conditionsOp: 'and', conditions, actions, fieldTypes });
+ 
+     const rules = [
+       rule(
+         'first',
+-        [{ op: 'is', field: 'payee', value: 'id1' }],
+-        [{ op: 'set', field: 'notes', value: 'sar' }],
++        [{ op: 'is', field: 'description', value: 'id1' }],
++        [{ op: 'set', field: 'name', value: 'sar' }],
+       ),
+-      rule('second', [{ op: 'oneOf', field: 'payee', value: ['id2', 'id3'] }]),
++      rule('second', [
++        { op: 'oneOf', field: 'description', value: ['id2', 'id3'] },
++      ]),
+       rule(
+         'third',
+-        [{ op: 'is', field: 'notes', value: 'James' }],
+-        [{ op: 'set', field: 'payee', value: 'id3' }],
++        [{ op: 'is', field: 'name', value: 'James' }],
++        [{ op: 'set', field: 'description', value: 'id3' }],
+       ),
+       rule('fourth', [
+-        { op: 'is', field: 'notes', value: 'James' },
++        { op: 'is', field: 'name', value: 'James' },
+         { op: 'gt', field: 'amount', value: 5 },
+       ]),
+       rule('fifth', [
+-        { op: 'is', field: 'category', value: 'id5' },
++        { op: 'is', field: 'description2', value: 'id5' },
+         { op: 'gt', field: 'amount', value: 5 },
+         { op: 'lt', field: 'amount', value: 10 },
+       ]),
+     ];
+ 
+     const foundRules = [];
+-    iterateIds(rules, 'payee', rule => {
++    iterateIds(rules, 'description', rule => {
+       foundRules.push(rule.getId());
+     });
+     expect(foundRules).toEqual(['first', 'second', 'second', 'third']);
+@@ -486,28 +526,30 @@ describe('Rule', () => {
+ 
+ describe('RuleIndexer', () => {
+   test('indexing a single field works', () => {
+-    const indexer = new RuleIndexer({ field: 'notes' });
++    const indexer = new RuleIndexer({ field: 'name' });
+ 
+     const rule = new Rule({
+       conditionsOp: 'and',
+-      conditions: [{ op: 'is', field: 'notes', value: 'James' }],
+-      actions: [{ op: 'set', field: 'notes', value: 'Sarah' }],
++      conditions: [{ op: 'is', field: 'name', value: 'James' }],
++      actions: [{ op: 'set', field: 'name', value: 'Sarah' }],
++      fieldTypes,
+     });
+     indexer.index(rule);
+ 
+     const rule2 = new Rule({
+       conditionsOp: 'and',
+       conditions: [{ op: 'is', field: 'category', value: 'foo' }],
+-      actions: [{ op: 'set', field: 'notes', value: 'Sarah' }],
++      actions: [{ op: 'set', field: 'name', value: 'Sarah' }],
++      fieldTypes,
+     });
+     indexer.index(rule2);
+ 
+     // rule2 always gets returned because it's not indexed and always
+     // needs to be run
+-    expect(indexer.getApplicableRules({ notes: 'James' })).toEqual(
++    expect(indexer.getApplicableRules({ name: 'James' })).toEqual(
+       new Set([rule, rule2]),
+     );
+-    expect(indexer.getApplicableRules({ notes: 'James2' })).toEqual(
++    expect(indexer.getApplicableRules({ name: 'James2' })).toEqual(
+       new Set([rule2]),
+     );
+     expect(indexer.getApplicableRules({ amount: 15 })).toEqual(
+@@ -521,24 +563,27 @@ describe('RuleIndexer', () => {
+     const rule = new Rule({
+       conditionsOp: 'and',
+       conditions: [
+-        { op: 'is', field: 'notes', value: 'James' },
++        { op: 'is', field: 'name', value: 'James' },
+         { op: 'is', field: 'category', value: 'food' },
+       ],
+-      actions: [{ op: 'set', field: 'notes', value: 'Sarah' }],
++      actions: [{ op: 'set', field: 'name', value: 'Sarah' }],
++      fieldTypes,
+     });
+     indexer.index(rule);
+ 
+     const rule2 = new Rule({
+       conditionsOp: 'and',
+       conditions: [{ op: 'is', field: 'category', value: 'bars' }],
+-      actions: [{ op: 'set', field: 'notes', value: 'Sarah' }],
++      actions: [{ op: 'set', field: 'name', value: 'Sarah' }],
++      fieldTypes,
+     });
+     indexer.index(rule2);
+ 
+     const rule3 = new Rule({
+       conditionsOp: 'and',
+       conditions: [{ op: 'is', field: 'date', value: '2020-01-20' }],
+-      actions: [{ op: 'set', field: 'notes', value: 'Sarah' }],
++      actions: [{ op: 'set', field: 'name', value: 'Sarah' }],
++      fieldTypes,
+     });
+     indexer.index(rule3);
+ 
+@@ -548,18 +593,18 @@ describe('RuleIndexer', () => {
+     expect(indexer.rules.get('*').size).toBe(1);
+ 
+     expect(
+-      indexer.getApplicableRules({ notes: 'James', category: 'food' }),
++      indexer.getApplicableRules({ name: 'James', category: 'food' }),
+     ).toEqual(new Set([rule, rule3]));
+     expect(
+-      indexer.getApplicableRules({ notes: 'James', category: 'f' }),
++      indexer.getApplicableRules({ name: 'James', category: 'f' }),
+     ).toEqual(new Set([rule, rule3]));
+     expect(
+-      indexer.getApplicableRules({ notes: 'James', category: 'foo' }),
++      indexer.getApplicableRules({ name: 'James', category: 'foo' }),
+     ).toEqual(new Set([rule, rule3]));
+     expect(
+-      indexer.getApplicableRules({ notes: 'James', category: 'bars' }),
++      indexer.getApplicableRules({ name: 'James', category: 'bars' }),
+     ).toEqual(new Set([rule2, rule3]));
+-    expect(indexer.getApplicableRules({ notes: 'James' })).toEqual(
++    expect(indexer.getApplicableRules({ name: 'James' })).toEqual(
+       new Set([rule3]),
+     );
+   });
+@@ -571,7 +616,8 @@ describe('RuleIndexer', () => {
+       id: 'id1',
+       conditionsOp: 'and',
+       conditions: [{ op: 'is', field: 'category', value: 'food' }],
+-      actions: [{ op: 'set', field: 'notes', value: 'Sarah' }],
++      actions: [{ op: 'set', field: 'name', value: 'Sarah' }],
++      fieldTypes,
+     });
+     indexer.index(rule);
+ 
+@@ -589,7 +635,8 @@ describe('RuleIndexer', () => {
+     rule = new Rule({
+       conditionsOp: 'and',
+       conditions: [{ op: 'is', field: 'category', value: 'alcohol' }],
+-      actions: [{ op: 'set', field: 'notes', value: 'Sarah' }],
++      actions: [{ op: 'set', field: 'name', value: 'Sarah' }],
++      fieldTypes,
+     });
+     indexer.index(rule);
+ 
+@@ -600,34 +647,36 @@ describe('RuleIndexer', () => {
+   });
+ 
+   test('indexing works with the oneOf operator', () => {
+-    const indexer = new RuleIndexer({ field: 'notes', method: 'firstchar' });
++    const indexer = new RuleIndexer({ field: 'name', method: 'firstchar' });
+ 
+     const rule = new Rule({
+       conditionsOp: 'and',
+       conditions: [
+-        { op: 'oneOf', field: 'notes', value: ['James', 'Sarah', 'Evy'] },
++        { op: 'oneOf', field: 'name', value: ['James', 'Sarah', 'Evy'] },
+       ],
+       actions: [{ op: 'set', field: 'category', value: 'Food' }],
++      fieldTypes,
+     });
+     indexer.index(rule);
+ 
+     const rule2 = new Rule({
+       conditionsOp: 'and',
+-      conditions: [{ op: 'is', field: 'notes', value: 'Georgia' }],
++      conditions: [{ op: 'is', field: 'name', value: 'Georgia' }],
+       actions: [{ op: 'set', field: 'category', value: 'Food' }],
++      fieldTypes,
+     });
+     indexer.index(rule2);
+ 
+-    expect(indexer.getApplicableRules({ notes: 'James' })).toEqual(
++    expect(indexer.getApplicableRules({ name: 'James' })).toEqual(
+       new Set([rule]),
+     );
+-    expect(indexer.getApplicableRules({ notes: 'Evy' })).toEqual(
++    expect(indexer.getApplicableRules({ name: 'Evy' })).toEqual(
+       new Set([rule]),
+     );
+-    expect(indexer.getApplicableRules({ notes: 'Charlotte' })).toEqual(
++    expect(indexer.getApplicableRules({ name: 'Charlotte' })).toEqual(
+       new Set([]),
+     );
+-    expect(indexer.getApplicableRules({ notes: 'Georgia' })).toEqual(
++    expect(indexer.getApplicableRules({ name: 'Georgia' })).toEqual(
+       new Set([rule2]),
+     );
+   });
+diff --git a/packages/loot-core/src/server/accounts/rules.ts b/packages/loot-core/src/server/accounts/rules.ts
+index 727e029f7..8bf51d7cc 100644
+--- a/packages/loot-core/src/server/accounts/rules.ts
++++ b/packages/loot-core/src/server/accounts/rules.ts
+@@ -10,12 +10,7 @@ import {
+   subDays,
+   parseDate,
+ } from '../../shared/months';
+-import {
+-  sortNumbers,
+-  getApproxNumberThreshold,
+-  isValidOp,
+-  FIELD_TYPES,
+-} from '../../shared/rules';
++import { sortNumbers, getApproxNumberThreshold } from '../../shared/rules';
+ import { recurConfigToRSchedule } from '../../shared/schedules';
+ import {
+   addSplitTransaction,
+@@ -174,12 +169,6 @@ const CONDITION_TYPES = {
+         return value.filter(Boolean).map(val => val.toLowerCase());
+       }
+ 
+-      assert(
+-        typeof value === 'string',
+-        'not-string',
+-        `Invalid string value (field: ${fieldName})`,
+-      );
+-
+       if (
+         op === 'contains' ||
+         op === 'matches' ||
+@@ -187,7 +176,41 @@ const CONDITION_TYPES = {
+         op === 'hasTags'
+       ) {
+         assert(
+-          value.length > 0,
++          typeof value === 'string' && value.length > 0,
++          'no-empty-string',
++          `contains must have non-empty string (field: ${fieldName})`,
++        );
++      }
++
++      return value.toLowerCase();
++    },
++  },
++  imported_payee: {
++    ops: [
++      'is',
++      'contains',
++      'matches',
++      'oneOf',
++      'isNot',
++      'doesNotContain',
++      'notOneOf',
++    ],
++    nullable: true,
++    parse(op, value, fieldName) {
++      if (op === 'oneOf' || op === 'notOneOf') {
++        assert(
++          Array.isArray(value),
++          'no-empty-array',
++          `${op} must have an array value (field: ${fieldName}): ${JSON.stringify(
++            value,
++          )}`,
++        );
++        return value.filter(Boolean).map(val => val.toLowerCase());
++      }
++
++      if (op === 'contains' || op === 'matches' || op === 'doesNotContain') {
++        assert(
++          typeof value === 'string' && value.length > 0,
+           'no-empty-string',
+           `${op} must have non-empty string (field: ${fieldName})`,
+         );
+@@ -254,8 +277,8 @@ export class Condition {
+   unparsedValue;
+   value;
+ 
+-  constructor(op, field, value, options) {
+-    const typeName = FIELD_TYPES.get(field);
++  constructor(op, field, value, options, fieldTypes) {
++    const typeName = fieldTypes.get(field);
+     assert(typeName, 'internal', 'Invalid condition field: ' + field);
+ 
+     const type = CONDITION_TYPES[typeName];
+@@ -268,7 +291,7 @@ export class Condition {
+       `Invalid condition type: ${typeName} (field: ${field})`,
+     );
+     assert(
+-      isValidOp(field, op),
++      type.ops.includes(op),
+       'internal',
+       `Invalid condition operator: ${op} (type: ${typeName}, field: ${field})`,
+     );
+@@ -491,7 +514,7 @@ export class Action {
+   type;
+   value;
+ 
+-  constructor(op: ActionOperator, field, value, options) {
++  constructor(op: ActionOperator, field, value, options, fieldTypes) {
+     assert(
+       ACTION_OPS.includes(op),
+       'internal',
+@@ -499,7 +522,7 @@ export class Action {
+     );
+ 
+     if (op === 'set') {
+-      const typeName = FIELD_TYPES.get(field);
++      const typeName = fieldTypes.get(field);
+       assert(typeName, 'internal', `Invalid field for action: ${field}`);
+       this.field = field;
+       this.type = typeName;
+@@ -715,21 +738,23 @@ export class Rule {
+     conditionsOp,
+     conditions,
+     actions,
++    fieldTypes,
+   }: {
+     id?: string;
+     stage?;
+     conditionsOp;
+     conditions;
+     actions;
++    fieldTypes;
+   }) {
+     this.id = id;
+     this.stage = stage;
+     this.conditionsOp = conditionsOp;
+     this.conditions = conditions.map(
+-      c => new Condition(c.op, c.field, c.value, c.options),
++      c => new Condition(c.op, c.field, c.value, c.options, fieldTypes),
+     );
+     this.actions = actions.map(
+-      a => new Action(a.op, a.field, a.value, a.options),
++      a => new Action(a.op, a.field, a.value, a.options, fieldTypes),
+     );
+   }
+ 
+diff --git a/packages/loot-core/src/server/accounts/transaction-rules.ts b/packages/loot-core/src/server/accounts/transaction-rules.ts
+index 206385263..e22697ea4 100644
+--- a/packages/loot-core/src/server/accounts/transaction-rules.ts
++++ b/packages/loot-core/src/server/accounts/transaction-rules.ts
+@@ -6,7 +6,11 @@ import {
+   parseDate,
+   dayFromDate,
+ } from '../../shared/months';
+-import { sortNumbers, getApproxNumberThreshold } from '../../shared/rules';
++import {
++  FIELD_TYPES,
++  sortNumbers,
++  getApproxNumberThreshold,
++} from '../../shared/rules';
+ import { ungroupTransaction } from '../../shared/transactions';
+ import { partitionByField, fastSetMerge } from '../../shared/util';
+ import {
+@@ -153,7 +157,10 @@ export const ruleModel = {
+ export function makeRule(data) {
+   let rule;
+   try {
+-    rule = new Rule(ruleModel.toJS(data));
++    rule = new Rule({
++      ...ruleModel.toJS(data),
++      fieldTypes: FIELD_TYPES,
++    });
+   } catch (e) {
+     console.warn('Invalid rule', e);
+     if (e instanceof RuleError) {
+@@ -301,7 +308,13 @@ export function conditionsToAQL(conditions, { recurDateBounds = 100 } = {}) {
+       }
+ 
+       try {
+-        return new Condition(cond.op, cond.field, cond.value, cond.options);
++        return new Condition(
++          cond.op,
++          cond.field,
++          cond.value,
++          cond.options,
++          FIELD_TYPES,
++        );
+       } catch (e) {
+         errors.push(e.type || 'internal');
+         console.log('conditionsToAQL: invalid condition: ' + e.message);
+@@ -511,14 +524,20 @@ export async function applyActions(
+ 
+       try {
+         if (action.op === 'set-split-amount') {
+-          return new Action(action.op, null, action.value, action.options);
++          return new Action(
++            action.op,
++            null,
++            action.value,
++            action.options,
++            FIELD_TYPES,
++          );
+         } else if (action.op === 'link-schedule') {
+-          return new Action(action.op, null, action.value, null);
++          return new Action(action.op, null, action.value, null, FIELD_TYPES);
+         } else if (
+           action.op === 'prepend-notes' ||
+           action.op === 'append-notes'
+         ) {
+-          return new Action(action.op, null, action.value, null);
++          return new Action(action.op, null, action.value, null, FIELD_TYPES);
+         }
+ 
+         return new Action(
+@@ -526,6 +545,7 @@ export async function applyActions(
+           action.field,
+           action.value,
+           action.options,
++          FIELD_TYPES,
+         );
+       } catch (e) {
+         console.log('Action error', e);
+@@ -645,6 +665,7 @@ export async function updatePayeeRenameRule(fromNames: string[], to: string) {
+       conditionsOp: 'and',
+       conditions: [{ op: 'oneOf', field: 'imported_payee', value: fromNames }],
+       actions: [{ op: 'set', field: 'payee', value: to }],
++      fieldTypes: FIELD_TYPES,
+     });
+     return insertRule(rule.serialize());
+   }
+@@ -753,6 +774,7 @@ export async function updateCategoryRules(transactions) {
+           conditionsOp: 'and',
+           conditions: [{ op: 'is', field: 'payee', value: payeeId }],
+           actions: [{ op: 'set', field: 'category', value: category }],
++          fieldTypes: FIELD_TYPES,
+         });
+         await insertRule(newRule.serialize());
+       }
+diff --git a/packages/loot-core/src/server/rules/app.ts b/packages/loot-core/src/server/rules/app.ts
+index df8b60def..95635fba7 100644
+--- a/packages/loot-core/src/server/rules/app.ts
++++ b/packages/loot-core/src/server/rules/app.ts
+@@ -1,4 +1,5 @@
+ // @ts-strict-ignore
++import { FIELD_TYPES as ruleFieldTypes } from '../../shared/rules';
+ import { type RuleEntity } from '../../types/models';
+ import { Condition, Action, rankRules } from '../accounts/rules';
+ import * as rules from '../accounts/transaction-rules';
+@@ -34,17 +35,36 @@ function validateRule(rule: Partial<RuleEntity>) {
+ 
+   const conditionErrors = runValidation(
+     rule.conditions,
+-    cond => new Condition(cond.op, cond.field, cond.value, cond.options),
++    cond =>
++      new Condition(
++        cond.op,
++        cond.field,
++        cond.value,
++        cond.options,
++        ruleFieldTypes,
++      ),
+   );
+ 
+   const actionErrors = runValidation(rule.actions, action =>
+     action.op === 'set-split-amount'
+-      ? new Action(action.op, null, action.value, action.options)
++      ? new Action(
++          action.op,
++          null,
++          action.value,
++          action.options,
++          ruleFieldTypes,
++        )
+       : action.op === 'link-schedule'
+-        ? new Action(action.op, null, action.value, null)
++        ? new Action(action.op, null, action.value, null, ruleFieldTypes)
+         : action.op === 'prepend-notes' || action.op === 'append-notes'
+-          ? new Action(action.op, null, action.value, null)
+-          : new Action(action.op, action.field, action.value, action.options),
++          ? new Action(action.op, null, action.value, null, ruleFieldTypes)
++          : new Action(
++              action.op,
++              action.field,
++              action.value,
++              action.options,
++              ruleFieldTypes,
++            ),
+   );
+ 
+   if (conditionErrors || actionErrors) {
+diff --git a/packages/loot-core/src/server/schedules/app.ts b/packages/loot-core/src/server/schedules/app.ts
+index 9440ab4d0..ea99443d4 100644
+--- a/packages/loot-core/src/server/schedules/app.ts
++++ b/packages/loot-core/src/server/schedules/app.ts
+@@ -73,7 +73,13 @@ export function getNextDate(
+ ) {
+   start = d.startOfDay(start);
+ 
+-  const cond = new Condition(dateCond.op, 'date', dateCond.value, null);
++  const cond = new Condition(
++    dateCond.op,
++    'date',
++    dateCond.value,
++    null,
++    new Map(Object.entries({ date: 'date' })),
++  );
+   const value = cond.getValue();
+ 
+   if (value.type === 'date') {
+diff --git a/packages/loot-core/src/shared/rules.ts b/packages/loot-core/src/shared/rules.ts
+index aac09411a..76eaa2926 100644
+--- a/packages/loot-core/src/shared/rules.ts
++++ b/packages/loot-core/src/shared/rules.ts
+@@ -1,11 +1,9 @@
+ // @ts-strict-ignore
+-import { FieldValueTypes, RuleConditionOp } from '../types/models';
+-
+ import { integerToAmount, amountToInteger, currencyToAmount } from './util';
+ 
+ // For now, this info is duplicated from the backend. Figure out how
+ // to share it later.
+-const TYPE_INFO = {
++export const TYPE_INFO = {
+   date: {
+     ops: ['is', 'isapprox', 'gt', 'gte', 'lt', 'lte'],
+     nullable: false,
+@@ -40,6 +38,18 @@ const TYPE_INFO = {
+     ],
+     nullable: true,
+   },
++  imported_payee: {
++    ops: [
++      'is',
++      'contains',
++      'matches',
++      'oneOf',
++      'isNot',
++      'doesNotContain',
++      'notOneOf',
++    ],
++    nullable: true,
++  },
+   number: {
+     ops: ['is', 'isapprox', 'isbetween', 'gt', 'gte', 'lt', 'lte'],
+     nullable: false,
+@@ -48,58 +58,25 @@ const TYPE_INFO = {
+     ops: ['is'],
+     nullable: false,
+   },
+-} as const;
+-
+-type FieldInfoConstraint = Record<
+-  keyof FieldValueTypes,
+-  { type: keyof typeof TYPE_INFO; disallowedOps?: Set<RuleConditionOp> }
+->;
+-
+-const FIELD_INFO = {
+-  imported_payee: {
+-    type: 'string',
+-    disallowedOps: new Set(['hasTags']),
+-  },
+-  payee: { type: 'id' },
+-  date: { type: 'date' },
+-  notes: { type: 'string' },
+-  amount: { type: 'number' },
+-  category: { type: 'id' },
+-  account: { type: 'id' },
+-  cleared: { type: 'boolean' },
+-  reconciled: { type: 'boolean' },
+-  saved: { type: 'saved' },
+-} as const satisfies FieldInfoConstraint;
+-
+-const fieldInfo: FieldInfoConstraint = FIELD_INFO;
++};
+ 
+-export const FIELD_TYPES = new Map<keyof FieldValueTypes, string>(
+-  Object.entries(FIELD_INFO).map(([field, info]) => [
+-    field as unknown as keyof FieldValueTypes,
+-    info.type,
+-  ]),
++export const FIELD_TYPES = new Map(
++  Object.entries({
++    imported_payee: 'imported_payee',
++    payee: 'id',
++    date: 'date',
++    notes: 'string',
++    amount: 'number',
++    amountInflow: 'number',
++    amountOutfow: 'number',
++    category: 'id',
++    account: 'id',
++    cleared: 'boolean',
++    reconciled: 'boolean',
++    saved: 'saved',
++  }),
+ );
+ 
+-export function isValidOp(field: keyof FieldValueTypes, op: RuleConditionOp) {
+-  const type = FIELD_TYPES.get(field);
+-  if (!type) {
+-    return false;
+-  }
+-  return (
+-    TYPE_INFO[type].ops.includes(op) && !fieldInfo[field].disallowedOps?.has(op)
+-  );
+-}
+-
+-export function getValidOps(field: keyof FieldValueTypes) {
+-  const type = FIELD_TYPES.get(field);
+-  if (!type) {
+-    return [];
+-  }
+-  return TYPE_INFO[type].ops.filter(
+-    op => !fieldInfo[field].disallowedOps?.has(op),
+-  );
+-}
+-
+ export const ALLOCATION_METHODS = {
+   'fixed-amount': 'a fixed amount',
+   'fixed-percent': 'a fixed percent of the remainder',
+@@ -211,10 +188,6 @@ export function getFieldError(type) {
+     case 'no-empty-array':
+     case 'no-empty-string':
+       return 'Value cannot be empty';
+-    case 'not-string':
+-      return 'Value must be a string';
+-    case 'not-boolean':
+-      return 'Value must be a boolean';
+     case 'not-number':
+       return 'Value must be a number';
+     case 'invalid-field':
+diff --git a/packages/loot-core/src/types/models/rule.d.ts b/packages/loot-core/src/types/models/rule.d.ts
+index 3fcde847f..55fbda9c4 100644
+--- a/packages/loot-core/src/types/models/rule.d.ts
++++ b/packages/loot-core/src/types/models/rule.d.ts
+@@ -37,8 +37,6 @@ type FieldValueTypes = {
+   payee: string;
+   imported_payee: string;
+   saved: string;
+-  cleared: boolean;
+-  reconciled: boolean;
+ };
+ 
+ type BaseConditionEntity<
+diff --git a/upcoming-release-notes/3399.md b/upcoming-release-notes/3399.md
+deleted file mode 100644
+index 8f49154a0..000000000
+--- a/upcoming-release-notes/3399.md
++++ /dev/null
+@@ -1,6 +0,0 @@
+----
+-category: Bugfix
+-authors: [jfdoming]
+----
+-
+-Fix regression in case sensitivity for `is`/`matches` operator

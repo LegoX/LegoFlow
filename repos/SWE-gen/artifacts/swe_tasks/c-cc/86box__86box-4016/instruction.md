@@ -1,0 +1,7 @@
+The EGA video card emulation has a bug with fine scrolling in text modes. When a demo program that uses EGA text mode fine scrolling is executed, the display output differs from real hardware and other emulators like PCem. Specifically, the horizontal pixel panning (fine scroll) feature in EGA text modes does not work correctly.
+
+The issue affects both 8-dot and 9-dot character width text modes. In EGA text modes, characters are typically 8 or 9 pixels wide, and the horizontal panning register allows fine-scrolling the display by shifting pixels left or right. When the fine scroll value is set via the EGA horizontal panning register (Attribute Controller index 0x13), the display should shift horizontally by the specified number of pixels.
+
+Additionally, there is a 'shift left by 1' effect that should be implemented in relation to the character skew counter, which affects how the fine scrolling is applied during display rendering.
+
+The expected behavior is that setting the horizontal panning register should correctly shift the text display by the specified number of pixels, matching real EGA hardware behavior. The current implementation incorrectly handles this fine scrolling, resulting in misaligned or incorrectly displayed text when fine scrolling is used.

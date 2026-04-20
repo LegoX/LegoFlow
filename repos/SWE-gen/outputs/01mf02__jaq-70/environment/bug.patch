@@ -1,0 +1,460 @@
+diff --git a/jaq-core/src/error.rs b/jaq-core/src/error.rs
+index 67b078b..ec14c60 100644
+--- a/jaq-core/src/error.rs
++++ b/jaq-core/src/error.rs
+@@ -50,10 +50,6 @@ pub enum Error {
+     Regex(String),
+     /// `"a" | test("."; "b")`
+     RegexFlag(char),
+-    /// custom filter without update
+-    NonUpdatable,
+-    /// arbitrary errors for custom filters
+-    Custom(String),
+ }
+ 
+ impl fmt::Display for Error {
+@@ -81,8 +77,6 @@ impl fmt::Display for Error {
+             Self::PathExp => write!(f, "invalid path expression"),
+             Self::Regex(e) => write!(f, "invalid regex: {e}"),
+             Self::RegexFlag(c) => write!(f, "invalid regex flag '{c}'"),
+-            Self::NonUpdatable => write!(f, "custom filter doesn't implement update"),
+-            Self::Custom(e) => write!(f, "custom filter error: {e}"),
+         }
+     }
+ }
+diff --git a/jaq-core/src/filter.rs b/jaq-core/src/filter.rs
+index 0f253c0..ad35c50 100644
+--- a/jaq-core/src/filter.rs
++++ b/jaq-core/src/filter.rs
+@@ -1,6 +1,3 @@
+-use core::fmt::Debug;
+-use alloc::sync::Arc;
+-
+ use crate::path::{self, Path};
+ use crate::results::{fold, recurse, then};
+ use crate::val::{Val, ValR, ValRs};
+@@ -110,66 +107,11 @@ pub enum Filter {
+         skip: usize,
+         id: usize,
+     },
+-
+-    Custom(CustomFilter),
+-}
+-
+-/// Custom filter.
+-#[derive(Clone)]
+-pub struct CustomFilter {
+-    args: Vec<Filter>,
+-    run: Arc<dyn for<'a> Fn(&'a [Filter], Cv<'a>) -> ValRs<'a>>,
+-    update: Option<Arc<dyn for<'a> Fn(&'a [Filter], Cv<'a>, Box<dyn Update<'a> + 'a>) -> ValRs<'a>>>,
+-}
+-
+-impl Debug for CustomFilter {
+-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+-        f.debug_struct("CustomFilter")
+-            .field("arity", &self.args.len())
+-            .field("run", &"{fn}")
+-            .field("update", &match &self.update {
+-                Some(_) => "Some({fn})",
+-                None => "None",
+-            })
+-            .finish()
+-    }
+-}
+-
+-impl CustomFilter {
+-    /// The arity (number of arguments) of the filter.
+-    pub fn arity(&self) -> usize {
+-        self.args.len()
+-    }
+-
+-    /// Create a new custom filter from a function.
+-    pub fn new(
+-        arity: usize,
+-        run: impl for<'a> Fn(&'a [Filter], Cv<'a>) -> ValRs<'a> + 'static,
+-    ) -> Self {
+-        Self {
+-            args: (0..arity).map(|n| Filter::Arg(n)).collect(),
+-            run: Arc::new(run),
+-            update: None,
+-        }
+-    }
+-
+-    /// Create a new custom filter from a run function and an update function (used for `filter |= ...`).
+-    pub fn with_update(
+-        arity: usize,
+-        run: impl for<'a> Fn(&'a [Filter], Cv<'a>) -> ValRs<'a> + 'static,
+-        update: impl for<'a> Fn(&'a [Filter], Cv<'a>, Box<dyn Update<'a> + 'a>) -> ValRs<'a> + 'static,
+-    ) -> Self {
+-        Self {
+-            args: (0..arity).map(|n| Filter::Arg(n)).collect(),
+-            run: Arc::new(run),
+-            update: Some(Arc::new(update)),
+-        }
+-    }
+ }
+ 
+ // we can unfortunately not make a `Box<dyn ... + Clone>`
+ // that is why we have to go through the pain of making a new trait here
+-pub trait Update<'a>: Fn(Val) -> ValRs<'a> + DynClone {}
++trait Update<'a>: Fn(Val) -> ValRs<'a> + DynClone {}
+ 
+ impl<'a, T: Fn(Val) -> ValRs<'a> + Clone> Update<'a> for T {}
+ 
+@@ -180,7 +122,7 @@ fn reduce<'a>(xs: ValRs<'a>, init: Val, f: impl Fn(Val, Val) -> ValRs<'a> + 'a)
+     Box::new(fold(false, xs, Box::new(core::iter::once(Ok(init))), f))
+ }
+ 
+-pub type Cv<'c> = (Ctx<'c>, Val);
++type Cv<'c> = (Ctx<'c>, Val);
+ 
+ impl Filter {
+     pub(crate) fn core() -> Vec<((String, usize), Self)> {
+@@ -391,17 +333,13 @@ impl Filter {
+                 let (save, rec) = &cv.0.recs[*id];
+                 rec.run((cv.0.save_skip_vars(*save, *skip), cv.1))
+             })),
+-
+-            Self::Custom(CustomFilter { args, run, .. }) => {
+-                (run)(args, cv.clone())
+-            },
+         }
+     }
+ 
+     /// `p.update(cv, f)` returns the output of `v | p |= f`
+     fn update<'a>(&'a self, cv: Cv<'a>, f: Box<dyn Update<'a> + 'a>) -> ValRs {
+         use core::iter::once;
+-        let err = Box::new(once(Err(Error::PathExp)));
++        let err = Box::new(core::iter::once(Err(Error::PathExp)));
+         match self {
+             Self::Int(_) | Self::Float(_) | Self::Str(_) => err,
+             Self::Array(_) | Self::Object(_) => err,
+@@ -463,11 +401,6 @@ impl Filter {
+                 let (save, rec) = &cv.0.recs[*id];
+                 rec.update((cv.0.save_skip_vars(*save, *skip), cv.1), f)
+             }
+-
+-            Self::Custom(CustomFilter { args, update: Some(update), .. }) => {
+-                (update)(args, cv.clone(), f.clone())
+-            },
+-            Self::Custom(CustomFilter { update: None, .. }) => Box::new(once(Err(Error::NonUpdatable))),
+         }
+     }
+ 
+@@ -570,13 +503,6 @@ impl Filter {
+             Self::Call { .. } => self,
+             Self::Var(v) => Self::Var(fv(vars, v)),
+             Self::Arg(a) => fa(vars, a),
+-            Self::Custom(CustomFilter { args, run, update }) => {
+-                Self::Custom(CustomFilter {
+-                    args: args.into_iter().map(|f| *sub(Box::new(f))).collect(),
+-                    run,
+-                    update,
+-                })
+-            }
+         }
+     }
+ }
+diff --git a/jaq-core/src/lib.rs b/jaq-core/src/lib.rs
+index b5015f4..acdf576 100644
+--- a/jaq-core/src/lib.rs
++++ b/jaq-core/src/lib.rs
+@@ -60,11 +60,10 @@ mod val;
+ pub use jaq_parse as parse;
+ 
+ pub use error::Error;
+-pub use filter::CustomFilter;
+ pub use rc_iter::RcIter;
+ pub use val::{Val, ValR};
+ 
+-use alloc::{collections::BTreeMap, string::{String, ToString}, vec::Vec};
++use alloc::{collections::BTreeMap, string::String, vec::Vec};
+ use lazy_iter::LazyIter;
+ use parse::{Def, Main};
+ use rc_list::RcList;
+@@ -142,7 +141,6 @@ impl Filter {
+ ///
+ /// For example, if we define a filter `def map(f): [.[] | f]`,
+ /// then the definitions will associate `map/1` to its definition.
+-#[derive(Debug, Default, Clone)]
+ pub struct Definitions(BTreeMap<(String, usize), filter::Filter>);
+ 
+ impl Definitions {
+@@ -160,11 +158,6 @@ impl Definitions {
+         let f = unparse::def(&self.get(), &def.args, def.body, errs);
+         self.0.insert((def.name, def.args.len()), f);
+     }
+-    
+-    /// Import a custom, Rust-defined filter.
+-    pub fn insert_custom(&mut self, name: &str, filter: filter::CustomFilter) {
+-        self.0.insert((name.to_string(), filter.arity()), filter::Filter::Custom(filter));
+-    }
+ 
+     /// Given a main filter (consisting of definitions and a body), return a finished filter.
+     pub fn finish(
+diff --git a/jaq-core/tests/custom.rs b/jaq-core/tests/custom.rs
+deleted file mode 100644
+index b0a4489..0000000
+--- a/jaq-core/tests/custom.rs
++++ /dev/null
+@@ -1,260 +0,0 @@
+-//! Tests for custom filters.
+-
+-use std::{
+-    iter::{once, repeat},
+-    rc::Rc,
+-};
+-
+-use itertools::Itertools;
+-use jaq_core::{parse, Ctx, CustomFilter, Definitions, Error, RcIter, Val};
+-use serde_json::{json, Value};
+-
+-pub fn yields<const N: usize>(
+-    defs: &Definitions,
+-    x: Value,
+-    f: &str,
+-    ys: [Value; N],
+-    err: Option<Error>,
+-) {
+-    let f = parse::parse(&f, parse::main()).0.unwrap();
+-
+-    let mut errs = Vec::new();
+-    let f = defs.clone().finish(f, Vec::new(), &mut errs);
+-    assert_eq!(errs, Vec::new());
+-
+-    let to = |v| Val::from(v);
+-
+-    let expected = ys.into_iter().map(|y| Ok(to(y)));
+-    let expected: Vec<_> = expected.chain(err.into_iter().map(Err)).collect();
+-
+-    let inputs = RcIter::new(core::iter::empty());
+-    let out: Vec<_> = f.run(Ctx::new([], &inputs), to(x)).collect();
+-    assert_eq!(out, expected);
+-}
+-
+-#[test]
+-fn arity0_source_only() {
+-    let mut defs = Definitions::core();
+-    defs.insert_custom(
+-        "natzero",
+-        CustomFilter::new(0, |_, _cv| Box::new(once(Ok(Val::Int(0))))),
+-    );
+-    defs.insert_custom(
+-        "nattwenty",
+-        CustomFilter::new(0, |_, _cv| Box::new(once(Ok(Val::Int(20))))),
+-    );
+-    defs.insert_custom(
+-        "hello",
+-        CustomFilter::new(0, |_, _cv| {
+-            Box::new(once(Ok(Val::Str(Rc::new("world".into())))))
+-        }),
+-    );
+-
+-    yields(&defs, Value::Null, "natzero", [json!(0)], None);
+-    yields(&defs, Value::Null, "nattwenty", [json!(20)], None);
+-    yields(&defs, Value::Null, "hello", [json!("world")], None);
+-}
+-
+-#[test]
+-fn arity0_and_sink() {
+-    let mut defs = Definitions::core();
+-    defs.insert_custom(
+-        "str_rev",
+-        CustomFilter::new(0, |_, (_, val)| {
+-            Box::new(once(
+-                val.to_str().map(|s| Val::str(s.chars().rev().join(""))),
+-            ))
+-        }),
+-    );
+-
+-    yields(&defs, json!("hello"), "str_rev", [json!("olleh")], None);
+-    yields(&defs, json!(""), "str_rev", [json!("")], None);
+-}
+-
+-#[test]
+-fn non_updatable() {
+-    let mut defs = Definitions::core();
+-    defs.insert_custom(
+-        "nupd",
+-        CustomFilter::new(0, |_, (_, val)| Box::new(once(Ok(val)))),
+-    );
+-
+-    yields(&defs, json!("hello"), "nupd", [json!("hello")], None);
+-    yields(
+-        &defs,
+-        json!("hello"),
+-        "nupd |= .",
+-        [],
+-        Some(Error::NonUpdatable),
+-    );
+-}
+-
+-#[test]
+-fn arity0_and_update() {
+-    let mut defs = Definitions::core();
+-    defs.insert_custom(
+-        "with_length",
+-        CustomFilter::with_update(
+-            0,
+-            |_, (_, val)| Box::new(once(val.to_str().map(|s| Val::from(json!(s.len()))))),
+-            |_, (_, val), _| Box::new(once(val.to_str().map(|s| Val::from(json!(s.len()))))),
+-        ),
+-    );
+-
+-    yields(&defs, json!("hello"), "with_length", [json!(5)], None);
+-    yields(&defs, json!("hello"), "with_length |= .", [json!(5)], None);
+-}
+-
+-#[test]
+-fn arity1() {
+-    let mut defs = Definitions::core();
+-    defs.insert_custom(
+-        "iflonger",
+-        CustomFilter::new(1, |args, (ctx, val)| {
+-            let arg = match args[0].run((ctx.clone(), val.clone())).next() {
+-                Some(Ok(v)) => v,
+-                Some(Err(e)) => return Box::new(once(Err(e))),
+-                None => {
+-                    return Box::new(once(Err(Error::Custom(
+-                        "value expected but none found".into(),
+-                    ))))
+-                }
+-            };
+-
+-            Box::new(once(
+-                val.to_str()
+-                    .and_then(|s| arg.as_int().map(|n| (s, n as usize)))
+-                    .map(|(s, n)| if s.len() > n { Val::Str(s) } else { Val::Null }),
+-            ))
+-        }),
+-    );
+-
+-    yields(&defs, json!("hello"), "iflonger(6)", [Value::Null], None);
+-    yields(&defs, json!("hello"), "iflonger(3)", [json!("hello")], None);
+-}
+-
+-#[test]
+-fn arity2() {
+-    let mut defs = Definitions::core();
+-    defs.insert_custom(
+-        "ifwithin",
+-        CustomFilter::new(2, |args, (ctx, val)| {
+-            let min = match args[0].run((ctx.clone(), val.clone())).next() {
+-                Some(Ok(v)) => match v.as_int() {
+-                    Ok(n) => n as usize,
+-                    Err(e) => return Box::new(once(Err(e))),
+-                },
+-                Some(Err(e)) => return Box::new(once(Err(e))),
+-                None => {
+-                    return Box::new(once(Err(Error::Custom(
+-                        "value expected but none found".into(),
+-                    ))))
+-                }
+-            };
+-            let max = match args[1].run((ctx.clone(), val.clone())).next() {
+-                Some(Ok(v)) => match v.as_int() {
+-                    Ok(n) => n as usize,
+-                    Err(e) => return Box::new(once(Err(e))),
+-                },
+-                Some(Err(e)) => return Box::new(once(Err(e))),
+-                None => {
+-                    return Box::new(once(Err(Error::Custom(
+-                        "value expected but none found".into(),
+-                    ))))
+-                }
+-            };
+-
+-            Box::new(once(val.to_str().map(|s| {
+-                if s.len() >= min && s.len() <= max {
+-                    Val::Str(s)
+-                } else {
+-                    Val::Null
+-                }
+-            })))
+-        }),
+-    );
+-
+-    yields(
+-        &defs,
+-        json!("hello"),
+-        "ifwithin(7; 11)",
+-        [Value::Null],
+-        None,
+-    );
+-    yields(
+-        &defs,
+-        json!("hello"),
+-        "ifwithin(3; 8)",
+-        [json!("hello")],
+-        None,
+-    );
+-}
+-
+-#[test]
+-fn arity12() {
+-    let mut defs = Definitions::core();
+-    defs.insert_custom(
+-        "sillysum",
+-        CustomFilter::new(12, |args, (ctx, val)| {
+-            let mut nums = Vec::with_capacity(args.len());
+-            for arg in args {
+-                match arg.run((ctx.clone(), val.clone())).next() {
+-                    Some(Ok(v)) => match v.as_int() {
+-                        Ok(n) => nums.push(n),
+-                        Err(e) => return Box::new(once(Err(e))),
+-                    },
+-                    Some(Err(e)) => return Box::new(once(Err(e))),
+-                    None => {
+-                        return Box::new(once(Err(Error::Custom(
+-                            "value expected but none found".into(),
+-                        ))))
+-                    }
+-                };
+-            }
+-
+-            Box::new(once(Ok(Val::Int(nums.into_iter().sum()))))
+-        }),
+-    );
+-
+-    yields(
+-        &defs,
+-        Value::Null,
+-        "sillysum(6; 13; 15; 8; 10; 12; 20; 16; 20; 3; 17; 8)",
+-        [json!(148)],
+-        None,
+-    );
+-}
+-
+-#[test]
+-fn iterator() {
+-    let mut defs = Definitions::core();
+-    defs.insert_custom(
+-        "randnums",
+-        CustomFilter::new(1, |args, (ctx, val)| {
+-            let amount = match args[0].run((ctx.clone(), val.clone())).next() {
+-                Some(Ok(Val::Int(n))) => n,
+-                Some(Ok(v)) => {
+-                    return Box::new(once(Err(Error::Custom(format!(
+-                        "expected int but got {v:?}"
+-                    )))))
+-                }
+-                Some(Err(e)) => return Box::new(once(Err(e))),
+-                None => {
+-                    return Box::new(once(Err(Error::Custom(
+-                        "value expected but none found".into(),
+-                    ))))
+-                }
+-            };
+-
+-            Box::new(repeat(42).take(amount as usize).map(|n| Ok(Val::Int(n))))
+-        }),
+-    );
+-
+-    yields(
+-        &defs,
+-        Value::Null,
+-        "randnums(3)",
+-        [json!(42), json!(42), json!(42)],
+-        None,
+-    );
+-}

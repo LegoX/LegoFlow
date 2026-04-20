@@ -1,0 +1,217 @@
+diff --git a/air_example.toml b/air_example.toml
+index 2c4e8e8..01cec97 100644
+--- a/air_example.toml
++++ b/air_example.toml
+@@ -6,12 +6,8 @@ root = "."
+ tmp_dir = "tmp"
+ 
+ [build]
+-# Array of commands to run before each build
+-pre_cmd = ["echo 'hello air' > pre_cmd.txt"]
+ # Just plain old shell command. You could use `make` as well.
+ cmd = "go build -o ./tmp/main ."
+-# Array of commands to run after ^C
+-post_cmd = ["echo 'hello air' > post_cmd.txt"]
+ # Binary file yields from `cmd`.
+ bin = "tmp/main"
+ # Customize binary, can setup environment variables when run your app.
+diff --git a/runner/config.go b/runner/config.go
+index 3ed4c21..47f238e 100644
+--- a/runner/config.go
++++ b/runner/config.go
+@@ -34,9 +34,7 @@ type Config struct {
+ }
+ 
+ type cfgBuild struct {
+-	PreCmd           []string      `toml:"pre_cmd"`
+ 	Cmd              string        `toml:"cmd"`
+-	PostCmd          []string      `toml:"post_cmd"`
+ 	Bin              string        `toml:"bin"`
+ 	FullBin          string        `toml:"full_bin"`
+ 	ArgsBin          []string      `toml:"args_bin"`
+diff --git a/runner/config_test.go b/runner/config_test.go
+index 37a0c6b..5f999c9 100644
+--- a/runner/config_test.go
++++ b/runner/config_test.go
+@@ -15,7 +15,6 @@ const (
+ 
+ func getWindowsConfig() Config {
+ 	build := cfgBuild{
+-		PreCmd:       []string{"echo Hello Air"},
+ 		Cmd:          "go build -o ./tmp/main .",
+ 		Bin:          "./tmp/main",
+ 		Log:          "build-errors.log",
+diff --git a/runner/engine.go b/runner/engine.go
+index e88f382..7d59f5a 100644
+--- a/runner/engine.go
++++ b/runner/engine.go
+@@ -376,13 +376,6 @@ func (e *Engine) buildRun() {
+ 	default:
+ 	}
+ 	var err error
+-	if err = e.runPreCmd(); err != nil {
+-		e.canExit <- true
+-		e.runnerLog("failed to execute pre_cmd: %s", err.Error())
+-		if e.config.Build.StopOnError {
+-			return
+-		}
+-	}
+ 	if err = e.building(); err != nil {
+ 		e.canExit <- true
+ 		e.buildLog("failed to build, error: %s", err.Error())
+@@ -417,9 +410,10 @@ func (e *Engine) flushEvents() {
+ 	}
+ }
+ 
+-// utility to execute commands, such as cmd & pre_cmd
+-func (e *Engine) runCommand(command string) error {
+-	cmd, stdout, stderr, err := e.startCmd(command)
++func (e *Engine) building() error {
++	var err error
++	e.buildLog("building...")
++	cmd, stdout, stderr, err := e.startCmd(e.config.Build.Cmd)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -429,7 +423,7 @@ func (e *Engine) runCommand(command string) error {
+ 	}()
+ 	_, _ = io.Copy(os.Stdout, stdout)
+ 	_, _ = io.Copy(os.Stderr, stderr)
+-	// wait for command to finish
++	// wait for building
+ 	err = cmd.Wait()
+ 	if err != nil {
+ 		return err
+@@ -437,40 +431,6 @@ func (e *Engine) runCommand(command string) error {
+ 	return nil
+ }
+ 
+-// run cmd option in .air.toml
+-func (e *Engine) building() error {
+-	e.buildLog("building...")
+-	err := e.runCommand(e.config.Build.Cmd)
+-	if err != nil {
+-		return err
+-	}
+-	return nil
+-}
+-
+-// run pre_cmd option in .air.toml
+-func (e *Engine) runPreCmd() error {
+-	for _, command := range e.config.Build.PreCmd {
+-		e.runnerLog("> %s", command)
+-		err := e.runCommand(command)
+-		if err != nil {
+-			return err
+-		}
+-	}
+-	return nil
+-}
+-
+-// run post_cmd option in .air.toml
+-func (e *Engine) runPostCmd() error {
+-	for _, command := range e.config.Build.PostCmd {
+-		e.runnerLog("> %s", command)
+-		err := e.runCommand(command)
+-		if err != nil {
+-			return err
+-		}
+-	}
+-	return nil
+-}
+-
+ func (e *Engine) runBin() error {
+ 	// control killFunc should be kill or not
+ 	killCh := make(chan struct{})
+@@ -597,8 +557,5 @@ func (e *Engine) cleanup() {
+ 
+ // Stop the air
+ func (e *Engine) Stop() {
+-	if err := e.runPostCmd(); err != nil {
+-		e.runnerLog("failed to execute post_cmd, error: %s", err.Error())
+-	}
+ 	close(e.exitCh)
+ }
+diff --git a/runner/engine_test.go b/runner/engine_test.go
+index de34848..59b239f 100644
+--- a/runner/engine_test.go
++++ b/runner/engine_test.go
+@@ -185,78 +185,6 @@ func TestRerunWhenFileChanged(t *testing.T) {
+ 	}
+ }
+ 
+-func TestRunCommand(t *testing.T) {
+-	// generate a random port
+-	port, f := GetPort()
+-	f()
+-	t.Logf("port: %d", port)
+-	tmpDir := initTestEnv(t, port)
+-	// change dir to tmpDir
+-	chdir(t, tmpDir)
+-	engine, err := NewEngine("", true)
+-	if err != nil {
+-		t.Fatalf("Should not be fail: %s.", err)
+-	}
+-	err = engine.runCommand("touch test.txt")
+-	if err != nil {
+-		t.Fatalf("Should not be fail: %s.", err)
+-	}
+-	if _, err := os.Stat("./test.txt"); err != nil {
+-		if os.IsNotExist(err) {
+-			t.Fatalf("Should not be fail: %s.", err)
+-		}
+-	}
+-}
+-
+-func TestRunPreCmd(t *testing.T) {
+-	// generate a random port
+-	port, f := GetPort()
+-	f()
+-	t.Logf("port: %d", port)
+-	tmpDir := initTestEnv(t, port)
+-	// change dir to tmpDir
+-	chdir(t, tmpDir)
+-	engine, err := NewEngine("", true)
+-	if err != nil {
+-		t.Fatalf("Should not be fail: %s.", err)
+-	}
+-	err = engine.runPreCmd()
+-	if err != nil {
+-		t.Fatalf("Should not be fail: %s.", err)
+-	}
+-	if _, err := os.Stat("./pre_cmd.txt"); err != nil {
+-		if os.IsNotExist(err) {
+-			t.Fatalf("Should not be fail: %s.", err)
+-		}
+-	}
+-}
+-
+-func TestRunPostCmd(t *testing.T) {
+-	// generate a random port
+-	port, f := GetPort()
+-	f()
+-	t.Logf("port: %d", port)
+-	tmpDir := initTestEnv(t, port)
+-	// change dir to tmpDir
+-	chdir(t, tmpDir)
+-
+-	engine, err := NewEngine("", true)
+-	if err != nil {
+-		t.Fatalf("Should not be fail: %s.", err)
+-	}
+-
+-	err = engine.runPostCmd()
+-	if err != nil {
+-		t.Fatalf("Should not be fail: %s.", err)
+-	}
+-
+-	if _, err := os.Stat("./post_cmd.txt"); err != nil {
+-		if os.IsNotExist(err) {
+-			t.Fatalf("Should not be fail: %s.", err)
+-		}
+-	}
+-}
+-
+ func TestRunBin(t *testing.T) {
+ 	engine, err := NewEngine("", true)
+ 	if err != nil {

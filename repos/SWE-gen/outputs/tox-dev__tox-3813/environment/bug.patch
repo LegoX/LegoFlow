@@ -1,0 +1,859 @@
+diff --git a/.github/workflows/update-schemastore.yaml b/.github/workflows/update-schemastore.yaml
+deleted file mode 100644
+index 933f3547..00000000
+--- a/.github/workflows/update-schemastore.yaml
++++ /dev/null
+@@ -1,64 +0,0 @@
+-name: Update SchemaStore
+-on:
+-  push:
+-    tags: ["*"]
+-
+-permissions:
+-  contents: read
+-
+-jobs:
+-  update-schemastore:
+-    runs-on: ubuntu-24.04
+-    env:
+-      GH_TOKEN: ${{ secrets.SCHEMASTORE_TOKEN }}
+-      BRANCH: update-tox-schema
+-    steps:
+-      - uses: actions/checkout@v6
+-      - name: Fork and clone SchemaStore
+-        run: gh repo fork SchemaStore/schemastore --clone --remote -- /tmp/schemastore
+-      - name: Create or reset branch
+-        run: git switch -C "$BRANCH"
+-        working-directory: /tmp/schemastore
+-      - name: Copy schema with SchemaStore $id
+-        run: |
+-          python3 -c "
+-          import json
+-          with open('${{ github.workspace }}/src/tox/tox.schema.json') as f:
+-              schema = json.load(f)
+-          schema['\$id'] = 'https://json.schemastore.org/tox.json'
+-          with open('/tmp/schemastore/src/schemas/json/tox.json', 'w') as f:
+-              json.dump(schema, f, indent=2)
+-              f.write('\n')
+-          "
+-      - name: Check for changes
+-        id: diff
+-        run: |
+-          git add src/schemas/json/tox.json
+-          if git diff --cached --quiet; then
+-            echo "changed=false" >> "$GITHUB_OUTPUT"
+-          else
+-            echo "changed=true" >> "$GITHUB_OUTPUT"
+-          fi
+-        working-directory: /tmp/schemastore
+-      - name: Commit and push
+-        if: steps.diff.outputs.changed == 'true'
+-        run: |
+-          git config user.name "github-actions[bot]"
+-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+-          git commit -m "Update tox JSON Schema to ${{ github.ref_name }}"
+-          git push --force origin "$BRANCH"
+-        working-directory: /tmp/schemastore
+-      - name: Create or update pull request
+-        if: steps.diff.outputs.changed == 'true'
+-        run: |
+-          if ! gh pr view "$BRANCH" --repo SchemaStore/schemastore > /dev/null 2>&1; then
+-            gh pr create \
+-              --repo SchemaStore/schemastore \
+-              --title "Update tox JSON Schema to ${{ github.ref_name }}" \
+-              --body "Updates tox's JSON Schema to [${{ github.sha }}](https://github.com/tox-dev/tox/commit/${{ github.sha }}) (release ${{ github.ref_name }})."
+-          else
+-            gh pr edit "$BRANCH" --repo SchemaStore/schemastore \
+-              --title "Update tox JSON Schema to ${{ github.ref_name }}" \
+-              --body "Updates tox's JSON Schema to [${{ github.sha }}](https://github.com/tox-dev/tox/commit/${{ github.sha }}) (release ${{ github.ref_name }})."
+-          fi
+-        working-directory: /tmp/schemastore
+diff --git a/docs/changelog/1388.feature.rst b/docs/changelog/1388.feature.rst
+deleted file mode 100644
+index 9021c2a5..00000000
+--- a/docs/changelog/1388.feature.rst
++++ /dev/null
+@@ -1,3 +0,0 @@
+-Enhance ``tox schema`` command: add ``x-taplo`` metadata for IDE integration, product dict support for ``env_list``,
+-handle ``int`` and ``PythonConstraints`` types, fix ``$schema`` draft-07 URI, and add schema freshness test. Add
+-``tox.toml`` to SchemaStore catalog for automatic IDE validation - by :user:`gaborbernat`.
+diff --git a/docs/changelog/3809.bugfix.rst b/docs/changelog/3809.bugfix.rst
+new file mode 100644
+index 00000000..ea429552
+--- /dev/null
++++ b/docs/changelog/3809.bugfix.rst
+@@ -0,0 +1,3 @@
++Fix cross-section substitution ``{[section]key}`` resolving to a literal unresolved reference instead of empty string
++when the referenced value contains only factor-conditional lines and no factors match the requesting environment - by
++:user:`Fridayai700`.
+diff --git a/src/tox/config/loader/ini/replace.py b/src/tox/config/loader/ini/replace.py
+index 3c6efc0d..0d2d23ce 100644
+--- a/src/tox/config/loader/ini/replace.py
++++ b/src/tox/config/loader/ini/replace.py
+@@ -41,7 +41,7 @@ class ReplaceReferenceIni(ReplaceReference):
+                 for src in self._config_value_sources(settings["env"], settings["section"], conf_args.env_name):
+                     try:
+                         if isinstance(src, SectionProxy):
+-                            return self.loader.process_raw(self.conf, conf_args.env_name, src[key])
++                            return self._resolve_section_proxy(src, key, conf_args.env_name)
+                         value = src.load(key, conf_args.chain)
+                     except KeyError as exc:  # if fails, keep trying maybe another source can satisfy # noqa: PERF203
+                         exception = exc
+@@ -61,6 +61,18 @@ class ReplaceReferenceIni(ReplaceReference):
+                     raise exception
+         return None
+ 
++    def _resolve_section_proxy(self, src: SectionProxy, key: str, env_name: str | None) -> str:
++        """Resolve a key from a SectionProxy, returning empty string when factor filtering empties the value."""
++        try:
++            return self.loader.process_raw(self.conf, env_name, src[key])
++        except KeyError:
++            if key in src:
++                # Key exists but factor filtering emptied the value.
++                # For cross-section references this is a valid empty result,
++                # not a missing key — the caller explicitly asked for this value.
++                return ""
++            raise
++
+     def _config_value_sources(
+         self, env: str | None, section: str | None, current_env: str | None
+     ) -> Iterator[SectionProxy | ConfigSet]:
+diff --git a/src/tox/session/cmd/schema.py b/src/tox/session/cmd/schema.py
+index c96ff385..ae98b970 100644
+--- a/src/tox/session/cmd/schema.py
++++ b/src/tox/session/cmd/schema.py
+@@ -35,9 +35,8 @@ def gen_schema(state: State) -> int:
+     core = state.conf.core
+     strict = state.conf.options.strict
+ 
+-    # Use any available run environment for introspection (fall back to "py" which is always defined)
+-    env_name = next(state.envs.iter(only_active=False), "py")
+-    env_properties = _get_schema(state.envs[env_name].conf, path="#/properties/env_run_base/properties")
++    # Accessing this adds extra stuff to core, so we need to do it first
++    env_properties = _get_schema(state.envs["py"].conf, path="#/properties/env_run_base/properties")
+ 
+     properties = _get_schema(core, path="#/properties")
+ 
+@@ -56,41 +55,23 @@ def gen_schema(state: State) -> int:
+             "properties": _get_schema(conf, path=f"#/properties/{key}/properties"),
+         }
+ 
+-    docs_base = "https://tox.wiki/en/stable"
+     json_schema = {
+-        "$schema": "http://json-schema.org/draft-07/schema#",
+-        "$id": "https://raw.githubusercontent.com/tox-dev/tox/main/src/tox/tox.schema.json",
+-        "title": "tox configuration",
+-        "description": "tox configuration file (tox.toml or [tool.tox] in pyproject.toml)",
+-        "x-taplo": {"links": {"key": f"{docs_base}/config.html"}},
++        "$schema": "http://json-schema.org/draft-07/schema",
++        "$id": "https://github.com/tox-dev/tox/blob/main/src/tox/util/tox.schema.json",
+         "type": "object",
+         "properties": {
+             **properties,
+             "env_run_base": {
+                 "type": "object",
+-                "description": "base configuration for run environments",
+-                "x-taplo": {"links": {"key": f"{docs_base}/config.html#run-environment"}},
+                 "properties": env_properties,
+                 "additionalProperties": not strict,
+             },
+             "env_pkg_base": {
+-                "type": "object",
+                 "$ref": "#/properties/env_run_base",
+-                "description": "base configuration for packaging environments",
+-                "x-taplo": {"links": {"key": f"{docs_base}/config.html#packaging-environment"}},
+                 "additionalProperties": not strict,
+             },
+-            "env": {
+-                "type": "object",
+-                "description": "per-environment overrides (keyed by environment name)",
+-                "x-taplo": {"links": {"key": f"{docs_base}/config.html#run-environment"}},
+-                "patternProperties": {"^.*$": {"$ref": "#/properties/env_run_base"}},
+-            },
+-            "legacy_tox_ini": {
+-                "type": "string",
+-                "description": "tox configuration in INI format embedded in a TOML file",
+-                "x-taplo": {"links": {"key": f"{docs_base}/config.html#pyproject-toml-ini"}},
+-            },
++            "env": {"type": "object", "patternProperties": {"^.*$": {"$ref": "#/properties/env_run_base"}}},
++            "legacy_tox_ini": {"type": "string"},
+         },
+         "additionalProperties": not strict,
+         "definitions": {
+@@ -138,10 +119,11 @@ def gen_schema(state: State) -> int:
+ 
+ 
+ def _get_schema(conf: ConfigSet, path: str) -> dict[str, dict[str, typing.Any]]:
+-    properties: dict[str, dict[str, typing.Any]] = {}
++    properties = {}
+     for x in conf.get_configs():
+         name, *aliases = x.keys
+-        if (of_type := getattr(x, "of_type", None)) is None:
++        of_type = getattr(x, "of_type", None)
++        if of_type is None:
+             continue
+         desc = getattr(x, "desc", None)
+         try:
+@@ -149,22 +131,17 @@ def _get_schema(conf: ConfigSet, path: str) -> dict[str, dict[str, typing.Any]]:
+         except ValueError:
+             print(name, "has unrecoginsed type:", of_type, file=sys.stderr)  # noqa: T201
+         for alias in aliases:
+-            properties[alias] = {
+-                "$ref": f"{path}/{name}",
+-                "description": f"Deprecated: use {name!r} instead",
+-                "deprecated": True,
+-            }
++            properties[alias] = {"$ref": f"{path}/{name}"}
+     return properties
+ 
+ 
+-def _process_type(of_type: typing.Any) -> dict[str, typing.Any]:  # noqa: C901, PLR0911, PLR0912
++def _process_type(of_type: typing.Any) -> dict[str, typing.Any]:  # noqa: C901, PLR0911
+     if of_type in {
+         Path,
+         str,
+         packaging.version.Version,
+         packaging.requirements.Requirement,
+         tox.tox_env.python.pip.req_file.PythonDeps,
+-        tox.tox_env.python.pip.req_file.PythonConstraints,
+     }:
+         return {"type": "string"}
+     if typing.get_origin(of_type) is typing.Union:
+@@ -175,53 +152,11 @@ def _process_type(of_type: typing.Any) -> dict[str, typing.Any]:  # noqa: C901,
+         raise ValueError(msg)
+     if of_type is bool:
+         return {"type": "boolean"}
+-    if of_type is int:
+-        return {"type": "integer", "minimum": 0}
+     if of_type is float:
+         return {"type": "number"}
+     if typing.get_origin(of_type) is typing.Literal:
+         return {"enum": list(typing.get_args(of_type))}
+-    if of_type is tox.config.types.EnvList:
+-        return {
+-            "type": "array",
+-            "items": {
+-                "oneOf": [
+-                    {"$ref": "#/definitions/subs"},
+-                    {
+-                        "type": "object",
+-                        "required": ["product"],
+-                        "properties": {
+-                            "product": {
+-                                "type": "array",
+-                                "items": {
+-                                    "oneOf": [
+-                                        {"type": "array", "items": {"type": "string"}},
+-                                        {
+-                                            "type": "object",
+-                                            "required": ["prefix"],
+-                                            "properties": {
+-                                                "prefix": {"type": "string"},
+-                                                "start": {"type": "integer"},
+-                                                "stop": {"type": "integer"},
+-                                            },
+-                                            "additionalProperties": False,
+-                                        },
+-                                    ],
+-                                },
+-                                "description": "factor groups for cartesian product expansion",
+-                            },
+-                            "exclude": {
+-                                "type": "array",
+-                                "items": {"type": "string"},
+-                                "description": "environment names to exclude from product",
+-                            },
+-                        },
+-                        "additionalProperties": False,
+-                    },
+-                ],
+-            },
+-        }
+-    if of_type is tox.config.types.Command:
++    if of_type in {tox.config.types.Command, tox.config.types.EnvList}:
+         return {"type": "array", "items": {"$ref": "#/definitions/subs"}}
+     if typing.get_origin(of_type) in {list, set}:
+         if typing.get_args(of_type)[0] in {str, packaging.requirements.Requirement}:
+diff --git a/src/tox/tox.schema.json b/src/tox/tox.schema.json
+index d9f4fe26..e213227c 100644
+--- a/src/tox/tox.schema.json
++++ b/src/tox/tox.schema.json
+@@ -1,13 +1,6 @@
+ {
+-  "$schema": "http://json-schema.org/draft-07/schema#",
+-  "$id": "https://raw.githubusercontent.com/tox-dev/tox/main/src/tox/tox.schema.json",
+-  "title": "tox configuration",
+-  "description": "tox configuration file (tox.toml or [tool.tox] in pyproject.toml)",
+-  "x-taplo": {
+-    "links": {
+-      "key": "https://tox.wiki/en/stable/config.html"
+-    }
+-  },
++  "$schema": "http://json-schema.org/draft-07/schema",
++  "$id": "https://github.com/tox-dev/tox/blob/main/src/tox/util/tox.schema.json",
+   "type": "object",
+   "properties": {
+     "tox_root": {
+@@ -15,18 +8,14 @@
+       "description": "the root directory (where the configuration file is found)"
+     },
+     "toxinidir": {
+-      "$ref": "#/properties/tox_root",
+-      "description": "Deprecated: use 'tox_root' instead",
+-      "deprecated": true
++      "$ref": "#/properties/tox_root"
+     },
+     "work_dir": {
+       "type": "string",
+       "description": "working directory"
+     },
+     "toxworkdir": {
+-      "$ref": "#/properties/work_dir",
+-      "description": "Deprecated: use 'work_dir' instead",
+-      "deprecated": true
++      "$ref": "#/properties/work_dir"
+     },
+     "temp_dir": {
+       "type": "string",
+@@ -41,7 +30,6 @@
+           },
+           {
+             "type": "object",
+-            "required": ["product"],
+             "properties": {
+               "product": {
+                 "type": "array",
+@@ -81,6 +69,7 @@
+                 "description": "environment names to exclude from product"
+               }
+             },
++            "required": ["product"],
+             "additionalProperties": false
+           }
+         ]
+@@ -88,9 +77,7 @@
+       "description": "define environments to automatically run"
+     },
+     "envlist": {
+-      "$ref": "#/properties/env_list",
+-      "description": "Deprecated: use 'env_list' instead",
+-      "deprecated": true
++      "$ref": "#/properties/env_list"
+     },
+     "base": {
+       "type": "array",
+@@ -104,9 +91,7 @@
+       "description": "Define the minimal tox version required to run"
+     },
+     "minversion": {
+-      "$ref": "#/properties/min_version",
+-      "description": "Deprecated: use 'min_version' instead",
+-      "deprecated": true
++      "$ref": "#/properties/min_version"
+     },
+     "provision_tox_env": {
+       "type": "string",
+@@ -124,55 +109,7 @@
+       "additionalProperties": {
+         "type": "array",
+         "items": {
+-          "oneOf": [
+-            {
+-              "$ref": "#/definitions/subs"
+-            },
+-            {
+-              "type": "object",
+-              "required": ["product"],
+-              "properties": {
+-                "product": {
+-                  "type": "array",
+-                  "items": {
+-                    "oneOf": [
+-                      {
+-                        "type": "array",
+-                        "items": {
+-                          "type": "string"
+-                        }
+-                      },
+-                      {
+-                        "type": "object",
+-                        "required": ["prefix"],
+-                        "properties": {
+-                          "prefix": {
+-                            "type": "string"
+-                          },
+-                          "start": {
+-                            "type": "integer"
+-                          },
+-                          "stop": {
+-                            "type": "integer"
+-                          }
+-                        },
+-                        "additionalProperties": false
+-                      }
+-                    ]
+-                  },
+-                  "description": "factor groups for cartesian product expansion"
+-                },
+-                "exclude": {
+-                  "type": "array",
+-                  "items": {
+-                    "type": "string"
+-                  },
+-                  "description": "environment names to exclude from product"
+-                }
+-              },
+-              "additionalProperties": false
+-            }
+-          ]
++          "$ref": "#/definitions/subs"
+         }
+       },
+       "description": "core labels"
+@@ -182,9 +119,7 @@
+       "description": "do not raise error if the environment name conflicts with base python"
+     },
+     "ignore_basepython_conflict": {
+-      "$ref": "#/properties/ignore_base_python_conflict",
+-      "description": "Deprecated: use 'ignore_base_python_conflict' instead",
+-      "deprecated": true
++      "$ref": "#/properties/ignore_base_python_conflict"
+     },
+     "skip_missing_interpreters": {
+       "type": "boolean",
+@@ -195,36 +130,24 @@
+       "description": "is there any packaging involved in this project"
+     },
+     "skipsdist": {
+-      "$ref": "#/properties/no_package",
+-      "description": "Deprecated: use 'no_package' instead",
+-      "deprecated": true
++      "$ref": "#/properties/no_package"
+     },
+     "package_env": {
+       "type": "string",
+       "description": "tox environment used to package"
+     },
+     "isolated_build_env": {
+-      "$ref": "#/properties/package_env",
+-      "description": "Deprecated: use 'package_env' instead",
+-      "deprecated": true
++      "$ref": "#/properties/package_env"
+     },
+     "package_root": {
+       "type": "string",
+       "description": "indicates where the packaging root file exists (historically setup.py file or pyproject.toml now)"
+     },
+     "setupdir": {
+-      "$ref": "#/properties/package_root",
+-      "description": "Deprecated: use 'package_root' instead",
+-      "deprecated": true
++      "$ref": "#/properties/package_root"
+     },
+     "env_run_base": {
+       "type": "object",
+-      "description": "base configuration for run environments",
+-      "x-taplo": {
+-        "links": {
+-          "key": "https://tox.wiki/en/stable/config.html#run-environment"
+-        }
+-      },
+       "properties": {
+         "set_env": {
+           "type": "object",
+@@ -234,9 +157,7 @@
+           "description": "environment variables to set when running commands in the tox environment"
+         },
+         "setenv": {
+-          "$ref": "#/properties/env_run_base/properties/set_env",
+-          "description": "Deprecated: use 'set_env' instead",
+-          "deprecated": true
++          "$ref": "#/properties/env_run_base/properties/set_env"
+         },
+         "base": {
+           "type": "array",
+@@ -256,55 +177,7 @@
+         "depends": {
+           "type": "array",
+           "items": {
+-            "oneOf": [
+-              {
+-                "$ref": "#/definitions/subs"
+-              },
+-              {
+-                "type": "object",
+-                "required": ["product"],
+-                "properties": {
+-                  "product": {
+-                    "type": "array",
+-                    "items": {
+-                      "oneOf": [
+-                        {
+-                          "type": "array",
+-                          "items": {
+-                            "type": "string"
+-                          }
+-                        },
+-                        {
+-                          "type": "object",
+-                          "required": ["prefix"],
+-                          "properties": {
+-                            "prefix": {
+-                              "type": "string"
+-                            },
+-                            "start": {
+-                              "type": "integer"
+-                            },
+-                            "stop": {
+-                              "type": "integer"
+-                            }
+-                          },
+-                          "additionalProperties": false
+-                        }
+-                      ]
+-                    },
+-                    "description": "factor groups for cartesian product expansion"
+-                  },
+-                  "exclude": {
+-                    "type": "array",
+-                    "items": {
+-                      "type": "string"
+-                    },
+-                    "description": "environment names to exclude from product"
+-                  }
+-                },
+-                "additionalProperties": false
+-              }
+-            ]
++            "$ref": "#/definitions/subs"
+           },
+           "description": "tox environments that this environment depends on (must be run after those)"
+         },
+@@ -320,27 +193,21 @@
+           "description": "directory assigned to the tox environment"
+         },
+         "envdir": {
+-          "$ref": "#/properties/env_run_base/properties/env_dir",
+-          "description": "Deprecated: use 'env_dir' instead",
+-          "deprecated": true
++          "$ref": "#/properties/env_run_base/properties/env_dir"
+         },
+         "env_tmp_dir": {
+           "type": "string",
+           "description": "a folder that is always reset at the start of the run"
+         },
+         "envtmpdir": {
+-          "$ref": "#/properties/env_run_base/properties/env_tmp_dir",
+-          "description": "Deprecated: use 'env_tmp_dir' instead",
+-          "deprecated": true
++          "$ref": "#/properties/env_run_base/properties/env_tmp_dir"
+         },
+         "env_log_dir": {
+           "type": "string",
+           "description": "a folder for logging where tox will put logs of tool invocation"
+         },
+         "envlogdir": {
+-          "$ref": "#/properties/env_run_base/properties/env_log_dir",
+-          "description": "Deprecated: use 'env_log_dir' instead",
+-          "deprecated": true
++          "$ref": "#/properties/env_run_base/properties/env_log_dir"
+         },
+         "suicide_timeout": {
+           "type": "number",
+@@ -366,9 +233,7 @@
+           "description": "environment variables to pass on to the tox environment"
+         },
+         "passenv": {
+-          "$ref": "#/properties/env_run_base/properties/pass_env",
+-          "description": "Deprecated: use 'pass_env' instead",
+-          "deprecated": true
++          "$ref": "#/properties/env_run_base/properties/pass_env"
+         },
+         "disallow_pass_env": {
+           "type": "array",
+@@ -410,10 +275,6 @@
+           },
+           "description": "command used to install packages"
+         },
+-        "constraints": {
+-          "type": "string",
+-          "description": "constraints to apply to installed python dependencies"
+-        },
+         "constrain_package_deps": {
+           "type": "boolean",
+           "description": "If true, apply constraints during install_package_deps."
+@@ -467,9 +328,7 @@
+           "description": "change to this working directory when executing the test command"
+         },
+         "changedir": {
+-          "$ref": "#/properties/env_run_base/properties/change_dir",
+-          "description": "Deprecated: use 'change_dir' instead",
+-          "deprecated": true
++          "$ref": "#/properties/env_run_base/properties/change_dir"
+         },
+         "args_are_paths": {
+           "type": "boolean",
+@@ -488,17 +347,6 @@
+           "type": "boolean",
+           "description": "if set to true a failing result of this testenv will not make tox fail (instead just warn)"
+         },
+-        "fail_fast": {
+-          "type": "boolean",
+-          "description": "if set to true, tox will stop executing remaining environments when this environment fails"
+-        },
+-        "default_base_python": {
+-          "type": "array",
+-          "items": {
+-            "$ref": "#/definitions/subs"
+-          },
+-          "description": "fallback python interpreter used when no factor or explicit base_python is defined"
+-        },
+         "base_python": {
+           "type": "array",
+           "items": {
+@@ -507,72 +355,48 @@
+           "description": "environment identifier for python, first one found wins"
+         },
+         "basepython": {
+-          "$ref": "#/properties/env_run_base/properties/base_python",
+-          "description": "Deprecated: use 'base_python' instead",
+-          "deprecated": true
++          "$ref": "#/properties/env_run_base/properties/base_python"
++        },
++        "skip_missing_interpreters": {
++          "type": "boolean",
++          "description": "override core skip_missing_interpreters for this environment"
+         },
+         "deps": {
+           "type": "string",
+           "description": "python dependencies with optional version specifiers, as specified by PEP-440"
+         },
+-        "dependency_groups": {
++        "constraints": {
+           "type": "array",
+           "items": {
+-            "$ref": "#/definitions/subs"
++            "type": "string"
+           },
+-          "description": "dependency groups to install of the target package"
++          "description": "constraints to apply to installed python dependencies"
+         },
+-        "extras": {
++        "dependency_groups": {
+           "type": "array",
+           "items": {
+             "$ref": "#/definitions/subs"
+           },
+-          "description": "extras to install of the target package"
+-        },
+-        "pylock": {
+-          "type": "string",
+-          "description": "PEP 751 pylock.toml lock file path to install locked dependencies from"
+-        },
+-        "extra_setup_commands": {
+-          "type": "array",
+-          "items": {
+-            "type": "array",
+-            "items": {
+-              "$ref": "#/definitions/subs"
+-            }
+-          },
+-          "description": "commands to execute after setup (deps and package install) but before test commands"
+-        },
+-        "skip_missing_interpreters": {
+-          "type": "boolean",
+-          "description": "override core skip_missing_interpreters for this environment"
++          "description": "dependency groups to install of the target package"
+         },
+         "system_site_packages": {
+           "type": "boolean",
+           "description": "create virtual environments that also have access to globally installed packages."
+         },
+         "sitepackages": {
+-          "$ref": "#/properties/env_run_base/properties/system_site_packages",
+-          "description": "Deprecated: use 'system_site_packages' instead",
+-          "deprecated": true
++          "$ref": "#/properties/env_run_base/properties/system_site_packages"
+         },
+         "always_copy": {
+           "type": "boolean",
+           "description": "force virtualenv to always copy rather than symlink"
+         },
+         "alwayscopy": {
+-          "$ref": "#/properties/env_run_base/properties/always_copy",
+-          "description": "Deprecated: use 'always_copy' instead",
+-          "deprecated": true
++          "$ref": "#/properties/env_run_base/properties/always_copy"
+         },
+         "download": {
+           "type": "boolean",
+           "description": "true if you want virtualenv to upgrade pip/wheel/setuptools to the latest version"
+         },
+-        "virtualenv_spec": {
+-          "type": "string",
+-          "description": "PEP 440 version spec for virtualenv (e.g. virtualenv<20.22.0). When set, tox bootstraps this version in an isolated environment and runs it via subprocess, enabling Python versions incompatible with the installed virtualenv."
+-        },
+         "skip_install": {
+           "type": "boolean",
+           "description": "skip installation"
+@@ -582,40 +406,36 @@
+           "description": "use develop mode"
+         },
+         "usedevelop": {
+-          "$ref": "#/properties/env_run_base/properties/use_develop",
+-          "description": "Deprecated: use 'use_develop' instead",
+-          "deprecated": true
++          "$ref": "#/properties/env_run_base/properties/use_develop"
+         },
+         "package": {
+           "type": "string",
+           "description": "package installation mode - wheel | sdist | sdist-wheel | editable | editable-legacy | deps-only | skip | external "
+         },
++        "extras": {
++          "type": "array",
++          "items": {
++            "$ref": "#/definitions/subs"
++          },
++          "description": "extras to install of the target package"
++        },
+         "package_env": {
+           "type": "string",
+           "description": "tox environment used to package"
++        },
++        "wheel_build_env": {
++          "type": "string",
++          "description": "wheel tag to use for building applications"
+         }
+       },
+       "additionalProperties": true
+     },
+     "env_pkg_base": {
+-      "type": "object",
+       "$ref": "#/properties/env_run_base",
+-      "description": "base configuration for packaging environments",
+-      "x-taplo": {
+-        "links": {
+-          "key": "https://tox.wiki/en/stable/config.html#packaging-environment"
+-        }
+-      },
+       "additionalProperties": true
+     },
+     "env": {
+       "type": "object",
+-      "description": "per-environment overrides (keyed by environment name)",
+-      "x-taplo": {
+-        "links": {
+-          "key": "https://tox.wiki/en/stable/config.html#run-environment"
+-        }
+-      },
+       "patternProperties": {
+         "^.*$": {
+           "$ref": "#/properties/env_run_base"
+@@ -623,13 +443,7 @@
+       }
+     },
+     "legacy_tox_ini": {
+-      "type": "string",
+-      "description": "tox configuration in INI format embedded in a TOML file",
+-      "x-taplo": {
+-        "links": {
+-          "key": "https://tox.wiki/en/stable/config.html#pyproject-toml-ini"
+-        }
+-      }
++      "type": "string"
+     }
+   },
+   "additionalProperties": true,
+diff --git a/tests/session/cmd/test_schema.py b/tests/session/cmd/test_schema.py
+index 74a2b414..53e53b14 100644
+--- a/tests/session/cmd/test_schema.py
++++ b/tests/session/cmd/test_schema.py
+@@ -1,13 +1,12 @@
+ from __future__ import annotations
+ 
+ import json
+-from pathlib import Path
+ from typing import TYPE_CHECKING
+ 
+ if TYPE_CHECKING:
+-    from tox.pytest import MonkeyPatch, ToxProjectCreator
++    from pathlib import Path
+ 
+-SCHEMA_PATH = Path(__file__).parents[3] / "src" / "tox" / "tox.schema.json"
++    from tox.pytest import MonkeyPatch, ToxProjectCreator
+ 
+ 
+ def test_show_schema_empty_dir(tox_project: ToxProjectCreator, monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+@@ -18,17 +17,3 @@ def test_show_schema_empty_dir(tox_project: ToxProjectCreator, monkeypatch: Monk
+     schema = json.loads(result.out)
+     assert "properties" in schema
+     assert "tox_root" in schema["properties"]
+-
+-
+-def test_schema_freshness(tox_project: ToxProjectCreator, monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+-    monkeypatch.chdir(tmp_path)
+-    project = tox_project({
+-        "tox.toml": 'env_list = ["py"]',
+-        "pyproject.toml": '[build-system]\nrequires = ["setuptools"]\nbuild-backend = "setuptools.build_meta"',
+-    })
+-    result = project.run("-qq", "schema")
+-    generated = json.loads(result.out)
+-    committed = json.loads(SCHEMA_PATH.read_text())
+-    assert generated == committed, (
+-        "tox.schema.json is out of date — regenerate with: tox schema > src/tox/tox.schema.json"
+-    )
+diff --git a/tests/session/cmd/test_show_config.py b/tests/session/cmd/test_show_config.py
+index 4c5559ae..28660c89 100644
+--- a/tests/session/cmd/test_show_config.py
++++ b/tests/session/cmd/test_show_config.py
+@@ -391,9 +391,14 @@ def test_cross_section_envpython_resolves_to_calling_env(tox_project: ToxProject
+ 
+ def test_factor_conditional_falls_back_to_default(tox_project: ToxProjectCreator) -> None:
+     py_ver = f"{sys.version_info[0]}.{sys.version_info[1]}"
+-    ini = (
+-        f"[tox]\nenv_list=py{py_ver}-a,py{py_ver}-b\nno_package=true\n[testenv]\nbase_python =\n    a: python{py_ver}\n"
+-    )
++    ini = f"""\
++    [tox]
++    env_list=py{py_ver}-a,py{py_ver}-b
++    no_package=true
++    [testenv]
++    base_python =
++        a: python{py_ver}
++    """
+     outcome = tox_project({"tox.ini": ini}).run("c", "-e", f"py{py_ver}-a,py{py_ver}-b", "-k", "base_python")
+     outcome.assert_success()
+     parser = ConfigParser(interpolation=None)
+@@ -402,6 +407,32 @@ def test_factor_conditional_falls_back_to_default(tox_project: ToxProjectCreator
+     assert parser.get(f"testenv:py{py_ver}-b", "base_python") == f"py{py_ver}"
+ 
+ 
++def test_cross_section_factor_conditional_resolves_to_empty(tox_project: ToxProjectCreator) -> None:
++    """Cross-section substitution resolves to empty when no factors match.
++
++    Regression test for gh-3809: {[section]key} where key contains factor-conditional values should resolve to empty
++    string when no factors match, not remain unresolved.
++
++    """
++    ini = """
++    [tox]
++    env_list=py39{,-keyfs_sqlite,-hash_hl}
++    no_package=true
++    [devpisettings]
++    storagebackend=
++        keyfs_sqlite: --backend-sqlite
++    [testenv]
++    commands=echo {[devpisettings]storagebackend}
++    allowlist_externals = echo
++    """
++    outcome = tox_project({"tox.ini": ini}).run("c", "-e", "py39,py39-keyfs_sqlite", "-k", "commands")
++    outcome.assert_success()
++    parser = ConfigParser(interpolation=None)
++    parser.read_string(outcome.out)
++    assert parser.get("testenv:py39", "commands") == "echo"
++    assert parser.get("testenv:py39-keyfs_sqlite", "commands") == "echo --backend-sqlite"
++
++
+ def test_core_on_platform(tox_project: ToxProjectCreator) -> None:
+     project = tox_project({"tox.ini": "[tox]\nno_package = true"})
+     result = project.run("c", "-e", "py", "--core", "-k", "on_platform")

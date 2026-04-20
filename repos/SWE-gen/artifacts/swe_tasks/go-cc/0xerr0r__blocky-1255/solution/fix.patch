@@ -1,0 +1,55 @@
+diff --git a/resolver/conditional_upstream_resolver.go b/resolver/conditional_upstream_resolver.go
+index fa8c2ddf..13084c49 100644
+--- a/resolver/conditional_upstream_resolver.go
++++ b/resolver/conditional_upstream_resolver.go
+@@ -121,7 +121,7 @@ func (r *ConditionalUpstreamResolver) internalResolve(reso Resolver, doFQ, do st
+ 
+ 	logger.WithFields(logrus.Fields{
+ 		"answer":   answer,
+-		"domain":   do,
++		"domain":   util.Obfuscate(do),
+ 		"upstream": reso,
+ 	}).Debugf("received response from conditional upstream")
+ 
+diff --git a/resolver/hosts_file_resolver.go b/resolver/hosts_file_resolver.go
+index 3da3082d..0a3c2d7f 100644
+--- a/resolver/hosts_file_resolver.go
++++ b/resolver/hosts_file_resolver.go
+@@ -126,7 +126,7 @@ func (r *HostsFileResolver) Resolve(request *model.Request) (*model.Response, er
+ 	if response != nil {
+ 		r.log().WithFields(logrus.Fields{
+ 			"answer": util.AnswerToString(response.Answer),
+-			"domain": domain,
++			"domain": util.Obfuscate(domain),
+ 		}).Debugf("returning hosts file entry")
+ 
+ 		return &model.Response{Res: response, RType: model.ResponseTypeHOSTSFILE, Reason: "HOSTS FILE"}, nil
+diff --git a/resolver/query_logging_resolver.go b/resolver/query_logging_resolver.go
+index 170101eb..36207d5c 100644
+--- a/resolver/query_logging_resolver.go
++++ b/resolver/query_logging_resolver.go
+@@ -157,7 +157,7 @@ func (r *QueryLoggingResolver) createLogEntry(request *model.Request, response *
+ 			entry.Answer = util.AnswerToString(response.Res.Answer)
+ 
+ 		case config.QueryLogFieldQuestion:
+-			entry.QuestionName = request.Req.Question[0].Name
++			entry.QuestionName = util.Obfuscate(request.Req.Question[0].Name)
+ 			entry.QuestionType = dns.TypeToString[request.Req.Question[0].Qtype]
+ 
+ 		case config.QueryLogFieldDuration:
+diff --git a/resolver/rewriter_resolver.go b/resolver/rewriter_resolver.go
+index 320c94d4..3dd44926 100644
+--- a/resolver/rewriter_resolver.go
++++ b/resolver/rewriter_resolver.go
+@@ -126,9 +126,8 @@ func (r *RewriterResolver) rewriteRequest(logger *logrus.Entry, request *dns.Msg
+ 			rewritten.Question[i].Name = dns.Fqdn(domainRewritten)
+ 
+ 			logger.WithFields(logrus.Fields{
+-				"domain":  domainOriginal,
+-				"rewrite": rewriteKey + ":" + r.cfg.Rewrite[rewriteKey],
+-			}).Debugf("rewriting %q to %q", domainOriginal, domainRewritten)
++				"rewrite": util.Obfuscate(rewriteKey) + ":" + util.Obfuscate(r.cfg.Rewrite[rewriteKey]),
++			}).Debugf("rewriting %q to %q", util.Obfuscate(domainOriginal), util.Obfuscate(domainRewritten))
+ 		}
+ 	}
+ 

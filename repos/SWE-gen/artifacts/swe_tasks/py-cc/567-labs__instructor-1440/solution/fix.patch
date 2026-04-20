@@ -1,0 +1,192 @@
+diff --git a/docs/integrations/genai.md b/docs/integrations/genai.md
+index 7c9cdc6e..767cb06a 100644
+--- a/docs/integrations/genai.md
++++ b/docs/integrations/genai.md
+@@ -263,6 +263,10 @@ print(response)  # UserDetail(name='JASON', age=25)
+ 
+ ## Multimodal Capabilities
+ 
++!!! info "Autodetect Images"
++
++    For convenient handling of images, you can enable automatic image conversion using the `autodetect_images` parameter. When enabled, Instructor will automatically detect and convert file paths and HTTP URLs provided as strings into the appropriate format required by the Google GenAI SDK. This makes working with images seamless and straightforward. ( see examples below )
++
+ Gemini models excel at processing different types of media. Instructor makes it easy to extract structured data from multimodal inputs.
+ 
+ ### Image Processing
+@@ -290,14 +294,15 @@ response = client.chat.completions.create(
+             "role": "user",
+             "content": [
+                 "Describe this image",
+-                "./scones.jpg",  # Local path
++                "./image.jpg",  # Local path
+             ],
+         }
+     ],
++    autodetect_images=True,
+     response_model=ImageDescription,
+ )
+ print(response)
+-#> objects=['cookies', 'coffee', 'blueberries', 'flowers'] scene='food photography'
++# > objects=['cookies', 'coffee', 'blueberries', 'flowers'] scene='food photography'
+ 
+ # Method 2 : Using instructor's image method to explicitly load an image
+ response = client.chat.completions.create(
+@@ -307,14 +312,14 @@ response = client.chat.completions.create(
+             "role": "user",
+             "content": [
+                 "Describe this image",
+-                instructor.Image.from_path("path/to/image.jpg"),  # Helper
++                instructor.Image.from_path("./image.jpg"),  # Helper
+             ],
+         }
+     ],
+     response_model=ImageDescription,
+ )
+ print(response)
+-#> objects=['cookies', 'coffee', 'blueberries', 'flowers'] scene='food photography'
++# > objects=['cookies', 'coffee', 'blueberries', 'flowers'] scene='food photography'
+ 
+ # Method 3 : Providing a image url
+ response = client.chat.completions.create(
+@@ -325,13 +330,14 @@ response = client.chat.completions.create(
+             "content": [
+                 "Describe this image",
+                 "https://raw.githubusercontent.com/instructor-ai/instructor/main/tests/assets/image.jpg",  # URL
+-            ]
++            ],
+         }
+     ],
++    autodetect_images=True,
+     response_model=ImageDescription,
+ )
+ print(response)
+-#> objects=['blueberries'] scene='blueberry field'
++# > objects=['blueberries'] scene='blueberry field'
+ ```
+ 
+ ### Audio Processing
+diff --git a/instructor/multimodal.py b/instructor/multimodal.py
+index 72b44fd9..57f879ac 100644
+--- a/instructor/multimodal.py
++++ b/instructor/multimodal.py
+@@ -64,28 +64,27 @@ class Image(BaseModel):
+     )
+ 
+     @classmethod
+-    def autodetect(cls, source: Union[str, Path]) -> Image:  # noqa: UP007
+-        """Attempt to autodetect an image from a source string or Path.
+-
+-        Args:
+-            source (Union[str,path]): The source string or path.
+-        Returns:
+-            An Image if the source is detected to be a valid image.
+-        Raises:
+-            ValueError: If the source is not detected to be a valid image.
+-        """
++    def autodetect(cls, source: str | Path) -> Image:
++        """Attempt to autodetect an image from a source string or Path."""
+         if isinstance(source, str):
+             if cls.is_base64(source):
+                 return cls.from_base64(source)
+-            elif source.startswith(("http://", "https://")):
++            if source.startswith(("http://", "https://")):
+                 return cls.from_url(source)
+-            elif source.startswith("gs://"):
++            if source.startswith("gs://"):
+                 return cls.from_gs_url(source)
+-            elif Path(source).is_file():
+-                return cls.from_path(source)
+-            else:
+-                return cls.from_raw_base64(source)
+-        elif isinstance(source, Path):
++            # Since detecting the max length of a file universally cross-platform is difficult,
++            # we'll just try/catch the Path conversion and file check
++            try:
++                path = Path(source)
++                if path.is_file():
++                    return cls.from_path(path)
++            except OSError:
++                pass  # Fall through to raw base64 attempt
++
++            return cls.from_raw_base64(source)
++
++        if isinstance(source, Path):
+             return cls.from_path(source)
+ 
+         raise ValueError("Unable to determine image type or unsupported image format")
+@@ -288,9 +287,9 @@ class Audio(BaseModel):
+         """Create an Audio instance from a URL."""
+         response = requests.get(url)
+         content_type = response.headers.get("content-type")
+-        assert (
+-            content_type in VALID_AUDIO_MIME_TYPES
+-        ), f"Invalid audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
++        assert content_type in VALID_AUDIO_MIME_TYPES, (
++            f"Invalid audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
++        )
+ 
+         data = base64.b64encode(response.content).decode("utf-8")
+         return cls(source=url, data=data, media_type=content_type)
+@@ -306,9 +305,9 @@ class Audio(BaseModel):
+         if mime_type == "audio/x-wav":
+             mime_type = "audio/wav"
+ 
+-        assert (
+-            mime_type in VALID_AUDIO_MIME_TYPES
+-        ), f"Invalid audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
++        assert mime_type in VALID_AUDIO_MIME_TYPES, (
++            f"Invalid audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
++        )
+ 
+         data = base64.b64encode(path.read_bytes()).decode("utf-8")
+         return cls(source=str(path), data=data, media_type=mime_type)
+@@ -468,6 +467,7 @@ def convert_messages(
+ 
+ def extract_genai_multimodal_content(
+     contents: list[Any],
++    autodetect_images: bool = True,
+ ):
+     """
+     Convert Typed Contents to the appropriate format for Google GenAI.
+@@ -495,7 +495,7 @@ def extract_genai_multimodal_content(
+ 
+         # Now we need to support a few cases
+         for content_part in content.parts:
+-            if content_part.text:
++            if content_part.text and autodetect_images:
+                 # Detect if the text is an image
+                 converted_item = Image.autodetect_safely(content_part.text)
+                 if isinstance(converted_item, Image):
+diff --git a/instructor/process_response.py b/instructor/process_response.py
+index ed48468e..632c2387 100644
+--- a/instructor/process_response.py
++++ b/instructor/process_response.py
+@@ -550,7 +550,7 @@ def handle_genai_structured_outputs(
+         system_message = None
+ 
+     new_kwargs["contents"] = convert_to_genai_messages(new_kwargs["messages"])
+-    new_kwargs["contents"] = extract_genai_multimodal_content(new_kwargs["contents"])
++
+     new_kwargs["config"] = types.GenerateContentConfig(
+         system_instruction=system_message,
+         response_mime_type="application/json",
+@@ -593,7 +593,6 @@ def handle_genai_tools(
+     )
+ 
+     new_kwargs["contents"] = convert_to_genai_messages(new_kwargs["messages"])
+-    new_kwargs["contents"] = extract_genai_multimodal_content(new_kwargs["contents"])
+ 
+     new_kwargs.pop("response_model", None)
+     new_kwargs.pop("messages", None)
+@@ -938,6 +937,11 @@ def handle_response_model(
+             autodetect_images=autodetect_images,
+         )
+ 
++    if mode in {Mode.GENAI_TOOLS, Mode.GENAI_STRUCTURED_OUTPUTS}:
++        new_kwargs["contents"] = extract_genai_multimodal_content(
++            new_kwargs["contents"], autodetect_images
++        )
++
+     logger.debug(
+         f"Instructor Request: {mode.value=}, {response_model=}, {new_kwargs=}",
+         extra={

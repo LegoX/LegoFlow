@@ -1,0 +1,10 @@
+matthewhudson/current-device:pr-390
+vuejs/vuefire:pr-1648
+firecow/gitlab-ci-local:pr-1810
+react-native-community/hooks:pr-410
+microsoft/azure-pipelines-tasks:pr-22005
+aws/aws-sdk-js-v3:pr-7930
+obsidian-tasks-group/obsidian-tasks:pr-3844
+revolist/revogrid:pr-833
+tomkp/react-split-pane:pr-880
+microsoft/reflect-metadata:pr-161

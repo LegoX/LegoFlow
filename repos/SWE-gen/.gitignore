@@ -1,0 +1,157 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+swegen-env*/
+.uv/
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+htmlcov/
+.tox/
+.nox/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.cursor/
+.cursor
+
+# Project-specific: Runtime data
+.swegen/
+.swegen-*/
+**/.swegen/
+**/.swegen-*/
+logs/
+scripts/logs/
+local_api_logger/
+runs/
+jobs/
+temp_repos/
+output/
+.state/
+
+# Artifacts: large runtime-generated data (sample data is tracked)
+artifacts/collected_prs/*_prs.jsonl
+artifacts/collected_prs/progress/
+artifacts/swe_tasks/*/.swegen-create-batch/
+artifacts/swe_tasks/*/.harbor-jobs/
+artifacts/swe_tasks/*/.swegen/
+
+# API statistics and logs
+api_logs/
+tmp/
+
+# Harbor job outputs
+harbor-jobs/
+*.log
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Temporary files
+# *.diff
+# *.patch
+.tmp/
+tmp/
+temp/
+*.tmp
+*.bak
+
+# OS files
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Environment variables (keep .env.example if needed)
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# Sensitive files
+gh_token.txt
+*_token.txt
+
+# One-off run/test scripts
+run_harbor_*.py
+run_harbor_*.sh
+tmp_run_*.py
+run_higress_*.py
+*_output.txt
+*_run.txt
+*_oracle.txt
+*_oracle_run.txt
+
+# Binary/package artifacts
+*.deb
+*.tgz
+*.whl
+*.tar.gz
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+.claude/worktrees/

@@ -1,0 +1,194 @@
+diff --git a/jaq-core/src/error.rs b/jaq-core/src/error.rs
+index ec14c60..67b078b 100644
+--- a/jaq-core/src/error.rs
++++ b/jaq-core/src/error.rs
+@@ -50,6 +50,10 @@ pub enum Error {
+     Regex(String),
+     /// `"a" | test("."; "b")`
+     RegexFlag(char),
++    /// custom filter without update
++    NonUpdatable,
++    /// arbitrary errors for custom filters
++    Custom(String),
+ }
+ 
+ impl fmt::Display for Error {
+@@ -77,6 +81,8 @@ impl fmt::Display for Error {
+             Self::PathExp => write!(f, "invalid path expression"),
+             Self::Regex(e) => write!(f, "invalid regex: {e}"),
+             Self::RegexFlag(c) => write!(f, "invalid regex flag '{c}'"),
++            Self::NonUpdatable => write!(f, "custom filter doesn't implement update"),
++            Self::Custom(e) => write!(f, "custom filter error: {e}"),
+         }
+     }
+ }
+diff --git a/jaq-core/src/filter.rs b/jaq-core/src/filter.rs
+index ad35c50..0f253c0 100644
+--- a/jaq-core/src/filter.rs
++++ b/jaq-core/src/filter.rs
+@@ -1,3 +1,6 @@
++use core::fmt::Debug;
++use alloc::sync::Arc;
++
+ use crate::path::{self, Path};
+ use crate::results::{fold, recurse, then};
+ use crate::val::{Val, ValR, ValRs};
+@@ -107,11 +110,66 @@ pub enum Filter {
+         skip: usize,
+         id: usize,
+     },
++
++    Custom(CustomFilter),
++}
++
++/// Custom filter.
++#[derive(Clone)]
++pub struct CustomFilter {
++    args: Vec<Filter>,
++    run: Arc<dyn for<'a> Fn(&'a [Filter], Cv<'a>) -> ValRs<'a>>,
++    update: Option<Arc<dyn for<'a> Fn(&'a [Filter], Cv<'a>, Box<dyn Update<'a> + 'a>) -> ValRs<'a>>>,
++}
++
++impl Debug for CustomFilter {
++    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
++        f.debug_struct("CustomFilter")
++            .field("arity", &self.args.len())
++            .field("run", &"{fn}")
++            .field("update", &match &self.update {
++                Some(_) => "Some({fn})",
++                None => "None",
++            })
++            .finish()
++    }
++}
++
++impl CustomFilter {
++    /// The arity (number of arguments) of the filter.
++    pub fn arity(&self) -> usize {
++        self.args.len()
++    }
++
++    /// Create a new custom filter from a function.
++    pub fn new(
++        arity: usize,
++        run: impl for<'a> Fn(&'a [Filter], Cv<'a>) -> ValRs<'a> + 'static,
++    ) -> Self {
++        Self {
++            args: (0..arity).map(|n| Filter::Arg(n)).collect(),
++            run: Arc::new(run),
++            update: None,
++        }
++    }
++
++    /// Create a new custom filter from a run function and an update function (used for `filter |= ...`).
++    pub fn with_update(
++        arity: usize,
++        run: impl for<'a> Fn(&'a [Filter], Cv<'a>) -> ValRs<'a> + 'static,
++        update: impl for<'a> Fn(&'a [Filter], Cv<'a>, Box<dyn Update<'a> + 'a>) -> ValRs<'a> + 'static,
++    ) -> Self {
++        Self {
++            args: (0..arity).map(|n| Filter::Arg(n)).collect(),
++            run: Arc::new(run),
++            update: Some(Arc::new(update)),
++        }
++    }
+ }
+ 
+ // we can unfortunately not make a `Box<dyn ... + Clone>`
+ // that is why we have to go through the pain of making a new trait here
+-trait Update<'a>: Fn(Val) -> ValRs<'a> + DynClone {}
++pub trait Update<'a>: Fn(Val) -> ValRs<'a> + DynClone {}
+ 
+ impl<'a, T: Fn(Val) -> ValRs<'a> + Clone> Update<'a> for T {}
+ 
+@@ -122,7 +180,7 @@ fn reduce<'a>(xs: ValRs<'a>, init: Val, f: impl Fn(Val, Val) -> ValRs<'a> + 'a)
+     Box::new(fold(false, xs, Box::new(core::iter::once(Ok(init))), f))
+ }
+ 
+-type Cv<'c> = (Ctx<'c>, Val);
++pub type Cv<'c> = (Ctx<'c>, Val);
+ 
+ impl Filter {
+     pub(crate) fn core() -> Vec<((String, usize), Self)> {
+@@ -333,13 +391,17 @@ impl Filter {
+                 let (save, rec) = &cv.0.recs[*id];
+                 rec.run((cv.0.save_skip_vars(*save, *skip), cv.1))
+             })),
++
++            Self::Custom(CustomFilter { args, run, .. }) => {
++                (run)(args, cv.clone())
++            },
+         }
+     }
+ 
+     /// `p.update(cv, f)` returns the output of `v | p |= f`
+     fn update<'a>(&'a self, cv: Cv<'a>, f: Box<dyn Update<'a> + 'a>) -> ValRs {
+         use core::iter::once;
+-        let err = Box::new(core::iter::once(Err(Error::PathExp)));
++        let err = Box::new(once(Err(Error::PathExp)));
+         match self {
+             Self::Int(_) | Self::Float(_) | Self::Str(_) => err,
+             Self::Array(_) | Self::Object(_) => err,
+@@ -401,6 +463,11 @@ impl Filter {
+                 let (save, rec) = &cv.0.recs[*id];
+                 rec.update((cv.0.save_skip_vars(*save, *skip), cv.1), f)
+             }
++
++            Self::Custom(CustomFilter { args, update: Some(update), .. }) => {
++                (update)(args, cv.clone(), f.clone())
++            },
++            Self::Custom(CustomFilter { update: None, .. }) => Box::new(once(Err(Error::NonUpdatable))),
+         }
+     }
+ 
+@@ -503,6 +570,13 @@ impl Filter {
+             Self::Call { .. } => self,
+             Self::Var(v) => Self::Var(fv(vars, v)),
+             Self::Arg(a) => fa(vars, a),
++            Self::Custom(CustomFilter { args, run, update }) => {
++                Self::Custom(CustomFilter {
++                    args: args.into_iter().map(|f| *sub(Box::new(f))).collect(),
++                    run,
++                    update,
++                })
++            }
+         }
+     }
+ }
+diff --git a/jaq-core/src/lib.rs b/jaq-core/src/lib.rs
+index acdf576..b5015f4 100644
+--- a/jaq-core/src/lib.rs
++++ b/jaq-core/src/lib.rs
+@@ -60,10 +60,11 @@ mod val;
+ pub use jaq_parse as parse;
+ 
+ pub use error::Error;
++pub use filter::CustomFilter;
+ pub use rc_iter::RcIter;
+ pub use val::{Val, ValR};
+ 
+-use alloc::{collections::BTreeMap, string::String, vec::Vec};
++use alloc::{collections::BTreeMap, string::{String, ToString}, vec::Vec};
+ use lazy_iter::LazyIter;
+ use parse::{Def, Main};
+ use rc_list::RcList;
+@@ -141,6 +142,7 @@ impl Filter {
+ ///
+ /// For example, if we define a filter `def map(f): [.[] | f]`,
+ /// then the definitions will associate `map/1` to its definition.
++#[derive(Debug, Default, Clone)]
+ pub struct Definitions(BTreeMap<(String, usize), filter::Filter>);
+ 
+ impl Definitions {
+@@ -158,6 +160,11 @@ impl Definitions {
+         let f = unparse::def(&self.get(), &def.args, def.body, errs);
+         self.0.insert((def.name, def.args.len()), f);
+     }
++    
++    /// Import a custom, Rust-defined filter.
++    pub fn insert_custom(&mut self, name: &str, filter: filter::CustomFilter) {
++        self.0.insert((name.to_string(), filter.arity()), filter::Filter::Custom(filter));
++    }
+ 
+     /// Given a main filter (consisting of definitions and a body), return a finished filter.
+     pub fn finish(

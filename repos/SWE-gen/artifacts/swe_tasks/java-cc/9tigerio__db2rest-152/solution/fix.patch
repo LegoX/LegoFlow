@@ -1,0 +1,62 @@
+diff --git a/src/main/java/com/homihq/db2rest/rest/create/CreateController.java b/src/main/java/com/homihq/db2rest/rest/create/CreateController.java
+index fd494d3d..96fcb6b9 100644
+--- a/src/main/java/com/homihq/db2rest/rest/create/CreateController.java
++++ b/src/main/java/com/homihq/db2rest/rest/create/CreateController.java
+@@ -35,10 +35,12 @@ public class CreateController {
+     @PostMapping ( "/{tableName}/bulk")
+     public CreateBulkResponse saveBulk(@PathVariable String tableName,
+                                        @RequestHeader(name = "Content-Profile") String schemaName,
+-                                       @RequestBody List<Map<String,Object>> data) {
++                                       @RequestBody List<Map<String,Object>> data,
++                                       @RequestParam(name = "tsid", required = false) String tsid,
++                                       @RequestParam(name = "tsidType", required = false, defaultValue = "number") String tsidType) {
+ 
+         int [] rows =
+-        createService.saveBulk(schemaName, tableName,data);
++        createService.saveBulk(schemaName, tableName, data, tsid, tsidType);
+ 
+         return new CreateBulkResponse(rows);
+     }
+diff --git a/src/main/java/com/homihq/db2rest/rest/create/CreateService.java b/src/main/java/com/homihq/db2rest/rest/create/CreateService.java
+index 3b8be71a..47347904 100644
+--- a/src/main/java/com/homihq/db2rest/rest/create/CreateService.java
++++ b/src/main/java/com/homihq/db2rest/rest/create/CreateService.java
+@@ -59,7 +59,7 @@ public class CreateService {
+             rows = namedParameterJdbcTemplate.update(insertStatement.getInsertStatement(), insertStatement.getParameters());
+         }
+         catch(DataAccessException e) {
+-            throw new GenericDataAccessException(e.getMessage());
++            throw new GenericDataAccessException(e.getMostSpecificCause().getMessage());
+         }
+         log.debug("Inserted - {} row(s)", rows);
+ 
+@@ -92,9 +92,12 @@ public class CreateService {
+     }
+ 
+     @Transactional
+-    public int[] saveBulk(String schemaName, String tableName, List<Map<String, Object>> dataList) {
++    public int[] saveBulk(String schemaName, String tableName, List<Map<String, Object>> dataList, String tsid, String tsidType) {
+         if(Objects.isNull(dataList) || dataList.isEmpty()) throw new RuntimeException("No data provided");
+ 
++        for(Map<String, Object> data : dataList)
++            processTSID(data, tsid, tsidType);
++
+         SqlTable table = SqlTable.of(tableName);
+ 
+         Map<String,Object> item = dataList.get(0);
+@@ -116,7 +119,14 @@ public class CreateService {
+         log.debug("SQL -> {}", batchInsert.getInsertStatementSQL());
+         log.debug("batch -> {}", batch);
+ 
+-        int[] updateCounts = namedParameterJdbcTemplate.batchUpdate(batchInsert.getInsertStatementSQL(), batch);
++        int[] updateCounts;
++
++        try {
++            updateCounts = namedParameterJdbcTemplate.batchUpdate(batchInsert.getInsertStatementSQL(), batch);
++        }
++        catch (DataAccessException e) {
++            throw new GenericDataAccessException(e.getMostSpecificCause().getMessage());
++        }
+ 
+         log.debug("Update counts - {}", updateCounts.length);
+ 

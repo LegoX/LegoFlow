@@ -1,0 +1,110 @@
+diff --git a/e2e/basic_test.go b/e2e/basic_test.go
+index 9b6c27c5..fc827630 100644
+--- a/e2e/basic_test.go
++++ b/e2e/basic_test.go
+@@ -140,50 +140,4 @@ var _ = Describe("Basic functional tests", func() {
+ 			})
+ 		})
+ 	})
+-
+-	Describe("Logging", func() {
+-		BeforeEach(func() {
+-			moka, err = createDNSMokkaContainer("moka1", `A google/NOERROR("A 1.2.3.4 123")`)
+-
+-			Expect(err).Should(Succeed())
+-			DeferCleanup(moka.Terminate)
+-		})
+-		When("log privacy is enabled", func() {
+-			BeforeEach(func() {
+-				blocky, err = createBlockyContainer(tmpDir,
+-					"upstreams:",
+-					"  groups:",
+-					"    default:",
+-					"      - moka1",
+-					"log:",
+-					"  level: trace",
+-					"  privacy: true",
+-				)
+-				Expect(err).Should(Succeed())
+-				DeferCleanup(blocky.Terminate)
+-			})
+-			It("should not log answers and questions", func() {
+-				msg := util.NewMsgWithQuestion("google.com.", A)
+-
+-				// do 2 requests
+-
+-				Expect(doDNSRequest(blocky, msg)).
+-					Should(
+-						SatisfyAll(
+-							BeDNSRecord("google.com.", A, "1.2.3.4"),
+-							HaveTTL(BeNumerically("==", 123)),
+-						))
+-
+-				Expect(doDNSRequest(blocky, msg)).
+-					Should(
+-						SatisfyAll(
+-							BeDNSRecord("google.com.", A, "1.2.3.4"),
+-							HaveTTL(BeNumerically("<=", 123)),
+-						))
+-
+-				Expect(getContainerLogs(blocky)).Should(Not(ContainElement(ContainSubstring("google.com"))))
+-				Expect(getContainerLogs(blocky)).Should(Not(ContainElement(ContainSubstring("1.2.3.4"))))
+-			})
+-		})
+-	})
+ })
+diff --git a/resolver/conditional_upstream_resolver.go b/resolver/conditional_upstream_resolver.go
+index 13084c49..fa8c2ddf 100644
+--- a/resolver/conditional_upstream_resolver.go
++++ b/resolver/conditional_upstream_resolver.go
+@@ -121,7 +121,7 @@ func (r *ConditionalUpstreamResolver) internalResolve(reso Resolver, doFQ, do st
+ 
+ 	logger.WithFields(logrus.Fields{
+ 		"answer":   answer,
+-		"domain":   util.Obfuscate(do),
++		"domain":   do,
+ 		"upstream": reso,
+ 	}).Debugf("received response from conditional upstream")
+ 
+diff --git a/resolver/hosts_file_resolver.go b/resolver/hosts_file_resolver.go
+index 0a3c2d7f..3da3082d 100644
+--- a/resolver/hosts_file_resolver.go
++++ b/resolver/hosts_file_resolver.go
+@@ -126,7 +126,7 @@ func (r *HostsFileResolver) Resolve(request *model.Request) (*model.Response, er
+ 	if response != nil {
+ 		r.log().WithFields(logrus.Fields{
+ 			"answer": util.AnswerToString(response.Answer),
+-			"domain": util.Obfuscate(domain),
++			"domain": domain,
+ 		}).Debugf("returning hosts file entry")
+ 
+ 		return &model.Response{Res: response, RType: model.ResponseTypeHOSTSFILE, Reason: "HOSTS FILE"}, nil
+diff --git a/resolver/query_logging_resolver.go b/resolver/query_logging_resolver.go
+index 36207d5c..170101eb 100644
+--- a/resolver/query_logging_resolver.go
++++ b/resolver/query_logging_resolver.go
+@@ -157,7 +157,7 @@ func (r *QueryLoggingResolver) createLogEntry(request *model.Request, response *
+ 			entry.Answer = util.AnswerToString(response.Res.Answer)
+ 
+ 		case config.QueryLogFieldQuestion:
+-			entry.QuestionName = util.Obfuscate(request.Req.Question[0].Name)
++			entry.QuestionName = request.Req.Question[0].Name
+ 			entry.QuestionType = dns.TypeToString[request.Req.Question[0].Qtype]
+ 
+ 		case config.QueryLogFieldDuration:
+diff --git a/resolver/rewriter_resolver.go b/resolver/rewriter_resolver.go
+index 3dd44926..320c94d4 100644
+--- a/resolver/rewriter_resolver.go
++++ b/resolver/rewriter_resolver.go
+@@ -126,8 +126,9 @@ func (r *RewriterResolver) rewriteRequest(logger *logrus.Entry, request *dns.Msg
+ 			rewritten.Question[i].Name = dns.Fqdn(domainRewritten)
+ 
+ 			logger.WithFields(logrus.Fields{
+-				"rewrite": util.Obfuscate(rewriteKey) + ":" + util.Obfuscate(r.cfg.Rewrite[rewriteKey]),
+-			}).Debugf("rewriting %q to %q", util.Obfuscate(domainOriginal), util.Obfuscate(domainRewritten))
++				"domain":  domainOriginal,
++				"rewrite": rewriteKey + ":" + r.cfg.Rewrite[rewriteKey],
++			}).Debugf("rewriting %q to %q", domainOriginal, domainRewritten)
+ 		}
+ 	}
+ 

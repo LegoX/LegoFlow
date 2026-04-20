@@ -1,0 +1,416 @@
+diff --git a/docs/integrations/genai.md b/docs/integrations/genai.md
+index 767cb06a..7c9cdc6e 100644
+--- a/docs/integrations/genai.md
++++ b/docs/integrations/genai.md
+@@ -263,10 +263,6 @@ print(response)  # UserDetail(name='JASON', age=25)
+ 
+ ## Multimodal Capabilities
+ 
+-!!! info "Autodetect Images"
+-
+-    For convenient handling of images, you can enable automatic image conversion using the `autodetect_images` parameter. When enabled, Instructor will automatically detect and convert file paths and HTTP URLs provided as strings into the appropriate format required by the Google GenAI SDK. This makes working with images seamless and straightforward. ( see examples below )
+-
+ Gemini models excel at processing different types of media. Instructor makes it easy to extract structured data from multimodal inputs.
+ 
+ ### Image Processing
+@@ -294,15 +290,14 @@ response = client.chat.completions.create(
+             "role": "user",
+             "content": [
+                 "Describe this image",
+-                "./image.jpg",  # Local path
++                "./scones.jpg",  # Local path
+             ],
+         }
+     ],
+-    autodetect_images=True,
+     response_model=ImageDescription,
+ )
+ print(response)
+-# > objects=['cookies', 'coffee', 'blueberries', 'flowers'] scene='food photography'
++#> objects=['cookies', 'coffee', 'blueberries', 'flowers'] scene='food photography'
+ 
+ # Method 2 : Using instructor's image method to explicitly load an image
+ response = client.chat.completions.create(
+@@ -312,14 +307,14 @@ response = client.chat.completions.create(
+             "role": "user",
+             "content": [
+                 "Describe this image",
+-                instructor.Image.from_path("./image.jpg"),  # Helper
++                instructor.Image.from_path("path/to/image.jpg"),  # Helper
+             ],
+         }
+     ],
+     response_model=ImageDescription,
+ )
+ print(response)
+-# > objects=['cookies', 'coffee', 'blueberries', 'flowers'] scene='food photography'
++#> objects=['cookies', 'coffee', 'blueberries', 'flowers'] scene='food photography'
+ 
+ # Method 3 : Providing a image url
+ response = client.chat.completions.create(
+@@ -330,14 +325,13 @@ response = client.chat.completions.create(
+             "content": [
+                 "Describe this image",
+                 "https://raw.githubusercontent.com/instructor-ai/instructor/main/tests/assets/image.jpg",  # URL
+-            ],
++            ]
+         }
+     ],
+-    autodetect_images=True,
+     response_model=ImageDescription,
+ )
+ print(response)
+-# > objects=['blueberries'] scene='blueberry field'
++#> objects=['blueberries'] scene='blueberry field'
+ ```
+ 
+ ### Audio Processing
+diff --git a/instructor/multimodal.py b/instructor/multimodal.py
+index 57f879ac..72b44fd9 100644
+--- a/instructor/multimodal.py
++++ b/instructor/multimodal.py
+@@ -64,27 +64,28 @@ class Image(BaseModel):
+     )
+ 
+     @classmethod
+-    def autodetect(cls, source: str | Path) -> Image:
+-        """Attempt to autodetect an image from a source string or Path."""
++    def autodetect(cls, source: Union[str, Path]) -> Image:  # noqa: UP007
++        """Attempt to autodetect an image from a source string or Path.
++
++        Args:
++            source (Union[str,path]): The source string or path.
++        Returns:
++            An Image if the source is detected to be a valid image.
++        Raises:
++            ValueError: If the source is not detected to be a valid image.
++        """
+         if isinstance(source, str):
+             if cls.is_base64(source):
+                 return cls.from_base64(source)
+-            if source.startswith(("http://", "https://")):
++            elif source.startswith(("http://", "https://")):
+                 return cls.from_url(source)
+-            if source.startswith("gs://"):
++            elif source.startswith("gs://"):
+                 return cls.from_gs_url(source)
+-            # Since detecting the max length of a file universally cross-platform is difficult,
+-            # we'll just try/catch the Path conversion and file check
+-            try:
+-                path = Path(source)
+-                if path.is_file():
+-                    return cls.from_path(path)
+-            except OSError:
+-                pass  # Fall through to raw base64 attempt
+-
+-            return cls.from_raw_base64(source)
+-
+-        if isinstance(source, Path):
++            elif Path(source).is_file():
++                return cls.from_path(source)
++            else:
++                return cls.from_raw_base64(source)
++        elif isinstance(source, Path):
+             return cls.from_path(source)
+ 
+         raise ValueError("Unable to determine image type or unsupported image format")
+@@ -287,9 +288,9 @@ class Audio(BaseModel):
+         """Create an Audio instance from a URL."""
+         response = requests.get(url)
+         content_type = response.headers.get("content-type")
+-        assert content_type in VALID_AUDIO_MIME_TYPES, (
+-            f"Invalid audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
+-        )
++        assert (
++            content_type in VALID_AUDIO_MIME_TYPES
++        ), f"Invalid audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
+ 
+         data = base64.b64encode(response.content).decode("utf-8")
+         return cls(source=url, data=data, media_type=content_type)
+@@ -305,9 +306,9 @@ class Audio(BaseModel):
+         if mime_type == "audio/x-wav":
+             mime_type = "audio/wav"
+ 
+-        assert mime_type in VALID_AUDIO_MIME_TYPES, (
+-            f"Invalid audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
+-        )
++        assert (
++            mime_type in VALID_AUDIO_MIME_TYPES
++        ), f"Invalid audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
+ 
+         data = base64.b64encode(path.read_bytes()).decode("utf-8")
+         return cls(source=str(path), data=data, media_type=mime_type)
+@@ -467,7 +468,6 @@ def convert_messages(
+ 
+ def extract_genai_multimodal_content(
+     contents: list[Any],
+-    autodetect_images: bool = True,
+ ):
+     """
+     Convert Typed Contents to the appropriate format for Google GenAI.
+@@ -495,7 +495,7 @@ def extract_genai_multimodal_content(
+ 
+         # Now we need to support a few cases
+         for content_part in content.parts:
+-            if content_part.text and autodetect_images:
++            if content_part.text:
+                 # Detect if the text is an image
+                 converted_item = Image.autodetect_safely(content_part.text)
+                 if isinstance(converted_item, Image):
+diff --git a/instructor/process_response.py b/instructor/process_response.py
+index 632c2387..ed48468e 100644
+--- a/instructor/process_response.py
++++ b/instructor/process_response.py
+@@ -550,7 +550,7 @@ def handle_genai_structured_outputs(
+         system_message = None
+ 
+     new_kwargs["contents"] = convert_to_genai_messages(new_kwargs["messages"])
+-
++    new_kwargs["contents"] = extract_genai_multimodal_content(new_kwargs["contents"])
+     new_kwargs["config"] = types.GenerateContentConfig(
+         system_instruction=system_message,
+         response_mime_type="application/json",
+@@ -593,6 +593,7 @@ def handle_genai_tools(
+     )
+ 
+     new_kwargs["contents"] = convert_to_genai_messages(new_kwargs["messages"])
++    new_kwargs["contents"] = extract_genai_multimodal_content(new_kwargs["contents"])
+ 
+     new_kwargs.pop("response_model", None)
+     new_kwargs.pop("messages", None)
+@@ -937,11 +938,6 @@ def handle_response_model(
+             autodetect_images=autodetect_images,
+         )
+ 
+-    if mode in {Mode.GENAI_TOOLS, Mode.GENAI_STRUCTURED_OUTPUTS}:
+-        new_kwargs["contents"] = extract_genai_multimodal_content(
+-            new_kwargs["contents"], autodetect_images
+-        )
+-
+     logger.debug(
+         f"Instructor Request: {mode.value=}, {response_model=}, {new_kwargs=}",
+         extra={
+diff --git a/tests/llm/test_genai/test_long_prompt.py b/tests/llm/test_genai/test_long_prompt.py
+deleted file mode 100644
+index 2eb636ec..00000000
+--- a/tests/llm/test_genai/test_long_prompt.py
++++ /dev/null
+@@ -1,51 +0,0 @@
+-import pytest
+-import instructor
+-from pydantic import BaseModel
+-from .util import models, modes
+-
+-long_message = """
+-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse in augue eu dolor tempus tincidunt. Suspendisse sed magna feugiat, mollis quam at, ornare leo. Praesent lacinia congue risus. Sed ac velit id libero vestibulum posuere. Aenean non lobortis lectus. Donec imperdiet dapibus congue. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Duis blandit dui convallis nisl pellentesque, et eleifend libero tincidunt.
+-
+-Donec massa orci, finibus eget accumsan vel, hendrerit ac elit. Integer arcu libero, tincidunt in tellus vitae, gravida efficitur risus. Maecenas luctus arcu sed leo eleifend scelerisque. Ut ex dui, ullamcorper vel sapien condimentum, sodales elementum nisl. Nunc pharetra diam lacus, at dapibus turpis dignissim eget. Praesent consectetur sed dolor et pharetra. Quisque rutrum consectetur velit sed lobortis.
+-
+-Donec a vehicula nulla. Maecenas mattis massa id odio ultrices tincidunt. Nullam tempor, sem id tempus finibus, enim urna gravida elit, sed interdum libero lacus at nisi. Nulla lectus tellus, suscipit et purus a, facilisis eleifend metus. Etiam ac vulputate tortor. Etiam rhoncus lacinia diam in ullamcorper. Cras id arcu justo. Cras interdum, ligula eu eleifend sollicitudin, magna ante tincidunt leo, at iaculis ligula nisi at justo. Suspendisse fringilla sapien ex, sit amet ultrices ligula scelerisque in. Nullam tempus convallis magna. Donec sodales congue felis, vitae cursus odio ultrices vitae.
+-
+-Donec dapibus eros tortor, ut porta quam elementum sit amet. In quam elit, lobortis viverra hendrerit at, tincidunt quis neque. Maecenas consectetur est a orci iaculis, ut congue nisl gravida. Quisque blandit sapien erat, et ullamcorper elit congue ut. Aenean condimentum porttitor odio, ac eleifend sapien consequat nec. Suspendisse sed eros nec tellus rutrum rutrum consectetur id massa. Vivamus volutpat neque enim, a dignissim sapien venenatis non. Etiam non sapien eu tellus sollicitudin tincidunt non ut tortor. Aliquam semper justo tincidunt mauris tincidunt imperdiet. Donec porttitor felis ac pharetra commodo.
+-
+-Proin a egestas ligula. Suspendisse ultrices, lacus non accumsan vestibulum, quam metus interdum quam, sed pellentesque mi augue sed libero. Sed sed diam eget felis feugiat accumsan viverra quis magna. Nunc condimentum laoreet mattis. Proin id purus vitae felis aliquet condimentum. Nullam augue lectus, vestibulum sed lacus laoreet, suscipit finibus leo. Donec sed justo sapien. Nullam ac imperdiet nisi. Sed nec convallis ante. Integer volutpat sit amet elit vel iaculis. Nam euismod bibendum dolor nec facilisis. Cras ornare risus sed ex aliquam, eu fringilla metus sollicitudin. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+-
+-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse in augue eu dolor tempus tincidunt. Suspendisse sed magna feugiat, mollis quam at, ornare leo. Praesent lacinia congue risus. Sed ac velit id libero vestibulum posuere. Aenean non lobortis lectus. Donec imperdiet dapibus congue. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Duis blandit dui convallis nisl pellentesque, et eleifend libero tincidunt.
+-
+-Donec massa orci, finibus eget accumsan vel, hendrerit ac elit. Integer arcu libero, tincidunt in tellus vitae, gravida efficitur risus. Maecenas luctus arcu sed leo eleifend scelerisque. Ut ex dui, ullamcorper vel sapien condimentum, sodales elementum nisl. Nunc pharetra diam lacus, at dapibus turpis dignissim eget. Praesent consectetur sed dolor et pharetra. Quisque rutrum consectetur velit sed lobortis.
+-
+-Donec a vehicula nulla. Maecenas mattis massa id odio ultrices tincidunt. Nullam tempor, sem id tempus finibus, enim urna gravida elit, sed interdum libero lacus at nisi. Nulla lectus tellus, suscipit et purus a, facilisis eleifend metus. Etiam ac vulputate tortor. Etiam rhoncus lacinia diam in ullamcorper. Cras id arcu justo. Cras interdum, ligula eu eleifend sollicitudin, magna ante tincidunt leo, at iaculis ligula nisi at justo. Suspendisse fringilla sapien ex, sit amet ultrices ligula scelerisque in. Nullam tempus convallis magna. Donec sodales congue felis, vitae cursus odio ultrices vitae.
+-
+-Donec dapibus eros tortor, ut porta quam elementum sit amet. In quam elit, lobortis viverra hendrerit at, tincidunt quis neque. Maecenas consectetur est a orci iaculis, ut congue nisl gravida. Quisque blandit sapien erat, et ullamcorper elit congue ut. Aenean condimentum porttitor odio, ac eleifend sapien consequat nec. Suspendisse sed eros nec tellus rutrum rutrum consectetur id massa. Vivamus volutpat neque enim, a dignissim sapien venenatis non. Etiam non sapien eu tellus sollicitudin tincidunt non ut tortor. Aliquam semper justo tincidunt mauris tincidunt imperdiet. Donec porttitor felis ac pharetra commodo.
+-
+-Proin a egestas ligula. Suspendisse ultrices, lacus non accumsan vestibulum, quam metus interdum quam, sed pellentesque mi augue sed libero. Sed sed diam eget felis feugiat accumsan viverra quis magna. Nunc condimentum laoreet mattis. Proin id purus vitae felis aliquet condimentum. Nullam augue lectus, vestibulum sed lacus laoreet, suscipit finibus leo. Donec sed justo sapien. Nullam ac imperdiet nisi. Sed nec convallis ante. Integer volutpat sit amet elit vel iaculis. Nam euismod bibendum dolor nec facilisis. Cras ornare risus sed ex aliquam, eu fringilla metus sollicitudin. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+-"""
+-
+-
+-@pytest.mark.parametrize("model", models)
+-@pytest.mark.parametrize("mode", modes)
+-def test_long_prompt(client, model, mode):
+-    class User(BaseModel):
+-        name: str
+-        age: int
+-
+-    client = instructor.from_genai(client, mode=mode)
+-    response = client.chat.completions.create(
+-        model=model,
+-        messages=[
+-            {
+-                "role": "user",
+-                "content": long_message
+-                + long_message
+-                + long_message
+-                + "ivan is 27 years old",
+-            },
+-        ],
+-        response_model=User,
+-    )
+-    assert response.name == "ivan"
+-    assert response.age == 27
+diff --git a/tests/llm/test_genai/test_multimodal.py b/tests/llm/test_genai/test_multimodal.py
+index a84ddaa1..9a2ae0e9 100644
+--- a/tests/llm/test_genai/test_multimodal.py
++++ b/tests/llm/test_genai/test_multimodal.py
+@@ -15,29 +15,6 @@ audio_file = os.path.join(curr_file, "../../assets/gettysburg.wav")
+ audio_url = "https://raw.githubusercontent.com/instructor-ai/instructor/main/tests/assets/gettysburg.wav"
+ 
+ 
+-long_message = """
+-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse in augue eu dolor tempus tincidunt. Suspendisse sed magna feugiat, mollis quam at, ornare leo. Praesent lacinia congue risus. Sed ac velit id libero vestibulum posuere. Aenean non lobortis lectus. Donec imperdiet dapibus congue. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Duis blandit dui convallis nisl pellentesque, et eleifend libero tincidunt.
+-
+-Donec massa orci, finibus eget accumsan vel, hendrerit ac elit. Integer arcu libero, tincidunt in tellus vitae, gravida efficitur risus. Maecenas luctus arcu sed leo eleifend scelerisque. Ut ex dui, ullamcorper vel sapien condimentum, sodales elementum nisl. Nunc pharetra diam lacus, at dapibus turpis dignissim eget. Praesent consectetur sed dolor et pharetra. Quisque rutrum consectetur velit sed lobortis.
+-
+-Donec a vehicula nulla. Maecenas mattis massa id odio ultrices tincidunt. Nullam tempor, sem id tempus finibus, enim urna gravida elit, sed interdum libero lacus at nisi. Nulla lectus tellus, suscipit et purus a, facilisis eleifend metus. Etiam ac vulputate tortor. Etiam rhoncus lacinia diam in ullamcorper. Cras id arcu justo. Cras interdum, ligula eu eleifend sollicitudin, magna ante tincidunt leo, at iaculis ligula nisi at justo. Suspendisse fringilla sapien ex, sit amet ultrices ligula scelerisque in. Nullam tempus convallis magna. Donec sodales congue felis, vitae cursus odio ultrices vitae.
+-
+-Donec dapibus eros tortor, ut porta quam elementum sit amet. In quam elit, lobortis viverra hendrerit at, tincidunt quis neque. Maecenas consectetur est a orci iaculis, ut congue nisl gravida. Quisque blandit sapien erat, et ullamcorper elit congue ut. Aenean condimentum porttitor odio, ac eleifend sapien consequat nec. Suspendisse sed eros nec tellus rutrum rutrum consectetur id massa. Vivamus volutpat neque enim, a dignissim sapien venenatis non. Etiam non sapien eu tellus sollicitudin tincidunt non ut tortor. Aliquam semper justo tincidunt mauris tincidunt imperdiet. Donec porttitor felis ac pharetra commodo.
+-
+-Proin a egestas ligula. Suspendisse ultrices, lacus non accumsan vestibulum, quam metus interdum quam, sed pellentesque mi augue sed libero. Sed sed diam eget felis feugiat accumsan viverra quis magna. Nunc condimentum laoreet mattis. Proin id purus vitae felis aliquet condimentum. Nullam augue lectus, vestibulum sed lacus laoreet, suscipit finibus leo. Donec sed justo sapien. Nullam ac imperdiet nisi. Sed nec convallis ante. Integer volutpat sit amet elit vel iaculis. Nam euismod bibendum dolor nec facilisis. Cras ornare risus sed ex aliquam, eu fringilla metus sollicitudin. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+-
+-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse in augue eu dolor tempus tincidunt. Suspendisse sed magna feugiat, mollis quam at, ornare leo. Praesent lacinia congue risus. Sed ac velit id libero vestibulum posuere. Aenean non lobortis lectus. Donec imperdiet dapibus congue. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Duis blandit dui convallis nisl pellentesque, et eleifend libero tincidunt.
+-
+-Donec massa orci, finibus eget accumsan vel, hendrerit ac elit. Integer arcu libero, tincidunt in tellus vitae, gravida efficitur risus. Maecenas luctus arcu sed leo eleifend scelerisque. Ut ex dui, ullamcorper vel sapien condimentum, sodales elementum nisl. Nunc pharetra diam lacus, at dapibus turpis dignissim eget. Praesent consectetur sed dolor et pharetra. Quisque rutrum consectetur velit sed lobortis.
+-
+-Donec a vehicula nulla. Maecenas mattis massa id odio ultrices tincidunt. Nullam tempor, sem id tempus finibus, enim urna gravida elit, sed interdum libero lacus at nisi. Nulla lectus tellus, suscipit et purus a, facilisis eleifend metus. Etiam ac vulputate tortor. Etiam rhoncus lacinia diam in ullamcorper. Cras id arcu justo. Cras interdum, ligula eu eleifend sollicitudin, magna ante tincidunt leo, at iaculis ligula nisi at justo. Suspendisse fringilla sapien ex, sit amet ultrices ligula scelerisque in. Nullam tempus convallis magna. Donec sodales congue felis, vitae cursus odio ultrices vitae.
+-
+-Donec dapibus eros tortor, ut porta quam elementum sit amet. In quam elit, lobortis viverra hendrerit at, tincidunt quis neque. Maecenas consectetur est a orci iaculis, ut congue nisl gravida. Quisque blandit sapien erat, et ullamcorper elit congue ut. Aenean condimentum porttitor odio, ac eleifend sapien consequat nec. Suspendisse sed eros nec tellus rutrum rutrum consectetur id massa. Vivamus volutpat neque enim, a dignissim sapien venenatis non. Etiam non sapien eu tellus sollicitudin tincidunt non ut tortor. Aliquam semper justo tincidunt mauris tincidunt imperdiet. Donec porttitor felis ac pharetra commodo.
+-
+-Proin a egestas ligula. Suspendisse ultrices, lacus non accumsan vestibulum, quam metus interdum quam, sed pellentesque mi augue sed libero. Sed sed diam eget felis feugiat accumsan viverra quis magna. Nunc condimentum laoreet mattis. Proin id purus vitae felis aliquet condimentum. Nullam augue lectus, vestibulum sed lacus laoreet, suscipit finibus leo. Donec sed justo sapien. Nullam ac imperdiet nisi. Sed nec convallis ante. Integer volutpat sit amet elit vel iaculis. Nam euismod bibendum dolor nec facilisis. Cras ornare risus sed ex aliquam, eu fringilla metus sollicitudin. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+-"""
+-
+-
+ @pytest.mark.parametrize("model", models)
+ @pytest.mark.parametrize("mode", modes)
+ def test_local_file_image(client, model, mode):
+@@ -50,11 +27,9 @@ def test_local_file_image(client, model, mode):
+                 "content": [
+                     "What is shown in this image?",
+                     instructor.Image.from_path(image_file),
+-                    long_message,
+                 ],  # type: ignore
+             }
+         ],
+-        autodetect_images=True,
+         response_model=ImageDescription,
+     )
+     assert isinstance(response, ImageDescription)
+@@ -74,11 +49,9 @@ def test_remote_url_image(client, model, mode):
+                 "content": [
+                     "Describe this image in detail",
+                     "gs://generativeai-downloads/images/scones.jpg",
+-                    long_message,
+                 ],  # type: ignore
+             }
+         ],
+-        autodetect_images=True,
+         response_model=ImageDescription,
+     )
+     assert isinstance(response, ImageDescription)
+@@ -94,13 +67,9 @@ def test_gs_url_image(client, model, mode):
+     response = client.chat.completions.create(
+         model=model,
+         messages=[
+-            {
+-                "role": "user",
+-                "content": ["What do you see in this image?", image_url, long_message],
+-            }  # type: ignore
++            {"role": "user", "content": ["What do you see in this image?", image_url]}  # type: ignore
+         ],
+         response_model=ImageDescription,
+-        autodetect_images=True,
+     )
+     assert isinstance(response, ImageDescription)
+     assert len(response.items) > 0
+@@ -116,11 +85,10 @@ def test_instructor_image(client, model, mode):
+         messages=[
+             {
+                 "role": "user",
+-                "content": ["Analyze this image", image_file, long_message],
++                "content": ["Analyze this image", image_file],
+             }  # type: ignore
+         ],
+         response_model=ImageDescription,
+-        autodetect_images=True,
+     )
+     assert isinstance(response, ImageDescription)
+     assert len(response.items) > 0
+@@ -142,7 +110,6 @@ def test_audio_from_path(client, model, mode):
+                 "content": [
+                     "What is this about?",
+                     instructor.Audio.from_path(audio_file),
+-                    long_message,
+                 ],  # type: ignore
+             }
+         ],
+@@ -168,7 +135,6 @@ def test_audio_from_url(client, model, mode):
+                 "content": [
+                     "What is this about?",
+                     instructor.Audio.from_url(audio_url),
+-                    long_message,
+                 ],  # type: ignore
+             }
+         ],
+@@ -176,54 +142,3 @@ def test_audio_from_url(client, model, mode):
+     )
+     assert isinstance(response, AudioResponse)
+     assert len(response.response) > 0
+-
+-
+-@pytest.mark.parametrize("autodetect_images", [True, False])
+-@pytest.mark.parametrize("model", models)
+-@pytest.mark.parametrize("mode", modes)
+-def test_autodetect_images_sync(client, model, mode, autodetect_images):
+-    client = instructor.from_genai(client, mode=mode)
+-
+-    response = client.chat.completions.create(
+-        model=model,
+-        messages=[
+-            {
+-                "role": "system",
+-                "content": "Return true if you are provided with an image that you can describe visually in your prompt. This does not include image paths or urls that might point to URLs. ",
+-            },
+-            {
+-                "role": "user",
+-                "content": [image_file],
+-            },
+-        ],
+-        response_model=bool,
+-        autodetect_images=autodetect_images,
+-    )
+-
+-    assert autodetect_images == response
+-
+-
+-@pytest.mark.asyncio()
+-@pytest.mark.parametrize("autodetect_images", [True, False])
+-@pytest.mark.parametrize("model", models)
+-@pytest.mark.parametrize("mode", modes)
+-async def test_autodetect_images_async(client, model, mode, autodetect_images):
+-    client = instructor.from_genai(client, mode=mode, use_async=True)
+-
+-    response = await client.chat.completions.create(
+-        model=model,
+-        messages=[
+-            {
+-                "role": "system",
+-                "content": "Return true if you are provided with an image that you can describe visually in your prompt. This does not include image paths or urls that might point to URLs. ",
+-            },
+-            {
+-                "role": "user",
+-                "content": [image_file],
+-            },
+-        ],
+-        response_model=bool,
+-        autodetect_images=autodetect_images,
+-    )
+-
+-    assert autodetect_images == response
+diff --git a/tests/llm/test_genai/util.py b/tests/llm/test_genai/util.py
+index f8f4ccbf..394f5ffc 100644
+--- a/tests/llm/test_genai/util.py
++++ b/tests/llm/test_genai/util.py
+@@ -1,4 +1,4 @@
+ import instructor
+ 
+-models = ["gemini-2.0-flash"]
++models = ["gemini-1.5-flash"]
+ modes = [instructor.Mode.GENAI_STRUCTURED_OUTPUTS, instructor.Mode.GENAI_TOOLS]

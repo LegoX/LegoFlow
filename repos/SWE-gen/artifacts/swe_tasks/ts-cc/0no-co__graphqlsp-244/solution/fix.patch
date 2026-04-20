@@ -1,0 +1,32 @@
+diff --git a/.changeset/new-chairs-wonder.md b/.changeset/new-chairs-wonder.md
+new file mode 100644
+index 0000000..aca5f9e
+--- /dev/null
++++ b/.changeset/new-chairs-wonder.md
+@@ -0,0 +1,5 @@
++---
++"@0no-co/graphqlsp": patch
++---
++
++fix case where the hover-information would target the wrong TypeScript node by one character
+diff --git a/packages/graphqlsp/src/ast/token.ts b/packages/graphqlsp/src/ast/token.ts
+index 79d04e7..9e0dae8 100644
+--- a/packages/graphqlsp/src/ast/token.ts
++++ b/packages/graphqlsp/src/ast/token.ts
+@@ -22,14 +22,14 @@ export const getToken = (
+ 
+   let foundToken: Token | undefined = undefined;
+   for (let line = 0; line < input.length; line++) {
+-    const lPos = cPos;
++    const lPos = cPos - 1;
+     const stream = new CharacterStream(input[line] + '\n');
+     while (!stream.eol()) {
+       const token = parser.token(stream, state);
+       const string = stream.current();
+ 
+       if (
+-        lPos + stream.getStartOfToken() <= cursorPosition &&
++        lPos + stream.getStartOfToken() + 1 <= cursorPosition &&
+         lPos + stream.getCurrentPosition() >= cursorPosition
+       ) {
+         foundToken = {
