@@ -33,8 +33,7 @@ python extract_verified_tasks.py
 | 文件 | 受众 | 内容 |
 |------|------|------|
 | `CLAUDE.md` | AI agent | 项目操作手册。CLAUDE.md 是 [Claude Code](https://code.claude.com/docs/zh-CN/memory) 的项目级指令文件，用于告诉 AI agent 如何在本项目上工作：构建/测试命令、目录结构、编码规范、常见工作流。目标 200 行以内，使用 markdown 标题和项目符号组织，指令需具体可验证（如"使用 2 空格缩进"而非"正确格式化代码"） |
-| `docs/Detail_Pipeline_SWE-gen.md` | 开发者 | 管线技术细节：架构、算法、各阶段说明 |
-| `docs/experiment-log.md` | 开发者 | 端到端管线验证记录 |
+| `docs/experiment-log.md` | 开发者 | AI agent (Claude-code) 端到端自动化执行管线的验证记录 |
 | `outputs.yaml` | 下游 agent | 定位和提取已验证 SWE 任务的 schema |
 
 ## 项目结构

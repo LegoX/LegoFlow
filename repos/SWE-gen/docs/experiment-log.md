@@ -1,5 +1,7 @@
 # 端到端管线验证日志
 
+> 本次验证流程完全由 AI agent（Claude Code）自主完成，包括环境配置、命令执行、结果分析和日志记录。
+
 **日期**: 2026-04-20
 **环境**: Linux 5.15.0, Python 3.12, Docker
 **模型**: OPENAI_MODEL=glm-5-urg, ANTHROPIC_MODEL=claude-sonnet-4-6
