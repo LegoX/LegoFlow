@@ -32,7 +32,7 @@ python extract_verified_tasks.py
 
 | 文件 | 受众 | 内容 |
 |------|------|------|
-| `CLAUDE.md` | AI agent | 操作手册：环境配置、工作流命令、下游接口 |
+| `CLAUDE.md` | AI agent | 项目操作手册。CLAUDE.md 是 [Claude Code](https://code.claude.com/docs/zh-CN/memory) 的项目级指令文件，用于告诉 AI agent 如何在本项目上工作：构建/测试命令、目录结构、编码规范、常见工作流。目标 200 行以内，使用 markdown 标题和项目符号组织，指令需具体可验证（如"使用 2 空格缩进"而非"正确格式化代码"） |
 | `docs/Detail_Pipeline_SWE-gen.md` | 开发者 | 管线技术细节：架构、算法、各阶段说明 |
 | `docs/experiment-log.md` | 开发者 | 端到端管线验证记录 |
 | `outputs.yaml` | 下游 agent | 定位和提取已验证 SWE 任务的 schema |
@@ -40,13 +40,18 @@ python extract_verified_tasks.py
 ## 项目结构
 
 ```
-src/swegen/              # 核心 Python 包
-tools/                   # PR 收集和评分脚本
-scripts/                 # 各语言的 create 脚本
 artifacts/
-  collected_prs/         # PR ID 列表
-  swe_tasks/{lang}-cc/   # 各语言生成的任务
-outputs/                 # 合并后的已验证任务
+  collected_prs/             # 各语言的 PR ID 列表
+  swe_tasks/{lang}-cc/       # 各语言生成的 SWE 任务
+docs/                        # 技术文档（管线说明、验证日志）
+outputs/                     # 合并后的已验证任务（供下游使用）
+scripts/                     # 各语言的 create 脚本
+src/swegen/                  # 核心 Python 包
+tests/                       # 单元测试
+tools/                       # PR 收集和评分脚本
+extract_verified_tasks.py    # 从 artifacts/ 提取已验证任务到 outputs/
+inputs.yaml                  # 上游输入配置（预留）
+outputs.yaml                 # 下游 agent 接口：定义如何定位已验证任务
 ```
 
 ## License
