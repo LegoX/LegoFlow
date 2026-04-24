@@ -122,7 +122,7 @@ status: status.yaml
 ### `status`
 - Live operational state of the block: current job progress, results so far, next steps, blockers, and metrics
 - In practice represented by `status.yaml`
-- Updated continuously by the running agent; rendered to a human-readable webpage via `scripts/render_status.py`
+- Updated continuously by the running agent
 - Associated log files live in `logs/` using the naming convention `logs/YYYY-MM-DD_<job_slug>.log`
 
 ## Recommended Directory Layout
@@ -152,8 +152,7 @@ status: status.yaml
 ├── scripts/
 │   ├── start.sh
 │   ├── dryrun.sh
-│   ├── clean.sh
-│   └── render_status.py
+│   └── clean.sh
 └── subblock/
 ```
 

@@ -144,7 +144,6 @@ When updating this block:
 - after every run, archive params, metrics, inputs, and log into `artifacts/files/run_NNN/` and append to `artifacts/index.yaml`
 - use `memory/notes.md` for long-form context, decisions, and observations
 - use `subblock/` for nested child blocks
-- run `python scripts/render_status.py --open` to view current status as a webpage
 ```
 
 ## Example Skeleton
