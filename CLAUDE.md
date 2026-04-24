@@ -2,7 +2,7 @@
 
 This file declares that the current directory is a `block`.
 
-For the canonical definition of a block, the field semantics, and the default directory contract, read `what_is_a_block.md`.
+For the canonical definition of a block, the field semantics, and the default directory contract, read `BLOCK_DEFINITION.md`.
 
 ## How To Use This File
 
@@ -20,9 +20,11 @@ This document should not re-explain the global block concept. Instead, it should
 
 ```md
 Name: <block_name>
-Type: <root block | child block | leaf block>
-Main doc: `docs/main.md`
-Definition reference: `what_is_a_block.md`
+Type: <root | pipeline | training | evaluation | data | utility | leaf>
+Main doc: `dashboard/overview.mdx`
+Meta info: `metainfo.yaml`
+Status: `status.yaml`
+Definition reference: `BLOCK_DEFINITION.md`
 ```
 
 ## Functional Positioning
@@ -43,7 +45,7 @@ Its boundary is:
 
 ## Inputs
 
-Describe the required upstream inputs of this block. Keep the detailed machine-readable structure in `inputs/index.yaml`, and use this section to explain intent.
+Describe the required upstream inputs of this block. Keep the detailed machine-readable structure in `metainfo.yaml`, and use this section to explain intent.
 
 Template:
 
@@ -59,7 +61,7 @@ Input readiness rule:
 
 ## Outputs
 
-Describe the main logical outputs of this block. Keep the detailed machine-readable structure in `outputs/index.yaml`.
+Describe the main logical outputs of this block. Keep the detailed machine-readable structure in `metainfo.yaml`.
 
 Template:
 
@@ -83,6 +85,10 @@ Template:
 ```md
 Artifacts stored by this block include:
 - <log files / reports / datasets / exports / traces>
+
+Every run must be archived: after each run, write params.yaml, metrics.yaml,
+and run.log into artifacts/files/run_NNN/, copy the inputs.yaml used for that
+run into the same directory, and append an entry to artifacts/index.yaml.
 
 Long-form memory maintained by this block includes:
 - <design notes>
@@ -130,11 +136,15 @@ Template:
 
 ```md
 When updating this block:
-- read `docs/main.md` first
-- use `inputs/index.yaml` and `outputs/index.yaml` for structured state
-- use `artifacts/` for raw evidence
-- use `memory/` for long-form context
+- read `dashboard/overview.mdx` first for current state
+- read `metainfo.yaml` for block identity, resources, and dependency wiring
+- read `status.yaml` for live job progress, results, and next steps
+- use `inputs.yaml` for runtime input values before a run
+- use `outputs.yaml` for runtime output values after a run
+- after every run, archive params, metrics, inputs, and log into `artifacts/files/run_NNN/` and append to `artifacts/index.yaml`
+- use `memory/notes.md` for long-form context, decisions, and observations
 - use `subblock/` for nested child blocks
+- run `python scripts/render_status.py --open` to view current status as a webpage
 ```
 
 ## Example Skeleton
@@ -144,7 +154,7 @@ When updating this block:
 
 This file declares that the current directory is a `block`.
 
-For the canonical definition of a block, read `what_is_a_block.md`.
+For the canonical definition of a block, read `BLOCK_DEFINITION.md`.
 
 ## Functional Positioning
 This block is responsible for normalizing incoming source material into a stable internal format.
@@ -170,4 +180,9 @@ Its boundary is:
 - `scripts/start.sh`: starts the intake flow
 - `scripts/dryrun.sh`: validates config, inputs, and required paths
 - `scripts/clean.sh`: removes temporary working files
+
+## Collaboration Rules
+- read `dashboard/overview.mdx` first
+- read `metainfo.yaml` for dependency wiring
+- after every run, archive into `artifacts/files/run_NNN/` and update `artifacts/index.yaml`
 ```

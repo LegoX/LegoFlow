@@ -1,0 +1,53 @@
+# status.yaml — growing history of this block's operational state
+# Agent appends to `history` after each meaningful change.
+# Do not truncate this file; it is the permanent record.
+
+block: swe_lego_live
+
+# ─── Current State ───────────────────────────────────────────────────────────
+
+updated_at: "2026-04-24T00:00:00Z"
+
+# idle | running | paused | completed | failed | blocked
+phase: idle
+
+# Free-form label for the current high-level stage.
+stage: design
+
+current_job:
+  name: null
+  started_at: null
+  progress: null        # 0.0–1.0, null if unknown
+  detail: null
+
+next_steps:
+  - order: 1
+    label: "Fill subblock docs"
+    detail: "Create CLAUDE.md and meta-info.yaml for each child block."
+    blocked_by: null
+
+  - order: 2
+    label: "Connect real repos"
+    detail: "Replace placeholder repo paths with live repo references."
+    blocked_by: null
+
+  - order: 3
+    label: "Wire inputs/outputs between subblocks"
+    detail: "Populate inputs.yaml and outputs.yaml for each subblock."
+    blocked_by: "Fill subblock docs"
+
+blockers: []
+
+metrics: {}
+
+# ─── History ─────────────────────────────────────────────────────────────────
+
+# Append-only. Agent adds an entry each time phase/stage changes or a milestone is reached.
+history: []
+# Example entry:
+# - timestamp: "2026-04-24T09:00:00Z"
+#   phase: completed
+#   stage: design
+#   label: "Block contract finalized"
+#   detail: "BLOCK_DEFINITION.md, meta-info.yaml, status.yaml all written."
+#   artifact: null   # optional path to supporting artifact

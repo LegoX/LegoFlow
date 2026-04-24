@@ -1,0 +1,75 @@
+# ─── Identity ────────────────────────────────────────────────────────────────
+
+name: swe_lego_live
+label: "SWE Lego Live"
+
+# root | pipeline | training | evaluation | data | utility | leaf
+role: root
+
+summary: >
+  Root orchestration block. Coordinates the full LLM development pipeline
+  across data curation, training, and evaluation subblocks.
+
+# ─── Tree Position ────────────────────────────────────────────────────────────
+
+parent: null
+
+children:
+  - data_curation
+  - sft_training
+  - evaluation
+
+# ─── Resources ───────────────────────────────────────────────────────────────
+
+resources:
+  cpu: null
+  gpu: null
+  memory: null
+  estimated_runtime: null
+
+# ─── Repos ───────────────────────────────────────────────────────────────────
+
+repos:
+  - path: repos/SWE-gen
+    role: swe_instance_generation
+  - path: repos/placeholder
+    role: placeholder
+
+# ─── Input Dependencies ──────────────────────────────────────────────────────
+
+# Inputs this block requires before it can run.
+# source_block: which block produces this (null = external / human-provided)
+inputs:
+  - name: github_token
+    description: GitHub API token for SWE-gen repo access
+    source_block: null
+    path: inputs/index.yaml
+    required: true
+
+  - name: anthropic_api_key
+    description: Anthropic API key for Claude Code agent
+    source_block: null
+    path: inputs/index.yaml
+    required: true
+
+  - name: openai_api_key
+    description: OpenAI API key for PR evaluation
+    source_block: null
+    path: inputs/index.yaml
+    required: false
+
+# ─── Output Dependencies ─────────────────────────────────────────────────────
+
+# Outputs this block produces that other blocks may consume.
+# consumer_block: which block reads this (null = terminal / human-facing)
+outputs:
+  - name: eval_report
+    description: Final evaluation results across all pipeline runs
+    consumer_block: null
+    path: outputs/index.yaml
+
+# ─── Navigation ──────────────────────────────────────────────────────────────
+
+main: dashboard/overview.mdx
+guide: CLAUDE.md
+status: status.yaml
