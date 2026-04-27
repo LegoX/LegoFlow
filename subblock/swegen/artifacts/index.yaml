@@ -1,0 +1,13 @@
+version: 1
+
+# Index of all experiment runs. Agent appends an entry after each run completes.
+runs: []
+# Example entry:
+# - id: run_001
+#   started_at: "2026-04-26T10:00:00Z"
+#   completed_at: "2026-04-26T14:00:00Z"
+#   status: completed
+#   params: artifacts/files/run_001/params.yaml
+#   metrics: artifacts/files/run_001/metrics.yaml
+#   log: artifacts/files/run_001/run.log
+#   notes: "py batch, n_concurrent=20"

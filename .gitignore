@@ -18,6 +18,7 @@ build/
 .venv/
 venv/
 env/
+*repos/
 
 # Node
 node_modules/
@@ -34,3 +35,8 @@ Thumbs.db
 *.bin
 *.safetensors
 artifacts/files/
+
+# SWE-gen subblock — generated data and virtual env
+subblock/swegen/artifacts/swe_tasks/
+subblock/swegen/artifacts/collected_prs/
+subblock/swegen/swegen-env2/

@@ -1,0 +1,43 @@
+# SWE-gen — Overview
+
+**Block**: `swegen` | **Type**: data | **Parent**: `swe_lego_live`
+
+## What This Block Does
+
+Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages
+(Python, JavaScript, TypeScript, Go, C, C++, Java, Rust).
+
+Runs as an adaptive agent: monitors per-language success rates every 30 minutes and
+tunes `timeout`, `cc_timeout`, and `n_concurrent` automatically.
+
+## Current State
+
+| Field | Value |
+|-------|-------|
+| Phase | idle |
+| Stage | data_generation |
+| Verified tasks (py) | 3 |
+| Total verified | 3 |
+
+## Quick Start
+
+```bash
+# 1. Install
+python -m venv swegen-env2 && source swegen-env2/bin/activate
+pip install -e repos/swegen/
+# 2. Set env vars (or place tokens in ~/gh_token.txt)
+# 3. Validate
+bash scripts/dryrun.sh
+# 4. Run
+bash scripts/start.sh
+```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `inputs.yaml` | Adaptive tuning params + per-language status |
+| `outputs/` | Merged verified SWE tasks (flat directory) |
+| `artifacts/swe_tasks/` | Per-language task directories |
+| `artifacts/collected_prs/` | PR ID lists per language |
+| `artifacts/logs/adaptive_decisions.jsonl` | Adaptive tuning decision log |

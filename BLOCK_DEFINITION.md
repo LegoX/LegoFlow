@@ -41,6 +41,18 @@ Agents need predictable directories and file names so they can update state with
 3. Recursive composition  
 A large system should be decomposable into smaller units that behave the same way as the parent.
 
+## Agent Team Model
+
+The project runs as an agent team. Each block in the tree is operated by a dedicated agent — one agent per block, each responsible for its own block's execution, state, and memory.
+
+This means:
+- Each agent reads its block's `CLAUDE.md` to understand its contract and boundaries
+- Each agent reads `metainfo.yaml` to understand its inputs, outputs, and position in the tree
+- Agents coordinate by passing values through the input/output contract: one block's `outputs.yaml` becomes another block's `inputs.yaml`
+- Each agent maintains its block's `status.yaml` and `memory/` independently
+
+A block is not just a folder — it is a teammate. Give it a clear role, defined interfaces, and a stable memory.
+
 ## Block Fields
 
 Every block should be understandable through the following fields:
@@ -109,6 +121,16 @@ status: status.yaml
   - `scripts/clean.sh`
 - `scripts/dryrun.sh` is the default health-check sample script for a block
 
+### Remote execution rule
+
+If a block's `metainfo.yaml` declares a remote resource (e.g. a `resources.ip` field with a GPU or CPU node address), the agent **must** execute that block remotely:
+
+1. Create a new local tmux window named after the block (e.g. `tmux new-window -n <block_name>`)
+2. Inside that window, SSH into the remote node and attach to (or create) a tmux session there
+3. Run the block's scripts inside that remote tmux session
+
+If no remote resource is declared, execution is local on the current node by default. Never run a remote-resource block locally — the declared node is where the required hardware, Docker daemon, or data lives.
+
 ### `subblock`
 - Nested child blocks
 - Each child under `subblock/` is itself a full block
@@ -123,7 +145,7 @@ status: status.yaml
 - Live operational state of the block: current job progress, results so far, next steps, blockers, and metrics
 - In practice represented by `status.yaml`
 - Updated continuously by the running agent
-- Associated log files live in `logs/` using the naming convention `logs/YYYY-MM-DD_<job_slug>.log`
+- Associated log files live in `artifacts/files/run_NNN/run.log` per run
 
 ## Recommended Directory Layout
 
@@ -162,7 +184,7 @@ status: status.yaml
 Every block should have one obvious place for people to start reading: `dashboard/overview.mdx`.
 
 ### 2. Logical result and stored evidence are different
-- `outputs/` tells you the logical results
+- `outputs.yaml` tells you the logical results of the last run
 - `artifacts/` tells you where the raw files and evidence live
 
 These should stay parallel.
@@ -205,3 +227,29 @@ That is the default block contract for this repo.
 | `status.yaml` | Agents + tooling | Agent (primary) | Live job progress, results, next steps, blockers, metrics |
 | `inputs.yaml` | Agent (primary) | Human | Runtime input values filled before each run |
 | `outputs.yaml` | Agent (primary) | Agent | Runtime output values written after each run completes |
+
+## User Guide
+
+### Creating a new block
+
+1. Copy `BLOCK_INTAKE.md` into the directory where the new block will live.
+2. Fill in the required fields: Identity, Position in the Tree, Input Dependencies, Output Dependencies.  
+   Leave optional fields as `null` if unknown.
+3. Hand the filled `BLOCK_INTAKE.md` to the agent.
+
+The agent will scaffold the full block directory from it:
+- `CLAUDE.md` — block contract with functional positioning, inputs, outputs, and collaboration rules
+- `metainfo.yaml` — machine-readable identity, resources, and dependency wiring
+- `status.yaml` — initialized with idle phase and the first next steps
+- `inputs.yaml` / `outputs.yaml` — pre-populated with the declared fields
+- Standard directories: `dashboard/`, `artifacts/`, `memory/`, `scripts/`, `subblock/`
+
+### Reading an existing block
+
+Start with `dashboard/overview.mdx` for current state, then `metainfo.yaml` for structure, then `status.yaml` for live progress.
+
+### Running a block
+
+1. Fill `inputs.yaml` with the required runtime values.
+2. Run `scripts/start.sh` to execute, or `scripts/dryrun.sh` to validate without side effects.
+3. After the run, the agent archives results into `artifacts/files/run_NNN/` and updates `artifacts/index.yaml`.

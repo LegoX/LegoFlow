@@ -1,0 +1,73 @@
+# ─── Identity ────────────────────────────────────────────────────────────────
+
+name: swegen
+label: "SWE-gen"
+
+# root | pipeline | training | evaluation | data | utility | leaf
+type: data
+
+summary: >
+  Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages.
+  Runs as an adaptive agent that monitors per-language success rates and tunes
+  pipeline parameters (timeout, cc_timeout, n_concurrent) automatically.
+
+# ─── Tree Position ────────────────────────────────────────────────────────────
+
+parent: swe_lego_live
+
+children: []
+
+# ─── Resources ───────────────────────────────────────────────────────────────
+
+resources:
+  cpu: null
+  gpu: null
+  memory: null
+  estimated_runtime: "hours per language batch; runs continuously in background"
+
+# ─── Repos ───────────────────────────────────────────────────────────────────
+
+repos:
+  - path: repos/swegen
+    role: core pipeline — CLI, task generation, validation, scoring
+
+# ─── Input Dependencies ──────────────────────────────────────────────────────
+
+inputs:
+  - name: github_tokens
+    description: Comma-separated GitHub API tokens for PR collection
+    source_block: null
+    required: true
+
+  - name: openai_api_key
+    description: LLM API key for PR evaluation and instruction generation
+    source_block: null
+    required: true
+
+  - name: openai_api_base_url
+    description: OpenAI-compatible API endpoint
+    source_block: null
+    required: true
+
+  - name: openai_model
+    description: Model for PR evaluation and instruction generation
+    source_block: null
+    required: true
+
+  - name: anthropic_model
+    description: Model for Claude Code SDK task completion
+    source_block: null
+    required: true
+
+# ─── Output Dependencies ─────────────────────────────────────────────────────
+
+outputs:
+  - name: verified_swe_tasks
+    description: Verified SWE tasks across all languages, merged into outputs/
+    consumer_block: null
+
+# ─── Navigation ──────────────────────────────────────────────────────────────
+
+main: dashboard/overview.mdx
+guide: CLAUDE.md
+status: status.yaml
