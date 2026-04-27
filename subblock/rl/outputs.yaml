@@ -1,0 +1,28 @@
+# Update these fields after each training or validation run.
+
+checkpoint_path:
+  description: Path to the latest trained actor model checkpoint
+  value: null
+  path: repos/harbor-verl-train/outputs/
+  note: Update after each successful run
+
+val_resolve_rate:
+  description: SWE-bench-Verified resolve rate (%) for the best checkpoint
+  value: null
+  note: Update after each val_only.sh run
+
+training_curves:
+  description: WandB run with reward, loss, token counts, timing metrics
+  value: null
+  wandb_run_id: null
+  note: Set wandb_run_id in config.yaml to resume an existing run
+
+training_log:
+  description: Per-run log file written by train_1node.sh
+  path: repos/harbor-verl-train/logs/
+  pattern: "harbor_swe_cc_1node_*.log"
+
+trajectory_log_dir:
+  description: JSONL files of all agent API traffic from rollouts
+  value: /tmp/trajectory_output_dir/
+  note: Ephemeral — copy to artifacts/files/ after each run before next run overwrites

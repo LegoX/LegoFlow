@@ -1,0 +1,13 @@
+name: rl-train
+summary: >
+  Online RL training pipeline for SWE-bench. Trains a configurable coding agent against a
+  configurable LLM served by vLLM, using Harbor on Kubernetes as the task execution layer
+  and rLLM + verl as the RL backbone (GRPO/GSPO). Reward is binary: 1 if the agent's patch
+  resolves the SWE-bench issue, 0 otherwise. All runtime config (model, infra, data, credentials)
+  is centralized in config.yaml. See CLAUDE.md for setup, environment, and execution interface.
+
+repos:
+  - path: repos/harbor-verl-train
+  - path: repos/harbor
+
+guide: CLAUDE.md

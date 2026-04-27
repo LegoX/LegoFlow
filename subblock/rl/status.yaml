@@ -1,0 +1,39 @@
+# status.yaml — growing history of this block's operational state
+# Agent appends to `history` after each meaningful change.
+# Do not truncate this file; it is the permanent record.
+
+block: rl_training
+
+# ─── Current State ───────────────────────────────────────────────────────────
+
+updated_at: "2026-04-27T00:00:00Z"
+
+# idle | running | paused | completed | failed | blocked
+phase: idle
+
+stage: ready
+
+current_job:
+  name: null
+  started_at: null
+  progress: null
+  detail: null
+
+next_steps:
+  - order: 1
+    label: "Fill inputs.yaml and launch a training run"
+    detail: "Edit inputs.yaml (model path, infra, data, credentials), then run bash scripts/start.sh"
+    blocked_by: null
+
+blockers: []
+
+metrics: {}
+
+# ─── History ─────────────────────────────────────────────────────────────────
+
+history:
+  - timestamp: "2026-04-27T00:00:00Z"
+    phase: idle
+    stage: ready
+    label: "Block initialized"
+    detail: "rl subblock scaffolded from SWE-Lego-Live-Training-RL and aligned to block definition."

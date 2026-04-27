@@ -4,3 +4,4 @@ swegen-env2/
 .swegen-*/
 logs/
 artifacts/logs/
+config.json

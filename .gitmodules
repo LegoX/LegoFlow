@@ -1,7 +1,0 @@
-[submodule "subblock/rl"]
-	path = subblock/rl
-	url = git@github.com:SWE-Lego/SWE-Lego-Live-Training-RL.git
-
-[submodule "subblock/sft"]
-	path = subblock/sft
-	url = git@github.com:SWE-Lego/SWE-Lego-Live-Training-SFT.git

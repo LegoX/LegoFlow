@@ -1,0 +1,46 @@
+# Edit this file before running any script. All paths relative to block root.
+
+model:
+  model_path: /mnt/public/models/Qwen3-30B-A3B-Instruct-2507
+  served_model_name: Qwen3-30B-A3B-Instruct-2507   # must NOT contain "/"
+
+infrastructure:
+  # node0_ip: leave empty to auto-detect this machine's LAN IP (`hostname -I | awk '{print $1}'`).
+  # Only set explicitly if the host has multiple interfaces and auto-detect picks the wrong one.
+  node0_ip: ""
+  n_nodes: 1
+  # n_gpus_per_node: GPUs on this node (check with `nvidia-smi -L`).
+  # vllm_tp_size MUST divide the model's num_key_value_heads. For Qwen3-30B-A3B
+  # (MoE, 4 KV heads), valid TP is 1/2/4 — TP=8 triggers a CUDA illegal-memory
+  # error. TP=2 with 8 GPUs gives DP=4 replicas (recommended).
+  # See CLAUDE.md "TP sizing for MoE/GQA models".
+  n_gpus_per_node: 8
+  vllm_tp_size: 2
+  vllm_port: 8000
+  ray_port: 6379
+  k8s_kubeconfig: /mnt/public/SWE-Lego-Live-Training-RL/k8s-cpu-240.yaml
+  k8s_namespace: default
+  k8s_pod_startup_timeout: 3000
+
+training:
+  train_batch_size: 64
+  n_parallel_tasks: 32
+  max_turns: 100
+  max_prompt_length: 20000
+  max_response_length: 80000
+  vllm_max_model_len: 100000
+
+data:
+  swe_parquet: /mnt/public/SWE-Lego-Live-Training-RL/data/rebench_p01_p23_5872/swerebench_sc4to7_877instances.parquet
+  val_parquet: /mnt/public/SWE-Lego-Live-Training-RL/data/SWE-Bench-Verified/test_verl_official.parquet
+  tasks_dir: /mnt/public/SWE-Lego-Live-Training-RL/data/harbor_swe_tasks
+  val_tasks_dir: /mnt/public/SWE-Lego-Live-Training-RL/data/harbor_swe_val_tasks
+  data_dir: /mnt/public/SWE-Lego-Live-Training-RL/data/harbor_swe_task_index
+
+experiment:
+  project_name: SWE-Lego-Live-Training-RL
+  exp_name: SWE-Lego-Live-Training-RL-1node         # date suffix appended at launch
+  trials_base_dir: /mnt/public/SWE-Lego-Live-Training-RL/harbor_trials_cc
+
+credentials:
+  wandb_api_key: "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"                 # fill in before running

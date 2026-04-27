@@ -1,0 +1,80 @@
+# ─── Identity ────────────────────────────────────────────────────────────────
+
+name: sft_training
+label: "SFT Training"
+
+# root | pipeline | training | evaluation | data | utility | leaf
+role: training
+
+summary: >
+  SFT training pipeline for SWE-bench coding models. Converts raw agent trajectories
+  from multiple scaffolds (Claude Code, OpenCode, OpenHands, OpenHands SDK, Terminus2)
+  into LLaMA-Factory sharegpt format, then trains models via LLaMA-Factory +
+  DeepSpeed (ZeRO-3). Reward signal is implicit in data quality: resolved
+  SWE-bench instances.
+
+# ─── Tree Position ────────────────────────────────────────────────────────────
+
+parent: swe_lego_live
+
+children: []
+
+# ─── Resources ───────────────────────────────────────────────────────────────
+
+resources:
+  cpu: null
+  gpu: "8× A100/H100 per node"
+  memory: null
+  estimated_runtime: "~20min per run (4 epochs, 64 instances, Qwen3-8B)"
+
+# ─── Repos ───────────────────────────────────────────────────────────────────
+
+repos:
+  - path: repos/LLaMA-Factory
+    role: training framework (LLaMA-Factory + DeepSpeed ZeRO-3)
+  - path: repos/swe_data_process
+    role: data processing (trajectory converters, quality scorers)
+
+# ─── Input Dependencies ──────────────────────────────────────────────────────
+
+# Inputs this block requires before it can run.
+# source_block: which block produces this (null = external / human-provided)
+inputs:
+  - name: raw_trajectories
+    description: Per-scaffold raw trajectory files (jierun or chaofan format)
+    source_block: trajgen
+    path: inputs.yaml
+    required: true
+
+  - name: base_model
+    description: Model checkpoint to initialize training from (configurable)
+    source_block: null
+    path: inputs.yaml
+    required: true
+
+  - name: excluded_repos
+    description: Repo exclusion list for filtering eval benchmark repos out of training data
+    source_block: null
+    path: artifacts/data/excluded_repos.txt
+    required: false
+
+# ─── Output Dependencies ─────────────────────────────────────────────────────
+
+# Outputs this block produces that other blocks may consume.
+# consumer_block: which block reads this (null = terminal / human-facing)
+outputs:
+  - name: checkpoint_path
+    description: Path to the trained model checkpoint under artifacts/model/
+    consumer_block: null
+    path: outputs.yaml
+
+  - name: training_curves
+    description: WandB run with loss, learning rate, and token metrics
+    consumer_block: null
+    path: outputs.yaml
+
+# ─── Navigation ──────────────────────────────────────────────────────────────
+
+main: dashboard/overview.mdx
+guide: CLAUDE.md
+status: status.yaml
