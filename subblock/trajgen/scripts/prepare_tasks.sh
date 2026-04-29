@@ -1,0 +1,322 @@
+#!/usr/bin/env bash
+# Prepare Harbor task directories from config.yaml task_source.
+set -euo pipefail
+
+BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG="$BLOCK_DIR/config.yaml"
+OVERWRITE=0
+
+usage() {
+  cat <<'EOF'
+Usage:
+  bash scripts/prepare_tasks.sh
+  bash scripts/prepare_tasks.sh --config config.yaml
+  bash scripts/prepare_tasks.sh --config config.some-variant.yaml --overwrite
+
+Prepares Harbor task directories under artifacts/tasks/<dataset>.
+Existing valid task directories are reused. Existing invalid directories require
+--overwrite before they are replaced.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config)
+      [[ $# -ge 2 ]] || { echo "ERROR: --config requires a value" >&2; exit 2; }
+      if [[ "$2" = /* ]]; then
+        CONFIG="$2"
+      else
+        CONFIG="$BLOCK_DIR/$2"
+      fi
+      shift 2
+      ;;
+    --overwrite)
+      OVERWRITE=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+cfg() {
+  python3 - "$CONFIG" "$1" <<'PY'
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print("ERROR: PyYAML is required", file=sys.stderr)
+    sys.exit(2)
+
+config_path, dotted_key = sys.argv[1], sys.argv[2]
+with open(config_path, encoding="utf-8") as fh:
+    data = yaml.safe_load(fh) or {}
+
+value = data
+for part in dotted_key.split("."):
+    if not isinstance(value, dict):
+        value = None
+        break
+    value = value.get(part)
+
+if value is None:
+    print("")
+elif isinstance(value, bool):
+    print("true" if value else "false")
+else:
+    print(value)
+PY
+}
+
+abspath() {
+  local p="$1"
+  if [[ "$p" = /* ]]; then
+    echo "$p"
+  else
+    echo "$BLOCK_DIR/$p"
+  fi
+}
+
+validate_tasks() {
+  local root="$1"
+  python3 - "$root" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+if not root.is_dir():
+    print("missing")
+    raise SystemExit(1)
+
+required_files = ["task.toml", "instruction.md"]
+required_dirs = ["environment", "tests"]
+
+valid = []
+for child in sorted(p for p in root.iterdir() if p.is_dir()):
+    if all((child / name).is_file() for name in required_files) and all(
+        (child / name).is_dir() for name in required_dirs
+    ):
+        valid.append(child.name)
+
+if not valid:
+    print("invalid")
+    raise SystemExit(1)
+
+print(f"valid:{len(valid)}")
+PY
+}
+
+copy_harbor_tasks() {
+  local src="$1"
+  local dst="$2"
+  python3 - "$src" "$dst" <<'PY'
+from pathlib import Path
+import shutil
+import sys
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+dst.parent.mkdir(parents=True, exist_ok=True)
+if dst.exists():
+    shutil.rmtree(dst)
+shutil.copytree(src, dst, symlinks=True)
+PY
+}
+
+find_valid_task_root() {
+  local root="$1"
+  local dataset_name="$2"
+  python3 - "$root" "$dataset_name" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+dataset_name = sys.argv[2].split("/")[-1]
+required_files = ["task.toml", "instruction.md"]
+required_dirs = ["environment", "tests"]
+
+def is_task_root(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    for child in path.iterdir():
+        if not child.is_dir():
+            continue
+        if all((child / name).is_file() for name in required_files) and all(
+            (child / name).is_dir() for name in required_dirs
+        ):
+            return True
+    return False
+
+candidates = [root, root / dataset_name]
+candidates.extend([p for p in root.iterdir() if p.is_dir()])
+for candidate in candidates:
+    if is_task_root(candidate):
+        print(candidate)
+        raise SystemExit(0)
+
+print("")
+PY
+}
+
+extract_archives() {
+  local src="$1"
+  local dst="$2"
+  python3 - "$src" "$dst" <<'PY'
+from pathlib import Path
+import shutil
+import sys
+import tarfile
+import zipfile
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+if dst.exists():
+    shutil.rmtree(dst)
+dst.mkdir(parents=True, exist_ok=True)
+
+archive_suffixes = (".tar.gz", ".tgz", ".tar", ".zip")
+archives = [
+    p for p in src.rglob("*")
+    if p.is_file() and any(str(p).lower().endswith(suffix) for suffix in archive_suffixes)
+]
+
+for archive in archives:
+    name = archive.name
+    for suffix in archive_suffixes:
+        if name.lower().endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    out_dir = dst / name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        if tarfile.is_tarfile(archive):
+            with tarfile.open(archive) as tf:
+                tf.extractall(out_dir)
+        elif zipfile.is_zipfile(archive):
+            with zipfile.ZipFile(archive) as zf:
+                zf.extractall(out_dir)
+        else:
+            continue
+    except Exception as exc:
+        print(f"ERROR extracting {archive}: {exc}", file=sys.stderr)
+        continue
+    print(out_dir)
+PY
+}
+
+[[ -f "$CONFIG" ]] || { echo "ERROR: config not found: $CONFIG" >&2; exit 1; }
+
+PROVIDER="$(cfg task_source.provider)"
+DATASET_NAME="$(cfg task_source.dataset_name)"
+SPLIT="$(cfg task_source.split)"
+HARBOR_PATH_RAW="$(cfg repositories.harbor.path)"
+HARBOR_UV_RAW="$(cfg environment.harbor_uv)"
+TARGET_RAW="$(cfg harbor_job.dataset_path)"
+
+[[ -n "$PROVIDER" ]] || { echo "ERROR: task_source.provider is empty" >&2; exit 1; }
+[[ -n "$DATASET_NAME" ]] || { echo "ERROR: task_source.dataset_name is empty" >&2; exit 1; }
+[[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: repositories.harbor.path is empty" >&2; exit 1; }
+[[ -n "$HARBOR_UV_RAW" ]] || { echo "ERROR: environment.harbor_uv is empty" >&2; exit 1; }
+
+DATASET_BASENAME="$(basename "$DATASET_NAME")"
+if [[ -z "$TARGET_RAW" ]]; then
+  TARGET_RAW="artifacts/tasks/$DATASET_BASENAME"
+fi
+
+TARGET_DIR="$(abspath "$TARGET_RAW")"
+HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
+HARBOR_UV_DIR="$(abspath "$HARBOR_UV_RAW")"
+HARBOR_PYTHON="$HARBOR_UV_DIR/bin/python"
+CACHE_DIR="$BLOCK_DIR/artifacts/tasks/.cache/$DATASET_BASENAME"
+EXTRACT_DIR="$BLOCK_DIR/artifacts/tasks/.cache/${DATASET_BASENAME}_extracted"
+
+echo "=== trajgen prepare tasks ==="
+echo "Config:   $CONFIG"
+echo "Provider: $PROVIDER"
+echo "Dataset:  $DATASET_NAME"
+[[ -n "$SPLIT" ]] && echo "Split:    $SPLIT"
+echo "Target:   $TARGET_RAW"
+
+if [[ -d "$TARGET_DIR" ]]; then
+  if validate_tasks "$TARGET_DIR" >/tmp/trajgen_prepare_validate.$$ 2>/dev/null; then
+    STATUS="$(cat /tmp/trajgen_prepare_validate.$$)"
+    rm -f /tmp/trajgen_prepare_validate.$$
+    echo "Target already contains Harbor task directories ($STATUS)."
+    exit 0
+  fi
+  rm -f /tmp/trajgen_prepare_validate.$$
+  if [[ "$OVERWRITE" != "1" ]]; then
+    echo "ERROR: target exists but does not look like Harbor task directories: $TARGET_RAW" >&2
+    echo "Re-run with --overwrite to replace it." >&2
+    exit 1
+  fi
+  rm -rf "$TARGET_DIR"
+fi
+
+[[ -d "$HARBOR_DIR/.git" ]] || { echo "ERROR: Harbor repo missing at $HARBOR_PATH_RAW; run scripts/update_repos.sh first" >&2; exit 1; }
+[[ -x "$HARBOR_PYTHON" ]] || { echo "ERROR: Harbor Python env missing at $HARBOR_PYTHON; install environment first" >&2; exit 1; }
+
+case "$PROVIDER" in
+  huggingface)
+    mkdir -p "$(dirname "$CACHE_DIR")"
+    rm -rf "$CACHE_DIR"
+    echo "Downloading Hugging Face dataset snapshot to artifacts/tasks/.cache/$DATASET_BASENAME ..."
+    if ! "$HARBOR_PYTHON" - "$DATASET_NAME" "$CACHE_DIR" <<'PY'
+import sys
+from huggingface_hub import snapshot_download
+
+repo_id, local_dir = sys.argv[1:3]
+snapshot_download(
+    repo_id=repo_id,
+    repo_type="dataset",
+    local_dir=local_dir,
+    local_dir_use_symlinks=False,
+)
+PY
+    then
+      echo "ERROR: failed to download Hugging Face dataset '$DATASET_NAME'." >&2
+      echo "If this dataset is private, authenticate with Hugging Face in the Harbor env before retrying." >&2
+      exit 1
+    fi
+
+    VALID_ROOT="$(find_valid_task_root "$CACHE_DIR" "$DATASET_NAME")"
+    if [[ -z "$VALID_ROOT" ]]; then
+      echo "Snapshot root is not a Harbor task directory; checking archives ..."
+      mapfile -t EXTRACTED_DIRS < <(extract_archives "$CACHE_DIR" "$EXTRACT_DIR")
+      for extracted in "${EXTRACTED_DIRS[@]:-}"; do
+        candidate="$(find_valid_task_root "$extracted" "$DATASET_NAME")"
+        if [[ -n "$candidate" ]]; then
+          VALID_ROOT="$candidate"
+          break
+        fi
+      done
+      if [[ -z "$VALID_ROOT" ]]; then
+        echo "ERROR: downloaded dataset is not a prebuilt Harbor task directory." >&2
+        echo "Checked both raw snapshot and extracted archives under artifacts/tasks/.cache/." >&2
+        echo "Expected child task dirs with task.toml, instruction.md, environment/, and tests/." >&2
+        echo "If this dataset needs conversion, add an explicit adapter flow to config and prepare_tasks.sh." >&2
+        exit 1
+      fi
+    fi
+
+    copy_harbor_tasks "$VALID_ROOT" "$TARGET_DIR"
+    ;;
+  *)
+    echo "ERROR: unsupported task_source.provider: $PROVIDER" >&2
+    echo "Supported providers: huggingface" >&2
+    exit 1
+    ;;
+esac
+
+validate_tasks "$TARGET_DIR" >/tmp/trajgen_prepare_validate.$$
+STATUS="$(cat /tmp/trajgen_prepare_validate.$$)"
+rm -f /tmp/trajgen_prepare_validate.$$
+echo "Prepared Harbor tasks at $TARGET_RAW ($STATUS)."

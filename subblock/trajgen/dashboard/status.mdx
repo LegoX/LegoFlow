@@ -1,0 +1,32 @@
+---
+title: Status
+block: trajgen
+source: status.yaml + artifacts/index.yaml
+---
+
+# Status
+
+## Current Job
+
+| Field | Value |
+|---|---|
+| Phase | idle |
+| Stage | scaffolded |
+| Job | - |
+| Progress | - |
+| Updated | 2026-04-29T00:00:00Z |
+
+## Next Steps
+
+| # | Step | Blocked by |
+|---|---|---|
+| 1 | Download or update local Harbor repo | - |
+| 2 | Install or refresh Harbor and LiteLLM envs | Download or update local Harbor repo |
+| 3 | Run `bash scripts/prepare_tasks.sh` | Install or refresh envs |
+| 4 | Run `bash scripts/dryrun.sh` | Prepare tasks |
+| 5 | Run `bash scripts/start.sh` | Dryrun passes |
+| 6 | Inspect `artifacts/jobs/<job>` | Job completes |
+
+## Experiment Runs
+
+No runs recorded yet.
