@@ -1,0 +1,115 @@
+---
+title: Overview
+block: trajgen
+updated_at: "2026-04-29T00:00:00Z"
+---
+
+# Trajectory Generation
+
+Trajectory generation block for Harbor-based SWE task rollouts. This block
+manages the Live-side shell around a pinned Harbor checkout and stores prepared
+tasks, Harbor jobs, LiteLLM trajectories, and logs under `artifacts/`.
+
+## Operational State
+
+The active operational snapshot lives in `status.yaml`. Use that file for the
+current phase, active job, blockers, and next operator action; this overview
+stays focused on the stable workflow.
+
+## Pipeline
+
+```text
+HF / external task source
+    └─▶ artifacts/tasks/<dataset>
+          └─▶ Harbor command generated from config.yaml
+                └─▶ artifacts/jobs/<job>/
+                      └─▶ <task>/agent/litellm-trajectory.jsonl
+                            └─▶ downstream SFT conversion
+```
+
+## Repo Policy
+
+`repos/harbor` is local-only and gitignored. It is updated through
+`scripts/update_repos.sh`, not committed into this repository.
+
+## Quick Start
+
+### Step 1: Download Or Update Harbor
+
+Ask the agent to download or update the managed Harbor checkout under
+`repos/harbor` according to `config.yaml`. This should happen before installing
+or refreshing environments.
+
+```text
+Download or update the trajgen Harbor repository. Use subblock/trajgen/config.yaml, run bash scripts/update_repos.sh, and confirm repos/harbor matches the pinned commit. Do not install environments or launch a job.
+```
+
+### Step 2: Install Or Refresh Environments
+
+Ask the agent to install or refresh both uv environments. Do this after changing
+the Harbor commit or when dryrun reports missing packages.
+
+```text
+Install or refresh the trajgen environments. Use subblock/trajgen/config.yaml, install artifacts/env/harbor-uv and artifacts/env/litellm-uv, then run bash scripts/dryrun.sh. Do not launch a job.
+```
+
+### Step 3: Prepare Tasks
+
+Ask the agent to prepare Harbor task directories under `artifacts/tasks`. This
+should happen before dryrun if the derived task directory is missing.
+
+```text
+Prepare trajgen task directories from subblock/trajgen/config.yaml. Run bash scripts/prepare_tasks.sh, store tasks under artifacts/tasks, and validate the Harbor task structure. Do not launch a job.
+```
+
+### Step 4: Validate Current Config
+
+Ask the agent to run `scripts/dryrun.sh` and explain any failures. This checks
+the pinned Harbor checkout, Harbor uv env, LiteLLM uv env, prepared tasks,
+model API metadata, and Harbor job settings.
+
+```text
+Validate subblock/trajgen/config.yaml with bash scripts/dryrun.sh. If it fails, explain which requirement is missing and how to fix it. Do not modify config.yaml unless I ask.
+```
+
+### Step 5: Launch A Job
+
+Ask the agent to launch only after dryrun passes. `scripts/start.sh` generates
+the LiteLLM config, starts the per-job LiteLLM proxy, builds the Harbor command
+from `config.yaml`, and writes job results under `artifacts/jobs`.
+If trajectory inference finishes but the LiteLLM proxy is still running, ask the
+agent to stop the matching LiteLLM process for this trajgen job.
+
+```text
+Run a trajgen Harbor job using the current subblock/trajgen/config.yaml. First run bash scripts/dryrun.sh; only if it passes, run bash scripts/start.sh.
+```
+
+```text
+The trajgen Harbor job has finished, but the LiteLLM proxy may still be running. Find the LiteLLM process started for this trajgen job and stop it safely. Do not kill unrelated LiteLLM processes.
+```
+
+### Step 6: Inspect Results
+
+Ask the agent to inspect the latest job directory and count trajectory files.
+Expected trajectory files are under
+`artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`.
+
+```text
+Inspect the latest trajgen job under artifacts/jobs. Summarize job status and save to subblock/trajgen/status.yaml.
+```
+
+### Step 7: Create A Config Variant
+
+Ask the agent to create a separate config variant when changing dataset, model,
+agent version, concurrency, or retry settings. Keep `config.yaml` as the active
+profile unless you explicitly ask to replace it.
+
+```text
+Create a new trajgen config variant for <dataset/model/agent/concurrency>. Do not overwrite config.yaml. Save the variant next to config.yaml with a descriptive name and explain the changed fields.
+```
+
+## Quick Links
+
+- [Status](./status.mdx) — live job progress and next steps
+- [Inputs & Outputs](./io.mdx) — current runtime config and produced paths
+- [Memory](./memory.mdx) — repo policy and handoff notes

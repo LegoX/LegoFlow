@@ -1,0 +1,101 @@
+---
+title: Inputs & Outputs
+block: trajgen
+source: config.yaml + metainfo.yaml
+---
+
+# Inputs & Outputs
+
+## Inputs
+
+Defined in `metainfo.yaml` and filled in `config.yaml`.
+`trajgen` intentionally uses `config.yaml` instead of `inputs.yaml` because the
+file describes a full Harbor run profile, not only upstream inputs.
+
+| Name | Description | Source | Required |
+|---|---|---|---|
+| repositories | Git remote/ref/path/read-only policy for Harbor | external | yes |
+| environment | Harbor uv env and LiteLLM runtime versions | external | yes |
+| model_api | Raw upstream model API used by LiteLLM | external | yes |
+| litellm_proxy | LiteLLM template, port, and master key | external | yes |
+| task_source | SWE task source for Harbor rollouts | external | yes |
+| harbor_job | jobs_dir, concurrency, retries, timeout, smoke limit | external | yes |
+| agent | Harbor agent, version, runtime image, sampling controls | external | yes |
+
+## Active Runtime Values
+
+Excerpted from `config.yaml`; treat that file as the source of truth before
+launching a job.
+
+```yaml
+repositories:
+  harbor:
+    url: https://github.com/SWE-Lego/harbor.git
+    branch: main
+    commit: 3062421c03d89a5e980684873840e6644e756771
+    path: repos/harbor
+    readonly: true
+environment:
+  harbor_uv: artifacts/env/harbor-uv
+  litellm_uv: artifacts/env/litellm-uv
+  litellm:
+    python_version: "3.13"
+    litellm_version: "1.83.9"
+model_api:
+  upstream_model: "openai/GLM-5-FP8"
+  api_base: "http://llm35.jierungogogo.com/v1"
+  api_key: "dummy-key"
+  input_cost_per_token: 0.0000021
+  output_cost_per_token: 0.0000084
+litellm_proxy:
+  config_template: scripts/serve_llm/litellm_config.example.yaml
+  port: 4001
+  master_key: dummy-key-cf
+task_source:
+  provider: huggingface
+  dataset_name: SWE-Lego/swerebenchv2-200-260429
+  split: train
+harbor_job:
+  jobs_dir: artifacts/jobs
+  n_concurrent: 1
+  n_tasks: null
+  max_retries: 2
+  timeout_multiplier: 2
+agent:
+  name: custom-claude-code
+  version: 2.1.118
+  runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
+  max_turns: 200
+  temperature: 0.7
+```
+
+The scripts derive stable defaults such as `producer_block=trajgen`,
+`output_format=litellm_logger_v0.1`, custom Claude Code import path, runtime
+mount paths, and LiteLLM trajectory header.
+`scripts/start.sh` also writes a per-job LiteLLM config under
+`artifacts/litellm/<job>/` and passes it to Harbor's LiteLLM serve script through
+`LITELLM_CONFIG` before launching a job.
+
+## Outputs
+
+This block does not maintain a separate `outputs.yaml`. The handoff contract is
+declared in `config.yaml`:
+
+- `harbor_job.jobs_dir`: Harbor job output root under this block's artifacts
+- derived task directory: `artifacts/tasks/<dataset>`
+- generated LiteLLM config: `artifacts/litellm/<job>/litellm_config_trajgen.yaml`
+- `harbor_job.jobs_dir/<job>`: generated Harbor job directory
+- `{job_dir}/<task-id>/agent/litellm-trajectory.jsonl`: LiteLLM logger file pattern under `artifacts/jobs`
+
+## Config Variants
+
+`config.yaml` is the active run profile. For experiments, create a separate
+variant file next to it, such as `config.glm5-smoke.yaml` or
+`config.<dataset>.<agent>.yaml`, and only replace `config.yaml` when you are
+ready to make that variant active.
+
+Each launched job should include a snapshot of the active config at:
+
+```text
+artifacts/jobs/<job>/config.yaml
+```
