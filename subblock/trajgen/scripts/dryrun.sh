@@ -300,7 +300,11 @@ if [[ -n "$UV_PROJECT_ENVIRONMENT_RAW" ]]; then
   if [[ -n "${HARBOR_DIR:-}" && -d "$HARBOR_DIR/.git" ]]; then
     case "$UV_PROJECT_ENVIRONMENT_ABS" in
       "$HARBOR_DIR"/*)
-        fail "environment.harbor_uv must be outside repos/harbor when the repo is read-only"
+        if [[ "$READONLY" == "true" ]]; then
+          fail "environment.harbor_uv must be outside repos/harbor when the repo is read-only"
+        else
+          warn "environment.harbor_uv is inside repos/harbor; this is only safe while repositories.harbor.readonly is false"
+        fi
         ;;
       *)
         ok "uv project environment is outside repos/harbor"

@@ -172,6 +172,7 @@ extract_archives() {
   python3 - "$src" "$dst" <<'PY'
 from pathlib import Path
 import shutil
+import stat
 import sys
 import tarfile
 import zipfile
@@ -200,15 +201,32 @@ def safe_extract_tar(tf: tarfile.TarFile, out_dir: Path) -> None:
     for member in tf.getmembers():
         target = out_dir / member.name
         ensure_within_dir(out_dir, target)
-        if member.issym() or member.islnk():
-            raise ValueError(f"refusing to extract archive link: {member.name}")
-    tf.extractall(out_dir)
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        if not member.isfile():
+            raise ValueError(f"refusing to extract non-file archive member: {member.name}")
+        source = tf.extractfile(member)
+        if source is None:
+            raise ValueError(f"could not read archive member: {member.name}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with source, open(target, "wb") as fh:
+            shutil.copyfileobj(source, fh)
 
 def safe_extract_zip(zf: zipfile.ZipFile, out_dir: Path) -> None:
     for member in zf.infolist():
         target = out_dir / member.filename
         ensure_within_dir(out_dir, target)
-    zf.extractall(out_dir)
+        mode = member.external_attr >> 16
+        file_type = stat.S_IFMT(mode)
+        if member.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        if file_type not in (0, stat.S_IFREG):
+            raise ValueError(f"refusing to extract non-file archive member: {member.filename}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with zf.open(member) as source, open(target, "wb") as fh:
+            shutil.copyfileobj(source, fh)
 
 for archive in archives:
     name = archive.name
@@ -228,6 +246,7 @@ for archive in archives:
         else:
             continue
     except Exception as exc:
+        shutil.rmtree(out_dir, ignore_errors=True)
         print(f"ERROR extracting {archive}: {exc}", file=sys.stderr)
         continue
     print(out_dir)

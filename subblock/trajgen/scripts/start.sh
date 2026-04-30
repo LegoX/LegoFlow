@@ -352,6 +352,7 @@ while IFS= read -r env_line; do
 done < <(export_run_environment)
 
 if [[ -z "$RUN_COMMAND" ]]; then
+  [[ -n "$TRAJGEN_AGENT_IMPORT_PATH" ]] || { echo "ERROR: agent.import_path is empty and no default is defined for agent.name=$(cfg agent.name)" >&2; exit 1; }
   EXTRA_ARGS=""
   if [[ -n "$N_TASKS" ]]; then
     EXTRA_ARGS=" --n-tasks $(printf '%q' "$N_TASKS")"
@@ -399,19 +400,20 @@ if [[ "$PRINT_COMMAND_ONLY" == "1" ]]; then
 fi
 
 echo "=== starting LiteLLM proxy ===" | tee "$LOG_FILE"
-(
-  cd "$HARBOR_DIR"
+setsid bash -c '
+  cd "$1"
   PATH="$(dirname "$TRAJGEN_LITELLM_BIN"):$PATH" \
-    LITELLM_CONFIG="$LITELLM_CONFIG_PATH" \
-    LITELLM_LOG_FOLDER="$LITELLM_ARTIFACT_DIR/logs" \
-    LITELLM_PORT="${LITELLM_PORT:-$(cfg litellm_proxy.port)}" \
-    API_KEY="$TRAJGEN_LITELLM_MASTER_KEY" \
+    LITELLM_CONFIG="$2" \
+    LITELLM_LOG_FOLDER="$3/logs" \
+    LITELLM_PORT="$4" \
+    API_KEY="$5" \
     bash scripts/serve_llm/serve_litellm.sh
-) 2>&1 | tee -a "$LOG_FILE" &
+' bash "$HARBOR_DIR" "$LITELLM_CONFIG_PATH" "$LITELLM_ARTIFACT_DIR" "${LITELLM_PORT:-$(cfg litellm_proxy.port)}" "$TRAJGEN_LITELLM_MASTER_KEY" >>"$LOG_FILE" 2>&1 &
 LITELLM_PID="$!"
 cleanup_litellm() {
   if kill -0 "$LITELLM_PID" >/dev/null 2>&1; then
-    kill "$LITELLM_PID" >/dev/null 2>&1 || true
+    kill -- "-$LITELLM_PID" >/dev/null 2>&1 || kill "$LITELLM_PID" >/dev/null 2>&1 || true
+    wait "$LITELLM_PID" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup_litellm EXIT
@@ -438,7 +440,7 @@ PY
   sleep 1
 done
 
-echo "=== trajgen start ===" | tee "$LOG_FILE"
+echo "=== trajgen start ===" | tee -a "$LOG_FILE"
 echo "Harbor dir: $HARBOR_PATH_RAW" | tee -a "$LOG_FILE"
 echo "Producer:   $PRODUCER_BLOCK" | tee -a "$LOG_FILE"
 echo "Format:     $OUTPUT_FORMAT" | tee -a "$LOG_FILE"
