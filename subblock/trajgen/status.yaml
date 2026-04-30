@@ -16,6 +16,7 @@ stage: harbor_job_running
 current_job:
   name: swerebenchv2-200-260429-custom-claude-code-2.1.118-GLM-5-FP8-20260430040352
   started_at: "2026-04-29T20:03:52Z"
+  name_timestamp_basis: "local launch time in UTC+8; started_at and updated_at are UTC"
   progress: "started; at least 1 trajectory file observed"
   detail: "Dryrun passed, LiteLLM proxy initialized with trajectory_logger callback, and Harbor job is running under artifacts/jobs/swerebenchv2-200-260429-custom-claude-code-2.1.118-GLM-5-FP8-20260430040352."
 

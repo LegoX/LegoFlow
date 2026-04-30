@@ -25,11 +25,14 @@ for dirpath, dirnames, filenames in os.walk(root):
     for name in dirnames + filenames:
         path = os.path.join(dirpath, name)
         try:
-            os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
+            mode = os.lstat(path).st_mode
+            if stat.S_ISLNK(mode):
+                continue
+            os.chmod(path, mode | stat.S_IWUSR)
         except FileNotFoundError:
             pass
 try:
-    os.chmod(root, os.stat(root).st_mode | stat.S_IWUSR)
+    os.chmod(root, os.lstat(root).st_mode | stat.S_IWUSR)
 except FileNotFoundError:
     pass
 PY

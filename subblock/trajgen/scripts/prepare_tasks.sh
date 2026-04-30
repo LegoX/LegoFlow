@@ -188,6 +188,28 @@ archives = [
     if p.is_file() and any(str(p).lower().endswith(suffix) for suffix in archive_suffixes)
 ]
 
+def ensure_within_dir(base: Path, candidate: Path) -> None:
+    base_resolved = base.resolve()
+    candidate_resolved = candidate.resolve(strict=False)
+    try:
+        candidate_resolved.relative_to(base_resolved)
+    except ValueError:
+        raise ValueError(f"archive member escapes extraction directory: {candidate}")
+
+def safe_extract_tar(tf: tarfile.TarFile, out_dir: Path) -> None:
+    for member in tf.getmembers():
+        target = out_dir / member.name
+        ensure_within_dir(out_dir, target)
+        if member.issym() or member.islnk():
+            raise ValueError(f"refusing to extract archive link: {member.name}")
+    tf.extractall(out_dir)
+
+def safe_extract_zip(zf: zipfile.ZipFile, out_dir: Path) -> None:
+    for member in zf.infolist():
+        target = out_dir / member.filename
+        ensure_within_dir(out_dir, target)
+    zf.extractall(out_dir)
+
 for archive in archives:
     name = archive.name
     for suffix in archive_suffixes:
@@ -199,10 +221,10 @@ for archive in archives:
     try:
         if tarfile.is_tarfile(archive):
             with tarfile.open(archive) as tf:
-                tf.extractall(out_dir)
+                safe_extract_tar(tf, out_dir)
         elif zipfile.is_zipfile(archive):
             with zipfile.ZipFile(archive) as zf:
-                zf.extractall(out_dir)
+                safe_extract_zip(zf, out_dir)
         else:
             continue
     except Exception as exc:

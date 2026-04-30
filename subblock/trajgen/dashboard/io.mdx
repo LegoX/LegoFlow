@@ -22,14 +22,17 @@ file describes a full Harbor run profile, not only upstream inputs.
 | harbor_job | jobs_dir, concurrency, retries, timeout, smoke limit | external | yes |
 | agent | Harbor agent, version, runtime image, sampling controls | external | yes |
 
-## Key Runtime Values
+## Active Runtime Values
+
+Excerpted from `config.yaml`; treat that file as the source of truth before
+launching a job.
 
 ```yaml
 repositories:
   harbor:
     url: https://github.com/SWE-Lego/harbor.git
     branch: main
-    commit: b0bc637359014b562600ec7914f03479b7f5c47b
+    commit: 3062421c03d89a5e980684873840e6644e756771
     path: repos/harbor
     readonly: true
 environment:
@@ -51,9 +54,11 @@ litellm_proxy:
 task_source:
   provider: huggingface
   dataset_name: SWE-Lego/swerebenchv2-200-260429
+  split: train
 harbor_job:
   jobs_dir: artifacts/jobs
-  n_concurrent: 6
+  n_concurrent: 1
+  n_tasks: null
   max_retries: 2
   timeout_multiplier: 2
 agent:

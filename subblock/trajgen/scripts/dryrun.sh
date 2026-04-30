@@ -365,12 +365,6 @@ if run_in_harbor_env "$HARBOR_CHECK_COMMAND --help >/dev/null" 2>/dev/null; then
 else
   fail "harbor check command failed: $HARBOR_CHECK_COMMAND"
 fi
-
-if run_in_harbor_env "$HARBOR_CHECK_COMMAND --help >/dev/null" 2>/dev/null; then
-  ok "health check passed: harbor --help"
-else
-  fail "health check failed: harbor --help"
-fi
 else
   warn "skipping Harbor import/CLI health checks because the configured uv environment is missing"
 fi
@@ -469,6 +463,20 @@ for key in \
   value="$(cfg "$key")"
   [[ -n "$value" ]] && ok "$key = $value" || fail "$key is required"
 done
+
+LITELLM_TEMPLATE_RAW="$(cfg litellm_proxy.config_template)"
+if [[ -n "$LITELLM_TEMPLATE_RAW" ]]; then
+  if [[ "$LITELLM_TEMPLATE_RAW" = /* ]]; then
+    LITELLM_TEMPLATE_PATH="$LITELLM_TEMPLATE_RAW"
+  else
+    LITELLM_TEMPLATE_PATH="${HARBOR_DIR:-}/$LITELLM_TEMPLATE_RAW"
+  fi
+  if [[ -n "${HARBOR_DIR:-}" && -d "$HARBOR_DIR/.git" ]]; then
+    [[ -f "$LITELLM_TEMPLATE_PATH" ]] && ok "LiteLLM config template exists" || fail "LiteLLM config template not found: $LITELLM_TEMPLATE_RAW"
+  else
+    warn "skipping LiteLLM config template existence check because repos/harbor is missing"
+  fi
+fi
 
 AGENT_MODEL_NAME="$(cfg agent.model_name)"
 if [[ -z "$AGENT_MODEL_NAME" ]]; then

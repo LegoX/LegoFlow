@@ -10,11 +10,11 @@ Trajectory generation block for Harbor-based SWE task rollouts. This block
 manages the Live-side shell around a pinned Harbor checkout and stores prepared
 tasks, Harbor jobs, LiteLLM trajectories, and logs under `artifacts/`.
 
-## Current Stage
+## Operational State
 
-**Ready for dryrun** — the block shell is present, `repos/harbor` is pinned by
-`config.yaml`, and local environments are installed under `artifacts/env/`.
-Next: run `bash scripts/dryrun.sh`, then launch with `bash scripts/start.sh`.
+The active operational snapshot lives in `status.yaml`. Use that file for the
+current phase, active job, blockers, and next operator action; this overview
+stays focused on the stable workflow.
 
 ## Pipeline
 

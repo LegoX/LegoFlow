@@ -116,7 +116,9 @@ abspath() {
 
 write_litellm_config() {
   local output="$1"
-  python3 - "$CONFIG" "$output" <<'PY'
+  local template="$2"
+  python3 - "$CONFIG" "$output" "$template" <<'PY'
+from pathlib import Path
 import sys
 
 try:
@@ -125,43 +127,58 @@ except ImportError:
     print("ERROR: PyYAML is required", file=sys.stderr)
     sys.exit(2)
 
-config_path, output_path = sys.argv[1:3]
+config_path, output_path, template_path = sys.argv[1:4]
 with open(config_path, encoding="utf-8") as fh:
     config = yaml.safe_load(fh) or {}
 
 model_api = config.get("model_api") or {}
 proxy = config.get("litellm_proxy") or {}
 
+data = {}
+if template_path:
+    template_file = Path(template_path)
+    if not template_file.is_file():
+        print(f"ERROR: LiteLLM config template not found: {template_path}", file=sys.stderr)
+        sys.exit(2)
+    with open(template_file, encoding="utf-8") as fh:
+        loaded = yaml.safe_load(fh) or {}
+    if not isinstance(loaded, dict):
+        print(f"ERROR: LiteLLM config template must be a mapping: {template_path}", file=sys.stderr)
+        sys.exit(2)
+    data.update(loaded)
+
 model_name = (model_api.get("upstream_model") or "").split("/")[-1]
-data = {
-    "model_list": [
-        {
-            "model_name": model_name,
-            "litellm_params": {
-                "model": model_api.get("upstream_model"),
-                "api_base": model_api.get("api_base"),
-                "api_key": model_api.get("api_key"),
-                "input_cost_per_token": model_api.get("input_cost_per_token"),
-                "output_cost_per_token": model_api.get("output_cost_per_token"),
-            },
-        }
-    ],
-    "router_settings": {
-        "optional_pre_call_checks": [
-            "prompt_caching",
-            "responses_api_deployment_check",
-        ]
-    },
-    "general_settings": {
-        "master_key": proxy.get("master_key"),
-        "disable_spend_logs": True,
-    },
-    "litellm_settings": {
-        "drop_params": True,
-        "callbacks": "trajectory_logger.trajectory_logger",
-        "use_chat_completions_url_for_anthropic_messages": True,
-    },
-}
+data["model_list"] = [
+    {
+        "model_name": model_name,
+        "litellm_params": {
+            "model": model_api.get("upstream_model"),
+            "api_base": model_api.get("api_base"),
+            "api_key": model_api.get("api_key"),
+            "input_cost_per_token": model_api.get("input_cost_per_token"),
+            "output_cost_per_token": model_api.get("output_cost_per_token"),
+        },
+    }
+]
+router_settings = data.get("router_settings") or {}
+router_settings["optional_pre_call_checks"] = [
+    "prompt_caching",
+    "responses_api_deployment_check",
+]
+data["router_settings"] = router_settings
+general_settings = data.get("general_settings") or {}
+general_settings.update({
+    "master_key": proxy.get("master_key"),
+    "disable_spend_logs": True,
+})
+data["general_settings"] = general_settings
+litellm_settings = data.get("litellm_settings") or {}
+litellm_settings.update({
+    "drop_params": True,
+    "callbacks": "trajectory_logger.trajectory_logger",
+    "use_chat_completions_url_for_anthropic_messages": True,
+})
+data["litellm_settings"] = litellm_settings
 
 with open(output_path, "w", encoding="utf-8") as fh:
     yaml.safe_dump(data, fh, sort_keys=False)
@@ -274,6 +291,12 @@ HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
 if [[ -n "$UV_PROJECT_ENVIRONMENT_RAW" ]]; then
   export UV_PROJECT_ENVIRONMENT="$(abspath "$UV_PROJECT_ENVIRONMENT_RAW")"
 fi
+if [[ -n "${UV_PROJECT_ENVIRONMENT:-}" ]]; then
+  HARBOR_PYTHON="$UV_PROJECT_ENVIRONMENT/bin/python"
+else
+  HARBOR_PYTHON="python3"
+fi
+[[ -x "$HARBOR_PYTHON" ]] || { echo "ERROR: Harbor Python not found or not executable: $HARBOR_PYTHON" >&2; exit 1; }
 export TRAJGEN_AGENT_IMPORT_PATH="$(cfg agent.import_path)"
 if [[ -z "$TRAJGEN_AGENT_IMPORT_PATH" && "$(cfg agent.name)" == "custom-claude-code" ]]; then
   export TRAJGEN_AGENT_IMPORT_PATH="harbor.agents.custom.claude_code:CustomClaudeCode"
@@ -333,7 +356,7 @@ if [[ -z "$RUN_COMMAND" ]]; then
   if [[ -n "$N_TASKS" ]]; then
     EXTRA_ARGS=" --n-tasks $(printf '%q' "$N_TASKS")"
   fi
-  RUN_COMMAND="uv run harbor run --path $(printf '%q' "$HARBOR_DATASET_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$TRAJGEN_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$TRAJGEN_JOB_NAME") --mounts-json \"\$(python - <<'PY'
+  RUN_COMMAND="uv run harbor run --path $(printf '%q' "$HARBOR_DATASET_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$TRAJGEN_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$TRAJGEN_JOB_NAME") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'
 import json
 import os
 mounts = [{
@@ -348,7 +371,15 @@ PY
 )\" --model $(printf '%q' "$TRAJGEN_AGENT_MODEL_NAME") --n-concurrent $(printf '%q' "$N_CONCURRENT")${EXTRA_ARGS} --timeout-multiplier $(printf '%q' "$TIMEOUT_MULTIPLIER") --max-retries $(printf '%q' "$MAX_RETRIES") --ak version=$(cfg_literal agent.version) --ak max_turns=$(printf '%q' "$MAX_TURNS") --ak temperature=$(printf '%q' "$TEMPERATURE") --ae ANTHROPIC_BASE_URL=\$TRAJGEN_LITELLM_ANTHROPIC_BASE_URL --ae ANTHROPIC_API_KEY=\$TRAJGEN_LITELLM_MASTER_KEY --ae ANTHROPIC_MODEL=\$TRAJGEN_AGENT_MODEL_NAME --ae CUSTOM_AGENT_RUNTIME_ROOT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ROOT --ae CUSTOM_AGENT_CLAUDE=\$TRAJGEN_CUSTOM_AGENT_CLAUDE --ae CUSTOM_AGENT_RUNTIME_ENV_SCRIPT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT"
 fi
 
-LITELLM_CONFIG_NAME="$(basename "$(cfg litellm_proxy.config_template)")"
+LITELLM_TEMPLATE_RAW="$(cfg litellm_proxy.config_template)"
+[[ -n "$LITELLM_TEMPLATE_RAW" ]] || { echo "ERROR: litellm_proxy.config_template is empty" >&2; exit 1; }
+if [[ "$LITELLM_TEMPLATE_RAW" = /* ]]; then
+  LITELLM_TEMPLATE_PATH="$LITELLM_TEMPLATE_RAW"
+else
+  LITELLM_TEMPLATE_PATH="$HARBOR_DIR/$LITELLM_TEMPLATE_RAW"
+fi
+[[ -f "$LITELLM_TEMPLATE_PATH" ]] || { echo "ERROR: LiteLLM config template not found: $LITELLM_TEMPLATE_RAW" >&2; exit 1; }
+LITELLM_CONFIG_NAME="$(basename "$LITELLM_TEMPLATE_RAW")"
 LITELLM_CONFIG_NAME="${LITELLM_CONFIG_NAME%.example.yaml}"
 LITELLM_CONFIG_NAME="${LITELLM_CONFIG_NAME}_trajgen"
 LITELLM_ARTIFACT_DIR="$BLOCK_DIR/artifacts/litellm/$JOB_NAME"
@@ -357,7 +388,7 @@ LITELLM_CONFIG_PATH="$LITELLM_ARTIFACT_DIR/${LITELLM_CONFIG_NAME}.yaml"
 TRAJECTORY_LOGGER_SOURCE="$HARBOR_DIR/scripts/serve_llm/trajectory_logger.py"
 [[ -f "$TRAJECTORY_LOGGER_SOURCE" ]] || { echo "ERROR: trajectory_logger.py not found in Harbor checkout" >&2; exit 1; }
 cp "$TRAJECTORY_LOGGER_SOURCE" "$LITELLM_ARTIFACT_DIR/trajectory_logger.py"
-write_litellm_config "$LITELLM_CONFIG_PATH"
+write_litellm_config "$LITELLM_CONFIG_PATH" "$LITELLM_TEMPLATE_PATH"
 export TRAJGEN_LITELLM_CONFIG="$LITELLM_CONFIG_PATH"
 
 if [[ "$PRINT_COMMAND_ONLY" == "1" ]]; then

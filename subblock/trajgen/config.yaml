@@ -41,7 +41,7 @@ litellm_proxy:
 # Source tasks for Harbor. provider describes where the task set comes from,
 # not the downstream trajectory format.
 task_source:
-  provider: huggingface           # choices: swegen | huggingface | external_dataset
+  provider: huggingface           # currently supported by prepare_tasks.sh
   dataset_name: SWE-Lego/swerebenchv2-200-260429
   split: train
 

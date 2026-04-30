@@ -87,7 +87,7 @@ import sys
 root = sys.argv[1]
 for path in [root]:
     try:
-        os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
+        os.chmod(path, os.lstat(path).st_mode | stat.S_IWUSR)
     except FileNotFoundError:
         pass
 
@@ -97,7 +97,10 @@ for dirpath, dirnames, filenames in os.walk(root):
     for name in dirnames + filenames:
         path = os.path.join(dirpath, name)
         try:
-            os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
+            mode = os.lstat(path).st_mode
+            if stat.S_ISLNK(mode):
+                continue
+            os.chmod(path, mode | stat.S_IWUSR)
         except FileNotFoundError:
             pass
 PY
@@ -120,12 +123,15 @@ for dirpath, dirnames, filenames in os.walk(root):
     for name in dirnames + filenames:
         path = os.path.join(dirpath, name)
         try:
-            os.chmod(path, os.stat(path).st_mode & ~write_bits)
+            mode = os.lstat(path).st_mode
+            if stat.S_ISLNK(mode):
+                continue
+            os.chmod(path, mode & ~write_bits)
         except FileNotFoundError:
             pass
 
 try:
-    os.chmod(root, os.stat(root).st_mode & ~write_bits)
+    os.chmod(root, os.lstat(root).st_mode & ~write_bits)
 except FileNotFoundError:
     pass
 PY
