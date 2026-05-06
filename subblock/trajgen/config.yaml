@@ -1,63 +1,104 @@
-# Edit this file before running trajgen scripts. Paths are relative to this
-# block root unless absolute.
+meta_info:
+  name: trajgen
+  label: "Trajectory Generation"
+  description: Generates raw agent trajectories with Harbor for downstream SFT data conversion. Harbor is managed as a local-only repository under repos/harbor and is updated on demand through the block scripts.
+  parent: swe_lego_live
+  subblocks: {}
 
-repositories:
-  harbor:
-    url: https://github.com/SWE-Lego/harbor.git
-    branch: main
-    # Optional reproducibility pin. When non-empty, scripts/update_repos.sh
-    # checks out this exact commit after fetching the branch.
-    commit: 3062421c03d89a5e980684873840e6644e756771
-    path: repos/harbor
-    readonly: true
+  repos:
+    harbor:
+      name: harbor
+      commit_id: 3062421c03d89a5e980684873840e6644e756771
+      role: trajectory generation runtime (managed local-only dependency)
 
-environment:
-  # Checked by scripts/dryrun.sh and scripts/start.sh before any Harbor task run.
-  # Keep uv's project environment outside repos/harbor so the managed checkout
-  # can remain read-only.
-  harbor_uv: artifacts/env/harbor-uv
-  litellm_uv: artifacts/env/litellm-uv
-  litellm:
-    python_version: "3.13"
-    litellm_version: "1.83.9"
+  environment:
+    requirements: repos/harbor/pyproject.toml
 
-model_api:
-  # Raw upstream OpenAI-compatible model API. Each Harbor job can start its own
-  # LiteLLM proxy from these values before launching agent rollouts.
-  upstream_model: "openai/GLM-5-FP8"
-  api_base: "http://llm35.jierungogogo.com/v1"
-  api_key: "dummy-key"
-  input_cost_per_token: 0.0000021
-  output_cost_per_token: 0.0000084
+  resources:
+    ip: null
+    pwd: null
+    apikey: null
+    model: null
+    public_storage: null
+    model_api:
+      description: Raw upstream model API used to configure per-job LiteLLM proxy startup. Supports OpenAI-compatible and Anthropic-compatible upstreams.
+      protocols: [openai_compatible, anthropic_compatible]
+      served_via: per_job_litellm_proxy
 
-litellm_proxy:
-  # Per-job LiteLLM proxy config generated from model_api before Harbor starts.
-  # scripts/start.sh writes the config under artifacts/litellm/<job>/ and passes
-  # it to Harbor's serve_litellm.sh through LITELLM_CONFIG.
-  config_template: scripts/serve_llm/litellm_config.example.yaml
-  port: 4001
-  master_key: dummy-key-cf
+runtime_info:
+  input:
+    repositories:
+      harbor:
+        url: https://github.com/SWE-Lego/harbor.git
+        branch: main
+        commit: 3062421c03d89a5e980684873840e6644e756771
+        path: repos/harbor
+        readonly: true
 
-# Source tasks for Harbor. provider describes where the task set comes from,
-# not the downstream trajectory format.
-task_source:
-  provider: huggingface           # currently supported by prepare_tasks.sh
-  dataset_name: SWE-Lego/swerebenchv2-200-260429
-  split: train
+    environment:
+      harbor_uv: artifacts/env/harbor-uv
+      litellm_uv: artifacts/env/litellm-uv
+      litellm:
+        python_version: "3.13"
+        litellm_version: "1.83.9"
 
-harbor_job:
-  # This is the trajgen block output root for Harbor job results.
-  # Store jobs under this block's artifacts directory, not under repos/harbor.
-  # scripts/start.sh exports this as TRAJGEN_HARBOR_JOBS_DIR.
-  jobs_dir: artifacts/jobs
-  n_concurrent: 1
-  n_tasks: null                   # set to 1 for smoke tests
-  max_retries: 2
-  timeout_multiplier: 2
+    model_api:
+      upstream_model: "openai/GLM-5-FP8"
+      api_base: "http://llm35.jierungogogo.com/v1"
+      api_key: "dummy-key"
+      input_cost_per_token: 0.0000021
+      output_cost_per_token: 0.0000084
 
-agent:
-  name: custom-claude-code
-  version: 2.1.118
-  runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
-  max_turns: 200
-  temperature: 0.7
+    litellm_proxy:
+      config_template: scripts/serve_llm/litellm_config.example.yaml
+      port: 4001
+      master_key: dummy-key-cf
+
+    task_source:
+      provider: huggingface
+      dataset_name: SWE-Lego/swerebenchv2-200-260429
+      split: train
+
+    harbor_job:
+      jobs_dir: artifacts/jobs
+      n_concurrent: 1
+      n_tasks: null
+      max_retries: 2
+      timeout_multiplier: 2
+
+    agent:
+      name: custom-claude-code
+      version: 2.1.118
+      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
+      max_turns: 200
+      temperature: 0.7
+
+  output:
+    raw_trajectories:
+      description: Harbor job directories and LiteLLM trajectory logs produced under artifacts/jobs
+      path: artifacts/jobs
+      trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
+      consumer_block: sft
+
+status:
+  phase: running
+  progress: "started; at least 1 trajectory file observed"
+  next_steps: |
+    1. Update local Harbor repo: Run bash scripts/update_repos.sh to clone or refresh repos/harbor.
+    2. Validate Harbor runtime config: Fill structured runtime fields in config.yaml, then run bash scripts/dryrun.sh.
+    3. Run trajectory generation: Run bash scripts/start.sh after dryrun passes.
+  blockers: null
+  last_updated: "2026-05-06T00:00:00Z"
+  current_job:
+    name: swerebenchv2-200-260429-custom-claude-code-2.1.118-GLM-5-FP8-20260430040352
+    started_at: "2026-04-29T20:03:52Z"
+    detail: "Dryrun passed, LiteLLM proxy initialized with trajectory_logger callback, and Harbor job is running."
+  metrics: {}
+
+evolving:
+  description: Generates agent trajectories using Harbor. Tunable parameters include agent sampling settings, Harbor concurrency, and timeout multipliers.
+  tunable_params:
+    temperature: "Agent sampling temperature (0.0-1.0)"
+    max_turns: "Maximum agent turns per task"
+    n_concurrent: "Harbor concurrent tasks"
+    timeout_multiplier: "Task timeout multiplier"

@@ -2,7 +2,7 @@
 cd "$(dirname "$0")/.."
 PROJECT_ROOT="$(pwd)"
 # python -m venv swegen-env2
-source swegen-env2/bin/activate  # Linux/Mac
+source artifacts/envs/swegen-env2/bin/activate  # Linux/Mac
 source scripts/load_runtime_env.sh
 echo 'activate swegen-env2'
 
@@ -17,8 +17,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
-# Read params from inputs.yaml (adaptive tuning)
-eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang py --inputs-yaml "${PROJECT_ROOT}/inputs.yaml")
+# Read params from config.yaml (adaptive tuning)
+eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang py --config-yaml "${PROJECT_ROOT}/config.yaml")
 echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 
 # Align Python with Go/JS thresholds/timeouts to avoid over-filtering and premature CC timeout.

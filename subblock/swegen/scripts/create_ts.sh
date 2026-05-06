@@ -2,7 +2,7 @@
 cd "$(dirname "$0")/.."
 PROJECT_ROOT="$(pwd)"
 # python -m venv swegen-env2
-source swegen-env2/bin/activate  # Linux/Mac
+source artifacts/envs/swegen-env2/bin/activate  # Linux/Mac
 source scripts/load_runtime_env.sh
 echo 'activate swegen-env2'
 
@@ -18,7 +18,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
 # Read params from inputs.yaml (adaptive tuning)
-eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang ts --inputs-yaml "${PROJECT_ROOT}/inputs.yaml")
+eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang ts --config-yaml "${PROJECT_ROOT}/config.yaml")
 echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 
 # TypeScript repos frequently need build + transpile steps, so keep higher budgets.

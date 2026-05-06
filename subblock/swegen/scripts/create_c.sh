@@ -1,7 +1,7 @@
 #!/bin/bash
 cd "$(dirname "$0")/.."
 PROJECT_ROOT="$(pwd)"
-source swegen-env2/bin/activate
+source artifacts/envs/swegen-env2/bin/activate
 source scripts/load_runtime_env.sh
 echo 'activate swegen-env2'
 
@@ -17,7 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
 # Read params from inputs.yaml (adaptive tuning)
-eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang c --inputs-yaml "${PROJECT_ROOT}/inputs.yaml")
+eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang c --config-yaml "${PROJECT_ROOT}/config.yaml")
 echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 
 swegen create \

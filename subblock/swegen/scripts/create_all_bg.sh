@@ -3,14 +3,14 @@ cd "$(dirname "$0")/.."
 # Run all 8 create scripts in background.
 
 set -euo pipefail
-source swegen-env2/bin/activate
+source artifacts/envs/swegen-env2/bin/activate
 source scripts/load_runtime_env.sh
 
 load_runtime_env
 
 mkdir -p artifacts/logs/swegen-create
 
-echo "Starting create scripts (params from inputs.yaml)..."
+echo "Starting create scripts (params from config.yaml)..."
 
 start_one() {
     local lang="$1"

@@ -1,0 +1,114 @@
+meta_info:
+  name: rl
+  label: "RL Training"
+  description: Online RL training pipeline for SWE-bench. Trains a configurable coding agent against a local LLM served by vLLM, using Harbor on Kubernetes as the task execution layer and rLLM + verl as the RL backbone (GRPO/GSPO).
+  parent: swe_lego_live
+  subblocks: {}
+
+  repos:
+    harbor_verl_train:
+      name: harbor-verl-train
+      commit_id: null
+      role: RL training framework (rLLM + verl, GRPO/GSPO)
+    harbor:
+      name: harbor
+      commit_id: null
+      role: task execution layer (Harbor on Kubernetes)
+
+  environment:
+    requirements: repos/harbor-verl-train/pyproject.toml
+
+  resources:
+    ip: null
+    pwd: null
+    apikey: null
+    model: null
+    public_storage: null
+    gpu: "8× A100/H100 per node"
+    estimated_runtime: "hours per training run"
+
+runtime_info:
+  input:
+    model:
+      model_path: /mnt/public/models/Qwen3-30B-A3B-Instruct-2507
+      served_model_name: Qwen3-30B-A3B-Instruct-2507
+
+    infrastructure:
+      node0_ip: ""
+      n_nodes: 1
+      n_gpus_per_node: 8
+      vllm_tp_size: 2
+      vllm_port: 8000
+      ray_port: 6379
+      k8s_kubeconfig: /mnt/public/SWE-Lego-Live-Training-RL/k8s-cpu-240.yaml
+      k8s_namespace: default
+      k8s_pod_startup_timeout: 3000
+
+    training:
+      train_batch_size: 64
+      n_parallel_tasks: 32
+      max_turns: 100
+      max_prompt_length: 20000
+      max_response_length: 80000
+      vllm_max_model_len: 100000
+
+    data:
+      swe_parquet: /mnt/public/SWE-Lego-Live-Training-RL/data/rebench_p01_p23_5872/swerebench_sc4to7_877instances.parquet
+      val_parquet: /mnt/public/SWE-Lego-Live-Training-RL/data/SWE-Bench-Verified/test_verl_official.parquet
+      tasks_dir: /mnt/public/SWE-Lego-Live-Training-RL/data/harbor_swe_tasks
+      val_tasks_dir: /mnt/public/SWE-Lego-Live-Training-RL/data/harbor_swe_val_tasks
+      data_dir: /mnt/public/SWE-Lego-Live-Training-RL/data/harbor_swe_task_index
+
+    experiment:
+      project_name: SWE-Lego-Live-Training-RL
+      exp_name: SWE-Lego-Live-Training-RL-1node
+      trials_base_dir: /mnt/public/SWE-Lego-Live-Training-RL/harbor_trials_cc
+
+    credentials:
+      wandb_api_key: "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"
+
+  output:
+    checkpoint_path:
+      description: Path to the latest trained actor model checkpoint
+      value: null
+      path: repos/harbor-verl-train/outputs/
+
+    val_resolve_rate:
+      description: SWE-bench-Verified resolve rate (%) for the best checkpoint
+      value: null
+
+    training_curves:
+      description: WandB run with reward, loss, token counts, timing metrics
+      value: null
+      wandb_run_id: null
+
+    training_log:
+      description: Per-run log file written by train_1node.sh
+      path: repos/harbor-verl-train/logs/
+      pattern: "harbor_swe_cc_1node_*.log"
+
+    trajectory_log_dir:
+      description: JSONL files of all agent API traffic from rollouts
+      value: /tmp/trajectory_output_dir/
+      note: Ephemeral — copy to artifacts after each run
+
+status:
+  phase: idle
+  progress: null
+  next_steps: |
+    1. Fill config.yaml and launch a training run: Edit config.yaml (model path, infra, data, credentials), then run bash scripts/start.sh
+  blockers: null
+  last_updated: "2026-05-06T00:00:00Z"
+  current_job:
+    name: null
+    started_at: null
+    detail: null
+  metrics: {}
+
+evolving:
+  description: Online RL training with tunable hyperparameters for batch size, parallel tasks, max turns, and model serving configuration.
+  tunable_params:
+    train_batch_size: "Training batch size"
+    n_parallel_tasks: "Number of parallel Harbor tasks"
+    max_turns: "Maximum agent turns per task"
+    vllm_tp_size: "vLLM tensor parallelism size (must divide num_key_value_heads)"

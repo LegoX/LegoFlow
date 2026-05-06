@@ -1,13 +1,9 @@
-version: 1
-
-# Index of all experiment runs. Agent appends an entry after each run completes.
 runs: []
+# Agent appends an entry after each run completes.
 # Example entry:
 # - id: run_001
-#   started_at: "2026-04-24T10:00:00Z"
-#   completed_at: "2026-04-24T14:00:00Z"
+#   started_at: "2026-05-06T08:00:00Z"
+#   completed_at: "2026-05-06T10:11:35Z"
 #   status: completed        # running | completed | failed
-#   params: artifacts/files/run_001/params.yaml
-#   metrics: artifacts/files/run_001/metrics.yaml
-#   log: artifacts/files/run_001/run.log
-#   notes: "baseline lr=1e-4"
+#   archive: artifacts/archives/run_001/
+#   notes: "Initial pipeline run"

@@ -1,24 +1,42 @@
 ---
 title: Overview
 block: swe_lego_live
-updated_at: "2026-04-24T00:00:00Z"
+updated_at: "2026-05-06T00:00:00Z"
 ---
 
 # SWE Lego Live
 
 Root orchestration block for the self-evolving LLM development pipeline.
 
+## Status
+
+**Phase**: idle  
+**Stage**: refactoring to latest block definition  
+**Progress**: null
+
 ## What This Block Does
 
-Coordinates the full pipeline across data curation, training, and evaluation subblocks.
-Users interact verbally with the agent while it provides human-readable feedback on progress.
+Coordinates the full pipeline across four subblocks:
+- **swegen**: SWE instance generation and repository management
+- **trajgen**: Trajectory generation using Claude Code agent
+- **sft**: Supervised fine-tuning on generated trajectories
+- **rl**: Reinforcement learning from human feedback
 
-## Current Stage
+## Inputs
 
-**Design** — block contract being finalized. Subblocks not yet wired.
+| Input | Description | Required |
+|-------|-------------|----------|
+| `github_token` | GitHub API token for SWE-gen repo access | Yes |
+| `anthropic_api_key` | Anthropic API key for Claude Code agent | Yes |
+| `openai_api_key` | OpenAI API key for PR evaluation | No |
 
-## Quick Links
+## Outputs
 
-- [Status](./status.mdx) — live job progress, experiment runs, next steps
-- [Inputs & Outputs](./io.mdx) — current runtime values and produced outputs
-- [Memory](./memory.mdx) — decisions, notes, and long-form context
+| Output | Description |
+|--------|-------------|
+| `eval_report` | Final evaluation results across all pipeline runs |
+| `pipeline_version` | Version identifier for this pipeline run |
+
+## Last Run
+
+No runs yet.
