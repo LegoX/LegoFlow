@@ -23,7 +23,7 @@ meta_info:
     user: root
     pwd: k9#mP2$vL7@nQ4!xZ8
     directory: /gpufs/haoli/code/
-    description: cpu node server for k8s cluster. for swegen task creation. 
+    description: cpu node server for k8s cluster. for swegen task creation. By default you should work at ${directory}
     public_storage: /gpufs/haoli/swedata
 
 runtime_info:

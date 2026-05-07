@@ -8,7 +8,7 @@ echo 'activate swegen-env2'
 
 load_runtime_env
 
-uv pip install -e repos/swegen/
+pip install -e repos/swegen/
 
 # MiniMax-M2.5
 # claude-sonnet-4-6

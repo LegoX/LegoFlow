@@ -8,7 +8,7 @@ echo 'activate swegen-env2'
 
 load_runtime_env
 
-uv pip install -e repos/swegen/
+pip install -e repos/swegen/
 
 export OPENAI_MODEL="${OPENAI_MODEL:-glm-5-urg}"
 export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
