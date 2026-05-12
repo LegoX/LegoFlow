@@ -8,7 +8,7 @@ meta_info:
   repos:
     swegen:
       name: swegen
-      commit_id: null
+      commit_id: null # latest
       role: core pipeline — CLI, task generation, validation, scoring
 
   environment:
@@ -29,10 +29,18 @@ meta_info:
 runtime_info:
   input:
     github_tokens: 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              # Comma-separated GitHub API tokens for PR collection
-    openai_api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY             # LLM API key for PR evaluation and instruction generation
-    openai_api_base_url: https://az.gptplus5.com/v1        # OpenAI-compatible API endpoint
-    openai_model: deepseek-v4-flash               # Model for PR evaluation and instruction generation
-    anthropic_model: deepseek-v4-flash            # Model for Claude Code SDK task completion
+
+    llm_api:
+      api_key: dummy-key
+      api_base_url: "http://llm10.jierungogogo.com/v1"
+      pr_model: "openai/MiniMax-M2.7"
+      task_model: "openai/MiniMax-M2.7"
+
+    # llm_api:
+    #   api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY             # LLM API key for PR evaluation and instruction generation
+    #   api_base_url: https://az.gptplus5.com/v1        # OpenAI-compatible API endpoint
+    #   pr_model: deepseek-v4-flash               # Model for PR evaluation and instruction generation
+    #   task_model: deepseek-v4-flash            # Model for Claude Code SDK task completion
 
     # Adaptive tuning configuration
     global:
@@ -189,28 +197,15 @@ runtime_info:
           last_checked: null
 
   output:
-    verified_tasks_indices:
-      - path: artifacts/swe_tasks/py-cc/verifiable_tasks.txt
-        description: List of verified Python task IDs (one per line)
-      - path: artifacts/swe_tasks/js-cc/verifiable_tasks.txt
-        description: List of verified JavaScript task IDs (one per line)
-      - path: artifacts/swe_tasks/ts-cc/verifiable_tasks.txt
-        description: List of verified TypeScript task IDs (one per line)
-      - path: artifacts/swe_tasks/go-cc/verifiable_tasks.txt
-        description: List of verified Go task IDs (one per line)
-      - path: artifacts/swe_tasks/c-cc/verifiable_tasks.txt
-        description: List of verified C task IDs (one per line)
-      - path: artifacts/swe_tasks/cpp-cc/verifiable_tasks.txt
-        description: List of verified C++ task IDs (one per line)
-      - path: artifacts/swe_tasks/java-cc/verifiable_tasks.txt
-        description: List of verified Java task IDs (one per line)
-      - path: artifacts/swe_tasks/rust-cc/verifiable_tasks.txt
-        description: List of verified Rust task IDs (one per line)
+    swe_tasks_dir:
+      path: artifacts/swe_tasks
+      description: Per-language task directories ({lang}-cc/), each with verifiable_tasks.txt listing verified task IDs
+      structure: "artifacts/swe_tasks/{lang}-cc/{task_id}/ with instruction.md, environment/, solution/, tests/"
 
-    merged_tasks:
-      path: outputs/
-      description: Merged directory containing all verified tasks from all languages
-      structure: "outputs/{task_id}/ with instruction.md, environment/, solution/, tests/"
+    merged_tasks_dir:
+      path: artifacts/swe_tasks
+      description: Merged directory containing all verified tasks from all languages (populated by scripts/extract_verified_tasks.py)
+      structure: "artifacts/swe_tasks/{task_id}/ with instruction.md, environment/, solution/, tests/"
       extract_command: python scripts/extract_verified_tasks.py
 
     logs:
@@ -234,17 +229,26 @@ runtime_info:
         description: Adaptive tuning decisions log (JSONL format)
 
 status:
-  phase: idle
-  progress: null
+  phase: running
+  progress: "run_002: generating 40 new tasks (9/40 new tasks so far). CC sessions now working with llm10.jierungogogo.com/MiniMax-M2.7."
   next_steps: |
-    1. Replenish PR pool: Run scripts/collect_all_bg.sh — py pool is at 10, below threshold of 100.
-    2. Run task creation: Run scripts/start.sh to launch all 8 language pipelines.
-    3. Extract verified tasks: Run python scripts/extract_verified_tasks.py to merge outputs.
+    1. Monitor swegen-py tmux session on 192.168.35.240 for progress.
+    2. When 40 new tasks are verified, run python scripts/extract_verified_tasks.py to merge outputs.
+    3. Trajgen will process tasks as they become available.
   blockers: null
-  last_updated: "2026-05-06T00:00:00Z"
+  last_updated: "2026-05-12T04:00:00Z"
   metrics:
-    py_verified: 3
-    total_verified: 3
+    py_verified: 12
+    total_verified: 12
+    pre_existing: 3
+    new_tasks: 9
+    target_new: 40
+  run_002:
+    started_at: "2026-05-10T12:09:00Z"
+    description: "Generating 40 new tasks from python_pr_ids.txt. Fixed: import re bug, stale ANTHROPIC_BASE_URL (was https://az.gptplus5.com, now http://llm.jierungogogo.com). 7 new tasks generated so far."
+    input_file: "artifacts/collected_prs/python_pr_ids.txt"
+    state_dir: "scripts/.swegen-py"
+    log: "artifacts/logs/swegen-create/cc_py_March.txt"
 
 evolving:
   description: Adaptive agent that monitors per-language success rates and tunes pipeline parameters (timeout, cc_timeout, n_concurrent) automatically every 30 minutes.

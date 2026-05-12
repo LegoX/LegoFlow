@@ -1,12 +1,8 @@
 #!/bin/bash
 
 load_runtime_env() {
-    # Source local .env if present (credentials injected by block intake)
     local block_root
     block_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-    if [[ -f "${block_root}/.env" ]]; then
-        source "${block_root}/.env"
-    fi
 
     local exported=""
     local exported_global=""
@@ -19,6 +15,12 @@ load_runtime_env() {
         # Inside a function, `declare -x` becomes local; rewrite to global `export`.
         exported_global="$(printf '%s\n' "$exported" | sed 's/^declare -x /export /')"
         eval "$exported_global"
+    fi
+
+    # Source local .env AFTER interactive shell inheritance so .env values win over
+    # stale shell values (e.g. old ANTHROPIC_BASE_URL from a previous session).
+    if [[ -f "${block_root}/.env" ]]; then
+        source "${block_root}/.env"
     fi
 
     if [ -z "${GITHUB_TOKENS:-}" ]; then

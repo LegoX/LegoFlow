@@ -131,8 +131,14 @@ config_path, output_path, template_path = sys.argv[1:4]
 with open(config_path, encoding="utf-8") as fh:
     config = yaml.safe_load(fh) or {}
 
-model_api = config.get("model_api") or {}
-proxy = config.get("litellm_proxy") or {}
+model_api = (config.get("runtime_info") or {}).get("input", {}).get("llm_api") or {}
+proxy = (config.get("runtime_info") or {}).get("input", {}).get("litellm_proxy") or {}
+
+# normalize key names: api_base_url → api_base, model → upstream_model
+if "api_base_url" in model_api and "api_base" not in model_api:
+    model_api["api_base"] = model_api["api_base_url"]
+if "model" in model_api and "upstream_model" not in model_api:
+    model_api["upstream_model"] = model_api["model"]
 
 data = {}
 if template_path:
@@ -227,14 +233,14 @@ echo "=== trajgen preflight ==="
 bash "$BLOCK_DIR/scripts/dryrun.sh"
 echo ""
 
-HARBOR_PATH_RAW="$(cfg repositories.harbor.path)"
+HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
 RUN_COMMAND="$(cfg command_override)"
-UV_PROJECT_ENVIRONMENT_RAW="$(cfg environment.harbor_uv)"
-LITELLM_UV_RAW="$(cfg environment.litellm_uv)"
-HARBOR_DATASET_PATH_RAW="$(cfg harbor_job.dataset_path)"
-HARBOR_JOBS_DIR_RAW="$(cfg harbor_job.jobs_dir)"
-HARBOR_DATASET="$(cfg harbor_job.dataset)"
-TASK_SOURCE_DATASET_NAME="$(cfg task_source.dataset_name)"
+UV_PROJECT_ENVIRONMENT_RAW="$(cfg meta_info.environment.harbor_uv)"
+LITELLM_UV_RAW="$(cfg meta_info.environment.litellm_uv)"
+HARBOR_DATASET_PATH_RAW="$(cfg runtime_info.input.harbor_job.dataset_path)"
+HARBOR_JOBS_DIR_RAW="$(cfg runtime_info.input.harbor_job.jobs_dir)"
+HARBOR_DATASET="$(cfg runtime_info.input.harbor_job.dataset)"
+TASK_SOURCE_DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
 if [[ -z "$HARBOR_DATASET" && -n "$TASK_SOURCE_DATASET_NAME" ]]; then
   HARBOR_DATASET="$(basename "$TASK_SOURCE_DATASET_NAME")"
 fi
@@ -249,14 +255,17 @@ OUTPUT_FORMAT="$(cfg output_format)"
 if [[ -z "$OUTPUT_FORMAT" ]]; then
   OUTPUT_FORMAT="litellm_logger_v0.1"
 fi
-AGENT_NAME="$(cfg agent.name)"
-AGENT_VERSION="$(cfg agent.version)"
-AGENT_MODEL_NAME="$(cfg agent.model_name)"
+AGENT_NAME="$(cfg runtime_info.input.agent.name)"
+AGENT_VERSION="$(cfg runtime_info.input.agent.version)"
+AGENT_MODEL_NAME="$(cfg runtime_info.input.agent.model_name)"
 if [[ -z "$AGENT_MODEL_NAME" ]]; then
-  AGENT_MODEL_NAME="$(cfg model_api.upstream_model)"
+  AGENT_MODEL_NAME="$(cfg runtime_info.input.llm_api.model)"
+  if [[ -z "$AGENT_MODEL_NAME" ]]; then
+    AGENT_MODEL_NAME="$(cfg runtime_info.input.llm_api.upstream_model)"
+  fi
   AGENT_MODEL_NAME="${AGENT_MODEL_NAME##*/}"
 fi
-JOB_NAME_PREFIX="$(cfg harbor_job.job_name_prefix)"
+JOB_NAME_PREFIX="$(cfg runtime_info.input.harbor_job.job_name_prefix)"
 if [[ -z "$JOB_NAME_PREFIX" ]]; then
   JOB_NAME_PREFIX="${HARBOR_DATASET}-${AGENT_NAME}-${AGENT_VERSION}-${AGENT_MODEL_NAME}"
 fi
@@ -265,29 +274,29 @@ JOB_DIR_RAW="$(cfg job_dir)"
 if [[ -z "$JOB_DIR_RAW" ]]; then
   JOB_DIR_RAW="${HARBOR_JOBS_DIR_RAW%/}/$JOB_NAME"
 fi
-N_CONCURRENT="$(cfg harbor_job.n_concurrent)"
-N_TASKS="$(cfg harbor_job.n_tasks)"
-MAX_RETRIES="$(cfg harbor_job.max_retries)"
-TIMEOUT_MULTIPLIER="$(cfg harbor_job.timeout_multiplier)"
-MAX_TURNS="$(cfg agent.max_turns)"
-TEMPERATURE="$(cfg agent.temperature)"
+N_CONCURRENT="$(cfg runtime_info.input.harbor_job.n_concurrent)"
+N_TASKS="$(cfg runtime_info.input.harbor_job.n_tasks)"
+MAX_RETRIES="$(cfg runtime_info.input.harbor_job.max_retries)"
+TIMEOUT_MULTIPLIER="$(cfg runtime_info.input.harbor_job.timeout_multiplier)"
+MAX_TURNS="$(cfg runtime_info.input.agent.max_turns)"
+TEMPERATURE="$(cfg runtime_info.input.agent.temperature)"
 
-[[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: repositories.harbor.path is empty" >&2; exit 1; }
+[[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.harbor.path is empty" >&2; exit 1; }
 [[ -n "$PRODUCER_BLOCK" ]] || { echo "ERROR: producer_block is empty" >&2; exit 1; }
 [[ -n "$OUTPUT_FORMAT" ]] || { echo "ERROR: output_format is empty" >&2; exit 1; }
-[[ -n "$HARBOR_DATASET" ]] || { echo "ERROR: could not derive dataset from task_source.dataset_name" >&2; exit 1; }
-[[ -n "$AGENT_NAME" ]] || { echo "ERROR: agent.name is empty" >&2; exit 1; }
-[[ -n "$AGENT_VERSION" ]] || { echo "ERROR: agent.version is empty" >&2; exit 1; }
-[[ -n "$AGENT_MODEL_NAME" ]] || { echo "ERROR: could not derive agent model_name from model_api.upstream_model" >&2; exit 1; }
-[[ -n "$HARBOR_DATASET_PATH_RAW" ]] || { echo "ERROR: could not derive dataset path from task_source.dataset_name" >&2; exit 1; }
-[[ -n "$HARBOR_JOBS_DIR_RAW" ]] || { echo "ERROR: harbor_job.jobs_dir is empty" >&2; exit 1; }
-[[ -n "$N_CONCURRENT" ]] || { echo "ERROR: harbor_job.n_concurrent is empty" >&2; exit 1; }
-[[ -n "$MAX_RETRIES" ]] || { echo "ERROR: harbor_job.max_retries is empty" >&2; exit 1; }
-[[ -n "$TIMEOUT_MULTIPLIER" ]] || { echo "ERROR: harbor_job.timeout_multiplier is empty" >&2; exit 1; }
+[[ -n "$HARBOR_DATASET" ]] || { echo "ERROR: could not derive dataset from runtime_info.input.task_source.dataset_name" >&2; exit 1; }
+[[ -n "$AGENT_NAME" ]] || { echo "ERROR: runtime_info.input.agent.name is empty" >&2; exit 1; }
+[[ -n "$AGENT_VERSION" ]] || { echo "ERROR: runtime_info.input.agent.version is empty" >&2; exit 1; }
+[[ -n "$AGENT_MODEL_NAME" ]] || { echo "ERROR: could not derive agent model_name from runtime_info.input.llm_api.model" >&2; exit 1; }
+[[ -n "$HARBOR_DATASET_PATH_RAW" ]] || { echo "ERROR: could not derive dataset path from runtime_info.input.task_source.dataset_name" >&2; exit 1; }
+[[ -n "$HARBOR_JOBS_DIR_RAW" ]] || { echo "ERROR: runtime_info.input.harbor_job.jobs_dir is empty" >&2; exit 1; }
+[[ -n "$N_CONCURRENT" ]] || { echo "ERROR: runtime_info.input.harbor_job.n_concurrent is empty" >&2; exit 1; }
+[[ -n "$MAX_RETRIES" ]] || { echo "ERROR: runtime_info.input.harbor_job.max_retries is empty" >&2; exit 1; }
+[[ -n "$TIMEOUT_MULTIPLIER" ]] || { echo "ERROR: runtime_info.input.harbor_job.timeout_multiplier is empty" >&2; exit 1; }
 [[ -n "$JOB_DIR_RAW" ]] || { echo "ERROR: job_dir is empty" >&2; exit 1; }
 
 HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
-[[ -d "$HARBOR_DIR/.git" ]] || { echo "ERROR: $HARBOR_PATH_RAW missing; run bash scripts/update_repos.sh" >&2; exit 1; }
+[[ -e "$HARBOR_DIR/.git" ]] || { echo "ERROR: $HARBOR_PATH_RAW missing; run bash scripts/update_repos.sh" >&2; exit 1; }
 if [[ -n "$UV_PROJECT_ENVIRONMENT_RAW" ]]; then
   export UV_PROJECT_ENVIRONMENT="$(abspath "$UV_PROJECT_ENVIRONMENT_RAW")"
 fi
@@ -297,12 +306,12 @@ else
   HARBOR_PYTHON="python3"
 fi
 [[ -x "$HARBOR_PYTHON" ]] || { echo "ERROR: Harbor Python not found or not executable: $HARBOR_PYTHON" >&2; exit 1; }
-export TRAJGEN_AGENT_IMPORT_PATH="$(cfg agent.import_path)"
-if [[ -z "$TRAJGEN_AGENT_IMPORT_PATH" && "$(cfg agent.name)" == "custom-claude-code" ]]; then
+export TRAJGEN_AGENT_IMPORT_PATH="$(cfg runtime_info.input.agent.import_path)"
+if [[ -z "$TRAJGEN_AGENT_IMPORT_PATH" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]]; then
   export TRAJGEN_AGENT_IMPORT_PATH="harbor.agents.custom.claude_code:CustomClaudeCode"
 fi
-export TRAJGEN_AGENT_API_PROTOCOL="$(cfg agent.api_protocol)"
-if [[ -z "$TRAJGEN_AGENT_API_PROTOCOL" && "$(cfg agent.name)" == "custom-claude-code" ]]; then
+export TRAJGEN_AGENT_API_PROTOCOL="$(cfg runtime_info.input.agent.api_protocol)"
+if [[ -z "$TRAJGEN_AGENT_API_PROTOCOL" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]]; then
   export TRAJGEN_AGENT_API_PROTOCOL="anthropic"
 fi
 export TRAJGEN_AGENT_MODEL_NAME="$AGENT_MODEL_NAME"
@@ -324,12 +333,18 @@ export TRAJGEN_JOB_NAME="$JOB_NAME"
 export TRAJGEN_JOB_NAME_PREFIX="$JOB_NAME_PREFIX"
 export TRAJGEN_JOB_DIR="$JOB_DIR"
 export TRAJGEN_TRAJECTORY_FILE_PATTERN="$JOB_DIR/<task-id>/agent/litellm-trajectory.jsonl"
-export TRAJGEN_RUNTIME_ROOT="$(cfg runtime_mount.container_runtime_root)"
-if [[ -z "$TRAJGEN_RUNTIME_ROOT" && "$(cfg agent.name)" == "custom-claude-code" ]]; then
+export TRAJGEN_RUNTIME_ROOT="$(cfg runtime_info.input.runtime_mount.container_runtime_root)"
+if [[ -z "$TRAJGEN_RUNTIME_ROOT" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]]; then
   export TRAJGEN_RUNTIME_ROOT="/opt/custom-agent-runtime/claude-code"
 fi
-export TRAJGEN_RUNTIME_SOURCE_IMAGE="$(cfg agent.runtime_image)"
-export TRAJGEN_RUNTIME_IMAGE_SUBPATH="$(cfg runtime_mount.image_subpath)"
+export TRAJGEN_RUNTIME_SOURCE_IMAGE="$(cfg runtime_info.input.agent.runtime_image)"
+RUNTIME_HOST_PATH_RAW="$(cfg runtime_info.input.agent.runtime_host_path)"
+if [[ -n "$RUNTIME_HOST_PATH_RAW" ]]; then
+  export TRAJGEN_RUNTIME_HOST_PATH="$(abspath "$RUNTIME_HOST_PATH_RAW")"
+else
+  export TRAJGEN_RUNTIME_HOST_PATH=""
+fi
+export TRAJGEN_RUNTIME_IMAGE_SUBPATH="$(cfg runtime_info.input.runtime_mount.image_subpath)"
 if [[ -z "$TRAJGEN_RUNTIME_IMAGE_SUBPATH" ]]; then
   TRAJGEN_RUNTIME_IMAGE_SUBPATH="${TRAJGEN_RUNTIME_ROOT#/}"
   export TRAJGEN_RUNTIME_IMAGE_SUBPATH
@@ -337,8 +352,8 @@ fi
 export TRAJGEN_CUSTOM_AGENT_RUNTIME_ROOT="$TRAJGEN_RUNTIME_ROOT"
 export TRAJGEN_CUSTOM_AGENT_CLAUDE="$TRAJGEN_RUNTIME_ROOT/bin/claude"
 export TRAJGEN_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT="$TRAJGEN_RUNTIME_ROOT/runtime-env.sh"
-export TRAJGEN_LITELLM_ANTHROPIC_BASE_URL="http://$(hostname -I | awk '{print $1}'):${LITELLM_PORT:-$(cfg litellm_proxy.port)}"
-export TRAJGEN_LITELLM_MASTER_KEY="$(cfg litellm_proxy.master_key)"
+export TRAJGEN_LITELLM_ANTHROPIC_BASE_URL="http://$(hostname -I | awk '{print $1}'):${LITELLM_PORT:-$(cfg runtime_info.input.litellm_proxy.port)}"
+export TRAJGEN_LITELLM_MASTER_KEY="$(cfg runtime_info.input.litellm_proxy.master_key)"
 if [[ -n "$LITELLM_UV_RAW" ]]; then
   LITELLM_UV="$(abspath "$LITELLM_UV_RAW")"
   export TRAJGEN_LITELLM_PYTHON="$LITELLM_UV/bin/python"
@@ -352,28 +367,45 @@ while IFS= read -r env_line; do
 done < <(export_run_environment)
 
 if [[ -z "$RUN_COMMAND" ]]; then
-  [[ -n "$TRAJGEN_AGENT_IMPORT_PATH" ]] || { echo "ERROR: agent.import_path is empty and no default is defined for agent.name=$(cfg agent.name)" >&2; exit 1; }
+  [[ -n "$TRAJGEN_AGENT_IMPORT_PATH" ]] || { echo "ERROR: runtime_info.input.agent.import_path is empty and no default is defined for agent.name=$(cfg runtime_info.input.agent.name)" >&2; exit 1; }
   EXTRA_ARGS=""
   if [[ -n "$N_TASKS" ]]; then
     EXTRA_ARGS=" --n-tasks $(printf '%q' "$N_TASKS")"
   fi
+  # Never retry timed-out tasks — they'll just time out again and waste budget
+  EXTRA_ARGS="$EXTRA_ARGS --retry-exclude AgentTimeoutError"
+  # Add any extra exclude-task-name flags from HARBOR_EXCLUDE_TASKS (space-separated list)
+  if [[ -n "$HARBOR_EXCLUDE_TASKS" ]]; then
+    for _excl_task in $HARBOR_EXCLUDE_TASKS; do
+      EXTRA_ARGS="$EXTRA_ARGS --exclude-task-name $(printf '%q' "$_excl_task")"
+    done
+  fi
   RUN_COMMAND="uv run harbor run --path $(printf '%q' "$HARBOR_DATASET_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$TRAJGEN_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$TRAJGEN_JOB_NAME") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'
 import json
 import os
-mounts = [{
-    'type': 'image',
-    'source': os.environ['TRAJGEN_RUNTIME_SOURCE_IMAGE'],
-    'target': os.environ['TRAJGEN_RUNTIME_ROOT'],
-    'read_only': True,
-    'image': {'subpath': os.environ['TRAJGEN_RUNTIME_IMAGE_SUBPATH'].lstrip('/')},
-}]
+host_path = os.environ.get('TRAJGEN_RUNTIME_HOST_PATH', '')
+if host_path:
+    mounts = [{
+        'type': 'bind',
+        'source': host_path,
+        'target': os.environ['TRAJGEN_RUNTIME_ROOT'],
+        'read_only': True,
+    }]
+else:
+    mounts = [{
+        'type': 'image',
+        'source': os.environ['TRAJGEN_RUNTIME_SOURCE_IMAGE'],
+        'target': os.environ['TRAJGEN_RUNTIME_ROOT'],
+        'read_only': True,
+        'image': {'subpath': os.environ['TRAJGEN_RUNTIME_IMAGE_SUBPATH'].lstrip('/')},
+    }]
 print(json.dumps(mounts))
 PY
-)\" --model $(printf '%q' "$TRAJGEN_AGENT_MODEL_NAME") --n-concurrent $(printf '%q' "$N_CONCURRENT")${EXTRA_ARGS} --timeout-multiplier $(printf '%q' "$TIMEOUT_MULTIPLIER") --max-retries $(printf '%q' "$MAX_RETRIES") --ak version=$(cfg_literal agent.version) --ak max_turns=$(printf '%q' "$MAX_TURNS") --ak temperature=$(printf '%q' "$TEMPERATURE") --ae ANTHROPIC_BASE_URL=\$TRAJGEN_LITELLM_ANTHROPIC_BASE_URL --ae ANTHROPIC_API_KEY=\$TRAJGEN_LITELLM_MASTER_KEY --ae ANTHROPIC_MODEL=\$TRAJGEN_AGENT_MODEL_NAME --ae CUSTOM_AGENT_RUNTIME_ROOT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ROOT --ae CUSTOM_AGENT_CLAUDE=\$TRAJGEN_CUSTOM_AGENT_CLAUDE --ae CUSTOM_AGENT_RUNTIME_ENV_SCRIPT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT"
+)\" --model $(printf '%q' "$TRAJGEN_AGENT_MODEL_NAME") --n-concurrent $(printf '%q' "$N_CONCURRENT")${EXTRA_ARGS} --timeout-multiplier $(printf '%q' "$TIMEOUT_MULTIPLIER") --max-retries $(printf '%q' "$MAX_RETRIES") --ak version=$(printf '%q' "$AGENT_VERSION") --ak max_turns=$(printf '%q' "$MAX_TURNS") --ak temperature=$(printf '%q' "$TEMPERATURE") --ae ANTHROPIC_BASE_URL=\$TRAJGEN_LITELLM_ANTHROPIC_BASE_URL --ae ANTHROPIC_API_KEY=\$TRAJGEN_LITELLM_MASTER_KEY --ae ANTHROPIC_MODEL=\$TRAJGEN_AGENT_MODEL_NAME --ae CUSTOM_AGENT_RUNTIME_ROOT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ROOT --ae CUSTOM_AGENT_CLAUDE=\$TRAJGEN_CUSTOM_AGENT_CLAUDE --ae CUSTOM_AGENT_RUNTIME_ENV_SCRIPT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT"
 fi
 
-LITELLM_TEMPLATE_RAW="$(cfg litellm_proxy.config_template)"
-[[ -n "$LITELLM_TEMPLATE_RAW" ]] || { echo "ERROR: litellm_proxy.config_template is empty" >&2; exit 1; }
+LITELLM_TEMPLATE_RAW="$(cfg runtime_info.input.litellm_proxy.config_template)"
+[[ -n "$LITELLM_TEMPLATE_RAW" ]] || { echo "ERROR: runtime_info.input.litellm_proxy.config_template is empty" >&2; exit 1; }
 if [[ "$LITELLM_TEMPLATE_RAW" = /* ]]; then
   LITELLM_TEMPLATE_PATH="$LITELLM_TEMPLATE_RAW"
 else
@@ -408,7 +440,7 @@ setsid bash -c '
     LITELLM_PORT="$4" \
     API_KEY="$5" \
     bash scripts/serve_llm/serve_litellm.sh
-' bash "$HARBOR_DIR" "$LITELLM_CONFIG_PATH" "$LITELLM_ARTIFACT_DIR" "${LITELLM_PORT:-$(cfg litellm_proxy.port)}" "$TRAJGEN_LITELLM_MASTER_KEY" >>"$LOG_FILE" 2>&1 &
+' bash "$HARBOR_DIR" "$LITELLM_CONFIG_PATH" "$LITELLM_ARTIFACT_DIR" "${LITELLM_PORT:-$(cfg runtime_info.input.litellm_proxy.port)}" "$TRAJGEN_LITELLM_MASTER_KEY" >>"$LOG_FILE" 2>&1 &
 LITELLM_PID="$!"
 cleanup_litellm() {
   if kill -0 "$LITELLM_PID" >/dev/null 2>&1; then

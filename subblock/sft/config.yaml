@@ -4,6 +4,8 @@ meta_info:
   description: SFT training pipeline for SWE-bench coding models. Converts raw agent trajectories from multiple scaffolds into LLaMA-Factory sharegpt format, then trains models via LLaMA-Factory + DeepSpeed (ZeRO-3).
   parent: swe_lego_live
   subblocks: {}
+  dependencies:
+    trajectories_dir: trajgen.output.raw_trajectories_dir  # path: subblock/trajgen/artifacts/jobs
 
   repos:
     llama_factory:
@@ -16,16 +18,14 @@ meta_info:
       role: data processing (trajectory converters, quality scorers)
 
   environment:
+    harbor_uv: artifacts/env/lf
     requirements: repos/LLaMA-Factory/pyproject.toml
 
   resources:
     ip: null
     pwd: null
-    apikey: null
-    model: null
-    public_storage: null
-    gpu: "8× A100/H100 per node"
-    estimated_runtime: "~20min per run (4 epochs, 64 instances, Qwen3-8B)"
+    directory: /gpufs/haoli/code/SWE-Lego-Live
+    public_storage: /gpufs/haoli/swedata
 
 runtime_info:
   input:
@@ -93,38 +93,16 @@ runtime_info:
   output:
     checkpoint_path:
       description: Path to the latest trained model checkpoint
-      value: /mnt/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/checkpoint-4
-
-    training_metrics:
-      final_loss: 0.6194439828395844
-      total_steps: 4
-      train_runtime: 1203.9731
+      value: /gpufs/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/checkpoint-4
 
     artifacts:
-      train_results: /mnt/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/train_results.json
-      train_loss_plot: /mnt/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/training_loss.png
-      training_log: /mnt/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/logs/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think_20260428_012158.log
+      train_results: /gpufs/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/train_results.json
+      train_loss_plot: /gpufs/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/training_loss.png
+      training_log: /gpufs/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/logs/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think_20260428_012158.log
 
     training_curves:
       description: WandB run with loss, learning rate, and token metrics
       value: null
-
-status:
-  phase: idle
-  progress: 1.0
-  next_steps: |
-    1. Start next training run: Update config.yaml with new trajectory source and run bash scripts/start.sh
-  blockers: null
-  last_updated: "2026-05-06T00:00:00Z"
-  current_job:
-    name: qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think
-    started_at: "2026-04-24T15:53:28Z"
-    detail: "4/4 steps, loss 0.6194, 20m56s"
-  metrics:
-    final_loss: 0.6194279789924622
-    total_steps: 4
-    train_runtime_seconds: 1256.0117
-    epochs: 4.0
 
 evolving:
   description: SFT training pipeline with tunable hyperparameters for learning rate, batch size, epochs, and model architecture.

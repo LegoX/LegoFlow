@@ -4,96 +4,111 @@ meta_info:
   description: Generates raw agent trajectories with Harbor for downstream SFT data conversion. Harbor is managed as a local-only repository under repos/harbor and is updated on demand through the block scripts.
   parent: swe_lego_live
   subblocks: {}
-
-  repos:
-    harbor:
-      name: harbor
-      commit_id: 3062421c03d89a5e980684873840e6644e756771
-      role: trajectory generation runtime (managed local-only dependency)
-
-  environment:
-    requirements: repos/harbor/pyproject.toml
+  dependencies:
+    task_source_dir: swegen.output.swe_tasks_dir   # path: subblock/swegen/artifacts/swe_tasks
 
   resources:
-    ip: null
-    pwd: null
-    apikey: null
-    model: null
-    public_storage: null
-    model_api:
-      description: Raw upstream model API used to configure per-job LiteLLM proxy startup. Supports OpenAI-compatible and Anthropic-compatible upstreams.
-      protocols: [openai_compatible, anthropic_compatible]
-      served_via: per_job_litellm_proxy
+    ip: 192.168.35.240        # CPU-only; runs on any node with Docker available
+    user: root
+    pwd: k9#mP2$vL7@nQ4!xZ8
+    directory: /gpufs/haoli/code/
+    description: cpu node server for k8s cluster. By default you should work at ${directory}
+    public_storage: /gpufs/haoli/swedata
+
+  repositories:
+    harbor:
+      url: git@github.com:SWE-Lego/harbor.git
+      branch: main
+      commit: 3062421c03d89a5e980684873840e6644e756771
+      path: repos/harbor
+      readonly: true
+
+  environment:
+    harbor_uv: artifacts/env/harbor-uv
+    litellm_uv: artifacts/env/litellm-venv  # separate venv; harbor env is managed by uv run and resets to 1.83.0
+    litellm:
+      python_version: "3.13"
+      litellm_version: "1.83.14"
+
+# ---------------------------------------------------------------------------
 
 runtime_info:
   input:
-    repositories:
-      harbor:
-        url: https://github.com/SWE-Lego/harbor.git
-        branch: main
-        commit: 3062421c03d89a5e980684873840e6644e756771
-        path: repos/harbor
-        readonly: true
+    llm_api:
+      api_key: dummy-key
+      api_base_url: "http://llm10.jierungogogo.com/v1"
+      model: "openai/MiniMax-M2.7"
+      description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
+      protocols: [openai_compatible, anthropic_compatible]
+      served_via: per_job_litellm_proxy
+      # input_cost_per_token: 0.0000021
+      # output_cost_per_token: 0.0000084
 
-    environment:
-      harbor_uv: artifacts/env/harbor-uv
-      litellm_uv: artifacts/env/litellm-uv
-      litellm:
-        python_version: "3.13"
-        litellm_version: "1.83.9"
-
-    model_api:
-      upstream_model: "openai/GLM-5-FP8"
-      api_base: "http://llm35.jierungogogo.com/v1"
-      api_key: "dummy-key"
-      input_cost_per_token: 0.0000021
-      output_cost_per_token: 0.0000084
+    # llm_api:
+    #   api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY             # LLM API key for PR evaluation and instruction generation
+    #   api_base_url: https://az.gptplus5.com/v1        # OpenAI-compatible API endpoint
+    #   model: openai/deepseek-v4-flash
+    #   description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
+    #   protocols: [openai_compatible, anthropic_compatible]
 
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
       port: 4001
       master_key: dummy-key-cf
 
+    # task_source: wired from swegen.output.swe_tasks_dir
+    # Use local swegen output; fall back to HuggingFace for smoke tests.
     task_source:
-      provider: huggingface
-      dataset_name: SWE-Lego/swerebenchv2-200-260429
-      split: train
+      provider: local
+      dataset_name: /gpufs/haoli/code/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks
 
     harbor_job:
       jobs_dir: artifacts/jobs
+      dataset_path: artifacts/tasks/py-cc   # points to verified py-cc tasks only
       n_concurrent: 1
       n_tasks: null
       max_retries: 2
-      timeout_multiplier: 2
+      timeout_multiplier: 5
 
     agent:
       name: custom-claude-code
       version: 2.1.118
       runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
-      max_turns: 200
+      runtime_host_path: artifacts/runtime/claude-code  # pre-extracted; use bind mount to avoid overlay filename-too-long bug
+      max_turns: 80
       temperature: 0.7
 
   output:
-    raw_trajectories:
-      description: Harbor job directories and LiteLLM trajectory logs produced under artifacts/jobs
+    raw_trajectories_dir:
+      description: Harbor job directories with LiteLLM trajectory logs
       path: artifacts/jobs
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
       consumer_block: sft
 
+environment:
+  extra:
+    # Tasks excluded from trajgen runs due to repeated timeouts or OOM kills
+    HARBOR_EXCLUDE_TASKS: elastic__elasticsearch-py-3329 elastic__elasticsearch-py-3332 cartography-cncf__cartography-1673 agentscope-ai__agentscope-885
+
 status:
   phase: running
-  progress: "started; at least 1 trajectory file observed"
+  progress: "run_001 started. Processing 3 verified py-cc tasks from swegen manifest. Harbor job running."
   next_steps: |
-    1. Update local Harbor repo: Run bash scripts/update_repos.sh to clone or refresh repos/harbor.
-    2. Validate Harbor runtime config: Fill structured runtime fields in config.yaml, then run bash scripts/dryrun.sh.
-    3. Run trajectory generation: Run bash scripts/start.sh after dryrun passes.
-  blockers: null
-  last_updated: "2026-05-06T00:00:00Z"
+    1. Monitor Harbor job completion for the 3 py-cc tasks.
+    2. As swegen adds more tasks to verifiable_tasks.txt, copy them to artifacts/tasks/py-cc and run new Harbor jobs.
+    3. After all 40 tasks processed, hand off to sft block.
+  blockers: ""
+  last_updated: "2026-05-10T11:56:00Z"
   current_job:
-    name: swerebenchv2-200-260429-custom-claude-code-2.1.118-GLM-5-FP8-20260430040352
-    started_at: "2026-04-29T20:03:52Z"
-    detail: "Dryrun passed, LiteLLM proxy initialized with trajectory_logger callback, and Harbor job is running."
-  metrics: {}
+    name: swe_tasks-custom-claude-code-2.1.118-deepseek-v4-flash-20260510115612
+    started_at: "2026-05-10T11:56:00Z"
+    stopped_at: null
+    detail: "Processing 3 py-cc tasks: agentscope-ai__agentscope-885, agentscope-ai__agentscope-1342, aider-ai__aider-4146"
+  metrics:
+    tasks_attempted: 3
+    real_trajectories: 0
+    quota_failed: 0
+    unit_test_passes: 0
 
 evolving:
   description: Generates agent trajectories using Harbor. Tunable parameters include agent sampling settings, Harbor concurrency, and timeout multipliers.

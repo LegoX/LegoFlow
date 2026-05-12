@@ -140,18 +140,18 @@ PY
 command -v git >/dev/null 2>&1 || { echo "ERROR: git is required" >&2; exit 1; }
 [[ -f "$CONFIG" ]] || { echo "ERROR: config.yaml not found at $CONFIG" >&2; exit 1; }
 
-HARBOR_URL="$(cfg repositories.harbor.url)"
-HARBOR_BRANCH="$(cfg repositories.harbor.branch)"
-HARBOR_REF="$(cfg repositories.harbor.ref)"
+HARBOR_URL="$(cfg meta_info.repositories.harbor.url)"
+HARBOR_BRANCH="$(cfg meta_info.repositories.harbor.branch)"
+HARBOR_REF="$(cfg meta_info.repositories.harbor.ref)"
 if [[ -z "$HARBOR_REF" ]]; then
   HARBOR_REF="$HARBOR_BRANCH"
 fi
 if [[ -n "$REF_OVERRIDE" ]]; then
   HARBOR_REF="$REF_OVERRIDE"
 fi
-HARBOR_COMMIT="$(cfg repositories.harbor.commit)"
-HARBOR_PATH_RAW="$(cfg repositories.harbor.path)"
-READONLY="$(cfg repositories.harbor.readonly)"
+HARBOR_COMMIT="$(cfg meta_info.repositories.harbor.commit)"
+HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
+READONLY="$(cfg meta_info.repositories.harbor.readonly)"
 
 [[ -n "$HARBOR_URL" ]] || { echo "ERROR: repositories.harbor.url is empty" >&2; exit 1; }
 [[ -n "$HARBOR_REF" || -n "$HARBOR_COMMIT" ]] || { echo "ERROR: repositories.harbor.branch/ref or commit is required" >&2; exit 1; }

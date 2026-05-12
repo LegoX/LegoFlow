@@ -4,6 +4,8 @@ meta_info:
   description: Online RL training pipeline for SWE-bench. Trains a configurable coding agent against a local LLM served by vLLM, using Harbor on Kubernetes as the task execution layer and rLLM + verl as the RL backbone (GRPO/GSPO).
   parent: swe_lego_live
   subblocks: {}
+  dependencies:
+    base_model_checkpoint: sft.output.checkpoint_path  # path: subblock/sft/artifacts/model/<run>/checkpoint-N
 
   repos:
     harbor_verl_train:

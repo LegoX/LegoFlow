@@ -158,24 +158,27 @@ PY
 done
 
 if [[ $FAIL -eq 0 ]]; then
-  HARBOR_URL="$(cfg repositories.harbor.url)"
-  HARBOR_BRANCH="$(cfg repositories.harbor.branch)"
-  HARBOR_REF="$(cfg repositories.harbor.ref)"
-  HARBOR_COMMIT="$(cfg repositories.harbor.commit)"
-  HARBOR_PATH_RAW="$(cfg repositories.harbor.path)"
-  READONLY="$(cfg repositories.harbor.readonly)"
-  UV_PROJECT_ENVIRONMENT_RAW="$(cfg environment.harbor_uv)"
-  LITELLM_UV_RAW="$(cfg environment.litellm_uv)"
-  LITELLM_PYTHON_VERSION="$(cfg environment.litellm.python_version)"
-  LITELLM_VERSION="$(cfg environment.litellm.litellm_version)"
-  MODEL_API_BASE_URL="$(cfg model_api.api_base)"
+  HARBOR_URL="$(cfg meta_info.repositories.harbor.url)"
+  HARBOR_BRANCH="$(cfg meta_info.repositories.harbor.branch)"
+  HARBOR_REF="$(cfg meta_info.repositories.harbor.ref)"
+  HARBOR_COMMIT="$(cfg meta_info.repositories.harbor.commit)"
+  HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
+  READONLY="$(cfg meta_info.repositories.harbor.readonly)"
+  UV_PROJECT_ENVIRONMENT_RAW="$(cfg meta_info.environment.harbor_uv)"
+  LITELLM_UV_RAW="$(cfg meta_info.environment.litellm_uv)"
+  LITELLM_PYTHON_VERSION="$(cfg meta_info.environment.litellm.python_version)"
+  LITELLM_VERSION="$(cfg meta_info.environment.litellm.litellm_version)"
+  MODEL_API_BASE_URL="$(cfg runtime_info.input.llm_api.api_base_url)"
   if [[ -z "$MODEL_API_BASE_URL" ]]; then
-    MODEL_API_BASE_URL="$(cfg model_api.base_url)"
+    MODEL_API_BASE_URL="$(cfg runtime_info.input.llm_api.api_base)"
   fi
-  MODEL_API_MODEL="$(cfg model_api.upstream_model)"
-  MODEL_API_KEY="$(cfg model_api.api_key)"
-  MODEL_API_INPUT_COST="$(cfg model_api.input_cost_per_token)"
-  MODEL_API_OUTPUT_COST="$(cfg model_api.output_cost_per_token)"
+  MODEL_API_MODEL="$(cfg runtime_info.input.llm_api.model)"
+  if [[ -z "$MODEL_API_MODEL" ]]; then
+    MODEL_API_MODEL="$(cfg runtime_info.input.llm_api.upstream_model)"
+  fi
+  MODEL_API_KEY="$(cfg runtime_info.input.llm_api.api_key)"
+  MODEL_API_INPUT_COST="$(cfg runtime_info.input.llm_api.input_cost_per_token)"
+  MODEL_API_OUTPUT_COST="$(cfg runtime_info.input.llm_api.output_cost_per_token)"
   RUN_COMMAND="$(cfg command_override)"
 else
   HARBOR_URL=""
@@ -198,18 +201,18 @@ fi
 
 echo ""
 echo "--- 3. Harbor repo config ---"
-[[ -n "$HARBOR_URL" ]] && ok "repositories.harbor.url = $HARBOR_URL" || fail "repositories.harbor.url is empty"
+[[ -n "$HARBOR_URL" ]] && ok "meta_info.repositories.harbor.url = $HARBOR_URL" || fail "meta_info.repositories.harbor.url is empty"
 if [[ -n "$HARBOR_COMMIT" ]]; then
-  ok "repositories.harbor.commit = $HARBOR_COMMIT"
+  ok "meta_info.repositories.harbor.commit = $HARBOR_COMMIT"
 elif [[ -n "$HARBOR_REF" ]]; then
-  ok "repositories.harbor.ref = $HARBOR_REF"
+  ok "meta_info.repositories.harbor.ref = $HARBOR_REF"
 elif [[ -n "$HARBOR_BRANCH" ]]; then
-  ok "repositories.harbor.branch = $HARBOR_BRANCH"
+  ok "meta_info.repositories.harbor.branch = $HARBOR_BRANCH"
 else
-  fail "repositories.harbor.branch/ref or commit is required"
+  fail "meta_info.repositories.harbor.branch/ref or commit is required"
 fi
-[[ -n "$HARBOR_PATH_RAW" ]] && ok "repositories.harbor.path = $HARBOR_PATH_RAW" || fail "repositories.harbor.path is empty"
-[[ "$READONLY" == "true" || "$READONLY" == "false" ]] && ok "repositories.harbor.readonly = $READONLY" || fail "repositories.harbor.readonly must be true or false"
+[[ -n "$HARBOR_PATH_RAW" ]] && ok "meta_info.repositories.harbor.path = $HARBOR_PATH_RAW" || fail "meta_info.repositories.harbor.path is empty"
+[[ "$READONLY" == "true" || "$READONLY" == "false" ]] && ok "meta_info.repositories.harbor.readonly = $READONLY" || fail "meta_info.repositories.harbor.readonly must be true or false"
 
 if [[ -n "$HARBOR_PATH_RAW" ]]; then
   if git -C "$BLOCK_DIR" check-ignore -q "$HARBOR_PATH_RAW" 2>/dev/null; then
@@ -223,7 +226,7 @@ echo ""
 echo "--- 4. Local Harbor checkout ---"
 if [[ -n "$HARBOR_PATH_RAW" ]]; then
   HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
-  if [[ -d "$HARBOR_DIR/.git" ]]; then
+  if [[ -e "$HARBOR_DIR/.git" ]]; then
     ok "$HARBOR_PATH_RAW exists"
     CURRENT_URL="$(git -C "$HARBOR_DIR" remote get-url origin 2>/dev/null || true)"
     COMMIT="$(git -C "$HARBOR_DIR" rev-parse HEAD 2>/dev/null || true)"
@@ -297,7 +300,7 @@ if [[ -n "$UV_PROJECT_ENVIRONMENT_RAW" ]]; then
   HARBOR_CHECK_COMMAND="$UV_PROJECT_ENVIRONMENT_ABS/bin/harbor"
   INSTALL_COMMAND="UV_PROJECT_ENVIRONMENT=$UV_PROJECT_ENVIRONMENT_ABS uv sync --all-extras"
   ok "uv project environment path = $UV_PROJECT_ENVIRONMENT_RAW"
-  if [[ -n "${HARBOR_DIR:-}" && -d "$HARBOR_DIR/.git" ]]; then
+  if [[ -n "${HARBOR_DIR:-}" && -e "$HARBOR_DIR/.git" ]]; then
     case "$UV_PROJECT_ENVIRONMENT_ABS" in
       "$HARBOR_DIR"/*)
         if [[ "$READONLY" == "true" ]]; then
@@ -354,7 +357,7 @@ for pkg in harbor litellm datasets; do
   fi
 done
 
-if [[ -n "${HARBOR_DIR:-}" && -d "$HARBOR_DIR/.git" ]]; then
+if [[ -n "${HARBOR_DIR:-}" && -e "$HARBOR_DIR/.git" ]]; then
   EDITABLE_STATUS="$(run_in_harbor_env "$PYTHON_CHECK_COMMAND \"$BLOCK_DIR/scripts/check_harbor_editable.py\"" 2>/dev/null || true)"
   case "$EDITABLE_STATUS" in
     ok:*) ok "harbor imports from repos/harbor" ;;
@@ -439,67 +442,67 @@ fi
 
 echo ""
 echo "--- 7. Model API ---"
-[[ -n "$MODEL_API_BASE_URL" ]] && ok "model_api.api_base = $MODEL_API_BASE_URL" || fail "model_api.api_base is required"
-[[ -n "$MODEL_API_MODEL" ]] && ok "model_api.upstream_model = $MODEL_API_MODEL" || fail "model_api.upstream_model is required"
+[[ -n "$MODEL_API_BASE_URL" ]] && ok "runtime_info.input.llm_api.api_base_url = $MODEL_API_BASE_URL" || fail "runtime_info.input.llm_api.api_base_url is required"
+[[ -n "$MODEL_API_MODEL" ]] && ok "runtime_info.input.llm_api.model = $MODEL_API_MODEL" || fail "runtime_info.input.llm_api.model is required"
 if [[ -n "$MODEL_API_KEY" ]]; then
-  ok "model_api.api_key is set"
+  ok "runtime_info.input.llm_api.api_key is set"
 else
-  fail "model_api.api_key is required"
+  fail "runtime_info.input.llm_api.api_key is required"
 fi
-[[ -n "$MODEL_API_INPUT_COST" ]] && ok "model_api.input_cost_per_token = $MODEL_API_INPUT_COST" || warn "model_api.input_cost_per_token is empty"
-[[ -n "$MODEL_API_OUTPUT_COST" ]] && ok "model_api.output_cost_per_token = $MODEL_API_OUTPUT_COST" || warn "model_api.output_cost_per_token is empty"
-info "model_api is raw upstream config; LiteLLM reachability is checked by each job after proxy startup"
+[[ -n "$MODEL_API_INPUT_COST" ]] && ok "runtime_info.input.llm_api.input_cost_per_token = $MODEL_API_INPUT_COST" || warn "runtime_info.input.llm_api.input_cost_per_token is empty"
+[[ -n "$MODEL_API_OUTPUT_COST" ]] && ok "runtime_info.input.llm_api.output_cost_per_token = $MODEL_API_OUTPUT_COST" || warn "runtime_info.input.llm_api.output_cost_per_token is empty"
+info "llm_api is raw upstream config; LiteLLM reachability is checked by each job after proxy startup"
 
 echo ""
 echo "--- 8. Harbor run config ---"
 for key in \
-  litellm_proxy.config_template \
-  litellm_proxy.port \
-  litellm_proxy.master_key \
-  task_source.provider \
-  task_source.dataset_name \
-  harbor_job.jobs_dir \
-  harbor_job.n_concurrent \
-  harbor_job.max_retries \
-  harbor_job.timeout_multiplier \
-  agent.name \
-  agent.version; do
+  runtime_info.input.litellm_proxy.config_template \
+  runtime_info.input.litellm_proxy.port \
+  runtime_info.input.litellm_proxy.master_key \
+  runtime_info.input.task_source.provider \
+  runtime_info.input.task_source.dataset_name \
+  runtime_info.input.harbor_job.jobs_dir \
+  runtime_info.input.harbor_job.n_concurrent \
+  runtime_info.input.harbor_job.max_retries \
+  runtime_info.input.harbor_job.timeout_multiplier \
+  runtime_info.input.agent.name \
+  runtime_info.input.agent.version; do
   value="$(cfg "$key")"
   [[ -n "$value" ]] && ok "$key = $value" || fail "$key is required"
 done
 
-LITELLM_TEMPLATE_RAW="$(cfg litellm_proxy.config_template)"
+LITELLM_TEMPLATE_RAW="$(cfg runtime_info.input.litellm_proxy.config_template)"
 if [[ -n "$LITELLM_TEMPLATE_RAW" ]]; then
   if [[ "$LITELLM_TEMPLATE_RAW" = /* ]]; then
     LITELLM_TEMPLATE_PATH="$LITELLM_TEMPLATE_RAW"
   else
     LITELLM_TEMPLATE_PATH="${HARBOR_DIR:-}/$LITELLM_TEMPLATE_RAW"
   fi
-  if [[ -n "${HARBOR_DIR:-}" && -d "$HARBOR_DIR/.git" ]]; then
+  if [[ -n "${HARBOR_DIR:-}" && -e "$HARBOR_DIR/.git" ]]; then
     [[ -f "$LITELLM_TEMPLATE_PATH" ]] && ok "LiteLLM config template exists" || fail "LiteLLM config template not found: $LITELLM_TEMPLATE_RAW"
   else
     warn "skipping LiteLLM config template existence check because repos/harbor is missing"
   fi
 fi
 
-AGENT_MODEL_NAME="$(cfg agent.model_name)"
+AGENT_MODEL_NAME="$(cfg runtime_info.input.agent.model_name)"
 if [[ -z "$AGENT_MODEL_NAME" ]]; then
   AGENT_MODEL_NAME="$MODEL_API_MODEL"
   AGENT_MODEL_NAME="${AGENT_MODEL_NAME##*/}"
 fi
 [[ -n "$AGENT_MODEL_NAME" ]] && ok "derived agent model_name = $AGENT_MODEL_NAME" || fail "could not derive agent model_name"
 
-HARBOR_JOBS_DIR="$(cfg harbor_job.jobs_dir)"
-HARBOR_DATASET_PATH="$(cfg harbor_job.dataset_path)"
-TASK_SOURCE_DATASET_NAME="$(cfg task_source.dataset_name)"
-HARBOR_DATASET="$(cfg harbor_job.dataset)"
+HARBOR_JOBS_DIR="$(cfg runtime_info.input.harbor_job.jobs_dir)"
+HARBOR_DATASET_PATH="$(cfg runtime_info.input.harbor_job.dataset_path)"
+TASK_SOURCE_DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
+HARBOR_DATASET="$(cfg runtime_info.input.harbor_job.dataset)"
 if [[ -z "$HARBOR_DATASET" && -n "$TASK_SOURCE_DATASET_NAME" ]]; then
   HARBOR_DATASET="$(basename "$TASK_SOURCE_DATASET_NAME")"
 fi
 if [[ -z "$HARBOR_DATASET_PATH" && -n "$HARBOR_DATASET" ]]; then
   HARBOR_DATASET_PATH="artifacts/tasks/$HARBOR_DATASET"
 fi
-[[ -n "$HARBOR_DATASET" ]] && ok "derived harbor dataset = $HARBOR_DATASET" || fail "could not derive harbor dataset from task_source.dataset_name"
+[[ -n "$HARBOR_DATASET" ]] && ok "derived harbor dataset = $HARBOR_DATASET" || fail "could not derive harbor dataset from runtime_info.input.task_source.dataset_name"
 [[ -n "$HARBOR_DATASET_PATH" ]] && ok "derived harbor dataset_path = $HARBOR_DATASET_PATH" || fail "could not derive harbor dataset_path"
 RUN_JOB_DIR="$(cfg job_dir)"
 [[ -n "$RUN_JOB_DIR" ]] || RUN_JOB_DIR="${HARBOR_JOBS_DIR%/}/latest"
@@ -508,7 +511,7 @@ case "$HARBOR_JOBS_DIR" in
     ok "Harbor jobs_dir is under block artifacts"
     ;;
   *)
-    fail "harbor_job.jobs_dir should point under artifacts/jobs, got: $HARBOR_JOBS_DIR"
+    fail "runtime_info.input.harbor_job.jobs_dir should point under artifacts/jobs, got: $HARBOR_JOBS_DIR"
     ;;
 esac
 case "$HARBOR_DATASET_PATH" in
@@ -533,8 +536,8 @@ case "$RUN_JOB_DIR" in
     fail "job_dir should point under artifacts/jobs, got: $RUN_JOB_DIR"
     ;;
 esac
-value="$(cfg agent.runtime_image)"
-[[ -n "$value" ]] && ok "agent.runtime_image = $value" || fail "agent.runtime_image is required"
+value="$(cfg runtime_info.input.agent.runtime_image)"
+[[ -n "$value" ]] && ok "runtime_info.input.agent.runtime_image = $value" || fail "runtime_info.input.agent.runtime_image is required"
 
 echo ""
 echo "--- 9. Run command ---"

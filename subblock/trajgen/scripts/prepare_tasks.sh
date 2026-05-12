@@ -255,17 +255,17 @@ PY
 
 [[ -f "$CONFIG" ]] || { echo "ERROR: config not found: $CONFIG" >&2; exit 1; }
 
-PROVIDER="$(cfg task_source.provider)"
-DATASET_NAME="$(cfg task_source.dataset_name)"
-SPLIT="$(cfg task_source.split)"
-HARBOR_PATH_RAW="$(cfg repositories.harbor.path)"
-HARBOR_UV_RAW="$(cfg environment.harbor_uv)"
-TARGET_RAW="$(cfg harbor_job.dataset_path)"
+PROVIDER="$(cfg runtime_info.input.task_source.provider)"
+DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
+SPLIT="$(cfg runtime_info.input.task_source.split)"
+HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
+HARBOR_UV_RAW="$(cfg meta_info.environment.harbor_uv)"
+TARGET_RAW="$(cfg runtime_info.input.harbor_job.dataset_path)"
 
-[[ -n "$PROVIDER" ]] || { echo "ERROR: task_source.provider is empty" >&2; exit 1; }
-[[ -n "$DATASET_NAME" ]] || { echo "ERROR: task_source.dataset_name is empty" >&2; exit 1; }
-[[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: repositories.harbor.path is empty" >&2; exit 1; }
-[[ -n "$HARBOR_UV_RAW" ]] || { echo "ERROR: environment.harbor_uv is empty" >&2; exit 1; }
+[[ -n "$PROVIDER" ]] || { echo "ERROR: runtime_info.input.task_source.provider is empty" >&2; exit 1; }
+[[ -n "$DATASET_NAME" ]] || { echo "ERROR: runtime_info.input.task_source.dataset_name is empty" >&2; exit 1; }
+[[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.harbor.path is empty" >&2; exit 1; }
+[[ -n "$HARBOR_UV_RAW" ]] || { echo "ERROR: meta_info.environment.harbor_uv is empty" >&2; exit 1; }
 
 DATASET_BASENAME="$(basename "$DATASET_NAME")"
 if [[ -z "$TARGET_RAW" ]]; then
@@ -302,10 +302,21 @@ if [[ -d "$TARGET_DIR" ]]; then
   rm -rf "$TARGET_DIR"
 fi
 
-[[ -d "$HARBOR_DIR/.git" ]] || { echo "ERROR: Harbor repo missing at $HARBOR_PATH_RAW; run scripts/update_repos.sh first" >&2; exit 1; }
+[[ -e "$HARBOR_DIR/.git" ]] || { echo "ERROR: Harbor repo missing at $HARBOR_PATH_RAW; run scripts/update_repos.sh first" >&2; exit 1; }
 [[ -x "$HARBOR_PYTHON" ]] || { echo "ERROR: Harbor Python env missing at $HARBOR_PYTHON; install environment first" >&2; exit 1; }
 
 case "$PROVIDER" in
+  local)
+    SRC_DIR="$(abspath "$DATASET_NAME")"
+    [[ -d "$SRC_DIR" ]] || { echo "ERROR: local task source not found: $DATASET_NAME" >&2; exit 1; }
+    VALID_ROOT="$(find_valid_task_root "$SRC_DIR" "$DATASET_NAME")"
+    if [[ -z "$VALID_ROOT" ]]; then
+      echo "ERROR: local source is not a Harbor task directory: $DATASET_NAME" >&2
+      echo "Expected child task dirs with task.toml, instruction.md, environment/, and tests/." >&2
+      exit 1
+    fi
+    copy_harbor_tasks "$VALID_ROOT" "$TARGET_DIR"
+    ;;
   huggingface)
     mkdir -p "$(dirname "$CACHE_DIR")"
     rm -rf "$CACHE_DIR"
@@ -352,7 +363,7 @@ PY
     ;;
   *)
     echo "ERROR: unsupported task_source.provider: $PROVIDER" >&2
-    echo "Supported providers: huggingface" >&2
+    echo "Supported providers: local, huggingface" >&2
     exit 1
     ;;
 esac
