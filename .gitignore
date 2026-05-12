@@ -1,5 +1,12 @@
-# Claude Code local settings (machine-specific, never commit)
-.claude/settings.local.json
+# Claude Code local state (machine-specific, never commit)
+.claude/
+
+# Secrets
+**/gh_token.txt
+*token*.txt
+!**/CLAUDE.md
+*.pem
+*.key
 
 # Environment variables
 .env
@@ -39,4 +46,16 @@ artifacts/files/
 # SWE-gen subblock — generated data and virtual env
 subblock/swegen/artifacts/swe_tasks/
 subblock/swegen/artifacts/collected_prs/
+subblock/swegen/artifacts/collected_prs_fresh/
+subblock/swegen/artifacts/envs/
 subblock/swegen/swegen-env2/
+subblock/swegen/scripts/jobs/
+subblock/swegen/scripts/.swegen-py/
+
+# Trajgen subblock — runtime mount + per-run artifacts (kept manifest yamls tracked)
+subblock/trajgen/artifacts/runtime/
+subblock/trajgen/artifacts/env/
+subblock/trajgen/artifacts/jobs/
+subblock/trajgen/artifacts/logs/
+subblock/trajgen/artifacts/litellm/
+subblock/trajgen/artifacts/tasks/
