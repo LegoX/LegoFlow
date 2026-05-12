@@ -1,7 +1,7 @@
 ---
 title: Overview
 block: swe_lego_live
-updated_at: "2026-05-06T00:00:00Z"
+updated_at: "2026-05-12T00:00:00Z"
 ---
 
 # SWE Lego Live
@@ -10,33 +10,104 @@ Root orchestration block for the self-evolving LLM development pipeline.
 
 ## Status
 
-**Phase**: idle  
-**Stage**: refactoring to latest block definition  
-**Progress**: null
+**Phase**: running  
+**Stage**: run_001 — swegen generating Python SWE tasks; trajgen consuming them  
+**Progress**: swegen run_002: 12/40 verified py tasks. trajgen run_001: 6 trajectories done (22 tasks tracked).
+
+## New-User Quickstart
+
+### Prerequisites
+
+- SSH access to `192.168.35.240` as `root` (the remote CPU node where swegen and trajgen run)
+- Docker available on the remote node
+- Python 3.10+ locally
+- A GitHub token with `repo` read scope
+- An OpenAI-compatible LLM API endpoint (used for PR evaluation and trajectory generation)
+
+### Step 1 — Fill in config
+
+Edit `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml`. In each file, fill the `runtime_info.input` section:
+
+**swegen** needs:
+- `runtime_info.input.github_tokens` — GitHub API token(s), comma-separated
+- `runtime_info.input.llm_api.api_key` — LLM API key
+- `runtime_info.input.llm_api.api_base_url` — OpenAI-compatible endpoint
+- `runtime_info.input.llm_api.pr_model` and `task_model` — model name (e.g. `openai/gpt-4o`)
+
+**trajgen** needs:
+- `runtime_info.input.llm_api.api_key`, `api_base_url`, `model` — same LLM endpoint
+
+### Step 2 — Validate
+
+```bash
+bash scripts/dryrun.sh
+```
+
+Checks local config files, required fields, and SSH reachability. Add `--full` to also run each subblock's own dryrun on the remote node.
+
+### Step 3 — Start
+
+```bash
+bash scripts/start.sh
+```
+
+Syncs code to the remote node and launches swegen and trajgen in named tmux sessions (`swegen-py` and `trajgen`). Use `--swegen-only` or `--trajgen-only` to start one at a time. Use `--dry-run` to preview the commands without executing.
+
+### Step 4 — Monitor
+
+```bash
+ssh root@192.168.35.240
+tmux ls
+tmux attach -t swegen-py    # watch swegen task generation
+tmux attach -t trajgen      # watch trajgen trajectory generation
+```
+
+swegen logs: `subblock/swegen/artifacts/logs/swegen-create/cc_py_March.txt`  
+trajgen logs: `subblock/trajgen/artifacts/jobs/<job>/` (one directory per Harbor job)
+
+### Step 5 — Check progress
+
+The agent updates `subblock/trajgen/artifacts/consumption_ledger.yaml` with per-task status (pending / done / failed / skipped). swegen verified task counts are in `subblock/swegen/artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt`.
+
+---
+
+## Current Run
+
+| Metric | Value |
+|--------|-------|
+| swegen run | run_002 |
+| swegen target | 40 new Python tasks |
+| swegen verified | 12 (9 new + 3 pre-existing) |
+| trajgen tasks tracked | 22 |
+| trajgen done | 6 |
+| trajgen failed/excluded | 4 |
+| trajgen pending | 12 |
+
+---
 
 ## What This Block Does
 
 Coordinates the full pipeline across four subblocks:
-- **swegen**: SWE instance generation and repository management
-- **trajgen**: Trajectory generation using Claude Code agent
-- **sft**: Supervised fine-tuning on generated trajectories
-- **rl**: Reinforcement learning from human feedback
+
+| Block | Role | Status |
+|-------|------|--------|
+| **swegen** | Converts GitHub PRs into verified SWE-Bench tasks | Active |
+| **trajgen** | Runs Claude Code agent on tasks, records trajectories | Active |
+| **sft** | Supervised fine-tuning on generated trajectories | Planned |
+| **rl** | Online RL from trajectory rewards | Planned |
+
+---
 
 ## Inputs
 
-| Input | Description | Required |
-|-------|-------------|----------|
-| `github_token` | GitHub API token for SWE-gen repo access | Yes |
-| `anthropic_api_key` | Anthropic API key for Claude Code agent | Yes |
-| `openai_api_key` | OpenAI API key for PR evaluation | No |
+| Input | Where | Required |
+|-------|-------|----------|
+| GitHub token | `subblock/swegen/config.yaml` → `runtime_info.input.github_tokens` | Yes |
+| LLM API key + endpoint | both subblock configs → `runtime_info.input.llm_api` | Yes |
 
 ## Outputs
 
-| Output | Description |
-|--------|-------------|
-| `eval_report` | Final evaluation results across all pipeline runs |
-| `pipeline_version` | Version identifier for this pipeline run |
-
-## Last Run
-
-No runs yet.
+| Output | Location |
+|--------|----------|
+| Verified SWE tasks | `subblock/swegen/artifacts/swe_tasks/{lang}-cc/` |
+| Raw agent trajectories | `subblock/trajgen/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl` |

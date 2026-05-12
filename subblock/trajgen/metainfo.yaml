@@ -1,4 +1,0 @@
-name: trajgen
-label: "Trajectory Generation"
-description: Generates raw agent trajectories with Harbor for downstream SFT data conversion.
-parent: swe_lego_live

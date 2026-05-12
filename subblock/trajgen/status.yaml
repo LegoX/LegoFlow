@@ -1,5 +1,0 @@
-phase: running
-progress: "Consuming py-cc tasks from swegen manifest. 3 tasks available, starting run_001."
-next_steps: "Monitor Harbor job and update ledger as tasks complete."
-blockers: ""
-last_updated: "2026-05-10T00:05:00Z"

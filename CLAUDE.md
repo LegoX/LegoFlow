@@ -55,20 +55,29 @@ If `meta_info.resources.ip` is set, the agent **must** SSH into that node and ru
 
 ## What To Read First
 
-1. `config.yaml` — block identity, resources, dependency wiring, runtime values, and status
-2. `dashboard/overview.mdx` — current state narrative
+1. `dashboard/overview.mdx` — current state narrative and new-user quickstart
+2. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, runtime values, and live status of the two active subblocks
 3. `BLOCK_DEFINITION.md` — full block system specification
+
+The root block has no `config.yaml` of its own; inputs and outputs are owned by the subblock configs listed below. Each subblock has its own `CLAUDE.md` agent contract.
 
 ## Input/Output Contract
 
-**Inputs** (`config.yaml` → `runtime_info.input`):
-- `github_token`: GitHub API token for SWE-gen repo access
-- `anthropic_api_key`: Anthropic API key for Claude Code agent
-- `openai_api_key`: OpenAI API key for PR evaluation (optional)
+The root block does not consume external inputs directly. Required external values are filled into each active subblock's `runtime_info.input`:
 
-**Outputs** (`config.yaml` → `runtime_info.output`):
-- `eval_report`: Final evaluation results across all pipeline runs
-- `pipeline_version`: Version identifier for this pipeline run
+**swegen** (`subblock/swegen/config.yaml` → `runtime_info.input`):
+- `github_tokens`: comma-separated GitHub API tokens for PR collection
+- `llm_api.api_key`, `llm_api.api_base_url`: OpenAI-compatible LLM endpoint
+- `llm_api.pr_model`, `llm_api.task_model`: model names for PR evaluation and task completion
+
+**trajgen** (`subblock/trajgen/config.yaml` → `runtime_info.input`):
+- `llm_api.api_key`, `llm_api.api_base_url`, `llm_api.model`: OpenAI-compatible LLM endpoint and model used by the per-job LiteLLM proxy
+
+**Outputs** (downstream-consumable artifacts):
+- `swegen.output.swe_tasks_dir`: verified SWE tasks under `subblock/swegen/artifacts/swe_tasks/{lang}-cc/`. The authoritative manifest is `{lang}-cc/verifiable_tasks.txt` — only task IDs in that file have passed NOP/Oracle validation.
+- `trajgen.output`: raw agent trajectories under `subblock/trajgen/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
+
+**Producer→consumer contract**: trajgen consumes **only** tasks listed in swegen's `verifiable_tasks.txt`. `subblock/trajgen/scripts/prepare_tasks.sh` enforces this by filtering through the manifest when copying from a local task source; task IDs already processed are tracked in `subblock/trajgen/artifacts/consumption_ledger.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in trajgen's `config.yaml`.
 
 ## How To Run
 
@@ -83,7 +92,7 @@ scripts/clean.sh    # remove temporary working files
 | Block | Remote? | Key tool | Status |
 |---|---|---|---|
 | `subblock/swegen/` | Yes (192.168.35.240) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
-| `subblock/trajgen/` | No | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
+| `subblock/trajgen/` | Yes (192.168.35.240) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
 | `subblock/sft/` | No (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
 | `subblock/rl/` | No (needs 8× GPU) | Harbor + vLLM + verl | Online RL on Qwen3-30B |
 
@@ -114,5 +123,5 @@ Append one entry to `artifacts/index.yaml`:
 
 ## Memory and Status
 
-- Long-form notes and decisions: `dashboard/memory.md`
+- Long-form notes and decisions: `dashboard/memory.mdx`
 - Keep `status` in `config.yaml` current throughout execution (phase, progress, next_steps, blockers)

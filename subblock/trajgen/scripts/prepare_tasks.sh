@@ -131,6 +131,47 @@ shutil.copytree(src, dst, symlinks=True)
 PY
 }
 
+copy_harbor_tasks_filtered() {
+  local src="$1"
+  local dst="$2"
+  local manifest="$3"
+  python3 - "$src" "$dst" "$manifest" <<'PY'
+from pathlib import Path
+import shutil
+import sys
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+manifest = Path(sys.argv[3])
+
+with manifest.open(encoding="utf-8") as fh:
+    allowed = {line.strip() for line in fh if line.strip() and not line.startswith("#")}
+
+if not allowed:
+    print(f"ERROR: manifest is empty: {manifest}", file=sys.stderr)
+    sys.exit(1)
+
+dst.parent.mkdir(parents=True, exist_ok=True)
+if dst.exists():
+    shutil.rmtree(dst)
+dst.mkdir(parents=True)
+
+copied = 0
+missing = []
+for task_id in sorted(allowed):
+    src_task = src / task_id
+    if not src_task.is_dir():
+        missing.append(task_id)
+        continue
+    shutil.copytree(src_task, dst / task_id, symlinks=True)
+    copied += 1
+
+for task_id in missing:
+    print(f"WARN: manifest entry missing from source: {task_id}", file=sys.stderr)
+print(f"filtered:{copied}/{len(allowed)} copied (manifest={manifest.name})")
+PY
+}
+
 find_valid_task_root() {
   local root="$1"
   local dataset_name="$2"
@@ -315,7 +356,14 @@ case "$PROVIDER" in
       echo "Expected child task dirs with task.toml, instruction.md, environment/, and tests/." >&2
       exit 1
     fi
-    copy_harbor_tasks "$VALID_ROOT" "$TARGET_DIR"
+    MANIFEST="$VALID_ROOT/verifiable_tasks.txt"
+    if [[ -f "$MANIFEST" ]]; then
+      echo "Manifest found: $MANIFEST — copying only listed tasks."
+      copy_harbor_tasks_filtered "$VALID_ROOT" "$TARGET_DIR" "$MANIFEST"
+    else
+      echo "No verifiable_tasks.txt in source — copying all task dirs."
+      copy_harbor_tasks "$VALID_ROOT" "$TARGET_DIR"
+    fi
     ;;
   huggingface)
     mkdir -p "$(dirname "$CACHE_DIR")"

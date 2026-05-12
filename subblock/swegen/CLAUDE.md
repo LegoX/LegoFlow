@@ -9,9 +9,8 @@ For the canonical definition of a block, the field semantics, and the default di
 ```md
 Name: swegen
 Type: data
+Config: `config.yaml`  (identity, resources, runtime I/O, live status)
 Main doc: `dashboard/overview.mdx`
-Meta info: `metainfo.yaml`
-Status: `status.yaml`
 Definition reference: `BLOCK_DEFINITION.md`
 ```
 
@@ -102,16 +101,23 @@ Reads `verifiable_tasks.txt` from each language, copies verified task directorie
 
 ## Downstream Agent Interface
 
-Downstream agents consume verified SWE tasks for trajectory inference:
+Downstream agents consume verified SWE tasks for trajectory inference. The **authoritative consumer contract** is the manifest file:
 
-1. Read `outputs.yaml` for data location schema
-2. Run `python scripts/extract_verified_tasks.py` to populate `outputs/`
-3. Each task in `outputs/{task_id}/` contains:
-   - `instruction.md` — problem description (input to the solving agent)
-   - `environment/Dockerfile` — Docker build environment
-   - `environment/bug.patch` — patch that introduces the bug
-   - `solution/fix.patch` — ground truth fix
-   - `tests/test.sh` — verification script (writes reward to `/logs/verifier/reward.txt`)
+- `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` — newline-delimited list of task IDs that passed NOP/Oracle validation.
+
+Consumers MUST filter by this manifest, not by scanning `artifacts/swe_tasks/{lang}-cc/` directly — the latter also contains in-progress and failed skeletons. The trajgen block does this via `prepare_tasks.sh` (manifest-filtered copy).
+
+Two interfaces are supported:
+
+1. **In-place** (recommended): consumer reads tasks directly from `artifacts/swe_tasks/{lang}-cc/<task_id>/`, gated by entries in `verifiable_tasks.txt`. trajgen uses this path.
+2. **Merged**: run `python scripts/extract_verified_tasks.py` to materialize a flat `outputs/` directory containing only verified tasks.
+
+Each task directory contains:
+- `instruction.md` — problem description (input to the solving agent)
+- `environment/Dockerfile` — Docker build environment
+- `environment/bug.patch` — patch that introduces the bug
+- `solution/fix.patch` — ground truth fix
+- `tests/test.sh` — verification script (writes reward to `/logs/verifier/reward.txt`)
 
 ## Directory Layout
 
@@ -131,10 +137,10 @@ outputs/              # Merged verified tasks (populated by scripts/extract_veri
 
 | File | Purpose |
 |------|---------|
-| `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` | List of verified task IDs per language |
-| `outputs.yaml` | Schema for downstream agents to find verified tasks |
-| `scripts/extract_verified_tasks.py` | Merges all verified tasks into `outputs/` |
-| `inputs.yaml` | Reserved for upstream agent configuration |
+| `config.yaml` | Single source of truth: identity, resources, runtime I/O, per-language tunable params, live status (replaces the old `metainfo.yaml`/`inputs.yaml`/`status.yaml`/`outputs.yaml` split). |
+| `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` | Authoritative manifest of validated task IDs per language. Consumers (e.g. trajgen) must filter by this file. |
+| `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/` | Per-batch state JSON used by `swegen create` for resume/dedup. |
+| `scripts/extract_verified_tasks.py` | Optional: merges all verified tasks into a flat `outputs/` directory. |
 
 ## Coding Standards
 
@@ -147,11 +153,11 @@ outputs/              # Merged verified tasks (populated by scripts/extract_veri
 
 ### Overview
 
-You (the AI agent) monitor and tune the SWE-gen pipeline. Configuration and status live in `inputs.yaml`.
+You (the AI agent) monitor and tune the SWE-gen pipeline. Configuration and per-language status live in `config.yaml` under `runtime_info.input.languages.<lang>` and `runtime_info.input.global`.
 
 ### Monitoring Cycle (every 30 minutes)
 
-1. **Collect status**: Count verified tasks from `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt`. Count failures from batch state in `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/`. Update `inputs.yaml` `status` fields.
+1. **Collect status**: Count verified tasks from `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt`. Count failures from batch state in `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/`. Update `config.yaml` → `runtime_info.input.languages.<lang>.status` fields.
 2. **Decide tuning**: If `success_rate < 0.15` for 2 consecutive cycles, increase `timeout` (+400) or `cc_timeout` (+300). If `success_rate > 0.4` and `n_concurrent < 24`, increase `n_concurrent` (+4). If `success_rate >= 0.25`, do nothing.
 3. **Check PR pool**: If `pr_pool_remaining < 100`, run `python repos/swegen/tools/collect_prs_wo_image.py --languages {lang} --repo_num 100 --max_prs_per_repo 50 --output_dir ./artifacts/collected_prs`, then deduplicate against processed PRs and update the input-ids-file.
 
@@ -159,14 +165,14 @@ You (the AI agent) monitor and tune the SWE-gen pipeline. Configuration and stat
 
 - Adjust at most 1 parameter per language per cycle
 - Wait ≥ 2 cycles (60 min) between adjustments for the same language
-- Parameter bounds: timeout [2400, 5400], cc_timeout [1800, 4200], n_concurrent [4, 32]
+- Parameter bounds (read from `runtime_info.input.global.param_bounds`): timeout [2400, 5400], cc_timeout [1800, 4200], n_concurrent [4, 32]
 - Do NOT restart running create scripts unless `zero_success_streak >= 3`
 - Log every decision to `artifacts/logs/adaptive_decisions.jsonl`
 
-### Reading params from inputs.yaml
+### Reading params from config.yaml
 
 ```bash
-eval $(python scripts/read_params.py --lang py --inputs-yaml inputs.yaml)
+eval $(python scripts/read_params.py --lang py --config-yaml config.yaml)
 echo $TIMEOUT $CC_TIMEOUT $N_CONCURRENT
 ```
 
@@ -180,10 +186,8 @@ echo $TIMEOUT $CC_TIMEOUT $N_CONCURRENT
 
 When updating this block:
 - read `dashboard/overview.mdx` first for current state
-- read `metainfo.yaml` for block identity, resources, and dependency wiring
-- read `status.yaml` for live job progress, results, and next steps
-- use `inputs.yaml` for all configurable pipeline parameters and per-language status
-- use `outputs.yaml` for the output schema consumed by downstream agents
-- after every run, archive params, metrics, inputs, and log into `artifacts/files/run_NNN/` and append to `artifacts/index.yaml`
-- use `memory/` for long-form context, experiment logs, and decisions
+- read `config.yaml` for everything: identity (`meta_info`), resources, runtime I/O (`runtime_info.input`/`output`), live status (`status`), and per-language tunable params (`runtime_info.input.languages.<lang>` and `.global`). The block has consolidated all of its prior yaml split into this single file.
+- treat `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` as the authoritative output manifest — never have downstream blocks read raw task dirs without filtering through it
+- after every run, archive params, metrics, inputs, and log into `artifacts/archives/run_NNN/` and append to `artifacts/index.yaml`
+- use `dashboard/memory.mdx` (or `memory/`) for long-form context, experiment logs, and decisions
 - use `subblock/` for nested child blocks
