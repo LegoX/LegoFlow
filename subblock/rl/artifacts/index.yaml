@@ -3,37 +3,56 @@ version: 1
 primary_artifacts:
   - model_checkpoints
   - training_log
+  - trajectory_logs
 
 artifacts:
   model_checkpoints:
-    description: Actor checkpoints saved during training
-    path: repos/harbor-verl-train/outputs/
-    producer: scripts/train_1node.sh
+    description: Actor model FSDP shards saved by verl during training (per save_freq).
+    path: repos/harbor-verl-train/checkpoints/
+    producer: scripts/train_1node_cc.sh
 
   training_log:
-    description: Per-run training log written by train_1node.sh
+    description: Per-run training log (stdout+stderr from sync_1nodes_cc.sh, tee'd live).
     path: repos/harbor-verl-train/logs/
-    pattern: "harbor_swe_cc_1node_*.log"
-    producer: scripts/train_1node.sh
+    pattern: "<exp_name>.log"
+    producer: scripts/train_1node_cc.sh
+
+  vllm_log:
+    description: vLLM throughput-only log (filtered tee from training log; throughput/tokens/s/prompt/generation lines only).
+    path: repos/harbor-verl-train/logs/
+    pattern: "<exp_name>_vllm.log"
+    producer: scripts/train_1node_cc.sh
 
   trajectory_logs:
-    description: JSONL files of all agent API traffic from rollouts (trajectory_logger.py)
-    path: /tmp/trajectory_output_dir/
-    producer: scripts/train_1node.sh
-    note: Ephemeral — copy to artifacts/files/ after each run
+    description: Per-trial JSONL of every LiteLLM API call (litellm trajectory_logger callback). One file per Harbor trial.
+    path: repos/harbor-verl-train/harbor_trials/<project_name>/<exp_name>/
+    pattern: "**/litellm-trajectory.jsonl"
+    producer: scripts/train_1node_cc.sh
+    note: Persistent — colocated with each trial's harbor_trials directory.
 
-  train_script:
-    description: Portable 1-node training launch script for this block
-    path: scripts/train_1node.sh
+  litellm_proxy_log:
+    description: Stdout of the LiteLLM proxy started by the launch script.
+    path: /tmp/
+    pattern: "litellm_cc_<litellm_port>.log"
+    producer: scripts/train_1node_cc.sh
+    note: Ephemeral — clean.sh wipes /tmp/litellm_cc_* by default.
+
+  litellm_proxy_config:
+    description: Auto-generated LiteLLM YAML (one model entry per discovered vLLM DP replica).
+    path: /tmp/
+    pattern: "litellm_cc_<litellm_port>.yaml"
+    producer: scripts/train_1node_cc.sh
+    note: Ephemeral — built at launch by discovering vllm_server_*_0 actors in Ray.
+
+  block_scripts:
+    description: Block-level launchers (entry, dryrun, clean, training wrapper).
+    path: scripts/
 
   pipeline_doc:
-    description: Detailed pipeline architecture, data flow, and bug fix record
-    url: https://github.com/Elvin-Yiming-Du/harbor-verl-train/blob/main/examples/harbor/scripts/TRAINING_PIPELINE.md
-
-  local_files:
-    description: Persistent copies of trajectory logs and exported reports
-    path: artifacts/files/
+    description: Detailed pipeline architecture, env-var contract, and tuning notes.
+    url: https://github.com/Elvin-Yiming-Du/harbor-verl-train/blob/ydu_dev/README.md
 
 notes:
-  - trajectory_logs are ephemeral at /tmp — copy to artifacts/files/ after each run
-  - checkpoints can be large; do not commit to git
+  - Training writes to repos/harbor-verl-train/logs/ and harbor_trials/ (both persistent).
+  - LiteLLM artifacts at /tmp/litellm_cc_* are ephemeral; clean.sh removes them.
+  - Checkpoints can be tens of GB — never commit to git; harvest via the path above.
