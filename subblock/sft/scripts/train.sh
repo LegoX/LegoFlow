@@ -4,7 +4,7 @@
 #   STEP 1: Dataset registration  (LF JSON → dataset_info.json)
 #   STEP 2: Generate train config and launch SFT training
 #
-# Reads all config from inputs.yaml — edit that file before running.
+# Reads all runtime config from config.yaml -> runtime_info.input.
 # Run from anywhere: bash scripts/train.sh
 # Assumes you are already on a compute node with GPUs available.
 set -euo pipefail
@@ -13,95 +13,111 @@ set -euo pipefail
 # Resolve block root and repo paths
 # ---------------------------------------------------------------------------
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SWE_DP_SRC="$BLOCK_DIR/repos/swe_data_process/src/swe_data_process"
-CONFIG="$BLOCK_DIR/inputs.yaml"
-LF_PYTHON="/anaconda3/envs/swelf/bin/python3"
-
-if [[ ! -x "$LF_PYTHON" ]]; then
-    echo "ERROR: swelf Python not found at $LF_PYTHON"
-    echo "  Create the environment first: conda create -n swelf python=3.12"
-    exit 1
-fi
-
-module load cuda12.4/toolkit/12.4.1
-
-# Parse inputs.yaml with the swelf environment Python; returns "" for null/None values.
-cfg() {
-    "$LF_PYTHON" - "$CONFIG" "$1" <<'PYEOF'
-import sys
-import yaml
-
-config_path, expr = sys.argv[1], sys.argv[2]
-
-with open(config_path, encoding="utf-8") as fh:
-    config = yaml.safe_load(fh)
-
-value = eval(f"config{expr}", {"__builtins__": {}}, {"config": config})
-print("" if value is None else value)
-PYEOF
-}
+SWE_DP_REPO="$BLOCK_DIR/repos/swe_data_process"
+SWE_DP_SRC="$SWE_DP_REPO/src"
+CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG_PYTHON="${CONFIG_PYTHON:-python3}"
 
 abspath() {
     local p="$1"
     if [[ -z "$p" ]]; then echo ""; elif [[ "$p" = /* ]]; then echo "$p"; else echo "$BLOCK_DIR/$p"; fi
 }
 
+resolve_output_dir() {
+    local p="$1"
+    if [[ "$p" = /* ]]; then echo "$p"; else echo "$BLOCK_DIR/artifacts/model/$(basename "$p")"; fi
+}
+
+load_cuda_module() {
+    local module_name="${CUDA_MODULE:-}"
+    if [[ -z "$module_name" ]]; then
+        return
+    fi
+    if command -v module >/dev/null 2>&1; then
+        module load "$module_name" || echo "WARNING: failed to load CUDA module '$module_name'; continuing with current environment" >&2
+    else
+        echo "WARNING: module command not available; skipping CUDA module load" >&2
+    fi
+}
+
+meta_cfg() {
+    "$CONFIG_PYTHON" "$BLOCK_DIR/scripts/config_value.py" "$CONFIG" meta_info "$1" --default "${2:-}"
+}
+
+SFT_UV_RAW="$(meta_cfg "environment.sft_uv")"
+SFT_UV="$(abspath "$SFT_UV_RAW")"
+SFT_PYTHON_VERSION="$(meta_cfg "environment.python_version" "3.12")"
+LF_PYTHON="$SFT_UV/bin/python"
+
+if [[ ! -x "$LF_PYTHON" ]]; then
+    echo "ERROR: SFT uv Python not found at $LF_PYTHON"
+    echo "  Create it with:"
+    echo "  uv venv \"$SFT_UV\" --python \"${SFT_PYTHON_VERSION:-3.12}\""
+    echo "  uv pip install --python \"$LF_PYTHON\" -e \"$BLOCK_DIR/repos/LLaMA-Factory\" -e \"$BLOCK_DIR/repos/swe_data_process\""
+    exit 1
+fi
+
+load_cuda_module
+
+# Parse config.yaml runtime_info.input with the SFT uv environment Python; returns "" for null/None values.
+cfg() {
+    "$LF_PYTHON" "$BLOCK_DIR/scripts/config_value.py" "$CONFIG" runtime_input "$1" --default "${2:-}"
+}
+
 # ---------------------------------------------------------------------------
 # Load config values
 # ---------------------------------------------------------------------------
-PROVIDER="$(cfg "['source']['provider']")"
-SCAFFOLD="$(cfg "['source']['scaffold']")"
-JOB_DIR="$(cfg "['source']['job_dir']")"
-TRAJS_DIR="$(cfg "['source']['trajs_dir']")"
-SOURCE_DIR="$(cfg "['source']['source_dir']")"
+SCAFFOLD="$(cfg "source.scaffold")"
+JOB_DIR_RAW="$(cfg "source.job_dir")"
+JOB_DIR="$(abspath "$JOB_DIR_RAW")"
 
-MAX_INSTANCES="$(cfg "['conversion']['max_instances']")"
-EXCLUDE_REPOS_RAW="$(cfg "['conversion']['exclude_repos_file']")"
+MAX_INSTANCES="$(cfg "conversion.max_instances")"
+EXCLUDE_REPOS_RAW="$(cfg "conversion.exclude_repos_file")"
 EXCLUDE_REPOS_FILE="$(abspath "$EXCLUDE_REPOS_RAW")"
-DATA_NAME="$(cfg "['conversion']['data_name']")"
+DATA_NAME="$(cfg "conversion.data_name")"
 IM_OUTPUT="$BLOCK_DIR/artifacts/data/im_data/${DATA_NAME}.jsonl"
 LF_OUTPUT="$BLOCK_DIR/artifacts/data/lf_data/${DATA_NAME}.json"
 
-DATASET_NAME_RAW="$(cfg "['dataset']['name']")"
+DATASET_NAME_RAW="$(cfg "dataset.name")"
 
-MODEL_PATH="$(cfg "['model']['model_name_or_path']")"
-TRUST_REMOTE_CODE="$(cfg "['model']['trust_remote_code']")"
+MODEL_PATH="$(cfg "model.model_name_or_path")"
+TRUST_REMOTE_CODE="$(cfg "model.trust_remote_code")"
 
-STAGE="$(cfg "['training']['stage']")"
-FINETUNING_TYPE="$(cfg "['training']['finetuning_type']")"
-DEEPSPEED="$(abspath "$(cfg "['training']['deepspeed']")")"
-TEMPLATE="$(cfg "['training']['template']")"
-CUTOFF_LEN="$(cfg "['training']['cutoff_len']")"
-ROPE_SCALING="$(cfg "['training']['rope_scaling']")"
-MAX_SAMPLES="$(cfg "['training']['max_samples']")"
-PREPROCESSING_WORKERS="$(cfg "['training']['preprocessing_num_workers']")"
-DATALOADER_WORKERS="$(cfg "['training']['dataloader_num_workers']")"
-OUTPUT_DIR="$(cfg "['training']['output_dir']")"
-SAVE_STRATEGY="$(cfg "['training']['save_strategy']")"
-LOGGING_STEPS="$(cfg "['training']['logging_steps']")"
-SAVE_STEPS="$(cfg "['training']['save_steps']")"
-OVERWRITE_OUTPUT_DIR="$(cfg "['training']['overwrite_output_dir']")"
-SAVE_ONLY_MODEL="$(cfg "['training']['save_only_model']")"
-RESUME_FROM_CHECKPOINT="$(cfg "['training']['resume_from_checkpoint']")"
-PER_DEVICE_BATCH="$(cfg "['training']['per_device_train_batch_size']")"
-GRAD_ACCUM="$(cfg "['training']['gradient_accumulation_steps']")"
-LR="$(cfg "['training']['learning_rate']")"
-WEIGHT_DECAY="$(cfg "['training']['weight_decay']")"
-MAX_GRAD_NORM="$(cfg "['training']['max_grad_norm']")"
-EPOCHS="$(cfg "['training']['num_train_epochs']")"
-LR_SCHEDULER="$(cfg "['training']['lr_scheduler_type']")"
-WARMUP_RATIO="$(cfg "['training']['warmup_ratio']")"
-BF16="$(cfg "['training']['bf16']")"
-DDP_TIMEOUT="$(cfg "['training']['ddp_timeout']")"
-ENABLE_LIGER="$(cfg "['training']['enable_liger_kernel']")"
-USE_UNSLOTH_GC="$(cfg "['training']['use_unsloth_gc']")"
-FLASH_ATTN="$(cfg "['training']['flash_attn']")"
-RUN_NAME_RAW="$(cfg "['experiment']['run_name']")"
-WANDB_API_KEY_VAL="$(cfg "['credentials']['wandb_api_key']")"
-WANDB_MODE="$(cfg "['experiment']['wandb_mode']")"
-WANDB_RUN_ID="$(cfg "['experiment']['wandb_run_id']")"
+STAGE="$(cfg "training.stage")"
+FINETUNING_TYPE="$(cfg "training.finetuning_type")"
+DEEPSPEED="$(abspath "$(cfg "training.deepspeed")")"
+TEMPLATE="$(cfg "training.template")"
+CUTOFF_LEN="$(cfg "training.cutoff_len")"
+ROPE_SCALING="$(cfg "training.rope_scaling")"
+MAX_SAMPLES="$(cfg "training.max_samples")"
+PREPROCESSING_WORKERS="$(cfg "training.preprocessing_num_workers")"
+DATALOADER_WORKERS="$(cfg "training.dataloader_num_workers")"
+OUTPUT_DIR="$(cfg "training.output_dir")"
+SAVE_STRATEGY="$(cfg "training.save_strategy")"
+LOGGING_STEPS="$(cfg "training.logging_steps")"
+SAVE_STEPS="$(cfg "training.save_steps")"
+OVERWRITE_OUTPUT_DIR="$(cfg "training.overwrite_output_dir")"
+SAVE_ONLY_MODEL="$(cfg "training.save_only_model")"
+RESUME_FROM_CHECKPOINT="$(cfg "training.resume_from_checkpoint")"
+PER_DEVICE_BATCH="$(cfg "training.per_device_train_batch_size")"
+GRAD_ACCUM="$(cfg "training.gradient_accumulation_steps")"
+LR="$(cfg "training.learning_rate")"
+WEIGHT_DECAY="$(cfg "training.weight_decay")"
+MAX_GRAD_NORM="$(cfg "training.max_grad_norm")"
+EPOCHS="$(cfg "training.num_train_epochs")"
+LR_SCHEDULER="$(cfg "training.lr_scheduler_type")"
+WARMUP_RATIO="$(cfg "training.warmup_ratio")"
+BF16="$(cfg "training.bf16")"
+DDP_TIMEOUT="$(cfg "training.ddp_timeout")"
+ENABLE_LIGER="$(cfg "training.enable_liger_kernel")"
+USE_UNSLOTH_GC="$(cfg "training.use_unsloth_gc")"
+FLASH_ATTN="$(cfg "training.flash_attn")"
+RUN_NAME_RAW="$(cfg "experiment.run_name")"
+WANDB_API_KEY_VAL="$(cfg "credentials.wandb_api_key")"
+WANDB_MODE="$(cfg "experiment.wandb_mode")"
+WANDB_RUN_ID="$(cfg "experiment.wandb_run_id")"
 
-N_GPUS="$(cfg "['infrastructure']['n_gpus_per_node']")"
+N_GPUS="$(cfg "infrastructure.n_gpus_per_node")"
 
 # Auto-derive dataset name from data_name if not explicitly set
 if [[ -n "$DATASET_NAME_RAW" ]]; then
@@ -119,17 +135,17 @@ fi
 
 echo "=== sft-train pipeline ==="
 echo "    Block:     $BLOCK_DIR"
-echo "    Provider:  $PROVIDER  Scaffold: $SCAFFOLD"
+echo "    Scaffold:  $SCAFFOLD"
 echo "    LF output: $LF_OUTPUT"
 echo "    Dataset:   $DATASET_NAME"
 echo "    Output dir: $OUTPUT_DIR"
 
 if [[ -z "$DATA_NAME" ]]; then
-    echo "ERROR: conversion.data_name is empty — set it in inputs.yaml"
+    echo "ERROR: conversion.data_name is empty — set runtime_info.input.conversion.data_name in config.yaml"
     exit 1
 fi
 
-if [[ -z "$N_GPUS" || "$N_GPUS" -lt 1 ]] 2>/dev/null; then
+if ! [[ "$N_GPUS" =~ ^[0-9]+$ ]] || [[ "$N_GPUS" -lt 1 ]]; then
     echo "ERROR: infrastructure.n_gpus_per_node must be a positive integer"
     exit 1
 fi
@@ -139,64 +155,47 @@ if [[ -z "$RUN_NAME" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Determine converter script and build CLI args
+# Determine converter module and build CLI args. The refactored swe_data_process
+# package exposes job-dir based converters only.
 # ---------------------------------------------------------------------------
 CONVERT_ARGS=()
 
-case "${PROVIDER}+${SCAFFOLD}" in
-    jierun+openhands-sdk)
-        CONVERTER="openhands/convert_openhands_sdk_jierun_to_im.py"
-        CONVERT_ARGS+=(--job-dir "$JOB_DIR")
-        [[ -n "$TRAJS_DIR" ]] && CONVERT_ARGS+=(--trajs-dir "$TRAJS_DIR")
+if [[ -z "$JOB_DIR" ]]; then
+    echo "ERROR: source.job_dir is empty — set runtime_info.input.source.job_dir in config.yaml"
+    exit 1
+fi
+
+case "${SCAFFOLD}" in
+    openhands-sdk)
+        CONVERTER_MODULE="swe_data_process.openhands.convert_openhands_sdk_to_im"
         ;;
-    jierun+claude-code)
-        CONVERTER="claudecode_opencode/convert_cc_jierun_to_im.py"
-        CONVERT_ARGS+=(--job-dir "$JOB_DIR")
-        [[ -n "$TRAJS_DIR" ]] && CONVERT_ARGS+=(--trajs-dir "$TRAJS_DIR")
+    claude-code)
+        CONVERTER_MODULE="swe_data_process.claudecode_opencode.convert_cc_to_im"
         ;;
-    jierun+open-code)
-        CONVERTER="claudecode_opencode/convert_oc_jierun_to_im.py"
-        CONVERT_ARGS+=(--job-dir "$JOB_DIR")
-        [[ -n "$TRAJS_DIR" ]] && CONVERT_ARGS+=(--trajs-dir "$TRAJS_DIR")
+    open-code)
+        CONVERTER_MODULE="swe_data_process.claudecode_opencode.convert_oc_to_im"
         ;;
-    jierun+terminus2)
-        CONVERTER="terminus2/convert_terminus2_jierun_to_im.py"
-        CONVERT_ARGS+=(--job-dir "$JOB_DIR")
-        ;;
-    chaofan+openhands)
-        CONVERTER="openhands/convert_openhands_chaofan_to_im.py"
-        CONVERT_ARGS+=(--source-dir "$SOURCE_DIR")
-        ;;
-    chaofan+claude-code)
-        CONVERTER="claudecode_opencode/convert_cc_chaofan_to_im.py"
-        CONVERT_ARGS+=(--source-dir "$SOURCE_DIR")
-        ;;
-    chaofan+open-code)
-        CONVERTER="claudecode_opencode/convert_oc_chaofan_to_im.py"
-        CONVERT_ARGS+=(--source-dir "$SOURCE_DIR")
-        ;;
-    chaofan+terminus2)
-        CONVERTER="terminus2/convert_terminus2_chaofan_to_im.py"
-        CONVERT_ARGS+=(--source-dir "$SOURCE_DIR")
-        ;;
-    chaofan+openhands-sdk)
-        CONVERTER="openhands/convert_openhands_sdk_chaofan_to_im.py"
-        CONVERT_ARGS+=(--source-dir "$SOURCE_DIR")
+    terminus2)
+        CONVERTER_MODULE="swe_data_process.terminus2.convert_terminus2_to_im"
         ;;
     *)
-        echo "ERROR: Unknown provider+scaffold: '${PROVIDER}+${SCAFFOLD}'"
-        echo "  Valid provider: jierun | chaofan"
-        echo "  Valid scaffold: openhands-sdk | claude-code | open-code | terminus2 | openhands (chaofan only)"
+        echo "ERROR: Unsupported scaffold for job-dir conversion: '${SCAFFOLD}'"
+        echo "  Valid scaffold: openhands-sdk | claude-code | open-code | terminus2"
         exit 1
         ;;
 esac
 
 # Common conversion args
+CONVERT_ARGS+=(--job-dir "$JOB_DIR")
 CONVERT_ARGS+=(--im-output "$IM_OUTPUT" --lf-output "$LF_OUTPUT")
 if [[ -n "$MAX_INSTANCES" ]] && [[ "$MAX_INSTANCES" -gt 0 ]] 2>/dev/null; then
     CONVERT_ARGS+=(--max-instances "$MAX_INSTANCES")
 fi
-if [[ -n "$EXCLUDE_REPOS_FILE" ]]; then
+if [[ -n "$EXCLUDE_REPOS_RAW" ]]; then
+    if [[ ! -f "$EXCLUDE_REPOS_FILE" ]]; then
+        echo "ERROR: conversion.exclude_repos_file not found: $EXCLUDE_REPOS_FILE"
+        exit 1
+    fi
     CONVERT_ARGS+=(--exclude-repos-file "$EXCLUDE_REPOS_FILE")
 fi
 
@@ -214,14 +213,20 @@ mkdir -p "$LF_DIR" "$IM_DIR"
 
 if [[ -f "$IM_OUTPUT" && -f "$LF_OUTPUT" ]]; then
     IM_LINES=$(wc -l < "$IM_OUTPUT" 2>/dev/null || echo "?")
-    LF_COUNT=$("$LF_PYTHON" -c "import json; print(len(json.load(open('$LF_OUTPUT'))))" 2>/dev/null || echo "?")
+    LF_COUNT=$("$LF_PYTHON" -c 'import json, sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))))' "$LF_OUTPUT" 2>/dev/null || echo "?")
     echo "=== IM output already exists ($IM_LINES lines): $IM_OUTPUT ==="
     echo "=== LF output already exists ($LF_COUNT records): $LF_OUTPUT ==="
     echo "    Skipping conversion. Delete both files to re-run."
+elif [[ -f "$IM_OUTPUT" || -f "$LF_OUTPUT" ]]; then
+    echo "ERROR: Found a partial conversion output."
+    echo "  IM: $IM_OUTPUT"
+    echo "  LF: $LF_OUTPUT"
+    echo "Delete the existing partial file or restore the missing pair before re-running."
+    exit 1
 else
-    echo "=== Running converter: $CONVERTER ==="
+    echo "=== Running converter module: $CONVERTER_MODULE ==="
     echo "    Args: ${CONVERT_ARGS[*]}"
-    "$LF_PYTHON" "$SWE_DP_SRC/$CONVERTER" "${CONVERT_ARGS[@]}"
+    PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" -m "$CONVERTER_MODULE" "${CONVERT_ARGS[@]}"
     echo "=== Conversion done ==="
 fi
 
@@ -242,82 +247,74 @@ if [[ ! -f "$DATASET_INFO" ]]; then
 fi
 
 "$LF_PYTHON" - "$DATASET_INFO" "$DATASET_NAME" "$LF_FILENAME" <<'PYEOF'
+import fcntl
 import json
+import os
 import sys
+import tempfile
+from pathlib import Path
 
 dataset_info_path, dataset_name, lf_filename = sys.argv[1:4]
+path = Path(dataset_info_path)
+lock_path = path.with_suffix(path.suffix + ".lock")
 
-with open(dataset_info_path) as f:
-    info = json.load(f)
+with open(lock_path, "w") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
 
-desired_entry = {
-    "file_name": lf_filename,
-    "formatting": "sharegpt",
-    "columns": {"messages": "messages"},
-    "tags": {
-        "role_tag": "role",
-        "content_tag": "content",
-        "user_tag": "user",
-        "assistant_tag": "assistant",
-        "system_tag": "system"
+    with open(path, encoding="utf-8") as f:
+        info = json.load(f)
+
+    desired_entry = {
+        "file_name": lf_filename,
+        "formatting": "sharegpt",
+        "columns": {"messages": "messages"},
+        "tags": {
+            "role_tag": "role",
+            "content_tag": "content",
+            "user_tag": "user",
+            "assistant_tag": "assistant",
+            "system_tag": "system"
+        }
     }
-}
 
-if dataset_name in info and info[dataset_name] == desired_entry:
-    print(f"=== Dataset '{dataset_name}' already registered with the current LF file — skipping ===")
-else:
-    old_entry = info.get(dataset_name)
-    info[dataset_name] = desired_entry
-    with open(dataset_info_path, "w") as f:
-        json.dump(info, f, indent=4, ensure_ascii=False)
-    if old_entry is None:
-        print(f"=== Registered dataset '{dataset_name}' → {lf_filename} ===")
+    if dataset_name in info and info[dataset_name] == desired_entry:
+        print(f"=== Dataset '{dataset_name}' already registered with the current LF file — skipping ===")
     else:
-        print(f"=== Updated dataset '{dataset_name}' mapping: {old_entry.get('file_name')} -> {lf_filename} ===")
+        old_entry = info.get(dataset_name)
+        info[dataset_name] = desired_entry
+        with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as tmp:
+            json.dump(info, tmp, indent=4, ensure_ascii=False)
+            tmp.write("\n")
+            tmp_path = tmp.name
+        os.replace(tmp_path, path)
+        if old_entry is None:
+            print(f"=== Registered dataset '{dataset_name}' -> {lf_filename} ===")
+        else:
+            print(f"=== Updated dataset '{dataset_name}' mapping: {old_entry.get('file_name')} -> {lf_filename} ===")
 PYEOF
 
 # ---------------------------------------------------------------------------
-# STEP 2: Update experiment tracking table
+# STEP 2: Generate LLaMA-Factory train YAML and launch training
 # ---------------------------------------------------------------------------
 echo ""
 echo "============================================================"
-echo "STEP 2: Update experiment tracking table"
-echo "============================================================"
-"$LF_PYTHON" "$BLOCK_DIR/scripts/update_tracking.py" --block-dir "$BLOCK_DIR"
-
-# ---------------------------------------------------------------------------
-# STEP 3: Generate LLaMA-Factory train YAML and launch training
-# ---------------------------------------------------------------------------
-echo ""
-echo "============================================================"
-echo "STEP 3: Generate train config and launch training"
+echo "STEP 2: Generate train config and launch training"
 echo "============================================================"
 
 if [[ -z "$OUTPUT_DIR" ]]; then
-    echo "ERROR: training.output_dir is empty — set it in inputs.yaml"
+    echo "ERROR: training.output_dir is empty — set runtime_info.input.training.output_dir in config.yaml"
     exit 1
 fi
 
-# Resolve OUTPUT_DIR to absolute path under artifacts/model/
-if [[ "$OUTPUT_DIR" = /* ]]; then
-    ABS_OUTPUT_DIR="$OUTPUT_DIR"
-else
-    ABS_OUTPUT_DIR="$BLOCK_DIR/artifacts/model/$(basename "$OUTPUT_DIR")"
-fi
+# Relative output dirs are stored under artifacts/model/; absolute paths are honored.
+ABS_OUTPUT_DIR="$(resolve_output_dir "$OUTPUT_DIR")"
 
-# Generate the LLaMA-Factory train YAML from inputs.yaml parameters
+# Generate the LLaMA-Factory train YAML from config.yaml runtime_info.input parameters
 TRAIN_YAML_NAME="$(basename "$OUTPUT_DIR").yaml"
 TRAIN_YAML_PATH="$BLOCK_DIR/artifacts/training_config/$TRAIN_YAML_NAME"
 
 echo "=== Generating train config: artifacts/training_config/$TRAIN_YAML_NAME ==="
 mkdir -p "$BLOCK_DIR/artifacts/training_config"
-
-RESUME_LINE=""
-if [[ -n "$RESUME_FROM_CHECKPOINT" && "$RESUME_FROM_CHECKPOINT" != "None" && "$RESUME_FROM_CHECKPOINT" != "null" ]]; then
-    RESUME_LINE="resume_from_checkpoint: $RESUME_FROM_CHECKPOINT"
-else
-    RESUME_LINE="resume_from_checkpoint: null"
-fi
 
 if [[ "$WANDB_MODE" == "disabled" ]]; then
     REPORT_TO="none"
@@ -325,55 +322,72 @@ else
     REPORT_TO="wandb"
 fi
 
-cat > "$TRAIN_YAML_PATH" << EOF
-### model
-model_name_or_path: ${MODEL_PATH}
-trust_remote_code: ${TRUST_REMOTE_CODE}
+"$LF_PYTHON" - "$CONFIG" "$TRAIN_YAML_PATH" "$BLOCK_DIR" "$DEEPSPEED" "$DATASET_NAME" "$ABS_OUTPUT_DIR" "$RUN_NAME" "$REPORT_TO" <<'PYEOF'
+import os
+import sys
+import tempfile
+from pathlib import Path
 
-### method
-stage: ${STAGE}
-do_train: true
-finetuning_type: ${FINETUNING_TYPE}
-deepspeed: ${DEEPSPEED}
+import yaml
 
-### dataset
-dataset_dir: ${BLOCK_DIR}/artifacts/data/lf_data
-dataset: ${DATASET_NAME}
-template: ${TEMPLATE}
-cutoff_len: ${CUTOFF_LEN}
-rope_scaling: ${ROPE_SCALING}
-max_samples: ${MAX_SAMPLES}
-overwrite_cache: true
-preprocessing_num_workers: ${PREPROCESSING_WORKERS}
-dataloader_num_workers: ${DATALOADER_WORKERS}
+config_path, train_yaml_path, block_dir, deepspeed, dataset_name, output_dir, run_name, report_to = sys.argv[1:9]
 
-### output
-output_dir: ${ABS_OUTPUT_DIR}
-run_name: ${RUN_NAME}
-logging_steps: ${LOGGING_STEPS}
-save_steps: ${SAVE_STEPS}
-save_strategy: ${SAVE_STRATEGY}
-plot_loss: true
-overwrite_output_dir: ${OVERWRITE_OUTPUT_DIR}
-save_only_model: ${SAVE_ONLY_MODEL}
-report_to: ${REPORT_TO}
-${RESUME_LINE}
+with open(config_path, encoding="utf-8") as fh:
+    cfg = yaml.safe_load(fh)["runtime_info"]["input"]
 
-### train
-per_device_train_batch_size: ${PER_DEVICE_BATCH}
-gradient_accumulation_steps: ${GRAD_ACCUM}
-learning_rate: ${LR}
-weight_decay: ${WEIGHT_DECAY}
-max_grad_norm: ${MAX_GRAD_NORM}
-num_train_epochs: ${EPOCHS}
-lr_scheduler_type: ${LR_SCHEDULER}
-warmup_ratio: ${WARMUP_RATIO}
-bf16: ${BF16}
-ddp_timeout: ${DDP_TIMEOUT}
-enable_liger_kernel: ${ENABLE_LIGER}
-use_unsloth_gc: ${USE_UNSLOTH_GC}
-flash_attn: ${FLASH_ATTN}
-EOF
+model = cfg["model"]
+training = cfg["training"]
+resume = training.get("resume_from_checkpoint")
+if resume in ("", "None", "null"):
+    resume = None
+
+data = {
+    "model_name_or_path": model["model_name_or_path"],
+    "trust_remote_code": model["trust_remote_code"],
+    "stage": training["stage"],
+    "do_train": True,
+    "finetuning_type": training["finetuning_type"],
+    "deepspeed": deepspeed,
+    "dataset_dir": str(Path(block_dir) / "artifacts" / "data" / "lf_data"),
+    "dataset": dataset_name,
+    "template": training["template"],
+    "cutoff_len": training["cutoff_len"],
+    "rope_scaling": training["rope_scaling"],
+    "max_samples": training["max_samples"],
+    "overwrite_cache": True,
+    "preprocessing_num_workers": training["preprocessing_num_workers"],
+    "dataloader_num_workers": training["dataloader_num_workers"],
+    "output_dir": output_dir,
+    "run_name": run_name,
+    "logging_steps": training["logging_steps"],
+    "save_steps": training["save_steps"],
+    "save_strategy": training["save_strategy"],
+    "plot_loss": True,
+    "overwrite_output_dir": training["overwrite_output_dir"],
+    "save_only_model": training["save_only_model"],
+    "report_to": report_to,
+    "resume_from_checkpoint": resume,
+    "per_device_train_batch_size": training["per_device_train_batch_size"],
+    "gradient_accumulation_steps": training["gradient_accumulation_steps"],
+    "learning_rate": training["learning_rate"],
+    "weight_decay": training["weight_decay"],
+    "max_grad_norm": training["max_grad_norm"],
+    "num_train_epochs": training["num_train_epochs"],
+    "lr_scheduler_type": training["lr_scheduler_type"],
+    "warmup_ratio": training["warmup_ratio"],
+    "bf16": training["bf16"],
+    "ddp_timeout": training["ddp_timeout"],
+    "enable_liger_kernel": training["enable_liger_kernel"],
+    "use_unsloth_gc": training["use_unsloth_gc"],
+    "flash_attn": training["flash_attn"],
+}
+
+path = Path(train_yaml_path)
+with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as tmp:
+    yaml.safe_dump(data, tmp, allow_unicode=True, sort_keys=False)
+    tmp_path = tmp.name
+os.replace(tmp_path, path)
+PYEOF
 
 echo "    Written: $TRAIN_YAML_PATH"
 
@@ -415,6 +429,16 @@ if [[ "$WANDB_MODE_CFG" != "disabled" && -n "$WANDB_RUN_ID" ]]; then
     export WANDB_RUN_ID="$WANDB_RUN_ID"
 fi
 
+STATUS_PID=""
+cleanup_status_updater() {
+    if [[ -n "${STATUS_PID:-}" ]]; then
+        kill "$STATUS_PID" 2>/dev/null || true
+        wait "$STATUS_PID" 2>/dev/null || true
+        STATUS_PID=""
+    fi
+}
+trap cleanup_status_updater EXIT
+
 echo "=== Launching training ==="
 echo "    YAML:    $TRAIN_YAML_PATH"
 echo "    Log:     $TRAIN_LOG"
@@ -425,109 +449,161 @@ nvidia-smi
 "$LF_PYTHON" "$BLOCK_DIR/scripts/update_status.py" --block-dir "$BLOCK_DIR" --loop 30 &
 STATUS_PID=$!
 
-FORCE_TORCHRUN=1 NPROC_PER_NODE="$N_GPUS" PYTHONPATH="$BLOCK_DIR/repos/LLaMA-Factory/src:${PYTHONPATH:-}" PATH="/anaconda3/envs/swelf/bin:$PATH" "$LF_PYTHON" -m llamafactory.cli train "$TRAIN_YAML_PATH" 2>&1 | tee "$TRAIN_LOG"
+FORCE_TORCHRUN=1 NPROC_PER_NODE="$N_GPUS" PYTHONPATH="$BLOCK_DIR/repos/LLaMA-Factory/src:${PYTHONPATH:-}" PATH="$SFT_UV/bin:$PATH" "$LF_PYTHON" -m llamafactory.cli train "$TRAIN_YAML_PATH" 2>&1 | tee "$TRAIN_LOG"
 
 # Stop status updater and do a final refresh
-kill "$STATUS_PID" 2>/dev/null || true
-wait "$STATUS_PID" 2>/dev/null || true
+cleanup_status_updater
 "$LF_PYTHON" "$BLOCK_DIR/scripts/update_status.py" --block-dir "$BLOCK_DIR"
 
 # ---------------------------------------------------------------------------
-# STEP 4: Update outputs.yaml
+# STEP 3: Update config.yaml runtime_info.output
 # ---------------------------------------------------------------------------
 echo ""
 echo "============================================================"
-echo "STEP 4: Update outputs.yaml"
+echo "STEP 3: Update config.yaml runtime_info.output"
 echo "============================================================"
 "$LF_PYTHON" - "$BLOCK_DIR" "$ABS_OUTPUT_DIR" "$TRAIN_LOG" <<'PYEOF'
+import fcntl
 import json
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
 
 block_dir, output_dir, train_log = sys.argv[1:4]
-outputs_path = Path(block_dir) / "outputs.yaml"
+config_path = Path(block_dir) / "config.yaml"
+lock_path = config_path.with_suffix(config_path.suffix + ".lock")
 
-with open(outputs_path, encoding="utf-8") as f:
-    outputs = yaml.safe_load(f)
 
-# checkpoint_path: find the latest checkpoint-* subdir, or use output_dir itself
-out = Path(output_dir)
-ckpts = sorted(out.glob("checkpoint-*"), key=lambda p: p.stat().st_mtime, reverse=True) if out.exists() else []
-outputs["checkpoint_path"]["value"] = str(ckpts[0]) if ckpts else str(out)
+def find_wandb_run_id(block_dir: Path) -> str:
+    candidates = []
+    for root in (block_dir / "artifacts" / "wandb", block_dir / "artifacts" / "wandb" / "wandb"):
+        if root.exists():
+            candidates.extend(p for p in root.iterdir() if p.is_dir() and "run-" in p.name)
+    if not candidates:
+        return ""
+    latest = max(candidates, key=lambda p: p.stat().st_mtime)
+    return latest.name.rsplit("-", 1)[-1]
 
-# training_log
-outputs["training_log"]["value"] = train_log
 
-# wandb_run_id: read from WANDB_RUN_ID env or scan wandb dir
-run_id = os.environ.get("WANDB_RUN_ID", "")
-if not run_id:
-    wandb_dir = Path(block_dir) / "artifacts" / "wandb" / "wandb"
-    runs = sorted(wandb_dir.glob("*-run-*"), key=lambda p: p.stat().st_mtime, reverse=True) if wandb_dir.exists() else []
-    if runs:
-        run_id = runs[0].name.rsplit("-", 1)[-1]
-outputs["training_curves"]["value"] = run_id or None
+def dump_output_block(output: dict) -> str:
+    dumped = yaml.safe_dump(
+        {"output": output},
+        allow_unicode=True,
+        sort_keys=False,
+        default_flow_style=False,
+    )
+    return "\n".join("  " + line if line else line for line in dumped.rstrip("\n").splitlines()) + "\n"
 
-# train_results.json
-train_results_path = out / "train_results.json"
-if train_results_path.exists():
-    with open(train_results_path) as f:
-        tr = json.load(f)
-    outputs["train_results"]["value"] = str(train_results_path)
-    outputs["final_loss"]["value"] = tr.get("train_loss")
-    outputs["train_runtime"]["value"] = tr.get("train_runtime")
 
-# trainer_state.json
-trainer_state_path = out / "trainer_state.json"
-if trainer_state_path.exists():
-    with open(trainer_state_path) as f:
-        ts = json.load(f)
-    outputs["total_steps"]["value"] = ts.get("global_step")
+def write_runtime_output_preserving_comments(path: Path, output: dict) -> None:
+    original = path.read_text(encoding="utf-8")
+    output_block = dump_output_block(output)
+    match = re.search(r"(?ms)^  output:\n.*?(?=^[^ \n]|\Z)", original)
+    if match:
+        updated = original[:match.start()] + output_block + original[match.end():]
+    else:
+        runtime_match = re.search(r"(?m)^runtime_info:\n", original)
+        if not runtime_match:
+            raise ValueError("config.yaml is missing runtime_info")
+        insert_at = runtime_match.end()
+        updated = original[:insert_at] + output_block + original[insert_at:]
 
-# training_loss.png
-loss_plot_path = out / "training_loss.png"
-if loss_plot_path.exists():
-    outputs["train_loss_plot"]["value"] = str(loss_plot_path)
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as tmp:
+        tmp.write(updated)
+        tmp_path = tmp.name
+    os.replace(tmp_path, path)
 
-# Write with section headers and blank lines
-SECTIONS = {
-    "checkpoint_path": "Model checkpoint",
-    "final_loss": "Training metrics",
-    "train_results": "Artifacts",
-    "training_curves": "Experiment tracking",
-}
-ORDER = [
-    "checkpoint_path",
-    "final_loss", "total_steps", "train_runtime",
-    "train_results", "train_loss_plot", "training_log",
-    "training_curves",
-]
+with open(lock_path, "w") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
 
-lines = ["# Outputs produced by this block. Updated automatically by train.sh after each run.\n"]
-for key in ORDER:
-    if key not in outputs:
-        continue
-    if key in SECTIONS:
-        lines.append(f"\n# {'─' * 75}")
-        lines.append(f"# {SECTIONS[key]}")
-        lines.append(f"# {'─' * 75}")
-    entry = {key: outputs[key]}
-    text = yaml.dump(entry, default_flow_style=False, allow_unicode=True, sort_keys=False).rstrip()
-    lines.append(text)
+    with open(config_path, encoding="utf-8") as f:
+        config = yaml.safe_load(f)
 
-with open(outputs_path, "w", encoding="utf-8") as f:
-    f.write("\n".join(lines) + "\n")
+    runtime_info = config.setdefault("runtime_info", {})
+    outputs = runtime_info.setdefault("output", {})
 
-print(f"=== Updated outputs.yaml ===")
-print(f"    checkpoint: {outputs['checkpoint_path']['value']}")
-print(f"    wandb_run_id: {outputs['training_curves']['value']}")
-print(f"    log: {outputs['training_log']['value']}")
-print(f"    final_loss: {outputs['final_loss']['value']}")
-print(f"    total_steps: {outputs['total_steps']['value']}")
-print(f"    train_runtime: {outputs['train_runtime']['value']}")
+    # checkpoint_path: find the latest checkpoint-* subdir, or use output_dir itself
+    out = Path(output_dir)
+    ckpts = sorted(out.glob("checkpoint-*"), key=lambda p: p.stat().st_mtime, reverse=True) if out.exists() else []
+    checkpoint = str(ckpts[0]) if ckpts else str(out)
+    checkpoint_entry = outputs.setdefault("checkpoint_path", {})
+    if not isinstance(checkpoint_entry, dict):
+        checkpoint_entry = {}
+        outputs["checkpoint_path"] = checkpoint_entry
+    checkpoint_entry.setdefault("description", "Path to the latest trained model checkpoint")
+    checkpoint_entry["value"] = checkpoint
+
+    # training_log
+    artifacts = outputs.setdefault("artifacts", {})
+    if not isinstance(artifacts, dict):
+        artifacts = {}
+        outputs["artifacts"] = artifacts
+    artifacts["training_log"] = train_log
+
+    # wandb_run_id: read from WANDB_RUN_ID env or scan wandb dir
+    run_id = os.environ.get("WANDB_RUN_ID", "")
+    if not run_id:
+        run_id = find_wandb_run_id(Path(block_dir))
+    training_curves = outputs.setdefault("training_curves", {})
+    if not isinstance(training_curves, dict):
+        training_curves = {}
+        outputs["training_curves"] = training_curves
+    training_curves.setdefault("description", "WandB run id with loss, learning rate, and token metrics")
+    training_curves["value"] = run_id or None
+
+    training_metrics = outputs.setdefault("training_metrics", {})
+    if not isinstance(training_metrics, dict):
+        training_metrics = {}
+        outputs["training_metrics"] = training_metrics
+    training_metrics.setdefault("description", "Final training metrics from LLaMA-Factory")
+    metrics_value = training_metrics.setdefault("value", {})
+    if not isinstance(metrics_value, dict):
+        metrics_value = {}
+        training_metrics["value"] = metrics_value
+
+    # train_results.json
+    train_results_path = out / "train_results.json"
+    if train_results_path.exists():
+        with open(train_results_path) as f:
+            tr = json.load(f)
+        artifacts["train_results"] = str(train_results_path)
+        metrics_value["final_loss"] = tr.get("train_loss")
+        metrics_value["train_runtime"] = tr.get("train_runtime")
+
+    # trainer_state.json
+    trainer_state_path = out / "trainer_state.json"
+    if trainer_state_path.exists():
+        with open(trainer_state_path) as f:
+            ts = json.load(f)
+        metrics_value["total_steps"] = ts.get("global_step")
+
+    # training_loss.png
+    loss_plot_path = out / "training_loss.png"
+    if loss_plot_path.exists():
+        artifacts["train_loss_plot"] = str(loss_plot_path)
+
+    write_runtime_output_preserving_comments(config_path, outputs)
+
+print("=== Updated config.yaml runtime_info.output ===")
+print(f"    checkpoint: {checkpoint_entry['value']}")
+print(f"    wandb_run_id: {training_curves['value']}")
+print(f"    log: {artifacts.get('training_log')}")
+print(f"    final_loss: {metrics_value.get('final_loss')}")
+print(f"    total_steps: {metrics_value.get('total_steps')}")
+print(f"    train_runtime: {metrics_value.get('train_runtime')}")
 PYEOF
+
+# ---------------------------------------------------------------------------
+# STEP 4: Update experiment tracking table after a successful run
+# ---------------------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "STEP 4: Update experiment tracking table"
+echo "============================================================"
+"$LF_PYTHON" "$BLOCK_DIR/scripts/update_tracking.py" --block-dir "$BLOCK_DIR"
 
 echo "=== Training done. Log: $TRAIN_LOG ==="

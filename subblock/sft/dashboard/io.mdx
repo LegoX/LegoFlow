@@ -6,33 +6,24 @@ updated_at: "2026-04-24T16:16:45Z"
 
 # Inputs & Outputs
 
-## Current Inputs (`inputs.yaml`)
+## Current Inputs (`config.yaml` → `runtime_info.input`)
 
-| Field | Value |
-|---|---|
-| provider | jierun |
-| scaffold | openhands-sdk |
-| job_dir | swerebench-filtered-oraclesolved-openhands-sdk-1.14.0-GLM-5-FP8-30-20260322001450 |
-| data_name | jierun_glm5_swerebench_oraclesolved_oh_sdk_test |
-| max_instances | 64 |
-| base_model | Qwen3-8B |
-| output_dir | qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think |
-| epochs | 4.0 |
-| learning_rate | 1e-4 |
-| global_batch_size | 64 (per_device=1 × accum=8 × gpu=8) |
-| wandb_mode | offline |
+`config.yaml` is the source of truth for the active scaffold, job directory,
+dataset name, model path, training hyperparameters, output directory, WandB mode,
+and uv environment path. Run `bash scripts/dryrun.sh` to validate those values
+against the current machine before training.
 
-See `inputs.yaml` for full config. See `memory/inputs_参数说明.md` for parameter reference.
+See `memory/inputs_参数说明.md` for the parameter reference.
 
-## Current Outputs (`outputs.yaml`)
+## Current Outputs (`config.yaml` → `runtime_info.output`)
 
 | Output | Value |
 |---|---|
-| checkpoint_path | artifacts/model/.../checkpoint-4 |
-| final_loss | 0.6194 |
-| total_steps | 4 |
-| train_runtime | 1256s (20m56s) |
-| training_log | artifacts/logs/...\_20260424_155328.log |
-| training_curves | null (offline mode) |
+| checkpoint_path | Updated in `config.yaml.runtime_info.output` after a successful run |
+| final_loss | Read from `<output_dir>/train_results.json` when available |
+| total_steps | Read from `<output_dir>/trainer_state.json` when available |
+| train_runtime | Read from `<output_dir>/train_results.json` when available |
+| training_log | `artifacts/logs/<run_name>_<timestamp>.log` |
+| training_curves | WandB run id when available |
 
-See `outputs.yaml` for full paths.
+See `config.yaml` for full paths.

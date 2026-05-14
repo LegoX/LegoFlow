@@ -1,9 +1,9 @@
 #!/bin/bash
 # Data-only pipeline (no training):
 #   STEP 0: Data conversion  (raw trajectories → IM JSONL → LF JSON)
-#   STEP 1: Dataset registration  (LF JSON → dataset_info.json)
+#   STEP 1: (intentionally omitted) Dataset registration happens in train.sh
 #
-# Reads all config from inputs.yaml — edit that file before running.
+# Reads runtime config from config.yaml -> runtime_info.input.
 # Run from anywhere: bash scripts/dataprep.sh
 set -euo pipefail
 
@@ -11,115 +11,93 @@ set -euo pipefail
 # Resolve block root and repo paths
 # ---------------------------------------------------------------------------
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SWE_DP_SRC="$BLOCK_DIR/repos/swe_data_process/src/swe_data_process"
-CONFIG="$BLOCK_DIR/inputs.yaml"
-LF_PYTHON="/anaconda3/envs/swelf/bin/python3"
-
-if [[ ! -x "$LF_PYTHON" ]]; then
-    echo "ERROR: swelf Python not found at $LF_PYTHON"
-    echo "  Create the environment first: conda create -n swelf python=3.12"
-    exit 1
-fi
-
-cfg() {
-    "$LF_PYTHON" - "$CONFIG" "$1" <<'PYEOF'
-import sys
-import yaml
-
-config_path, expr = sys.argv[1], sys.argv[2]
-
-with open(config_path, encoding="utf-8") as fh:
-    config = yaml.safe_load(fh)
-
-value = eval(f"config{expr}", {"__builtins__": {}}, {"config": config})
-print("" if value is None else value)
-PYEOF
-}
+SWE_DP_REPO="$BLOCK_DIR/repos/swe_data_process"
+SWE_DP_SRC="$SWE_DP_REPO/src"
+CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG_PYTHON="${CONFIG_PYTHON:-python3}"
 
 abspath() {
     local p="$1"
     if [[ -z "$p" ]]; then echo ""; elif [[ "$p" = /* ]]; then echo "$p"; else echo "$BLOCK_DIR/$p"; fi
 }
 
+meta_cfg() {
+    "$CONFIG_PYTHON" "$BLOCK_DIR/scripts/config_value.py" "$CONFIG" meta_info "$1" --default "${2:-}"
+}
+
+SFT_UV_RAW="$(meta_cfg "environment.sft_uv")"
+SFT_UV="$(abspath "$SFT_UV_RAW")"
+SFT_PYTHON_VERSION="$(meta_cfg "environment.python_version" "3.12")"
+LF_PYTHON="$SFT_UV/bin/python"
+
+if [[ ! -x "$LF_PYTHON" ]]; then
+    echo "ERROR: SFT uv Python not found at $LF_PYTHON"
+    echo "  Create it with:"
+    echo "  uv venv \"$SFT_UV\" --python \"${SFT_PYTHON_VERSION:-3.12}\""
+    echo "  uv pip install --python \"$LF_PYTHON\" -e \"$BLOCK_DIR/repos/LLaMA-Factory\" -e \"$BLOCK_DIR/repos/swe_data_process\""
+    exit 1
+fi
+
+cfg() {
+    "$LF_PYTHON" "$BLOCK_DIR/scripts/config_value.py" "$CONFIG" runtime_input "$1" --default "${2:-}"
+}
+
 # ---------------------------------------------------------------------------
 # Load config values (only source + conversion + dataset sections needed)
 # ---------------------------------------------------------------------------
-PROVIDER="$(cfg "['source']['provider']")"
-SCAFFOLD="$(cfg "['source']['scaffold']")"
-JOB_DIR="$(cfg "['source']['job_dir']")"
-TRAJS_DIR="$(cfg "['source']['trajs_dir']")"
-SOURCE_DIR="$(cfg "['source']['source_dir']")"
+SCAFFOLD="$(cfg "source.scaffold")"
+JOB_DIR_RAW="$(cfg "source.job_dir")"
+JOB_DIR="$(abspath "$JOB_DIR_RAW")"
 
-MAX_INSTANCES="$(cfg "['conversion']['max_instances']")"
-EXCLUDE_REPOS_RAW="$(cfg "['conversion']['exclude_repos_file']")"
+MAX_INSTANCES="$(cfg "conversion.max_instances")"
+EXCLUDE_REPOS_RAW="$(cfg "conversion.exclude_repos_file")"
 EXCLUDE_REPOS_FILE="$(abspath "$EXCLUDE_REPOS_RAW")"
-DATA_NAME="$(cfg "['conversion']['data_name']")"
+DATA_NAME="$(cfg "conversion.data_name")"
 IM_OUTPUT="$BLOCK_DIR/artifacts/data/im_data/${DATA_NAME}.jsonl"
 LF_OUTPUT="$BLOCK_DIR/artifacts/data/lf_data/${DATA_NAME}.json"
 
 echo "=== sft-train data prep ==="
 echo "    Block:     $BLOCK_DIR"
-echo "    Provider:  $PROVIDER  Scaffold: $SCAFFOLD"
+echo "    Scaffold:  $SCAFFOLD"
 echo "    LF output: $LF_OUTPUT"
 
 if [[ -z "$DATA_NAME" ]]; then
-    echo "ERROR: conversion.data_name is empty — set it in inputs.yaml"
+    echo "ERROR: conversion.data_name is empty — set runtime_info.input.conversion.data_name in config.yaml"
     exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# Determine converter script and build CLI args
+# Determine converter module and build CLI args. The refactored swe_data_process
+# package exposes job-dir based converters only.
 # ---------------------------------------------------------------------------
 CONVERT_ARGS=()
 
-case "${PROVIDER}+${SCAFFOLD}" in
-    jierun+openhands-sdk)
-        CONVERTER="openhands/convert_openhands_sdk_jierun_to_im.py"
-        CONVERT_ARGS+=(--job-dir "$JOB_DIR")
-        [[ -n "$TRAJS_DIR" ]] && CONVERT_ARGS+=(--trajs-dir "$TRAJS_DIR")
+if [[ -z "$JOB_DIR" ]]; then
+    echo "ERROR: source.job_dir is empty — set runtime_info.input.source.job_dir in config.yaml"
+    exit 1
+fi
+
+case "${SCAFFOLD}" in
+    openhands-sdk)
+        CONVERTER_MODULE="swe_data_process.openhands.convert_openhands_sdk_to_im"
         ;;
-    jierun+claude-code)
-        CONVERTER="claudecode_opencode/convert_cc_jierun_to_im.py"
-        CONVERT_ARGS+=(--job-dir "$JOB_DIR")
-        [[ -n "$TRAJS_DIR" ]] && CONVERT_ARGS+=(--trajs-dir "$TRAJS_DIR")
+    claude-code)
+        CONVERTER_MODULE="swe_data_process.claudecode_opencode.convert_cc_to_im"
         ;;
-    jierun+open-code)
-        CONVERTER="claudecode_opencode/convert_oc_jierun_to_im.py"
-        CONVERT_ARGS+=(--job-dir "$JOB_DIR")
-        [[ -n "$TRAJS_DIR" ]] && CONVERT_ARGS+=(--trajs-dir "$TRAJS_DIR")
+    open-code)
+        CONVERTER_MODULE="swe_data_process.claudecode_opencode.convert_oc_to_im"
         ;;
-    jierun+terminus2)
-        CONVERTER="terminus2/convert_terminus2_jierun_to_im.py"
-        CONVERT_ARGS+=(--job-dir "$JOB_DIR")
-        ;;
-    chaofan+openhands)
-        CONVERTER="openhands/convert_openhands_chaofan_to_im.py"
-        CONVERT_ARGS+=(--source-dir "$SOURCE_DIR")
-        ;;
-    chaofan+claude-code)
-        CONVERTER="claudecode_opencode/convert_cc_chaofan_to_im.py"
-        CONVERT_ARGS+=(--source-dir "$SOURCE_DIR")
-        ;;
-    chaofan+open-code)
-        CONVERTER="claudecode_opencode/convert_oc_chaofan_to_im.py"
-        CONVERT_ARGS+=(--source-dir "$SOURCE_DIR")
-        ;;
-    chaofan+terminus2)
-        CONVERTER="terminus2/convert_terminus2_chaofan_to_im.py"
-        CONVERT_ARGS+=(--source-dir "$SOURCE_DIR")
-        ;;
-    chaofan+openhands-sdk)
-        CONVERTER="openhands/convert_openhands_sdk_chaofan_to_im.py"
-        CONVERT_ARGS+=(--source-dir "$SOURCE_DIR")
+    terminus2)
+        CONVERTER_MODULE="swe_data_process.terminus2.convert_terminus2_to_im"
         ;;
     *)
-        echo "ERROR: Unknown provider+scaffold: '${PROVIDER}+${SCAFFOLD}'"
-        echo "  Valid provider: jierun | chaofan"
-        echo "  Valid scaffold: openhands-sdk | claude-code | open-code | terminus2 | openhands (chaofan only)"
+        echo "ERROR: Unsupported scaffold for job-dir conversion: '${SCAFFOLD}'"
+        echo "  Valid scaffold: openhands-sdk | claude-code | open-code | terminus2"
         exit 1
         ;;
 esac
 
+CONVERT_ARGS+=(--job-dir "$JOB_DIR")
 CONVERT_ARGS+=(--im-output "$IM_OUTPUT" --lf-output "$LF_OUTPUT")
 if [[ -n "$MAX_INSTANCES" ]] && [[ "$MAX_INSTANCES" -gt 0 ]] 2>/dev/null; then
     CONVERT_ARGS+=(--max-instances "$MAX_INSTANCES")
@@ -142,14 +120,20 @@ mkdir -p "$LF_DIR" "$IM_DIR"
 
 if [[ -f "$IM_OUTPUT" && -f "$LF_OUTPUT" ]]; then
     IM_LINES=$(wc -l < "$IM_OUTPUT" 2>/dev/null || echo "?")
-    LF_COUNT=$("$LF_PYTHON" -c "import json; print(len(json.load(open('$LF_OUTPUT'))))" 2>/dev/null || echo "?")
+    LF_COUNT=$("$LF_PYTHON" -c 'import json, sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))))' "$LF_OUTPUT" 2>/dev/null || echo "?")
     echo "=== IM output already exists ($IM_LINES lines): $IM_OUTPUT ==="
     echo "=== LF output already exists ($LF_COUNT records): $LF_OUTPUT ==="
     echo "    Skipping conversion. Delete both files to re-run."
+elif [[ -f "$IM_OUTPUT" || -f "$LF_OUTPUT" ]]; then
+    echo "ERROR: Found a partial conversion output."
+    echo "  IM: $IM_OUTPUT"
+    echo "  LF: $LF_OUTPUT"
+    echo "Delete the existing partial file or restore the missing pair before re-running."
+    exit 1
 else
-    echo "=== Running converter: $CONVERTER ==="
+    echo "=== Running converter module: $CONVERTER_MODULE ==="
     echo "    Args: ${CONVERT_ARGS[*]}"
-    "$LF_PYTHON" "$SWE_DP_SRC/$CONVERTER" "${CONVERT_ARGS[@]}"
+    PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" -m "$CONVERTER_MODULE" "${CONVERT_ARGS[@]}"
     echo "=== Conversion done ==="
 fi
 

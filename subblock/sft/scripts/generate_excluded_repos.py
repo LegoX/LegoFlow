@@ -5,23 +5,28 @@
 输出文件每行一个 ``owner/repo``，可直接传给各转换脚本的 ``--exclude-repos-file`` 参数。
 
 用法：
-    conda activate swelf
-    cd ~/swe_data_process/scripts
-    python generate_excluded_repos.py                        # 使用默认输出路径
-    python generate_excluded_repos.py -o /tmp/excluded.txt   # 自定义输出路径
+    cd /path/to/SWE-Lego-Live/subblock/sft
+    artifacts/env/lf/bin/python scripts/generate_excluded_repos.py
+    artifacts/env/lf/bin/python scripts/generate_excluded_repos.py -o /tmp/excluded.txt
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+BLOCK_DIR = Path(__file__).resolve().parent.parent
+LOCAL_SRC = BLOCK_DIR / "repos" / "swe_data_process" / "src"
+if LOCAL_SRC.exists():
+    sys.path.insert(0, str(LOCAL_SRC))
 
 from swe_data_process.utils import (
     DEFAULT_REFERENCE_DATASETS,
     load_reference_repos_from_hf,
 )
 
-DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "artifacts" / "excluded_repos.txt"
+DEFAULT_OUTPUT = BLOCK_DIR / "artifacts" / "data" / "excluded_repos.txt"
 
 
 def parse_args() -> argparse.Namespace:

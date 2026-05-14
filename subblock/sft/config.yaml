@@ -7,45 +7,49 @@ meta_info:
   dependencies:
     trajectories_dir: trajgen.output.raw_trajectories_dir  # path: subblock/trajgen/artifacts/jobs
 
-  repos:
-    llama_factory:
-      name: LLaMA-Factory
-      commit_id: null
-      role: training framework (LLaMA-Factory + DeepSpeed ZeRO-3)
-    swe_data_process:
-      name: swe_data_process
-      commit_id: null
-      role: data processing (trajectory converters, quality scorers)
-
-  environment:
-    harbor_uv: artifacts/env/lf
-    requirements: repos/LLaMA-Factory/pyproject.toml
-
   resources:
     ip: null
     pwd: null
-    directory: /gpufs/haoli/code/SWE-Lego-Live
-    public_storage: /gpufs/haoli/swedata
+    directory: /public/storage/haoli/code/SWE-Lego-Live
+    public_storage: /public/storage/haoli/swedata
+
+  repositories:
+    llama_factory:
+      url: https://github.com/hiyouga/LLaMA-Factory.git
+      branch: null
+      commit: ef507ae8e0b7a72f48fdaa524bba68f4e56fe70f
+      path: repos/LLaMA-Factory
+      readonly: true
+    swe_data_process:
+      url: https://github.com/SWE-Lego/swe_data_process.git
+      branch: swe-lego-live
+      commit: 8f60ee31bc6c0caf36d1fca88b16bb1e024b9c7e
+      path: repos/swe_data_process
+      readonly: true
+
+  environment:
+    sft_uv: artifacts/env/lf
+    python_version: "3.12"
+    packages:
+      - repos/LLaMA-Factory
+      - repos/swe_data_process
 
 runtime_info:
   input:
     source:
-      provider: jierun              # choices: jierun | chaofan
-      scaffold: openhands-sdk       # choices: openhands-sdk | claude-code | open-code | terminus2 | openhands
-      job_dir: "artifacts/data/raw/raw_data/swerebench-filtered-oraclesolved-openhands-sdk-1.14.0-GLM-5-FP8-30-20260322001450-sample100"
-      trajs_dir: "artifacts/data/raw/raw_data/swerebench-filtered-oraclesolved-openhands-sdk-1.14.0-GLM-5-FP8-30-20260322001450-sample100_trajs_via_logger"
-      source_dir: ""
+      scaffold: claude-code       # choices: openhands-sdk | claude-code | open-code | terminus2
+      job_dir: "/public/storage/haoli/code/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/swerebenchv2-200-260429-custom-claude-code-2.1.118-MiniMax-M2.7-20260513230507"
 
     conversion:
       max_instances: 64
       exclude_repos_file: artifacts/data/excluded_repos.txt
-      data_name: "jierun_glm5_swerebench_oraclesolved_oh_sdk_test"
+      data_name: "glm5_swerebench_oraclesolved_oh_sdk_test"
 
     dataset:
-      name: ""                      # auto-derived from lf_output filename
+      name: ""                      # auto-derived from conversion.data_name
 
     model:
-      model_name_or_path: /mnt/ydu/models/Qwen3-8B
+      model_name_or_path: /jyx_data/models/Qwen/Qwen3-8B
       trust_remote_code: true
 
     training:
@@ -58,7 +62,7 @@ runtime_info:
       max_samples: 1000000
       preprocessing_num_workers: 16
       dataloader_num_workers: 4
-      output_dir: "qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think"
+      output_dir: "qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think"
       logging_steps: 1
       save_strategy: steps
       save_steps: 200
@@ -93,15 +97,15 @@ runtime_info:
   output:
     checkpoint_path:
       description: Path to the latest trained model checkpoint
-      value: /gpufs/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/checkpoint-4
+      value: /public/storage/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/checkpoint-4
 
     artifacts:
-      train_results: /gpufs/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/train_results.json
-      train_loss_plot: /gpufs/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/training_loss.png
-      training_log: /gpufs/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/logs/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think_20260428_012158.log
+      train_results: /public/storage/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/train_results.json
+      train_loss_plot: /public/storage/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/training_loss.png
+      training_log: /public/storage/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/logs/qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think_20260428_012158.log
 
     training_curves:
-      description: WandB run with loss, learning rate, and token metrics
+      description: WandB run id with loss, learning rate, and token metrics
       value: null
 
 evolving:

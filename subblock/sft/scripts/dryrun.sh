@@ -1,15 +1,14 @@
 #!/bin/bash
-# Validate config, paths, and environment without running training.
+# Validate config, paths, converter modules, and environment without running training.
 # Run from anywhere: bash scripts/dryrun.sh
 set -euo pipefail
 
-module load cuda12.4/toolkit/12.4.1
-
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LF_REPO="$BLOCK_DIR/repos/LLaMA-Factory"
-SWE_DP_SRC="$BLOCK_DIR/repos/swe_data_process/src/swe_data_process"
-CONFIG="$BLOCK_DIR/inputs.yaml"
-LF_PYTHON="/anaconda3/envs/swelf/bin/python3"
+SWE_DP_REPO="$BLOCK_DIR/repos/swe_data_process"
+SWE_DP_SRC="$SWE_DP_REPO/src"
+CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG_PYTHON="${CONFIG_PYTHON:-python3}"
 
 PASS=0
 FAIL=0
@@ -20,85 +19,138 @@ fail() { echo "  [FAIL] $1"; FAIL=$((FAIL+1)); }
 warn() { echo "  [WARN] $1"; WARN=$((WARN+1)); }
 info() { echo "  [INFO] $1"; }
 
-cfg() {
-    "$LF_PYTHON" - "$CONFIG" "$1" <<'PYEOF'
-import sys
-import yaml
-
-config_path, expr = sys.argv[1], sys.argv[2]
-
-with open(config_path, encoding="utf-8") as fh:
-    config = yaml.safe_load(fh)
-
-value = eval(f"config{expr}", {"__builtins__": {}}, {"config": config})
-print("" if value is None else value)
-PYEOF
-}
-
 abspath() {
     local p="$1"
     if [[ -z "$p" ]]; then echo ""; elif [[ "$p" = /* ]]; then echo "$p"; else echo "$BLOCK_DIR/$p"; fi
 }
 
-echo "=== sft-train dryrun: $BLOCK_DIR ==="
+resolve_output_dir() {
+    local p="$1"
+    if [[ "$p" = /* ]]; then echo "$p"; else echo "$BLOCK_DIR/artifacts/model/$(basename "$p")"; fi
+}
+
+load_cuda_module() {
+    local module_name="${CUDA_MODULE:-}"
+    if [[ -z "$module_name" ]]; then
+        info "CUDA module loading disabled; set CUDA_MODULE=<module> to load one"
+    elif command -v module >/dev/null 2>&1; then
+        if module load "$module_name"; then
+            ok "Loaded CUDA module: $module_name"
+        else
+            warn "Failed to load CUDA module '$module_name'; current environment will be checked"
+        fi
+    else
+        warn "module command not available; current environment will be checked"
+    fi
+}
+
+meta_cfg() {
+    "$CONFIG_PYTHON" "$BLOCK_DIR/scripts/config_value.py" "$CONFIG" meta_info "$1" --default "${2:-}"
+}
+
+SFT_UV_RAW="$(meta_cfg "environment.sft_uv")"
+SFT_UV="$(abspath "$SFT_UV_RAW")"
+SFT_PYTHON_VERSION="$(meta_cfg "environment.python_version" "3.12")"
+LF_PYTHON="$SFT_UV/bin/python"
+
+cfg() {
+    "$CONFIG_PYTHON" "$BLOCK_DIR/scripts/config_value.py" "$CONFIG" runtime_input "$1" --default "${2:-}"
+}
+
+converter_module_for_scaffold() {
+    case "$1" in
+        openhands-sdk) echo "swe_data_process.openhands.convert_openhands_sdk_to_im" ;;
+        claude-code)   echo "swe_data_process.claudecode_opencode.convert_cc_to_im" ;;
+        open-code)     echo "swe_data_process.claudecode_opencode.convert_oc_to_im" ;;
+        terminus2)     echo "swe_data_process.terminus2.convert_terminus2_to_im" ;;
+        *)             echo "" ;;
+    esac
+}
+
+echo "=== sft dryrun: $BLOCK_DIR ==="
+echo ""
+load_cuda_module
 echo ""
 
 # ---------------------------------------------------------------------------
-# 1. inputs.yaml
+# 1. config.yaml
 # ---------------------------------------------------------------------------
 echo "--- 1. Config file ---"
 if [[ -f "$CONFIG" ]]; then
-    ok "inputs.yaml exists"
-    if [[ -x "$LF_PYTHON" ]]; then
-        ok "swelf python exists at $LF_PYTHON"
-    else
-        fail "swelf python not found at $LF_PYTHON"
-    fi
-    if "$LF_PYTHON" -c "import yaml; yaml.safe_load(open('$CONFIG'))" 2>/dev/null; then
-        ok "inputs.yaml is valid YAML"
-    else
-        fail "inputs.yaml has YAML syntax errors"
-    fi
+    ok "config.yaml exists"
 else
-    fail "inputs.yaml not found"
+    fail "config.yaml not found"
     exit 1
 fi
 
-if [[ ! -x "$LF_PYTHON" ]]; then
-    echo "Cannot continue dryrun without swelf python. Fix the swelf environment first."
-    exit 1
+if [[ -x "$LF_PYTHON" ]]; then
+    ok "SFT uv python exists at $LF_PYTHON"
+else
+    fail "SFT uv python not found at $LF_PYTHON"
 fi
 
-if ! "$LF_PYTHON" -c "import yaml; yaml.safe_load(open('$CONFIG'))" 2>/dev/null; then
-    echo "Cannot continue dryrun until inputs.yaml parses successfully."
+if "$CONFIG_PYTHON" - "$CONFIG" <<'PYEOF' 2>/dev/null
+import sys
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    config = yaml.safe_load(fh)
+
+assert isinstance(config, dict)
+assert isinstance(config["runtime_info"]["input"], dict)
+PYEOF
+then
+    ok "config.yaml is valid YAML with runtime_info.input"
+else
+    fail "config.yaml must contain runtime_info.input"
     exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Conda environment
+# 2. uv environment
 # ---------------------------------------------------------------------------
 echo ""
-echo "--- 2. Conda environment ---"
-if [[ -d /anaconda3/envs/swelf ]]; then
-    ok "conda env 'swelf' exists at /anaconda3/envs/swelf"
+echo "--- 2. uv environment ---"
+if command -v uv &>/dev/null; then
+    ok "uv command is available"
 else
-    fail "conda env 'swelf' not found — run: conda create -n swelf python=3.12 && pip install -e repos/LLaMA-Factory/ -e repos/swe_data_process/"
+    fail "uv command not found"
+fi
+
+ok "SFT uv environment path = $SFT_UV_RAW"
+if [[ -d "$SFT_UV" ]]; then
+    ok "SFT uv environment exists"
+else
+    fail "SFT uv environment is missing; create it with: uv venv $SFT_UV --python ${SFT_PYTHON_VERSION:-3.12} && uv pip install --python $LF_PYTHON -e $LF_REPO -e $SWE_DP_REPO"
+fi
+
+if [[ -x "$LF_PYTHON" ]]; then
+    ok "SFT uv python is executable"
+else
+    fail "SFT uv python is missing: $LF_PYTHON"
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Repos
+# 3. Repos and imports
 # ---------------------------------------------------------------------------
 echo ""
-echo "--- 3. Repos ---"
+echo "--- 3. Repos and Python modules ---"
 if [[ -d "$LF_REPO" ]]; then
     ok "repos/LLaMA-Factory/ exists"
 else
     fail "repos/LLaMA-Factory/ not found"
 fi
-if [[ -d "$SWE_DP_SRC" ]]; then
-    ok "repos/swe_data_process/src/swe_data_process/ exists"
+
+if [[ -f "$SWE_DP_REPO/pyproject.toml" && -d "$SWE_DP_SRC/swe_data_process" ]]; then
+    ok "repos/swe_data_process is an installable src-layout package"
 else
-    fail "repos/swe_data_process/src/swe_data_process/ not found"
+    fail "repos/swe_data_process package files not found"
+fi
+
+if [[ -x "$LF_PYTHON" ]] && PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" -c "import swe_data_process" 2>/dev/null; then
+    ok "swe_data_process is importable with local PYTHONPATH"
+else
+    warn "skipping or failing swe_data_process import check because SFT uv python is unavailable or import failed"
 fi
 
 # ---------------------------------------------------------------------------
@@ -106,68 +158,46 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 4. Source data ---"
-PROVIDER="$(cfg "['source']['provider']")"
-SCAFFOLD="$(cfg "['source']['scaffold']")"
-JOB_DIR="$(cfg "['source']['job_dir']")"
-SOURCE_DIR="$(cfg "['source']['source_dir']")"
+SCAFFOLD="$(cfg "source.scaffold")"
+JOB_DIR_RAW="$(cfg "source.job_dir")"
+JOB_DIR="$(abspath "$JOB_DIR_RAW")"
 
-info "provider=$PROVIDER  scaffold=$SCAFFOLD"
+info "scaffold=$SCAFFOLD"
 
-VALID_COMBINATIONS=(
-    "jierun+openhands-sdk" "jierun+claude-code" "jierun+open-code" "jierun+terminus2"
-    "chaofan+openhands" "chaofan+claude-code" "chaofan+open-code" "chaofan+terminus2" "chaofan+openhands-sdk"
-)
-COMBO="${PROVIDER}+${SCAFFOLD}"
-COMBO_VALID=false
-for c in "${VALID_COMBINATIONS[@]}"; do [[ "$c" == "$COMBO" ]] && COMBO_VALID=true && break; done
-
-if $COMBO_VALID; then
-    ok "provider+scaffold combination is valid: $COMBO"
+CONVERTER_MODULE="$(converter_module_for_scaffold "$SCAFFOLD")"
+if [[ -n "$CONVERTER_MODULE" ]]; then
+    ok "scaffold is supported: $SCAFFOLD"
 else
-    fail "Unknown provider+scaffold: '$COMBO'. Valid: ${VALID_COMBINATIONS[*]}"
+    fail "Unsupported scaffold '$SCAFFOLD'. Valid: openhands-sdk claude-code open-code terminus2"
 fi
 
-if [[ "$PROVIDER" == "jierun" ]]; then
-    if [[ -z "$JOB_DIR" ]]; then
-        fail "source.job_dir is empty — set it to the harbor job directory"
-    elif [[ -d "$JOB_DIR" ]]; then
-        ok "source.job_dir exists: $JOB_DIR"
-    else
-        warn "source.job_dir not found (may be on another node): $JOB_DIR"
-    fi
+if [[ -z "$JOB_DIR" ]]; then
+    fail "source.job_dir is empty — set runtime_info.input.source.job_dir"
+elif [[ -d "$JOB_DIR" ]]; then
+    ok "source.job_dir exists: $JOB_DIR"
 else
-    if [[ -z "$SOURCE_DIR" ]]; then
-        fail "source.source_dir is empty — set it to the chaofan completions directory"
-    elif [[ -d "$SOURCE_DIR" ]]; then
-        ok "source.source_dir exists: $SOURCE_DIR"
-    else
-        warn "source.source_dir not found (may be on another node): $SOURCE_DIR"
-    fi
+    warn "source.job_dir not found (may be on another node): $JOB_DIR"
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Converter script
+# 5. Converter module
 # ---------------------------------------------------------------------------
 echo ""
-echo "--- 5. Converter script ---"
-case "$COMBO" in
-    jierun+openhands-sdk)  CONVERTER="openhands/convert_openhands_sdk_jierun_to_im.py" ;;
-    jierun+claude-code)    CONVERTER="claudecode_opencode/convert_cc_jierun_to_im.py" ;;
-    jierun+open-code)      CONVERTER="claudecode_opencode/convert_oc_jierun_to_im.py" ;;
-    jierun+terminus2)      CONVERTER="terminus2/convert_terminus2_jierun_to_im.py" ;;
-    chaofan+openhands)     CONVERTER="openhands/convert_openhands_chaofan_to_im.py" ;;
-    chaofan+claude-code)   CONVERTER="claudecode_opencode/convert_cc_chaofan_to_im.py" ;;
-    chaofan+open-code)     CONVERTER="claudecode_opencode/convert_oc_chaofan_to_im.py" ;;
-    chaofan+terminus2)     CONVERTER="terminus2/convert_terminus2_chaofan_to_im.py" ;;
-    chaofan+openhands-sdk) CONVERTER="openhands/convert_openhands_sdk_chaofan_to_im.py" ;;
-    *)                     CONVERTER="" ;;
-esac
+echo "--- 5. Converter module ---"
+if [[ -n "$CONVERTER_MODULE" ]]; then
+    if [[ ! -x "$LF_PYTHON" ]]; then
+        warn "skipping converter module import check because SFT uv python is unavailable"
+    elif PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" - "$CONVERTER_MODULE" <<'PYEOF' 2>/dev/null
+import importlib.util
+import sys
 
-if [[ -n "$CONVERTER" ]]; then
-    if [[ -f "$SWE_DP_SRC/$CONVERTER" ]]; then
-        ok "Converter exists: $CONVERTER"
+module = sys.argv[1]
+raise SystemExit(0 if importlib.util.find_spec(module) else 1)
+PYEOF
+    then
+        ok "Converter module exists: $CONVERTER_MODULE"
     else
-        fail "Converter not found: $SWE_DP_SRC/$CONVERTER"
+        fail "Converter module not found: $CONVERTER_MODULE"
     fi
 fi
 
@@ -176,29 +206,31 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 6. Conversion output paths ---"
-DATA_NAME="$(cfg "['conversion']['data_name']")"
+DATA_NAME="$(cfg "conversion.data_name")"
+IM_OUTPUT="$BLOCK_DIR/artifacts/data/im_data/${DATA_NAME}.jsonl"
+LF_OUTPUT="$BLOCK_DIR/artifacts/data/lf_data/${DATA_NAME}.json"
 
 if [[ -z "$DATA_NAME" ]]; then
     fail "conversion.data_name is empty"
 else
     ok "conversion.data_name = $DATA_NAME"
-    IM_OUTPUT="$BLOCK_DIR/artifacts/data/im_data/${DATA_NAME}.jsonl"
-    LF_OUTPUT="$BLOCK_DIR/artifacts/data/lf_data/${DATA_NAME}.json"
     info "im_output = $IM_OUTPUT"
     info "lf_output = $LF_OUTPUT"
     if [[ -f "$IM_OUTPUT" && -f "$LF_OUTPUT" ]]; then
-        COUNT=$("$LF_PYTHON" -c "import json; print(len(json.load(open('$LF_OUTPUT'))))" 2>/dev/null || echo "?")
+        COUNT=$("$CONFIG_PYTHON" -c 'import json, sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))))' "$LF_OUTPUT" 2>/dev/null || echo "?")
         info "IM + LF output both exist ($COUNT LF records) — STEP 0 will be skipped"
+    elif [[ -f "$IM_OUTPUT" || -f "$LF_OUTPUT" ]]; then
+        fail "Partial conversion output exists; delete or restore the missing IM/LF pair before running conversion"
     fi
 fi
 
-EXCL_RAW="$(cfg "['conversion']['exclude_repos_file']")"
+EXCL_RAW="$(cfg "conversion.exclude_repos_file")"
 EXCL="$(abspath "$EXCL_RAW")"
 if [[ -z "$EXCL_RAW" ]]; then
     warn "conversion.exclude_repos_file is empty — repo filtering disabled"
 elif [[ -f "$EXCL" ]]; then
-    COUNT=$(wc -l < "$EXCL")
-    ok "exclude_repos_file exists ($COUNT entries): $EXCL"
+    COUNT=$(awk 'NF && $1 !~ /^#/' "$EXCL" | wc -l)
+    ok "exclude_repos_file exists ($COUNT repos): $EXCL"
 else
     fail "exclude_repos_file not found: $EXCL"
 fi
@@ -208,13 +240,14 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 7. Dataset registration ---"
-DATASET_NAME_RAW="$(cfg "['dataset']['name']")"
+DATASET_NAME_RAW="$(cfg "dataset.name")"
 if [[ -n "$DATASET_NAME_RAW" ]]; then
     DATASET_NAME="$DATASET_NAME_RAW"
 else
     DATASET_NAME="$DATA_NAME"
     info "dataset.name not set — auto-derived from data_name: $DATASET_NAME"
 fi
+
 if [[ -z "$DATASET_NAME" || "$DATASET_NAME" == "." ]]; then
     fail "Could not derive dataset name — set conversion.data_name or dataset.name"
 else
@@ -222,7 +255,7 @@ else
     DATASET_INFO="$BLOCK_DIR/artifacts/data/lf_data/dataset_info.json"
     if [[ -f "$DATASET_INFO" ]]; then
         LF_FILENAME="$(basename "$LF_OUTPUT")"
-        DATASET_STATUS=$("$LF_PYTHON" - "$DATASET_INFO" "$DATASET_NAME" "$LF_FILENAME" <<'PYEOF'
+        DATASET_STATUS=$("$CONFIG_PYTHON" - "$DATASET_INFO" "$DATASET_NAME" "$LF_FILENAME" <<'PYEOF'
 import json
 import sys
 
@@ -261,7 +294,7 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 8. Model path ---"
-MODEL_PATH="$(cfg "['model']['model_name_or_path']")"
+MODEL_PATH="$(cfg "model.model_name_or_path")"
 info "model_name_or_path = $MODEL_PATH"
 if [[ -n "$MODEL_PATH" && -d "$MODEL_PATH" ]]; then
     ok "Model directory exists"
@@ -274,16 +307,16 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 9. Training config ---"
-OUTPUT_DIR="$(cfg "['training']['output_dir']")"
-TEMPLATE="$(cfg "['training']['template']")"
-EPOCHS="$(cfg "['training']['num_train_epochs']")"
-LR="$(cfg "['training']['learning_rate']")"
+OUTPUT_DIR="$(cfg "training.output_dir")"
+TEMPLATE="$(cfg "training.template")"
+EPOCHS="$(cfg "training.num_train_epochs")"
+LR="$(cfg "training.learning_rate")"
 info "template=$TEMPLATE  epochs=$EPOCHS  lr=$LR"
 if [[ -z "$OUTPUT_DIR" ]]; then
-    fail "training.output_dir is empty — set it (e.g. qwen3_8b_jierun_oh_sdk_1k_gbs64pbs1acc8_lr1e-4_epo4_think)"
+    fail "training.output_dir is empty — set it (e.g. qwen3_8b_oh_sdk_1k_gbs64pbs1acc8_lr1e-4_epo4_think)"
 else
     ok "training.output_dir = $OUTPUT_DIR"
-    ABS_OUTPUT_DIR="$BLOCK_DIR/artifacts/model/$(basename "$OUTPUT_DIR")"
+    ABS_OUTPUT_DIR="$(resolve_output_dir "$OUTPUT_DIR")"
     TRAIN_YAML_NAME="$(basename "$OUTPUT_DIR").yaml"
     info "train YAML will be generated at: artifacts/training_config/$TRAIN_YAML_NAME"
     info "model checkpoints will be saved to: $ABS_OUTPUT_DIR"
@@ -297,8 +330,8 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 10. Credentials ---"
-WANDB_MODE="$(cfg "['experiment']['wandb_mode']")"
-WANDB_KEY="$(cfg "['credentials']['wandb_api_key']")"
+WANDB_MODE="$(cfg "experiment.wandb_mode")"
+WANDB_KEY="$(cfg "credentials.wandb_api_key")"
 case "$WANDB_MODE" in
     online)
         if [[ -n "$WANDB_KEY" ]]; then
@@ -309,11 +342,6 @@ case "$WANDB_MODE" in
         ;;
     offline)
         ok "experiment.wandb_mode=offline"
-        if [[ -n "$WANDB_KEY" ]]; then
-            info "credentials.wandb_api_key is set (optional in offline mode)"
-        else
-            info "credentials.wandb_api_key is empty (allowed in offline mode)"
-        fi
         ;;
     disabled)
         ok "experiment.wandb_mode=disabled"
@@ -324,7 +352,7 @@ case "$WANDB_MODE" in
         ;;
 esac
 
-RUN_NAME_RAW="$(cfg "['experiment']['run_name']")"
+RUN_NAME_RAW="$(cfg "experiment.run_name")"
 if [[ -n "$RUN_NAME_RAW" ]]; then
     RUN_NAME="$RUN_NAME_RAW"
     ok "experiment.run_name = $RUN_NAME (explicit)"
@@ -338,7 +366,7 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 11. GPU ---"
-N_GPUS="$(cfg "['infrastructure']['n_gpus_per_node']")"
+N_GPUS="$(cfg "infrastructure.n_gpus_per_node")"
 info "n_gpus_per_node = $N_GPUS"
 if ! [[ "$N_GPUS" =~ ^[0-9]+$ ]] || [[ "$N_GPUS" -lt 1 ]]; then
     fail "infrastructure.n_gpus_per_node must be a positive integer"
