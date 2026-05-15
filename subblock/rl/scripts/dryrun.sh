@@ -62,7 +62,7 @@ WANDB_FROM_ENV="${WANDB_API_KEY:-}"
 if [[ -n "$WANDB_FROM_CFG" || -n "$WANDB_FROM_ENV" ]]; then
     echo "  OK       wandb_api_key set ($([[ -n "$WANDB_FROM_CFG" ]] && echo config || echo env))"
 else
-    echo "  MISSING  WANDB_API_KEY (set credentials.wandb_api_key in config.yaml or export WANDB_API_KEY)"
+    echo "  MISSING  WANDB_API_KEY — export it in your shell before launch (do NOT hardcode it in config.yaml). To opt out, set credentials.wandb_mode: disabled."
     missing=$((missing+1))
 fi
 

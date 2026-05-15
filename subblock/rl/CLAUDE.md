@@ -43,10 +43,22 @@ to verl during setup.
 
 ## Environment
 
-- Python venv at `repos/harbor-verl-train/.venv` (built by `setup_env.sh`)
-- No conda — `setup_env.sh` uses `uv` + `pip install -e` for harbor, verl, and
-  harbor-verl-train; pulls in pinned `vllm`, `flash_attn`, `cupy`, `transformers`.
-- First run of `scripts/start.sh` triggers `setup_env.sh` if `.venv` is missing.
+Default path: `setup_env.sh` builds a fresh venv at
+`repos/harbor-verl-train/.venv` via `uv` + `pip install -e` for harbor / verl /
+harbor-verl-train and pulls in pinned `vllm`, `flash_attn`, `cupy`,
+`transformers`. The first run of `scripts/start.sh` triggers this if the venv
+is missing.
+
+To reuse an existing venv (e.g. a sibling block already bootstrapped one), set
+`runtime_info.input.environment.venv_path` in `config.yaml` to that venv's
+absolute path. The wrapper exports `VENV_PATH` and the upstream
+`sync_1nodes_cc.sh` sources `$VENV_PATH/bin/activate` instead of bootstrapping.
+
+> WARNING: the venv must have **harbor / verl / harbor-verl-train installed
+> editable from the same source trees you intend to run**. A venv whose editable
+> paths point elsewhere will silently run different code than what's under
+> `repos/`. Verify with:
+> `$VENV_PATH/bin/python -c "import harbor, verl, verl_patch; print(harbor.__file__)"`
 
 ## Configuration
 
@@ -54,16 +66,17 @@ All knobs live in `config.yaml`. Two tiers:
 
 | Tier | Sections | Plumbed via |
 |---|---|---|
-| **Env-driven** (live) | `model`, `data`, `infrastructure`, `k8s`, `harbor_agent`, `harbor_runtime`, `experiment`, `credentials` | `scripts/train_1node_cc.sh` exports them as env vars consumed by `sync_1nodes_cc.sh` and forwarded into the Ray runtime env |
+| **Env-driven** (live) | `model`, `data`, `infrastructure`, `environment`, `k8s`, `harbor_agent`, `harbor_runtime`, `experiment`, `credentials` | `scripts/train_1node_cc.sh` exports them as env vars consumed by `sync_1nodes_cc.sh` and forwarded into the Ray runtime env |
 | **Upstream-fixed** (documentation only) | `vllm`, `training`, `algorithm` | hardcoded in `repos/harbor-verl-train/scripts/sync_1nodes_cc.sh`. To change, edit the upstream script (or fork it) — they are mirrored here so this file documents the live state. |
 
 ### Common edits
 
 - **Switch model**: `runtime_info.input.model.model_path` (re-check `vllm.gen_tp` divides `num_key_value_heads` — `dryrun.sh` validates this).
 - **Different k8s cluster**: `runtime_info.input.k8s.kubeconfig`.
+- **Reuse a prebuilt venv**: `runtime_info.input.environment.venv_path` (skips `setup_env.sh`; see Environment section above for the editable-install gotcha).
 - **Bump parallelism**: `harbor_runtime.num_workers` (16 cold-start; 32–96 steady).
 - **Enable tail-killer**: `harbor_runtime.tail_kill_target=0.95` (kills slowest 5% per step after `tail_kill_grace_sec=180`).
-- **wandb**: set `credentials.wandb_api_key`; or export `WANDB_MODE=offline` to opt out.
+- **wandb**: NEVER hardcode the key in `config.yaml` — keep `credentials.wandb_api_key: ""` and `export WANDB_API_KEY=...` in your shell before launch (or set `wandb_mode: disabled` to opt out). `dryrun.sh` checks both sources.
 
 ## Execution
 
@@ -136,10 +149,18 @@ metadata.yaml). Do not commit checkpoints.
 Long-form notes — architecture rationale, experiment log, design decisions —
 live in `dashboard/memory/` (preserved from the legacy layout).
 
-## Remote Execution
+## Long-running Backgrounding
 
-This block needs 8× A100/H100. If `meta_info.resources.ip` is set, run
-remotely via SSH + tmux. Else local-only.
+Training takes hours. To detach from your shell:
+
+- `tmux` / `screen` are the cleanest options — install separately
+  (`apt-get install tmux`) if missing.
+- Otherwise `nohup setsid bash scripts/start.sh > logs/launch.log 2>&1 < /dev/null &`
+  works on this image (both `nohup` and `setsid` are present).
+
+If you need to run on a different machine, `meta_info.resources.ip` is the
+intended SSH target; this block has no built-in remote runner so wire it up
+yourself for now.
 
 ## Legacy Backup
 

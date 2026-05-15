@@ -71,7 +71,19 @@ runtime_info:
       ray_dashboard_port: 8265
       litellm_port: 8002
       vllm_logging_level: INFO
-      anthropic_api_key: sk-dummy
+      anthropic_api_key: sk-dummy   # dummy placeholder for LiteLLM's Anthropic shim — proxied to local vLLM, not real Anthropic
+
+    # ---------------------------------------------------------------------
+    # Python environment
+    # ---------------------------------------------------------------------
+    environment:
+      # Empty → use the default `repos/harbor-verl-train/.venv` (built by
+      # setup_env.sh on first run via scripts/start.sh).
+      # Set this to point at an existing venv (absolute path or relative to
+      # this block) to skip bootstrap and reuse a prebuilt environment.
+      # The venv MUST have harbor / verl / harbor-verl-train installed
+      # editable; mismatched paths will silently run the wrong code.
+      venv_path: ""
 
     # ---------------------------------------------------------------------
     # Kubernetes (Harbor sandbox)
@@ -182,13 +194,17 @@ runtime_info:
       project_name: swe-lego-live-rl
       exp_name: ""                 # empty → auto-generated as harbor-cc-sync-1n-<UTC timestamp>
       trials_dir: ""               # empty → repos/harbor-verl-train/harbor_trials/<project>/<exp>
-      trajectory_logger_src: /mnt/ydu/ydu_rl_train/harbor/scripts/serve_llm/trajectory_logger.py
+      trajectory_logger_src: /mnt/ydu/SWE-Lego-Live-RL/subblock/rl/repos/harbor/scripts/serve_llm/trajectory_logger.py
 
     # ---------------------------------------------------------------------
-    # Credentials
+    # Credentials — do NOT commit secrets here.
+    # Set WANDB_API_KEY via env var (e.g. in your shell rc, or `export
+    # WANDB_API_KEY=...` before `bash scripts/start.sh`). dryrun.sh fails
+    # if neither this field nor $WANDB_API_KEY is set. To opt out entirely,
+    # set wandb_mode: disabled.
     # ---------------------------------------------------------------------
     credentials:
-      wandb_api_key: ""            # required; export WANDB_MODE=offline to opt out
+      wandb_api_key: ""            # leave empty — provide via $WANDB_API_KEY env
       wandb_mode: online           # online | offline | disabled
 
   output:
@@ -222,18 +238,32 @@ runtime_info:
       pattern: "**/litellm-trajectory.jsonl"
 
 status:
-  phase: idle
-  progress: null
+  phase: running
+  progress: "vllm warming up (verl boot → ~10–20 min CUDA-graph capture before LiteLLM registers)"
   next_steps: |
-    1. (one-time) bash repos/harbor-verl-train/scripts/setup_env.sh   # builds .venv + clones+patches verl/harbor
-    2. Edit config.yaml (model, data, kubeconfig, wandb_api_key, etc.)
-    3. bash scripts/start.sh
+    Monitor:
+      tail -F repos/harbor-verl-train/logs/harbor-cc-sync-1n-20260515-022150.log
+      curl -sS http://127.0.0.1:8002/health/liveliness   # once LiteLLM up
+    Stop:
+      ps -ef | grep -E "sync_1nodes_cc|main_ppo" | grep -v grep   # then kill the PIDs
   blockers: null
-  last_updated: "2026-05-14T00:00:00Z"
+  last_updated: "2026-05-15T02:23:54Z"
   current_job:
-    name: null
-    started_at: null
-    detail: null
+    name: harbor-cc-sync-1n-20260515-022150
+    started_at: "2026-05-15T02:21:50Z"
+    detail: |
+      Relaunch after prior run (20260514-165214) crashed 2026-05-14 21:54Z with
+      `ValueError: response_mask must contain at least one valid token` in
+      verl/trainer/ppo/rollout_corr_helper.py:831 — same config retried per user.
+      Pre-launch: killed orphan LiteLLM (pid 2710740) holding :8002; `clean.sh`
+      default (ray temp + litellm temp; prior logs/trials preserved).
+      Reused venv: /mnt/ydu/ydu_rl_train/harbor-verl-train/.venv (symlinked into repos/harbor-verl-train/.venv).
+      NODE0_IP auto-detected: 192.168.16.183.
+      Process tree: sync_1nodes_cc.sh pid 2995677, main_ppo pid 2995957.
+      Launch log: logs/launch_20260515-022147.log
+      Upstream log: repos/harbor-verl-train/logs/harbor-cc-sync-1n-20260515-022150.log
+      Risk: prior crash was a deterministic-looking verl assert; if it recurs at
+      the same step, a code/config fix is needed (not just a restart).
   metrics: {}
 
 evolving:

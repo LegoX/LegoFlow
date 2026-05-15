@@ -51,12 +51,16 @@ abspath() {
 # Export only if value is non-empty (lets upstream defaults apply otherwise).
 export_if_set() {
     local var="$1" val="$2"
-    [[ -n "$val" ]] && export "$var=$val"
+    if [[ -n "$val" ]]; then export "$var=$val"; fi
 }
 
 # ---------------------------------------------------------------------------
 # runtime_info.input.* → env vars consumed by sync_1nodes_cc.sh
 # ---------------------------------------------------------------------------
+
+# Python environment — user-overridable. Empty → upstream defaults to
+# $REPO/.venv (built by setup_env.sh on first run).
+export_if_set VENV_PATH "$(abspath "$(cfg runtime_info.input.environment.venv_path)")"
 
 # Model
 export_if_set MODEL_PATH        "$(cfg runtime_info.input.model.model_path)"
@@ -119,7 +123,7 @@ export_if_set HARBOR_TAIL_KILL_MIN_TASKS "$(cfg runtime_info.input.harbor_runtim
 export_if_set PROJECT_NAME           "$(cfg runtime_info.input.experiment.project_name)"
 export_if_set EXP_NAME               "$(cfg runtime_info.input.experiment.exp_name)"
 export_if_set HARBOR_TRIALS_DIR      "$(abspath "$(cfg runtime_info.input.experiment.trials_dir)")"
-export_if_set TRAJECTORY_LOGGER_SRC  "$(cfg runtime_info.input.experiment.trajectory_logger_src)"
+export_if_set TRAJECTORY_LOGGER_SRC  "$(abspath "$(cfg runtime_info.input.experiment.trajectory_logger_src)")"
 
 # Credentials
 export_if_set WANDB_API_KEY "$(cfg runtime_info.input.credentials.wandb_api_key)"
