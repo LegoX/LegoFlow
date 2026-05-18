@@ -17,7 +17,7 @@ meta_info:
     llama_factory:
       url: https://github.com/hiyouga/LLaMA-Factory.git
       branch: null
-      commit: ef507ae8e0b7a72f48fdaa524bba68f4e56fe70f
+      commit: e695fdfa7092fc39e474fb47be4de82b87160a8e
       path: repos/LLaMA-Factory
       readonly: true
     swe_data_process:
