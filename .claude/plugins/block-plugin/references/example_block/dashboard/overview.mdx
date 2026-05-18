@@ -1,0 +1,27 @@
+# SFT Training — Overview
+
+## Status
+
+Phase: **idle** (initialized, not yet run)
+
+## What this block does
+
+This block trains a language model using supervised fine-tuning (SFT). It takes a labeled dataset and hyperparameters as input, runs the training loop on a remote GPU node, and produces a saved model checkpoint as output.
+
+## Inputs
+
+| Name | Description |
+|------|-------------|
+| `dataset_path` | Path to the training dataset |
+| `learning_rate` | Learning rate (float) |
+| `num_epochs` | Number of training epochs (int) |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| `model_checkpoint` | Path to the saved model checkpoint |
+
+## Last run
+
+No runs yet.

@@ -1,0 +1,45 @@
+meta_info:
+  name: sft_training
+  label: SFT Training
+  description: Trains a language model using supervised fine-tuning (SFT).
+  parent: root
+  subblocks: {}
+
+  repos:
+    trl:
+      commit_id: a1b2c3d4
+      role: SFT trainer implementation
+
+  environment:
+    requirements: repos/trl/requirements.txt
+
+  resources:
+    ip: 192.168.1.10
+    pwd: null
+    apikey: null
+    model: null
+    public_storage: /mnt/shared/sft_training/
+
+runtime_info:
+  # Only external inputs (API keys, human decisions, external paths).
+  # Inter-block values are wired through subblocks[].dependencies — not here.
+  input:
+    dataset_path: null    # path to the labeled training dataset
+    learning_rate: null   # float, e.g. 1e-4
+    num_epochs: null      # int, number of training epochs
+
+  output:
+    model_checkpoint: null  # path to saved model checkpoint after training
+
+status:
+  phase: idle
+  progress: null
+  next_steps: Fill runtime_info.input in config.yaml, then run scripts/dryrun.sh.
+  blockers: null
+  last_updated: 2026-05-04
+
+evolving:
+  description: Tune learning_rate and num_epochs to minimize validation loss.
+  tunable_params:
+    learning_rate: null   # range: 1e-5–1e-3
+    num_epochs: null      # range: 1–10, step 1

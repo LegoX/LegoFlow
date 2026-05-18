@@ -1,11 +1,10 @@
 # Claude Code local state (machine-specific, never commit)
 .claude/settings.local.json
-.claude/
 
 # Secrets
-**/gh_token.txt
 *token*.txt
-!**/CLAUDE.md
+*token*.json
+*.token
 *.pem
 *.key
 
@@ -26,7 +25,10 @@ build/
 .venv/
 venv/
 env/
-*repos/
+
+# Extra untracked checkouts under subblock repos/ (submodules are tracked via .gitmodules)
+subblock/*/repos/*
+!subblock/*/repos/.gitkeep
 
 # Node
 node_modules/
