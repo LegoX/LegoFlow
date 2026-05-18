@@ -8,12 +8,12 @@ meta_info:
     task_source_dir: swegen.output.swe_tasks_dir   # path: subblock/swegen/artifacts/swe_tasks
 
   resources:
-    ip: 192.168.35.240        # CPU-only; runs on any node with Docker available
-    user: root
-    pwd: k9#mP2$vL7@nQ4!xZ8
+    ip: local        # CPU-only; runs on any node with Docker available
+    user: null
+    pwd: null
     directory: /gpufs/haoli/code/
     description: cpu node server for k8s cluster. By default you should work at ${directory}
-    public_storage: /gpufs/haoli/swedata
+    public_storage: null
 
   repositories:
     harbor:
@@ -58,17 +58,35 @@ runtime_info:
 
     # task_source: wired from swegen.output.swe_tasks_dir
     # Use local swegen output; fall back to HuggingFace for smoke tests.
-    task_source:
-      provider: local
-      dataset_name: /gpufs/haoli/code/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks
+    # task_source:
+    #   provider: local
+    #   dataset_name: /gpufs/haoli/code/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks
 
+    # harbor_job:
+    #   jobs_dir: artifacts/jobs
+    #   dataset_path: artifacts/tasks/py-cc   # points to verified py-cc tasks only
+    #   n_concurrent: 1
+    #   n_tasks: null
+    #   max_retries: 2
+    #   timeout_multiplier: 5
+
+
+    # TESTRUN: use HuggingFace dataset as test run, do not delete this
+    task_source:
+      provider: huggingface           # currently supported by prepare_tasks.sh
+      dataset_name: SWE-Lego/swerebenchv2-200-260429
+      split: train
+
+    # TESTRUN: use HuggingFace dataset as test run, do not delete this
     harbor_job:
+      # This is the trajgen block output root for Harbor job results.
+      # Store jobs under this block's artifacts directory, not under repos/harbor.
+      # scripts/start.sh exports this as TRAJGEN_HARBOR_JOBS_DIR.
       jobs_dir: artifacts/jobs
-      dataset_path: artifacts/tasks/py-cc   # points to verified py-cc tasks only
-      n_concurrent: 1
-      n_tasks: null
+      n_concurrent: 8
+      n_tasks: null                   # set to 1 for smoke tests
       max_retries: 2
-      timeout_multiplier: 5
+      timeout_multiplier: 2
 
     agent:
       name: custom-claude-code
@@ -93,23 +111,22 @@ environment:
 
 status:
   phase: running
-  progress: "run_001 started. Processing 3 verified py-cc tasks from swegen manifest. Harbor job running."
+  progress: "DONE. 200/200 tasks scored. 29 reward=1.0 (14.5%). 171 reward=0. 22 errors."
   next_steps: |
-    1. Monitor Harbor job completion for the 3 py-cc tasks.
-    2. As swegen adds more tasks to verifiable_tasks.txt, copy them to artifacts/tasks/py-cc and run new Harbor jobs.
-    3. After all 40 tasks processed, hand off to sft block.
+    1. Hand off 29 passing trajectories to sft block.
+    2. Optionally re-run failing tasks with higher timeout or different model.
   blockers: ""
-  last_updated: "2026-05-10T11:56:00Z"
+  last_updated: "2026-05-14T02:17:00Z"
   current_job:
-    name: swe_tasks-custom-claude-code-2.1.118-deepseek-v4-flash-20260510115612
-    started_at: "2026-05-10T11:56:00Z"
-    stopped_at: null
-    detail: "Processing 3 py-cc tasks: agentscope-ai__agentscope-885, agentscope-ai__agentscope-1342, aider-ai__aider-4146"
+    name: swerebenchv2-200-260429-custom-claude-code-2.1.118-MiniMax-M2.7-20260513230507
+    started_at: "2026-05-13T23:06:02Z"
+    stopped_at: "2026-05-14T10:16:44Z"
+    detail: "200 tasks from HF dataset swerebenchv2-200-260429 (8 concurrent). 29 passed, 171 failed, 22 errors."
   metrics:
-    tasks_attempted: 3
-    real_trajectories: 0
-    quota_failed: 0
-    unit_test_passes: 0
+    tasks_attempted: 200
+    real_trajectories: 200
+    quota_failed: 22
+    unit_test_passes: 29
 
 evolving:
   description: Generates agent trajectories using Harbor. Tunable parameters include agent sampling settings, Harbor concurrency, and timeout multipliers.
