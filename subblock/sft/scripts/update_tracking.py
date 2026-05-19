@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Append a row to artifacts/实验追踪表.xlsx after a training run.
+"""Append a row to artifacts/实验追踪表.xlsx after a successful training run.
 
 Usage (called by train.sh):
     python scripts/update_tracking.py --block-dir /path/to/block
 """
 import argparse
+import fcntl
 import json
+import os
 import statistics
 import sys
+import tempfile
 from pathlib import Path
 
 import openpyxl
@@ -15,8 +18,21 @@ import yaml
 
 
 def load_config(block_dir: Path) -> dict:
-    with open(block_dir / "inputs.yaml", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    with open(block_dir / "config.yaml", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    return config["runtime_info"]["input"]
+
+
+def extract_score(record: dict) -> dict | None:
+    """Read score from legacy IM or PangUML v2 meta_info.unique_info."""
+    score = record.get("_score")
+    if isinstance(score, dict):
+        return score
+
+    meta_info = record.get("meta_info")
+    unique_info = meta_info.get("unique_info") if isinstance(meta_info, dict) else None
+    score = unique_info.get("_score") if isinstance(unique_info, dict) else None
+    return score if isinstance(score, dict) else None
 
 
 def compute_im_stats(im_path: Path) -> dict:
@@ -32,8 +48,8 @@ def compute_im_stats(im_path: Path) -> dict:
             record = json.loads(line)
             msgs = record.get("messages", [])
             turns_list.append(len(msgs))
-            score = record.get("_score")
-            if score and isinstance(score, dict):
+            score = extract_score(record)
+            if score:
                 cs = score.get("composite_score")
                 if cs is not None:
                     scores_list.append(cs)
@@ -53,12 +69,14 @@ def compute_im_stats(im_path: Path) -> dict:
     }
 
 
-def compute_token_stats(lf_path: Path, model_path: str) -> str:
+def compute_token_stats(lf_path: Path, model_path: str, trust_remote_code: bool) -> str:
     """Compute token length stats from LF JSON using the model tokenizer."""
     try:
         from transformers import AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_path, trust_remote_code=trust_remote_code
+        )
     except Exception:
         return ""
 
@@ -80,10 +98,24 @@ def compute_token_stats(lf_path: Path, model_path: str) -> str:
     return f"Max: {max(lengths)}\nMin: {min(lengths)}\nMean: {int(statistics.mean(lengths))}"
 
 
-def derive_scaffold_label(scaffold: str, job_dir: str, source_dir: str) -> str:
+def resolve_output_dir(block_dir: Path, output_dir: str) -> Path:
+    path = Path(output_dir)
+    if path.is_absolute():
+        return path
+    return block_dir / "artifacts" / "model" / path.name
+
+
+def read_train_results(output_dir: Path) -> dict:
+    path = output_dir / "train_results.json"
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+def derive_scaffold_label(scaffold: str, job_dir: str) -> str:
     """Try to extract scaffold + version from job_dir name."""
-    src = job_dir or source_dir or ""
-    name = Path(src).name if src else ""
+    name = Path(job_dir).name if job_dir else ""
     # e.g. swerebench-filtered-oraclesolved-openhands-sdk-1.14.0-GLM-5-...
     scaffold_map = {
         "openhands-sdk": "openhands-sdk",
@@ -103,14 +135,13 @@ def derive_scaffold_label(scaffold: str, job_dir: str, source_dir: str) -> str:
     return label
 
 
-def derive_teacher_model(job_dir: str, source_dir: str) -> str:
+def derive_teacher_model(job_dir: str) -> str:
     """Extract teacher model name from job directory path."""
     import re
-    src = job_dir or source_dir or ""
-    name = Path(src).name if src else ""
+    name = Path(job_dir).name if job_dir else ""
     m = re.search(r"(GLM-\d+|GPT-\d+|Claude-\d+)", name, re.IGNORECASE)
     if m:
-        return m.group(1).lower().replace("-", "-")
+        return m.group(1).lower()
     return ""
 
 
@@ -135,37 +166,30 @@ def main():
     block = Path(args.block_dir)
     cfg = load_config(block)
 
-    provider = cfg["source"]["provider"]
     scaffold = cfg["source"]["scaffold"]
     job_dir = cfg["source"].get("job_dir", "") or ""
-    source_dir = cfg["source"].get("source_dir", "") or ""
     data_name = cfg["conversion"]["data_name"]
     model_path = cfg["model"]["model_name_or_path"]
+    trust_remote_code = bool(cfg["model"].get("trust_remote_code", False))
     template = cfg["training"]["template"]
     output_dir = cfg["training"]["output_dir"]
 
     output_basename = Path(output_dir).name
-    abs_output_dir = block / "artifacts" / "model" / output_basename
+    abs_output_dir = resolve_output_dir(block, output_dir)
 
     im_path = block / "artifacts" / "data" / "im_data" / f"{data_name}.jsonl"
     lf_path = block / "artifacts" / "data" / "lf_data" / f"{data_name}.json"
     train_yaml = block / "artifacts" / "training_config" / f"{output_basename}.yaml"
 
-    # Converter script path
-    combo = f"{provider}+{scaffold}"
+    # Converter module command
     converter_map = {
-        "jierun+openhands-sdk": "openhands/convert_openhands_sdk_jierun_to_im.py",
-        "jierun+claude-code": "claudecode_opencode/convert_cc_jierun_to_im.py",
-        "jierun+open-code": "claudecode_opencode/convert_oc_jierun_to_im.py",
-        "jierun+terminus2": "terminus2/convert_terminus2_jierun_to_im.py",
-        "chaofan+openhands": "openhands/convert_openhands_chaofan_to_im.py",
-        "chaofan+claude-code": "claudecode_opencode/convert_cc_chaofan_to_im.py",
-        "chaofan+open-code": "claudecode_opencode/convert_oc_chaofan_to_im.py",
-        "chaofan+terminus2": "terminus2/convert_terminus2_chaofan_to_im.py",
-        "chaofan+openhands-sdk": "openhands/convert_openhands_sdk_chaofan_to_im.py",
+        "openhands-sdk": "swe_data_process.openhands.convert_openhands_sdk_to_im",
+        "claude-code": "swe_data_process.claudecode_opencode.convert_cc_to_im",
+        "open-code": "swe_data_process.claudecode_opencode.convert_oc_to_im",
+        "terminus2": "swe_data_process.terminus2.convert_terminus2_to_im",
     }
-    converter_rel = converter_map.get(combo, "")
-    converter_full = str(block / "repos" / "swe_data_process" / "src" / "swe_data_process" / converter_rel) if converter_rel else ""
+    converter_module = converter_map.get(scaffold, "")
+    converter_command = f"python -m {converter_module}" if converter_module else ""
 
     # Compute stats from IM data
     im_stats = {"turns": "", "scores": "", "count": ""}
@@ -180,7 +204,7 @@ def main():
     if not args.skip_token_stats and lf_path.exists():
         try:
             print("Computing token length stats (this may take a while)...")
-            token_stats = compute_token_stats(lf_path, model_path)
+            token_stats = compute_token_stats(lf_path, model_path, trust_remote_code)
         except Exception as e:
             print(f"WARNING: failed to compute token stats: {e}", file=sys.stderr)
 
@@ -193,16 +217,18 @@ def main():
         except Exception:
             traj_count = str(im_stats.get("count", ""))
 
+    train_results = read_train_results(abs_output_dir)
+
     # Build row values (A-S)
     row = {
         "A": "python",
-        "B": _derive_dataset_label(job_dir, source_dir, data_name),
-        "C": provider,
-        "D": derive_scaffold_label(scaffold, job_dir, source_dir),
+        "B": _derive_dataset_label(job_dir, data_name),
+        "C": "harbor",
+        "D": derive_scaffold_label(scaffold, job_dir),
         "E": derive_think_mode(template, output_dir),
-        "F": derive_teacher_model(job_dir, source_dir),
-        "G": job_dir if provider == "jierun" else source_dir,
-        "H": converter_full,
+        "F": derive_teacher_model(job_dir),
+        "G": job_dir,
+        "H": converter_command,
         "I": str(lf_path),
         "J": token_stats,
         "K": im_stats["turns"],
@@ -212,8 +238,8 @@ def main():
         "O": str(train_yaml),
         "P": output_basename,
         "Q": str(abs_output_dir),
-        "R": "",
-        "S": "",
+        "R": train_results.get("train_loss", ""),
+        "S": train_results.get("train_runtime", ""),
     }
 
     # Append to Excel
@@ -222,22 +248,34 @@ def main():
         print(f"ERROR: tracking table not found: {xlsx_path}", file=sys.stderr)
         sys.exit(1)
 
-    wb = openpyxl.load_workbook(xlsx_path)
-    ws = wb["实验追踪"]
-    next_row = ws.max_row + 1
+    lock_path = xlsx_path.with_suffix(xlsx_path.suffix + ".lock")
+    with lock_path.open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
 
-    for col_letter, value in row.items():
-        ws[f"{col_letter}{next_row}"] = value
+        wb = openpyxl.load_workbook(xlsx_path)
+        ws = wb["实验追踪"]
+        next_row = ws.max_row + 1
 
-    wb.save(xlsx_path)
+        for col_letter, value in row.items():
+            ws[f"{col_letter}{next_row}"] = value
+
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f".{xlsx_path.stem}.", suffix=xlsx_path.suffix, dir=xlsx_path.parent
+        )
+        os.close(fd)
+        try:
+            wb.save(tmp_name)
+            os.replace(tmp_name, xlsx_path)
+        finally:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
     print(f"=== Updated tracking table: row {next_row} in {xlsx_path} ===")
 
 
-def _derive_dataset_label(job_dir: str, source_dir: str, data_name: str) -> str:
+def _derive_dataset_label(job_dir: str, data_name: str) -> str:
     """Extract dataset label from job_dir or data_name."""
     import re
-    src = job_dir or source_dir or ""
-    name = Path(src).name if src else data_name
+    name = Path(job_dir).name if job_dir else data_name
     # e.g. swerebench-filtered-oraclesolved-openhands-sdk-...
     m = re.match(r"(swerebench[\w-]*oraclesolved|swerebench[\w-]*)", name)
     if m:
