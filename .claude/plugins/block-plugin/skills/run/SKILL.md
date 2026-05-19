@@ -25,6 +25,8 @@ The "current block" is the current working directory. Read, in order:
 2. `./CLAUDE.md` — read it; honor any block-specific rules it states.
 3. `./dashboard/overview.mdx` — useful context, not load-bearing.
 
+Note that if you cannot find these files, go back to user and ask him to double check if this is really a block.
+
 ## Step 2 — Load subblocks
 
 For each `name` listed under `meta_info.subblocks` in `./config.yaml`, read `./subblock/<name>/config.yaml`. Keep a map:

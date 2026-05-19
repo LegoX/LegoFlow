@@ -9,6 +9,7 @@ A **block** is the basic collaboration unit in a block-structured project: a sel
 | Command | What it does |
 | --- | --- |
 | `/block:create` | Interview-driven scaffolding of a new block — produces the full directory tree per `BLOCK_DEFINITION.md`. Accepts a filled-in `BLOCK_INTAKE.md` or a chat description. |
+| `/block:check` | Recursively sanity-check every block at and beneath the current directory: `config.yaml` schema, `runtime_info.input` completeness, inter-block dependency resolution, repo pin matches, environment + remote-resource reachability, and live availability of every OpenAI-compatible LLM endpoint declared in any block's input (probes `GET /models` — no chat completion calls). Read-only; reports every failure in one pass. |
 | `/block:run` | Preflight the block in the current working directory: validates `config.yaml`, all `runtime_info.input` values, inter-block dependencies, repos, environment, and `scripts/start.sh`; then executes `start.sh` (locally, or in a tmux+SSH session if `meta_info.resources.ip` is set). Archives the run on completion. |
 
 ## Install
@@ -38,6 +39,7 @@ block-plugin/
 │   └── example_block/           # full sft_training reference block
 └── skills/
     ├── create/SKILL.md          # /block:create
+    ├── check/SKILL.md           # /block:check
     └── run/SKILL.md             # /block:run
 ```
 
@@ -54,7 +56,10 @@ $ cd ~/projects/my-pipeline
 # Fill in the inputs the scaffold left as null
 $ $EDITOR data_curation/config.yaml
 
-# Preflight + run
+# Sanity-check the whole tree (configs, deps, remotes, API keys) before running
 $ cd data_curation
+/block:check
+
+# Preflight + run
 /block:run
 ```
