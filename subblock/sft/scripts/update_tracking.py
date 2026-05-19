@@ -223,7 +223,7 @@ def main():
     row = {
         "A": "python",
         "B": _derive_dataset_label(job_dir, data_name),
-        "C": "job_dir",
+        "C": "harbor",
         "D": derive_scaffold_label(scaffold, job_dir),
         "E": derive_think_mode(template, output_dir),
         "F": derive_teacher_model(job_dir),

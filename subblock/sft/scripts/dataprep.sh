@@ -26,6 +26,10 @@ meta_cfg() {
 }
 
 SFT_UV_RAW="$(meta_cfg "environment.sft_uv")"
+if [[ -z "$SFT_UV_RAW" ]]; then
+    echo "ERROR: meta_info.environment.sft_uv is not set in $CONFIG"
+    exit 1
+fi
 SFT_UV="$(abspath "$SFT_UV_RAW")"
 SFT_PYTHON_VERSION="$(meta_cfg "environment.python_version" "3.12")"
 LF_PYTHON="$SFT_UV/bin/python"
@@ -102,7 +106,11 @@ CONVERT_ARGS+=(--im-output "$IM_OUTPUT" --lf-output "$LF_OUTPUT")
 if [[ -n "$MAX_INSTANCES" ]] && [[ "$MAX_INSTANCES" -gt 0 ]] 2>/dev/null; then
     CONVERT_ARGS+=(--max-instances "$MAX_INSTANCES")
 fi
-if [[ -n "$EXCLUDE_REPOS_FILE" ]]; then
+if [[ -n "$EXCLUDE_REPOS_RAW" ]]; then
+    if [[ ! -f "$EXCLUDE_REPOS_FILE" ]]; then
+        echo "ERROR: conversion.exclude_repos_file not found: $EXCLUDE_REPOS_FILE"
+        exit 1
+    fi
     CONVERT_ARGS+=(--exclude-repos-file "$EXCLUDE_REPOS_FILE")
 fi
 

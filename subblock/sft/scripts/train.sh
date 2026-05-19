@@ -45,6 +45,10 @@ meta_cfg() {
 }
 
 SFT_UV_RAW="$(meta_cfg "environment.sft_uv")"
+if [[ -z "$SFT_UV_RAW" ]]; then
+    echo "ERROR: meta_info.environment.sft_uv is not set in $CONFIG"
+    exit 1
+fi
 SFT_UV="$(abspath "$SFT_UV_RAW")"
 SFT_PYTHON_VERSION="$(meta_cfg "environment.python_version" "3.12")"
 LF_PYTHON="$SFT_UV/bin/python"
