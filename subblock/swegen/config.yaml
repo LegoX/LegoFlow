@@ -19,12 +19,12 @@ meta_info:
     description: Virtual environment for swegen CLI and dependencies
 
   resources:
-    ip: 192.168.35.240        # CPU-only; runs on any node with Docker available
+    ip: local        # CPU-only; runs on any node with Docker available
     user: root
-    pwd: k9#mP2$vL7@nQ4!xZ8
+    pwd: null
     directory: /gpufs/haoli/code/
-    description: cpu node server for k8s cluster. for swegen task creation. By default you should work at ${directory}
-    public_storage: /gpufs/haoli/swedata
+    description: cpu node server for k8s cluster. By default you should work at ${directory}
+    public_storage: null
 
 runtime_info:
   input:

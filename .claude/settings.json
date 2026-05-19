@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "local-blocks": {
+      "source": {
+        "source": "directory",
+        "path": ".claude/plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "block@local-blocks": true
+  }
+}

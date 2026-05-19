@@ -1,0 +1,52 @@
+meta_info:
+  name: <block_name>
+  label: <Human Readable Label>
+  description: <one sentence: what does this block do?>
+  parent: <parent_block_name or null>
+
+  subblocks:
+    <child_name>:
+      role: <one phrase: what does this child do?>
+      dependencies:
+        # Keys are input names this child needs; values are where they come from.
+        # Use dot-notation to reference another block's output: <block>.output.<key>
+        # Use "human" for values filled manually before a run.
+        # Example:
+        #   dataset_path: swegen.output.verified_tasks_dir
+        #   api_key: human
+
+  environment:
+    venv_name: # the virtual env to be used
+    venv_path: # the path to this virtual env
+    requirements: # from where the virtual env is built
+    description: 
+
+  resources:
+    ip: <ip or null>
+    pwd: <pwd or null>
+    directory: <null> # by default it's the current directory if this is not on another server
+    description: # the server where you should by default work at ${directory}
+    public_storage: # shared storage path for outputs
+
+runtime_info:
+  # Only list values that come from OUTSIDE the block tree:
+  # API keys, human decisions, external dataset paths, hyperparameters set by a human.
+  # Inter-block values are wired through subblocks[].dependencies above — do not repeat them here.
+  input:
+    <input_name>: null  # <description>
+
+  output:
+    # Values this block produces for other blocks or downstream consumers.
+    <output_name>: null  # <description>
+
+status:
+  phase: idle           # idle | running | done | blocked
+  progress: null
+  next_steps: Fill runtime_info.input, then run scripts/dryrun.sh.
+  blockers: null
+  last_updated: <YYYY-MM-DD>
+
+evolving:
+  description: <what is this block trying to optimize?>
+  tunable_params:
+    # <param_name>: null  # range: <min>–<max>, step <step>
