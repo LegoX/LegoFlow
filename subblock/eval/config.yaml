@@ -39,8 +39,8 @@ runtime_info:
   input:
     llm_api:
       api_key: dummy-key
-      api_base_url: "http://llm10.jierungogogo.com/v1"
-      model: "openai/MiniMax-M2.7"
+      api_base_url: "https://qwen.jierungogogo.com/v1"
+      model: "openai/Qwen3.5-35B-A3B"
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
@@ -75,7 +75,7 @@ runtime_info:
     # task copy step is required.
     task_source:
       provider: harbor_registry
-      dataset_name: swebench-verified
+      dataset_name: swebench-verified-100
       version: "1.0"
       registry_path: repos/harbor/registry.json
 
@@ -86,11 +86,50 @@ runtime_info:
       max_retries: 2
       timeout_multiplier: 1
 
+    # Supported agents — switch by editing the four fields below (name, version,
+    # runtime_image, runtime_host_path) together. `max_turns` is reused as
+    # `max_iterations` when agent is openhands-sdk (same semantics).
+    #
+    #   custom-claude-code (Anthropic protocol, validated end-to-end):
+    #     name: custom-claude-code
+    #     version: 2.1.118
+    #     runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
+    #     runtime_host_path: artifacts/runtime/claude-code
+    #
+    #   custom-openhands-sdk (OpenAI protocol):
+    #     name: custom-openhands-sdk
+    #     version: 1.14.0
+    #     runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
+    #     runtime_host_path: artifacts/runtime/openhands-sdk
+    #
+    #   custom-opencode (OpenAI-compatible via @ai-sdk/openai-compatible):
+    #     name: custom-opencode
+    #     version: 1.14.22
+    #     runtime_image: docker.io/yjiangcm/c-oc-1.14.22:v0.2
+    #     runtime_host_path: artifacts/runtime/opencode
     agent:
-      name: custom-claude-code
-      version: 2.1.118
-      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
-      runtime_host_path: artifacts/runtime/claude-code  # pre-extracted; bind mount avoids overlay filename-too-long bug
+      name: custom-opencode
+      version: 1.14.22
+      runtime_image: docker.io/jierun/c-oc-1.14.22:v0.1
+      # `runtime_host_path` must be a directory that already contains the
+      # extracted agent runtime tree from `runtime_image` (bind-mount source).
+      # If the dir is empty, the agent falls back to an in-container install
+      # step (curl https://claude.ai/install.sh for claude-code, pip for
+      # openhands-sdk), which 403s/times out on isolated networks. Bind-mount
+      # is preferred over image-mount because the latter trips an overlayfs
+      # filename-too-long bug for some task images.
+      #
+      # Pre-extract once per runtime_image (idempotent — re-run if you bump
+      # the image). Set SUBPATH to claude-code or oh-sdk to match the agent:
+      #   RUNTIME_IMAGE=<runtime_image from this config>
+      #   SUBPATH=claude-code   # or: oh-sdk
+      #   HOST_DIR=artifacts/runtime/<runtime_host_path basename>
+      #   docker pull "$RUNTIME_IMAGE" && \
+      #   CID=$(docker create "$RUNTIME_IMAGE") && \
+      #   rm -rf "$HOST_DIR" && mkdir -p "$(dirname "$HOST_DIR")" && \
+      #   docker cp "$CID:/opt/custom-agent-runtime/$SUBPATH" "$HOST_DIR" && \
+      #   docker rm "$CID"
+      runtime_host_path: artifacts/runtime/opencode
       max_turns: 200
       temperature: 0.7
 
@@ -107,6 +146,9 @@ environment:
   extra:
     # Tasks excluded from this eval run (e.g. previously confirmed timeouts/OOMs).
     HARBOR_EXCLUDE_TASKS: ""
+    # Workaround for Harbor's serve_litellm.sh: under `set -u` it dereferences
+    # LITELLM_STICKY_ROUTING_ALIASES without a default when CONFIG_NAME != "litellm_config".
+    LITELLM_STICKY_ROUTING_ALIASES: ""
 
 status:
   phase: idle

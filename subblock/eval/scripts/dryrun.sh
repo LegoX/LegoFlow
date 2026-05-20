@@ -507,6 +507,41 @@ esac
 value="$(cfg runtime_info.input.agent.runtime_image)"
 [[ -n "$value" ]] && ok "runtime_info.input.agent.runtime_image = $value" || fail "runtime_info.input.agent.runtime_image is required"
 
+# When runtime_host_path is set, start.sh switches to a bind-mount of that
+# host dir into the task container at container_runtime_root. If the dir is
+# empty/missing, mount silently succeeds but the agent falls back to a
+# `curl https://claude.ai/install.sh` (claude-code) or pip-install
+# (openhands-sdk) step inside every task container, which generally 403s on
+# isolated networks. Catch the empty-dir case here so it surfaces in
+# preflight instead of a wall of exception.txt.
+RUNTIME_HOST_PATH_RAW="$(cfg runtime_info.input.agent.runtime_host_path)"
+AGENT_NAME_RAW="$(cfg runtime_info.input.agent.name)"
+case "$AGENT_NAME_RAW" in
+  custom-claude-code)
+    RUNTIME_MARKER="bin/claude" ; RUNTIME_IMG_SUBPATH="claude-code" ;;
+  custom-openhands-sdk)
+    RUNTIME_MARKER="runtime-env.sh" ; RUNTIME_IMG_SUBPATH="oh-sdk" ;;
+  custom-opencode)
+    RUNTIME_MARKER="bin/opencode" ; RUNTIME_IMG_SUBPATH="opencode" ;;
+  *)
+    RUNTIME_MARKER="" ; RUNTIME_IMG_SUBPATH="" ;;
+esac
+if [[ -n "$RUNTIME_HOST_PATH_RAW" ]]; then
+  RUNTIME_HOST_PATH_ABS="$(abspath "$RUNTIME_HOST_PATH_RAW")"
+  EXTRACT_HINT="(extract with: CID=\$(docker create $value) && docker cp \"\$CID:/opt/custom-agent-runtime/${RUNTIME_IMG_SUBPATH:-<subpath>}\" $(dirname "$RUNTIME_HOST_PATH_RAW")/ && docker rm \"\$CID\")"
+  if [[ ! -d "$RUNTIME_HOST_PATH_ABS" ]]; then
+    fail "agent.runtime_host_path does not exist: $RUNTIME_HOST_PATH_RAW $EXTRACT_HINT"
+  elif [[ -z "$(ls -A "$RUNTIME_HOST_PATH_ABS" 2>/dev/null)" ]]; then
+    fail "agent.runtime_host_path is empty: $RUNTIME_HOST_PATH_RAW $EXTRACT_HINT"
+  elif [[ -n "$RUNTIME_MARKER" && ! -e "$RUNTIME_HOST_PATH_ABS/$RUNTIME_MARKER" ]]; then
+    fail "agent.runtime_host_path missing $RUNTIME_MARKER: $RUNTIME_HOST_PATH_RAW (re-extract from $value)"
+  elif [[ -z "$RUNTIME_MARKER" ]]; then
+    warn "agent.runtime_host_path populated but no marker defined for agent.name=$AGENT_NAME_RAW; cannot verify contents"
+  else
+    ok "agent.runtime_host_path is populated ($RUNTIME_MARKER present)"
+  fi
+fi
+
 echo ""
 echo "--- 9. Run command ---"
 if [[ -n "$RUN_COMMAND" ]]; then

@@ -273,13 +273,28 @@ else
   HARBOR_PYTHON="python3"
 fi
 [[ -x "$HARBOR_PYTHON" ]] || { echo "ERROR: Harbor Python not found or not executable: $HARBOR_PYTHON" >&2; exit 1; }
+AGENT_NAME="$(cfg runtime_info.input.agent.name)"
 export EVAL_AGENT_IMPORT_PATH="$(cfg runtime_info.input.agent.import_path)"
-if [[ -z "$EVAL_AGENT_IMPORT_PATH" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]]; then
-  export EVAL_AGENT_IMPORT_PATH="harbor.agents.custom.claude_code:CustomClaudeCode"
+if [[ -z "$EVAL_AGENT_IMPORT_PATH" ]]; then
+  case "$AGENT_NAME" in
+    custom-claude-code)
+      export EVAL_AGENT_IMPORT_PATH="harbor.agents.custom.claude_code:CustomClaudeCode"
+      ;;
+    custom-openhands-sdk)
+      export EVAL_AGENT_IMPORT_PATH="harbor.agents.custom.openhands_sdk:CustomOpenHandsSDK"
+      ;;
+    custom-opencode)
+      export EVAL_AGENT_IMPORT_PATH="harbor.agents.custom.opencode:CustomOpenCode"
+      ;;
+  esac
 fi
 export EVAL_AGENT_API_PROTOCOL="$(cfg runtime_info.input.agent.api_protocol)"
-if [[ -z "$EVAL_AGENT_API_PROTOCOL" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]]; then
-  export EVAL_AGENT_API_PROTOCOL="anthropic"
+if [[ -z "$EVAL_AGENT_API_PROTOCOL" ]]; then
+  case "$AGENT_NAME" in
+    custom-claude-code)    export EVAL_AGENT_API_PROTOCOL="anthropic" ;;
+    custom-openhands-sdk)  export EVAL_AGENT_API_PROTOCOL="openai" ;;
+    custom-opencode)       export EVAL_AGENT_API_PROTOCOL="openai" ;;
+  esac
 fi
 export EVAL_AGENT_MODEL_NAME="$AGENT_MODEL_NAME"
 
@@ -302,8 +317,12 @@ export EVAL_JOB_NAME_PREFIX="$JOB_NAME_PREFIX"
 export EVAL_JOB_DIR="$JOB_DIR"
 export EVAL_TRAJECTORY_FILE_PATTERN="$JOB_DIR/<task-id>/agent/litellm-trajectory.jsonl"
 export EVAL_RUNTIME_ROOT="$(cfg runtime_info.input.runtime_mount.container_runtime_root)"
-if [[ -z "$EVAL_RUNTIME_ROOT" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]]; then
-  export EVAL_RUNTIME_ROOT="/opt/custom-agent-runtime/claude-code"
+if [[ -z "$EVAL_RUNTIME_ROOT" ]]; then
+  case "$AGENT_NAME" in
+    custom-claude-code)    export EVAL_RUNTIME_ROOT="/opt/custom-agent-runtime/claude-code" ;;
+    custom-openhands-sdk)  export EVAL_RUNTIME_ROOT="/opt/custom-agent-runtime/oh-sdk" ;;
+    custom-opencode)       export EVAL_RUNTIME_ROOT="/opt/custom-agent-runtime/opencode" ;;
+  esac
 fi
 export EVAL_RUNTIME_SOURCE_IMAGE="$(cfg runtime_info.input.agent.runtime_image)"
 RUNTIME_HOST_PATH_RAW="$(cfg runtime_info.input.agent.runtime_host_path)"
@@ -318,9 +337,16 @@ if [[ -z "$EVAL_RUNTIME_IMAGE_SUBPATH" ]]; then
   export EVAL_RUNTIME_IMAGE_SUBPATH
 fi
 export EVAL_CUSTOM_AGENT_RUNTIME_ROOT="$EVAL_RUNTIME_ROOT"
-export EVAL_CUSTOM_AGENT_CLAUDE="$EVAL_RUNTIME_ROOT/bin/claude"
 export EVAL_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT="$EVAL_RUNTIME_ROOT/runtime-env.sh"
-export EVAL_LITELLM_ANTHROPIC_BASE_URL="http://$(hostname -I | awk '{print $1}'):${LITELLM_PORT:-$(cfg runtime_info.input.litellm_proxy.port)}"
+case "$AGENT_NAME" in
+  custom-claude-code)    export EVAL_CUSTOM_AGENT_CLAUDE="$EVAL_RUNTIME_ROOT/bin/claude" ;;
+  custom-openhands-sdk)  export EVAL_CUSTOM_AGENT_PYTHON="$EVAL_RUNTIME_ROOT/bin/python" ;;
+  custom-opencode)       export EVAL_CUSTOM_AGENT_OPENCODE="$EVAL_RUNTIME_ROOT/bin/opencode" ;;
+esac
+LITELLM_HOST_IP="$(hostname -I | awk '{print $1}')"
+LITELLM_PORT_RESOLVED="${LITELLM_PORT:-$(cfg runtime_info.input.litellm_proxy.port)}"
+export EVAL_LITELLM_ANTHROPIC_BASE_URL="http://$LITELLM_HOST_IP:$LITELLM_PORT_RESOLVED"
+export EVAL_LITELLM_OPENAI_BASE_URL="http://$LITELLM_HOST_IP:$LITELLM_PORT_RESOLVED/v1"
 export EVAL_LITELLM_MASTER_KEY="$(cfg runtime_info.input.litellm_proxy.master_key)"
 if [[ -n "$LITELLM_UV_RAW" ]]; then
   LITELLM_UV="$(abspath "$LITELLM_UV_RAW")"
@@ -335,7 +361,7 @@ while IFS= read -r env_line; do
 done < <(export_run_environment)
 
 if [[ -z "$RUN_COMMAND" ]]; then
-  [[ -n "$EVAL_AGENT_IMPORT_PATH" ]] || { echo "ERROR: runtime_info.input.agent.import_path is empty and no default is defined for agent.name=$(cfg runtime_info.input.agent.name)" >&2; exit 1; }
+  [[ -n "$EVAL_AGENT_IMPORT_PATH" ]] || { echo "ERROR: runtime_info.input.agent.import_path is empty and no default is defined for agent.name=$AGENT_NAME" >&2; exit 1; }
   EXTRA_ARGS=""
   if [[ -n "$N_TASKS" ]]; then
     EXTRA_ARGS=" --n-tasks $(printf '%q' "$N_TASKS")"
@@ -348,6 +374,82 @@ if [[ -z "$RUN_COMMAND" ]]; then
       EXTRA_ARGS="$EXTRA_ARGS --exclude-task-name $(printf '%q' "$_excl_task")"
     done
   fi
+  # Per-agent kwargs/env flags. MAX_TURNS is reused as max_iterations for openhands-sdk (same semantics).
+  # openhands-sdk uses litellm internally and needs a provider-prefixed model name.
+  case "$AGENT_NAME" in
+    custom-openhands-sdk)
+      HARBOR_MODEL_NAME="openai/$EVAL_AGENT_MODEL_NAME"
+      ;;
+    custom-opencode)
+      HARBOR_MODEL_NAME="hosted_vllm/$EVAL_AGENT_MODEL_NAME"
+      ;;
+    *)
+      HARBOR_MODEL_NAME="$EVAL_AGENT_MODEL_NAME"
+      ;;
+  esac
+  case "$AGENT_NAME" in
+    custom-claude-code)
+      AGENT_FLAGS=" --ak max_turns=$(printf '%q' "$MAX_TURNS") --ak temperature=$(printf '%q' "$TEMPERATURE")"
+      AGENT_FLAGS+=" --ae ANTHROPIC_BASE_URL=\$EVAL_LITELLM_ANTHROPIC_BASE_URL"
+      AGENT_FLAGS+=" --ae ANTHROPIC_API_KEY=\$EVAL_LITELLM_MASTER_KEY"
+      AGENT_FLAGS+=" --ae ANTHROPIC_MODEL=\$EVAL_AGENT_MODEL_NAME"
+      AGENT_FLAGS+=" --ae CUSTOM_AGENT_RUNTIME_ROOT=\$EVAL_CUSTOM_AGENT_RUNTIME_ROOT"
+      AGENT_FLAGS+=" --ae CUSTOM_AGENT_CLAUDE=\$EVAL_CUSTOM_AGENT_CLAUDE"
+      AGENT_FLAGS+=" --ae CUSTOM_AGENT_RUNTIME_ENV_SCRIPT=\$EVAL_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT"
+      AGENT_FLAGS+=" --ae CLAUDE_CODE_ATTRIBUTION_HEADER=0"
+      ;;
+    custom-openhands-sdk)
+      AGENT_FLAGS=" --ak max_iterations=$(printf '%q' "$MAX_TURNS") --ak temperature=$(printf '%q' "$TEMPERATURE")"
+      AGENT_FLAGS+=" --ae LLM_BASE_URL=\$EVAL_LITELLM_OPENAI_BASE_URL"
+      AGENT_FLAGS+=" --ae LLM_API_KEY=\$EVAL_LITELLM_MASTER_KEY"
+      AGENT_FLAGS+=" --ae CUSTOM_AGENT_RUNTIME_ROOT=\$EVAL_CUSTOM_AGENT_RUNTIME_ROOT"
+      AGENT_FLAGS+=" --ae CUSTOM_AGENT_PYTHON=\$EVAL_CUSTOM_AGENT_PYTHON"
+      ;;
+    custom-opencode)
+      OPENCODE_DISABLE_STREAMING="${OPENCODE_DISABLE_STREAMING:-true}"
+      OPENCODE_CONFIG_CONTENT="$($HARBOR_PYTHON -c 'import json, os
+model_name = os.environ["EVAL_AGENT_MODEL_NAME"]
+opencode_model = "hosted_vllm/" + model_name
+disable_streaming = os.environ.get("OPENCODE_DISABLE_STREAMING", "true").lower() in {"1", "true", "yes", "on"}
+options = {
+    "baseURL": "{env:HOSTED_VLLM_BASE_URL}",
+    "apiKey": "{env:HOSTED_VLLM_API_KEY}",
+    "headers": {"x-harbor-temperature": "{env:OPENCODE_TEMPERATURE}"},
+}
+if disable_streaming:
+    options["disableStreaming"] = True
+print(json.dumps({
+    "$schema": "https://opencode.ai/config.json",
+    "model": opencode_model,
+    "small_model": opencode_model,
+    "enabled_providers": ["hosted_vllm"],
+    "provider": {
+        "hosted_vllm": {
+            "npm": "@ai-sdk/openai-compatible",
+            "name": "Hosted vLLM",
+            "options": options,
+            "models": {model_name: {"name": model_name}},
+        },
+    },
+    "agent": {
+        "title": {"model": opencode_model},
+        "summary": {"model": opencode_model},
+        "compaction": {"model": opencode_model},
+    },
+}, separators=(",", ":")))'
+      )"
+      AGENT_FLAGS=""
+      AGENT_FLAGS+=" --ae HOSTED_VLLM_BASE_URL=\$EVAL_LITELLM_OPENAI_BASE_URL"
+      AGENT_FLAGS+=" --ae HOSTED_VLLM_API_KEY=\$EVAL_LITELLM_MASTER_KEY"
+      AGENT_FLAGS+=" --ae OPENCODE_TEMPERATURE=$TEMPERATURE"
+      AGENT_FLAGS+=" --ae OPENCODE_CONFIG_CONTENT=$(printf '%q' "$OPENCODE_CONFIG_CONTENT")"
+      AGENT_FLAGS+=" --ae CUSTOM_AGENT_RUNTIME_ROOT=\$EVAL_CUSTOM_AGENT_RUNTIME_ROOT"
+      AGENT_FLAGS+=" --ae CUSTOM_AGENT_OPENCODE=\$EVAL_CUSTOM_AGENT_OPENCODE"
+      AGENT_FLAGS+=" --ae CUSTOM_AGENT_RUNTIME_ENV_SCRIPT=\$EVAL_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT"
+      ;;
+    *)
+      echo "ERROR: no default agent flags for agent.name=$AGENT_NAME (set command_override or extend start.sh)" >&2; exit 1 ;;
+  esac
   RUN_COMMAND="uv run harbor run --dataset $(printf '%q' "$DATASET_NAME") --registry-path $(printf '%q' "$EVAL_HARBOR_REGISTRY_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$EVAL_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$EVAL_JOB_NAME") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'
 import json
 import os
@@ -369,7 +471,7 @@ else:
     }]
 print(json.dumps(mounts))
 PY
-)\" --model $(printf '%q' "$EVAL_AGENT_MODEL_NAME") --n-concurrent $(printf '%q' "$N_CONCURRENT")${EXTRA_ARGS} --timeout-multiplier $(printf '%q' "$TIMEOUT_MULTIPLIER") --max-retries $(printf '%q' "$MAX_RETRIES") --ak version=$(printf '%q' "$AGENT_VERSION") --ak max_turns=$(printf '%q' "$MAX_TURNS") --ak temperature=$(printf '%q' "$TEMPERATURE") --ae ANTHROPIC_BASE_URL=\$EVAL_LITELLM_ANTHROPIC_BASE_URL --ae ANTHROPIC_API_KEY=\$EVAL_LITELLM_MASTER_KEY --ae ANTHROPIC_MODEL=\$EVAL_AGENT_MODEL_NAME --ae CUSTOM_AGENT_RUNTIME_ROOT=\$EVAL_CUSTOM_AGENT_RUNTIME_ROOT --ae CUSTOM_AGENT_CLAUDE=\$EVAL_CUSTOM_AGENT_CLAUDE --ae CUSTOM_AGENT_RUNTIME_ENV_SCRIPT=\$EVAL_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT --ae CLAUDE_CODE_ATTRIBUTION_HEADER=0"
+)\" --model $(printf '%q' "$HARBOR_MODEL_NAME") --n-concurrent $(printf '%q' "$N_CONCURRENT")${EXTRA_ARGS} --timeout-multiplier $(printf '%q' "$TIMEOUT_MULTIPLIER") --max-retries $(printf '%q' "$MAX_RETRIES") --ak version=$(printf '%q' "$AGENT_VERSION")${AGENT_FLAGS}"
 fi
 
 LITELLM_TEMPLATE_RAW="$(cfg runtime_info.input.litellm_proxy.config_template)"
