@@ -26,8 +26,8 @@ meta_info:
         <input_key>: <source_block>.output.<key>  # or: human
   repos: {}          # name → {commit_id, role}
   resources:
-    ip:              # remote node IP; null = run locally
-    pwd:             # working directory on remote node
+    ip:              # 'local' (default) or null = run on current host; remote IP = run via SSH+tmux
+    pwd:             # working directory on remote node (only used when ip is a remote IP)
 
 runtime_info:
   input: {}          # ONLY external values (API keys, human decisions)
@@ -43,9 +43,11 @@ evolving:
 
 **Wiring rule**: inter-block values go in `meta_info.subblocks[].dependencies`, never in `runtime_info.input`. Only values originating outside the block tree go in `runtime_info.input`.
 
-### Remote execution rule
+### Execution location rule
 
-If `meta_info.resources.ip` is set, the agent **must** SSH into that node and run inside a tmux session — never run a remote-resource block locally. Confirm with the user whether code needs to be synced or is already present at the remote path.
+**Default: run locally.** Unless explicitly told otherwise, agents should treat `meta_info.resources.ip: local` (or null) as the intended setting and execute on the current host inside a local tmux session — no SSH, no rsync. Do not "restore" an old remote IP found in git history or older CLAUDE.md revisions; the local default is intentional.
+
+If — and only if — `meta_info.resources.ip` is set to a real remote IP, the agent **must** SSH into that node and run inside a tmux session there, and confirm with the user whether code needs to be synced or is already present at the remote path.
 
 ## Block Identity (Root)
 
@@ -89,12 +91,14 @@ scripts/clean.sh    # remove temporary working files
 
 ## Subblocks
 
-| Block | Remote? | Key tool | Status |
+All subblocks run **locally** by default (`meta_info.resources.ip: local`). Override to a remote IP only on explicit user request.
+
+| Block | Execution | Key tool | Status |
 |---|---|---|---|
-| `subblock/swegen/` | Yes (192.168.35.240) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
-| `subblock/trajgen/` | Yes (192.168.35.240) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
-| `subblock/sft/` | No (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
-| `subblock/rl/` | No (needs 8× GPU) | Harbor + vLLM + verl | Online RL on Qwen3-30B |
+| `subblock/swegen/` | Local (CPU + Docker) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
+| `subblock/trajgen/` | Local (CPU + Docker) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
+| `subblock/sft/` | Local (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
+| `subblock/rl/` | Local (needs 8× GPU) | Harbor + vLLM + verl | Online RL on Qwen3-30B |
 
 Each subblock has its own `CLAUDE.md` with its full agent contract.
 
