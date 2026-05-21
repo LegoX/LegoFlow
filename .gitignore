@@ -38,6 +38,5 @@ artifacts/files/
 # Dashboard runtime output
 dashboard/swegen/index.html
 dashboard/swegen/site/
-dashboard/swegen/.progress_monitor_all_state.jsonl*
-dashboard/swegen/.progress_monitor_all_cache.json
+dashboard/swegen/.progress_monitor_all_state.jsonl.*
 dashboard/swegen/dashboard_sync.log
