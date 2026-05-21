@@ -17,11 +17,12 @@ def load_dashboard_module():
 def test_dashboard_defaults_read_swegen_data_and_write_local_runtime_files():
     module = load_dashboard_module()
     dashboard_root = Path(__file__).resolve().parent
+    home_root = Path.home()
 
     assert module.DASHBOARD_ROOT == dashboard_root
-    assert module.REPO_ROOT == Path("/home/ywxzml3j/ywxzml3juser23/SWE-gen")
-    assert module.ROOT == module.REPO_ROOT / "tasks" / "March"
-    assert module.PR_DIR == module.REPO_ROOT / "collected_prs"
+    assert module.REPO_ROOT == home_root / "SWE-gen"
+    assert module.ROOT == home_root / "SWE-gen" / "tasks" / "March"
+    assert module.PR_DIR == home_root / "SWE-gen" / "collected_prs"
     assert module.DEFAULT_HTML == dashboard_root / "site" / "index.html"
     assert module.DEFAULT_STATE == dashboard_root / ".progress_monitor_all_state.jsonl"
     assert module.DEFAULT_CACHE == dashboard_root / ".progress_monitor_all_cache.json"

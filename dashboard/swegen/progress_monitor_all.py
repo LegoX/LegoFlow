@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover - Python < 3.11 fallback path
 
 BJT = timezone(timedelta(hours=8))
 SCRIPT_DIR = Path(__file__).resolve().parent
-HOME_DIR = Path(os.environ.get("SWEGEN_HOME", "/home/ywxzml3j/ywxzml3juser23")).expanduser()
+HOME_DIR = Path(os.environ.get("SWEGEN_HOME", str(Path.home()))).expanduser()
 DASHBOARD_ROOT = Path(os.environ.get("SWEGEN_DASHBOARD_ROOT", str(SCRIPT_DIR))).expanduser().resolve()
 REPO_ROOT = Path(os.environ.get("SWEGEN_DATA_ROOT", str(HOME_DIR / "SWE-gen"))).expanduser().resolve()
 ROOT = Path(os.environ.get("SWEGEN_TASK_ROOT", str(REPO_ROOT / "tasks" / "March"))).expanduser().resolve()

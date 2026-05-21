@@ -2,7 +2,7 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOME_DIR="${SWEGEN_HOME:-/home/ywxzml3j/ywxzml3juser23}"
+HOME_DIR="${SWEGEN_HOME:-$HOME}"
 DASHBOARD_SCRIPT="$SCRIPT_DIR/progress_monitor_all.py"
 RUN_DIR="$SCRIPT_DIR"
 PUBLIC_DIR="${PUBLIC_DIR:-$RUN_DIR/site}"
