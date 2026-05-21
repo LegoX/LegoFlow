@@ -238,8 +238,8 @@ def main():
         "O": str(train_yaml),
         "P": output_basename,
         "Q": str(abs_output_dir),
-        "R": train_results.get("train_loss", ""),
-        "S": train_results.get("train_runtime", ""),
+        "R": "",
+        "S": "",
     }
 
     # Append to Excel
@@ -269,6 +269,7 @@ def main():
         finally:
             if os.path.exists(tmp_name):
                 os.unlink(tmp_name)
+    lock_path.unlink(missing_ok=True)
     print(f"=== Updated tracking table: row {next_row} in {xlsx_path} ===")
 
 
