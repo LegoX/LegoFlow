@@ -1,13 +1,12 @@
 # SWE-gen 进度监控 Dashboard
 
-这个目录保存 SWE-gen 进度监控网页的生成和部署代码。网页内容格式沿用原始目录
-`/home/ywxzml3j/ywxzml3juser23/SWE-gen/public_progress_dashboard`，默认从
-`/home/ywxzml3j/ywxzml3juser23/SWE-gen` 读取实时数据，并把运行时文件写到当前
-`dashboard/swegen/` 目录下。
+这个目录保存 SWE-gen 进度监控网页的生成和部署代码。网页内容格式沿用 SWE-gen
+项目里的原始 dashboard。生成器默认读取 `$SWEGEN_HOME/SWE-gen` 下的实时数据，
+并把运行时文件写到当前 `dashboard/swegen/` 目录下。
 
 ## 本地生成
 
-在仓库根目录 `/home/ywxzml3j/ywxzml3juser23/SWE-Lego-Live` 执行：
+在本仓库根目录执行：
 
 ```bash
 python3 dashboard/swegen/progress_monitor_all.py \
@@ -24,11 +23,13 @@ python3 dashboard/swegen/progress_monitor_all.py --serve
 
 ## Cloudflare Pages 同步
 
-同步脚本会读取下面这个环境变量文件：
+同步脚本默认读取下面这个环境变量文件：
 
 ```bash
-/home/ywxzml3j/ywxzml3juser23/.config/swegen_progress_cloudflare.env
+~/.config/swegen_progress_cloudflare.env
 ```
+
+如果你的文件放在其他位置，可以启动时通过 `ENV_FILE` 覆盖。
 
 该文件至少需要包含：
 
@@ -62,7 +63,7 @@ bash dashboard/swegen/run_cloudflare_pages_sync.sh
 
 生成器支持以下环境变量覆盖默认路径：
 
-- `SWEGEN_HOME`：基础 home 目录，默认 `/home/ywxzml3j/ywxzml3juser23`。
+- `SWEGEN_HOME`：基础 home 目录，默认使用当前用户的 home 目录。
 - `SWEGEN_DATA_ROOT`：SWE-gen 数据和代码根目录，默认 `$SWEGEN_HOME/SWE-gen`。
 - `SWEGEN_TASK_ROOT`：任务输出根目录，默认 `$SWEGEN_DATA_ROOT/tasks/March`。
 - `SWEGEN_PR_DIR`：PR ID 文件目录，默认 `$SWEGEN_DATA_ROOT/collected_prs`。
