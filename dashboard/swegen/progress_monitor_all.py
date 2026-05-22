@@ -1447,8 +1447,6 @@ def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
     append_state(args.state_file, data["state_snap"])
     html_doc = render_html(data, refresh_seconds, args.output_html)
     atomic_write_text(args.output_html, html_doc)
-    if args.output_html.name == "index.html" and args.output_html.parent.name == "site":
-        atomic_write_text(args.output_html.parent.parent / "index.html", html_doc)
     return data
 
 
