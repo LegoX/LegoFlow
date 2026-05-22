@@ -105,14 +105,6 @@ def resolve_output_dir(block_dir: Path, output_dir: str) -> Path:
     return block_dir / "artifacts" / "model" / path.name
 
 
-def read_train_results(output_dir: Path) -> dict:
-    path = output_dir / "train_results.json"
-    if not path.exists():
-        return {}
-    with path.open(encoding="utf-8") as f:
-        return json.load(f)
-
-
 def derive_scaffold_label(scaffold: str, job_dir: str) -> str:
     """Try to extract scaffold + version from job_dir name."""
     name = Path(job_dir).name if job_dir else ""
@@ -217,8 +209,6 @@ def main():
         except Exception:
             traj_count = str(im_stats.get("count", ""))
 
-    train_results = read_train_results(abs_output_dir)
-
     # Build row values (A-S)
     row = {
         "A": "python",
@@ -269,7 +259,6 @@ def main():
         finally:
             if os.path.exists(tmp_name):
                 os.unlink(tmp_name)
-    lock_path.unlink(missing_ok=True)
     print(f"=== Updated tracking table: row {next_row} in {xlsx_path} ===")
 
 

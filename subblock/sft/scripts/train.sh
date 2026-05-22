@@ -295,8 +295,6 @@ with open(lock_path, "w") as lock:
             print(f"=== Registered dataset '{dataset_name}' -> {lf_filename} ===")
         else:
             print(f"=== Updated dataset '{dataset_name}' mapping: {old_entry.get('file_name')} -> {lf_filename} ===")
-
-lock_path.unlink(missing_ok=True)
 PYEOF
 
 # ---------------------------------------------------------------------------
@@ -593,8 +591,6 @@ with open(lock_path, "w") as lock:
         artifacts["train_loss_plot"] = str(loss_plot_path)
 
     write_runtime_output_preserving_comments(config_path, outputs)
-
-lock_path.unlink(missing_ok=True)
 
 print("=== Updated config.yaml runtime_info.output ===")
 print(f"    checkpoint: {checkpoint_entry['value']}")
