@@ -1,0 +1,18 @@
+version: 1
+
+# Index of all experiment runs. Agent appends an entry after each run completes.
+runs:
+  - id: run_001
+    started_at: "2026-05-07T20:23:47Z"
+    completed_at: "2026-05-09T17:29:07Z"
+    status: completed
+    notes: "Python batch (67517 PRs). 3 verified tasks: agentscope-ai__agentscope-885, agentscope-ai__agentscope-1342, aider-ai__aider-4146. 62885 failed due to GitHub API rate limiting (infra_error)."
+
+  - id: run_002
+    started_at: "2026-05-10T12:09:00Z"
+    completed_at: null
+    status: running
+    notes: "Generating 40 NEW tasks from infra-retry PRs (62885 PRs that failed due to rate limiting in run_001). Skipping pre-existing 3. Using --skip-pr-files to exclude them from count. See artifacts/task_manifest.yaml for task origin tracking."
+    input_file: artifacts/collected_prs/python_infra_retry.txt
+    log: artifacts/logs/swegen-create/cc_py_retry_40.txt
+    manifest: artifacts/task_manifest.yaml

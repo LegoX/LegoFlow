@@ -46,8 +46,8 @@ SWEGEN_TRAJ_DIR="/path/to/trajectory-jsonl-dir"
 ```bash
 python3 dashboard/swegen/progress_monitor_all.py \
   --output-html dashboard/swegen/site/index.html \
-  --state-file dashboard/swegen/.progress_monitor_all_state.jsonl \
-  --cache-file dashboard/swegen/.progress_monitor_all_cache.json
+  --state-file dashboard/swegen/memory/.progress_monitor_all_state.jsonl \
+  --cache-file dashboard/swegen/memory/.progress_monitor_all_cache.json
 ```
 
 生成后可以打开 `dashboard/swegen/site/index.html`，也可以启动本地服务：
@@ -60,16 +60,16 @@ python3 dashboard/swegen/progress_monitor_all.py --serve
 
 仓库中包含两个生成器运行状态文件：
 
-- `.progress_monitor_all_state.jsonl`：历史快照文件。每次运行生成器时都会追加一行 JSON，记录当时各语言的 PR 数、已处理数、可验证任务数等概要数据。页面里的 1 小时和 24 小时增量来自这个文件。
-- `.progress_monitor_all_cache.json`：增量缓存文件。生成器扫描任务目录、batch 状态和轨迹文件时会把文件签名和统计结果写入这里，下次运行时可复用未变化文件的统计，避免每次都全量解析大量任务和轨迹数据。
+- `memory/.progress_monitor_all_state.jsonl`：历史快照文件。每次运行生成器时都会追加一行 JSON，记录当时各语言的 PR 数、已处理数、可验证任务数等概要数据。页面里的 1 小时和 24 小时增量来自这个文件。
+- `memory/.progress_monitor_all_cache.json`：增量缓存文件。生成器扫描任务目录、batch 状态和轨迹文件时会把文件签名和统计结果写入这里，下次运行时可复用未变化文件的统计，避免每次都全量解析大量任务和轨迹数据。
 
 这两个文件由下面的命令生成或更新：
 
 ```bash
 python3 dashboard/swegen/progress_monitor_all.py \
   --output-html dashboard/swegen/site/index.html \
-  --state-file dashboard/swegen/.progress_monitor_all_state.jsonl \
-  --cache-file dashboard/swegen/.progress_monitor_all_cache.json
+  --state-file dashboard/swegen/memory/.progress_monitor_all_state.jsonl \
+  --cache-file dashboard/swegen/memory/.progress_monitor_all_cache.json
 ```
 
 同步脚本 `dashboard/swegen/run_cloudflare_pages_sync.sh` 内部也会调用同一个生成器，因此运行同步脚本时也会更新这两个文件。

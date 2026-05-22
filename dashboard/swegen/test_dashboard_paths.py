@@ -24,5 +24,5 @@ def test_dashboard_defaults_read_swegen_data_and_write_local_runtime_files():
     assert module.ROOT == home_root / "SWE-gen" / "tasks" / "March"
     assert module.PR_DIR == home_root / "SWE-gen" / "collected_prs"
     assert module.DEFAULT_HTML == dashboard_root / "site" / "index.html"
-    assert module.DEFAULT_STATE == dashboard_root / ".progress_monitor_all_state.jsonl"
-    assert module.DEFAULT_CACHE == dashboard_root / ".progress_monitor_all_cache.json"
+    assert module.DEFAULT_STATE == dashboard_root / "memory" / ".progress_monitor_all_state.jsonl"
+    assert module.DEFAULT_CACHE == dashboard_root / "memory" / ".progress_monitor_all_cache.json"

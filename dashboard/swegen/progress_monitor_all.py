@@ -40,8 +40,8 @@ REPO_ROOT = Path(os.environ.get("SWEGEN_DATA_ROOT", str(HOME_DIR / "SWE-gen"))).
 ROOT = Path(os.environ.get("SWEGEN_TASK_ROOT", str(REPO_ROOT / "tasks" / "March"))).expanduser().resolve()
 PR_DIR = Path(os.environ.get("SWEGEN_PR_DIR", str(REPO_ROOT / "collected_prs"))).expanduser().resolve()
 DEFAULT_HTML = DASHBOARD_ROOT / "site" / "index.html"
-DEFAULT_STATE = DASHBOARD_ROOT / ".progress_monitor_all_state.jsonl"
-DEFAULT_CACHE = DASHBOARD_ROOT / ".progress_monitor_all_cache.json"
+DEFAULT_STATE = DASHBOARD_ROOT / "memory" / ".progress_monitor_all_state.jsonl"
+DEFAULT_CACHE = DASHBOARD_ROOT / "memory" / ".progress_monitor_all_cache.json"
 CACHE_VERSION = 2
 
 TRAJ_DIR = Path(

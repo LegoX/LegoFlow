@@ -1,0 +1,7 @@
+.env
+swegen-env2/
+.swegen/
+.swegen-*/
+logs/
+artifacts/logs/
+config.json

@@ -35,8 +35,6 @@ Thumbs.db
 *.safetensors
 artifacts/files/
 
-# Dashboard runtime output
-dashboard/swegen/index.html
-dashboard/swegen/site/
-dashboard/swegen/.progress_monitor_all_state.jsonl.*
+# Dashboard transient runtime output
+dashboard/swegen/memory/.progress_monitor_all_state.jsonl.*
 dashboard/swegen/dashboard_sync.log

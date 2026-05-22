@@ -1,0 +1,6 @@
+{
+  "name": "block",
+  "description": "Scaffold, check, and run blocks in a block-structured project (per BLOCK_DEFINITION.md). Provides /block:create, /block:check, and /block:run.",
+  "version": "0.2.0",
+  "author": { "name": "haoli" }
+}

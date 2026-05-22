@@ -1,0 +1,12 @@
+# session.log — run_001
+
+This file records the Claude Code session: tool calls, agent reasoning, and decisions made during the run.
+
+[Example placeholder — in a real run this file is written by Claude Code automatically.]
+
+## Key decisions
+
+- Validated dataset format before starting training (12,400 JSONL examples, all well-formed)
+- Confirmed trl@a1b2c3d4 is installed on remote node before launching
+- Monitored val_loss per epoch; no early stopping triggered
+- Saved checkpoint after epoch 3 as val_loss was still improving slightly

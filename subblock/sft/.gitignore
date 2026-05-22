@@ -1,0 +1,20 @@
+# Runtime data (large files, generated per-run)
+artifacts/data/im_data/
+artifacts/data/lf_data/
+artifacts/data/raw/
+
+# Model checkpoints
+artifacts/model/
+
+# WandB run data
+artifacts/wandb/
+
+# Training logs
+artifacts/logs/
+
+# Generated training YAML (regenerated from inputs/index.yaml each run)
+artifacts/training_config/*.yaml
+
+# Python
+__pycache__/
+*.pyc

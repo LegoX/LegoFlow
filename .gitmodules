@@ -1,0 +1,12 @@
+[submodule "subblock/swegen/repos/swegen"]
+	path = subblock/swegen/repos/swegen
+	url = git@github.com:SWE-Lego/SWE-gen.git
+[submodule "subblock/sft/repos/swe_data_process"]
+	path = subblock/sft/repos/swe_data_process
+	url = git@github.com:SWE-Lego/swe_data_process.git
+[submodule "subblock/trajgen/repos/harbor"]
+	path = subblock/trajgen/repos/harbor
+	url = git@github.com:SWE-Lego/harbor.git
+[submodule "subblock/sft/repos/LLaMA-Factory"]
+	path = subblock/sft/repos/LLaMA-Factory
+	url = https://github.com/hiyouga/LLaMA-Factory.git

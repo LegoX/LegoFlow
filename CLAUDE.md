@@ -1,173 +1,127 @@
-# <Block Name>
+# CLAUDE.md
 
-This file declares that the current directory is a `block`.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-For the canonical definition of a block, the field semantics, and the default directory contract, read `what_is_a_block.md`.
+# SWE Lego Live
 
-## How To Use This File
+Root orchestration block for the self-evolving LLM development pipeline. Coordinates data curation (swegen), trajectory generation (trajgen), supervised fine-tuning (sft), and reinforcement learning (rl) in sequence.
 
-Use this file as the local template for describing the current block.
+## Block System
 
-This document should not re-explain the global block concept. Instead, it should describe:
-- what this block is responsible for
-- what it takes as input
-- what it produces as output
-- what evidence it stores
-- how it relates to parent and child blocks
-- how to run and validate it
+This repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md` and `config.yaml`.
 
-## Block Summary
+**Full specification**: `BLOCK_DEFINITION.md` — every agent with this repo SHOULD READ it before any actions.
 
-```md
-Name: <block_name>
-Type: <root block | child block | leaf block>
-Main doc: `docs/main.md`
-Definition reference: `what_is_a_block.md`
+### config.yaml schema
+
+Every block's `config.yaml` follows this structure:
+
+```yaml
+meta_info:
+  name, label, description, parent
+  subblocks:
+    <child>:
+      role:
+      dependencies:
+        <input_key>: <source_block>.output.<key>  # or: human
+  repos: {}          # name → {commit_id, role}
+  resources:
+    ip:              # remote node IP; null = run locally
+    pwd:             # working directory on remote node
+
+runtime_info:
+  input: {}          # ONLY external values (API keys, human decisions)
+  output: {}         # values produced for downstream blocks
+
+status:
+  phase:             # idle | running | done | blocked
+  progress, next_steps, blockers, last_updated
+
+evolving:
+  tunable_params: {} # auto-tuned parameters with bounds
 ```
 
-## Functional Positioning
+**Wiring rule**: inter-block values go in `meta_info.subblocks[].dependencies`, never in `runtime_info.input`. Only values originating outside the block tree go in `runtime_info.input`.
 
-Describe the purpose of this block in 3-8 lines.
+### Remote execution rule
 
-Template:
+If `meta_info.resources.ip` is set, the agent **must** SSH into that node and run inside a tmux session — never run a remote-resource block locally. Confirm with the user whether code needs to be synced or is already present at the remote path.
 
-```md
-This block is responsible for <primary responsibility>.
+## Block Identity (Root)
 
-It exists to <why this block exists>.
+- **Name**: swe_lego_live
+- **Parent**: none
+- **Children**: swegen → trajgen → sft → rl
 
-Its boundary is:
-- in scope: <what this block owns>
-- out of scope: <what this block does not own>
+## What To Read First
+
+1. `dashboard/overview.mdx` — current state narrative and new-user quickstart
+2. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, runtime values, and live status of the two active subblocks
+3. `BLOCK_DEFINITION.md` — full block system specification
+
+The root block has no `config.yaml` of its own; inputs and outputs are owned by the subblock configs listed below. Each subblock has its own `CLAUDE.md` agent contract.
+
+## Input/Output Contract
+
+The root block does not consume external inputs directly. Required external values are filled into each active subblock's `runtime_info.input`:
+
+**swegen** (`subblock/swegen/config.yaml` → `runtime_info.input`):
+- `github_tokens`: comma-separated GitHub API tokens for PR collection
+- `llm_api.api_key`, `llm_api.api_base_url`: OpenAI-compatible LLM endpoint
+- `llm_api.pr_model`, `llm_api.task_model`: model names for PR evaluation and task completion
+
+**trajgen** (`subblock/trajgen/config.yaml` → `runtime_info.input`):
+- `llm_api.api_key`, `llm_api.api_base_url`, `llm_api.model`: OpenAI-compatible LLM endpoint and model used by the per-job LiteLLM proxy
+
+**Outputs** (downstream-consumable artifacts):
+- `swegen.output.swe_tasks_dir`: verified SWE tasks under `subblock/swegen/artifacts/swe_tasks/{lang}-cc/`. The authoritative manifest is `{lang}-cc/verifiable_tasks.txt` — only task IDs in that file have passed NOP/Oracle validation.
+- `trajgen.output`: raw agent trajectories under `subblock/trajgen/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
+
+**Producer→consumer contract**: trajgen consumes **only** tasks listed in swegen's `verifiable_tasks.txt`. `subblock/trajgen/scripts/prepare_tasks.sh` enforces this by filtering through the manifest when copying from a local task source; task IDs already processed are tracked in `subblock/trajgen/artifacts/consumption_ledger.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in trajgen's `config.yaml`.
+
+## How To Run
+
+```bash
+scripts/dryrun.sh   # validate config, inputs, and required paths (no side effects)
+scripts/start.sh    # execute the full pipeline
+scripts/clean.sh    # remove temporary working files
 ```
 
-## Inputs
+## Subblocks
 
-Describe the required upstream inputs of this block. Keep the detailed machine-readable structure in `inputs/index.yaml`, and use this section to explain intent.
+| Block | Remote? | Key tool | Status |
+|---|---|---|---|
+| `subblock/swegen/` | Yes (192.168.35.240) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
+| `subblock/trajgen/` | Yes (192.168.35.240) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
+| `subblock/sft/` | No (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
+| `subblock/rl/` | No (needs 8× GPU) | Harbor + vLLM + verl | Online RL on Qwen3-30B |
 
-Template:
+Each subblock has its own `CLAUDE.md` with its full agent contract.
 
-```md
-This block depends on the following input categories:
-- `<input_name_1>`: <why it is needed>
-- `<input_name_2>`: <why it is needed>
+## Artifact Archiving
 
-Input readiness rule:
-- this block can start when <condition>
-- this block is blocked when <condition>
+After each run, create `artifacts/archives/run_NNN/` containing:
+
+| File | Content |
+|---|---|
+| `metadata.yaml` | run id, timestamps, phase/stage, results, repo commit ids, copy of inputs |
+| `config.yaml` | snapshot of config at run time |
+| `scripts/` | copy of scripts executed |
+| `repos/` | snapshot of repo state |
+| `session.log` | Claude Code session record |
+| `monitor.md` | agent monitor output |
+
+Append one entry to `artifacts/index.yaml`:
+```yaml
+- id: run_001
+  started_at: "..."
+  completed_at: "..."
+  status: completed   # running | completed | failed
+  archive: artifacts/archives/run_001/
+  notes: "one-line summary"
 ```
 
-## Outputs
+## Memory and Status
 
-Describe the main logical outputs of this block. Keep the detailed machine-readable structure in `outputs/index.yaml`.
-
-Template:
-
-```md
-This block produces:
-- `<output_name_1>`: <meaning>
-- `<output_name_2>`: <meaning>
-
-Outputs should answer:
-- what result was produced
-- what decision can be made from it
-- what downstream block may consume it
-```
-
-## Artifacts And Memory
-
-Explain what kinds of evidence and long-form records this block keeps.
-
-Template:
-
-```md
-Artifacts stored by this block include:
-- <log files / reports / datasets / exports / traces>
-
-Long-form memory maintained by this block includes:
-- <design notes>
-- <decision records>
-- <postmortems or analysis reports>
-```
-
-## Parent And Child Relationships
-
-Describe where this block sits in the larger tree.
-
-Template:
-
-```md
-Parent relationship:
-- parent block: <name or none>
-- this block receives <what comes from parent>
-- this block reports back <what goes to parent>
-
-Child relationship:
-- child blocks under `subblock/`: <list or none>
-- this block delegates <what is delegated downward>
-- this block integrates <what is collected upward>
-```
-
-## Execution Interface
-
-Describe how this block is operated through `scripts/`.
-
-Template:
-
-```md
-Available scripts:
-- `scripts/start.sh`: <how the block is started>
-- `scripts/dryrun.sh`: <how to perform the default health check>
-- `scripts/clean.sh`: <how temporary or generated state is cleaned>
-
-Dryrun expectation:
-- `scripts/dryrun.sh` should verify that this block can be read, resolved, and exercised safely without side effects.
-```
-
-## Collaboration Rules
-
-Template:
-
-```md
-When updating this block:
-- read `docs/main.md` first
-- use `inputs/index.yaml` and `outputs/index.yaml` for structured state
-- use `artifacts/` for raw evidence
-- use `memory/` for long-form context
-- use `subblock/` for nested child blocks
-```
-
-## Example Skeleton
-
-```md
-# Data Intake Block
-
-This file declares that the current directory is a `block`.
-
-For the canonical definition of a block, read `what_is_a_block.md`.
-
-## Functional Positioning
-This block is responsible for normalizing incoming source material into a stable internal format.
-
-Its boundary is:
-- in scope: source ingestion, validation, normalization
-- out of scope: downstream execution and final reporting
-
-## Inputs
-- `source_catalog`: records of input sources
-- `ingest_policy`: rules for validating and accepting inputs
-
-## Outputs
-- `normalized_items`: accepted and normalized units
-- `ingest_report`: summary of accepted, rejected, and blocked items
-
-## Parent And Child Relationships
-- parent block: root pipeline block
-- child blocks under `subblock/`: `fetch`, `normalize`
-- delegates source retrieval downward and aggregates normalized results upward
-
-## Execution Interface
-- `scripts/start.sh`: starts the intake flow
-- `scripts/dryrun.sh`: validates config, inputs, and required paths
-- `scripts/clean.sh`: removes temporary working files
-```
+- Long-form notes and decisions: `dashboard/memory.mdx`
+- Keep `status` in `config.yaml` current throughout execution (phase, progress, next_steps, blockers)

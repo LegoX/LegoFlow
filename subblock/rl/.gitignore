@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Training runtime artifacts (under repos/harbor-verl-train/)
+repos/harbor-verl-train/logs/
+repos/harbor-verl-train/outputs/
+repos/harbor-verl-train/wandb/
+
+# Local state
+*.log
+.DS_Store
+.claude/
