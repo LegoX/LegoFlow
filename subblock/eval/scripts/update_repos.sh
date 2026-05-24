@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Clone or update local-only repos used by trajgen.
+# Clone or update local-only repos used by eval.
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -160,7 +160,7 @@ READONLY="$(cfg meta_info.repositories.harbor.readonly)"
 HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
 mkdir -p "$(dirname "$HARBOR_DIR")"
 
-echo "=== trajgen repo update ==="
+echo "=== eval repo update ==="
 echo "Harbor URL:  $HARBOR_URL"
 echo "Harbor ref:  ${HARBOR_REF:-<none>}"
 echo "Harbor pin:  ${HARBOR_COMMIT:-<none>}"
