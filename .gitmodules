@@ -10,3 +10,6 @@
 [submodule "subblock/sft/repos/LLaMA-Factory"]
 	path = subblock/sft/repos/LLaMA-Factory
 	url = https://github.com/hiyouga/LLaMA-Factory.git
+[submodule "subblock/eval/repos/harbor"]
+	path = subblock/eval/repos/harbor
+	url = git@github.com:SWE-Lego/harbor.git

@@ -1,6 +1,6 @@
 # 训练状态
 
-更新时间: 2026-04-28 02:05:50
+更新时间: 2026-05-21 10:57:09
 
 状态: **已完成**
 
@@ -9,12 +9,12 @@
 | 项目 | 值 |
 |---|---|
 | 基座模型 | Qwen3-8B |
-| 数据集 | jierun_glm5_swerebench_oraclesolved_oh_sdk_test |
+| 数据集 | m_2.7_swerebenchv2-200-260429_cc_test |
 | 模板 | qwen3_nothink |
 | 学习率 | 0.0001 |
 | 训练轮数 | 4.0 |
 | 全局 batch size | 64 (per_device=1 x accum=8 x gpu=8) |
-| 输出目录 | qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think |
+| 输出目录 | qwen3_8b_m_2.7_swerebenchv2-200-260429_cc_test_gbs64pbs1acc8_lr1e-4_epo4_think |
 
 ## 训练进度
 
@@ -25,19 +25,19 @@
 | Epoch | 4.0 |
 | Loss | - |
 | 学习率 | - |
-| 已用时间 | 0:20:03 |
+| 已用时间 | 0:06:09 |
 | 预计剩余 | 0:00:00 |
 
 ## 最终结果
 
 | 指标 | 值 |
 |---|---|
-| 最终 loss | 0.6194439828395844 |
-| 总训练时间 | 0h 20m 3s |
-| 样本吞吐 | 0.199 samples/s |
-| 步数吞吐 | 0.003 steps/s |
+| 最终 loss | 0.9048204869031906 |
+| 总训练时间 | 0h 6m 12s |
+| 样本吞吐 | 0.354 samples/s |
+| 步数吞吐 | 0.011 steps/s |
 | 总 epoch | 4.0 |
 
 ## Loss 曲线
 
-![training_loss](../artifacts/model/qwen3_8b_jierun_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/training_loss.png)
+![training_loss](../artifacts/model/qwen3_8b_m_2.7_swerebenchv2-200-260429_cc_test_gbs64pbs1acc8_lr1e-4_epo4_think/training_loss.png)

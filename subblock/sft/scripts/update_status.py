@@ -8,6 +8,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import sys
 import time
 from datetime import datetime
@@ -17,8 +18,9 @@ import yaml
 
 
 def load_config(block_dir: Path) -> dict:
-    with open(block_dir / "inputs.yaml", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    with open(block_dir / "config.yaml", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    return config["runtime_info"]["input"]
 
 
 def read_last_log_entry(log_path: Path) -> dict | None:
@@ -44,6 +46,19 @@ def read_train_results(output_dir: Path) -> dict | None:
         return json.load(f)
 
 
+def resolve_output_dir(block_dir: Path, output_dir: str) -> Path:
+    path = Path(output_dir)
+    if path.is_absolute():
+        return path
+    return block_dir / "artifacts" / "model" / path.name
+
+
+def atomic_write_text(path: Path, content: str) -> None:
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def fmt_seconds(s):
     if s is None:
         return "-"
@@ -55,6 +70,7 @@ def fmt_seconds(s):
 def generate_status(block_dir: Path) -> str:
     cfg = load_config(block_dir)
     data_name = cfg["conversion"]["data_name"]
+    dataset_name = cfg.get("dataset", {}).get("name") or data_name
     model = Path(cfg["model"]["model_name_or_path"]).name
     output_dir_name = cfg["training"]["output_dir"]
     template = cfg["training"]["template"]
@@ -65,7 +81,7 @@ def generate_status(block_dir: Path) -> str:
     n_gpus = cfg["infrastructure"]["n_gpus_per_node"]
     gbs = batch * accum * n_gpus
 
-    output_dir = block_dir / "artifacts" / "model" / Path(output_dir_name).name
+    output_dir = resolve_output_dir(block_dir, output_dir_name)
     trainer_log = output_dir / "trainer_log.jsonl"
     train_results = read_train_results(output_dir)
     last_entry = read_last_log_entry(trainer_log)
@@ -95,7 +111,9 @@ def generate_status(block_dir: Path) -> str:
     lines.append(f"| 项目 | 值 |")
     lines.append(f"|---|---|")
     lines.append(f"| 基座模型 | {model} |")
-    lines.append(f"| 数据集 | {data_name} |")
+    lines.append(f"| 数据集 | {dataset_name} |")
+    if dataset_name != data_name:
+        lines.append(f"| 数据文件名 | {data_name} |")
     lines.append(f"| 模板 | {template} |")
     lines.append(f"| 学习率 | {lr} |")
     lines.append(f"| 训练轮数 | {epochs} |")
@@ -145,8 +163,12 @@ def generate_status(block_dir: Path) -> str:
     if loss_plot.exists():
         lines.append("## Loss 曲线")
         lines.append("")
-        rel = loss_plot.relative_to(block_dir)
-        lines.append(f"![training_loss](../{rel})")
+        try:
+            rel = loss_plot.relative_to(block_dir)
+            plot_path = f"../{rel}"
+        except ValueError:
+            plot_path = str(loss_plot)
+        lines.append(f"![training_loss]({plot_path})")
         lines.append("")
 
     return "\n".join(lines)
@@ -165,7 +187,7 @@ def main():
     while True:
         try:
             content = generate_status(block)
-            status_path.write_text(content, encoding="utf-8")
+            atomic_write_text(status_path, content)
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Updated {status_path}")
         except Exception as e:
             print(f"WARNING: status update failed: {e}", file=sys.stderr)

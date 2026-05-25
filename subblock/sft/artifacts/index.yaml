@@ -13,6 +13,6 @@ runs:
     metrics: artifacts/files/run_001/metrics.yaml
     log: artifacts/files/run_001/run.log
     detail: >
-      Full fine-tuning of Qwen3-8B on jierun_glm5_swerebench_oraclesolved_oh_sdk_test
+      Full fine-tuning of Qwen3-8B on glm5_swerebench_oraclesolved_oh_sdk_test
       (64 instances, openhands-sdk scaffold). DeepSpeed ZeRO-3, 4 epochs, lr=1e-4,
       gbs=64. Final loss: 0.6194. Runtime: 20m56s.
