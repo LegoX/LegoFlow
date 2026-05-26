@@ -13,7 +13,7 @@ general coding benchmarks) through Harbor against a configurable upstream LLM.
 
 ## What To Read First
 
-1. `config.yaml` — block identity, Harbor config, runtime values, and status
+1. `config.yaml` — block identity, Harbor config, runtime values (one-shot per run; live state in `artifacts/index.yaml`)
 2. `dashboard/overview.mdx` — current state narrative
 
 ## Input/Output Contract

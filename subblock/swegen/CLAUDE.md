@@ -9,7 +9,7 @@ For the canonical definition of a block, the field semantics, and the default di
 ```md
 Name: swegen
 Type: data
-Config: `config.yaml`  (identity, resources, runtime I/O, live status)
+Config: `config.yaml`  (identity, resources, runtime I/O — one-shot per run)
 Main doc: `dashboard/overview.mdx`
 Definition reference: `BLOCK_DEFINITION.md`
 ```
@@ -137,7 +137,7 @@ outputs/              # Merged verified tasks (populated by scripts/extract_veri
 
 | File | Purpose |
 |------|---------|
-| `config.yaml` | Single source of truth: identity, resources, runtime I/O, per-language tunable params, live status (replaces the old `metainfo.yaml`/`inputs.yaml`/`status.yaml`/`outputs.yaml` split). |
+| `config.yaml` | Single source of truth for inputs: identity, resources, runtime I/O, per-language tunable params. One-shot per run — no live state (live state lives in `artifacts/index.yaml`). |
 | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` | Authoritative manifest of validated task IDs per language. Consumers (e.g. trajgen) must filter by this file. |
 | `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/` | Per-batch state JSON used by `swegen create` for resume/dedup. |
 | `scripts/extract_verified_tasks.py` | Optional: merges all verified tasks into a flat `outputs/` directory. |
@@ -186,7 +186,7 @@ echo $TIMEOUT $CC_TIMEOUT $N_CONCURRENT
 
 When updating this block:
 - read `dashboard/overview.mdx` first for current state
-- read `config.yaml` for everything: identity (`meta_info`), resources, runtime I/O (`runtime_info.input`/`output`), live status (`status`), and per-language tunable params (`runtime_info.input.languages.<lang>` and `.global`). The block has consolidated all of its prior yaml split into this single file.
+- read `config.yaml` for inputs: identity (`meta_info`), resources, runtime I/O (`runtime_info.input`/`output`), and per-language tunable params (`runtime_info.input.languages.<lang>` and `.global`). `config.yaml` is one-shot per run — for live state look at `artifacts/index.yaml`.
 - treat `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` as the authoritative output manifest — never have downstream blocks read raw task dirs without filtering through it
 - after every run, archive params, metrics, inputs, and log into `artifacts/archives/run_NNN/` and append to `artifacts/index.yaml`
 - use `dashboard/memory.mdx` (or `memory/`) for long-form context, experiment logs, and decisions

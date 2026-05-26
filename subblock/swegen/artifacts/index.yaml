@@ -1,26 +1,41 @@
 version: 1
-
-# Index of all experiment runs. Agent appends an entry after each run completes.
 runs:
-  - id: run_001
-    started_at: "2026-05-07T20:23:47Z"
-    completed_at: "2026-05-09T17:29:07Z"
-    status: completed
-    notes: "Python batch (67517 PRs). 3 verified tasks: agentscope-ai__agentscope-885, agentscope-ai__agentscope-1342, aider-ai__aider-4146. 62885 failed due to GitHub API rate limiting (infra_error)."
-
-  - id: run_002
-    started_at: "2026-05-10T12:09:00Z"
-    completed_at: null
-    status: abandoned
-    notes: "Generating 40 NEW tasks from infra-retry PRs (62885 PRs that failed due to rate limiting in run_001). Skipping pre-existing 3. Using --skip-pr-files to exclude them from count. See artifacts/task_manifest.yaml for task origin tracking. Marked abandoned 2026-05-21: artifacts wiped before bootstrap; never produced an archive."
-    input_file: artifacts/collected_prs/python_infra_retry.txt
-    log: artifacts/logs/swegen-create/cc_py_retry_40.txt
-    manifest: artifacts/task_manifest.yaml
-
-  - id: run_003
-    started_at: "2026-05-21T04:11:00+08:00"
-    completed_at: "2026-05-21T07:10:00+08:00"
-    status: blocked
-    notes: "Halted by monitor after 65 task dirs, 0 verified. Two fixes shipped in-flight (added `import re` to task_instruction.py; corrected model name openai/MiniMax-M2.7 → MiniMax-M2.7). Then hit hard blocker: Claude Code CLI v2.1.145 refuses --dangerously-skip-permissions as root. Cannot bypass autonomously. See config.yaml status.blockers for resolution options. swegen-py tmux preserved at bash prompt."
-    input_file: artifacts/collected_prs/python_pr_ids.txt
-    log: artifacts/logs/swegen-create/cc_py_March.txt
+- id: run_001
+  started_at: '2026-05-07T20:23:47Z'
+  completed_at: '2026-05-09T17:29:07Z'
+  status: completed
+  notes: 'Python batch (67517 PRs). 3 verified tasks: agentscope-ai__agentscope-885,
+    agentscope-ai__agentscope-1342, aider-ai__aider-4146. 62885 failed due to GitHub
+    API rate limiting (infra_error).'
+- id: run_002
+  started_at: '2026-05-10T12:09:00Z'
+  completed_at: null
+  status: abandoned
+  notes: 'Generating 40 NEW tasks from infra-retry PRs (62885 PRs that failed due
+    to rate limiting in run_001). Skipping pre-existing 3. Using --skip-pr-files to
+    exclude them from count. See artifacts/task_manifest.yaml for task origin tracking.
+    Marked abandoned 2026-05-21: artifacts wiped before bootstrap; never produced
+    an archive.'
+  input_file: artifacts/collected_prs/python_infra_retry.txt
+  log: artifacts/logs/swegen-create/cc_py_retry_40.txt
+  manifest: artifacts/task_manifest.yaml
+- id: run_003
+  started_at: '2026-05-21T04:11:00+08:00'
+  completed_at: '2026-05-21T07:10:00+08:00'
+  status: blocked
+  notes: 'Halted by monitor after 65 task dirs, 0 verified. Two fixes shipped in-flight
+    (added `import re` to task_instruction.py; corrected model name openai/MiniMax-M2.7
+    → MiniMax-M2.7). Then hit hard blocker: Claude Code CLI v2.1.145 refuses --dangerously-skip-permissions
+    as root. Cannot bypass autonomously. See config.yaml status.blockers for resolution
+    options. swegen-py tmux preserved at bash prompt.'
+  input_file: artifacts/collected_prs/python_pr_ids.txt
+  log: artifacts/logs/swegen-create/cc_py_March.txt
+- id: run_004
+  started_at: '2026-05-25T00:00:00Z'
+  completed_at: null
+  status: running
+  notes: 'haoli/dev branch, executed as non-root user haoli (resolves prior run_003
+    CC-SDK-root blocker). Target: 16 verified py tasks; orchestrator tmux session
+    will auto-fire trajgen on threshold.'
+  input_file: artifacts/collected_prs/python_pr_ids.txt
+  log: artifacts/logs/swegen-create/cc_py_March.txt

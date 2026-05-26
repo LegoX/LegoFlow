@@ -1,31 +1,69 @@
 ---
 name: run
 description: >
-  Preflight and execute the block in the current working directory. Reads the bundled BLOCK_DEFINITION.md to recall the contract, then validates that the block in CWD is ready to run — config.yaml is well-formed, every runtime_info.input is filled, every inter-block dependency declared in meta_info.subblocks[].dependencies resolves to a non-null output of the named sibling block, repos under repos/ are present and at their pinned commits, the environment (venv_path) exists, and scripts/start.sh is present and executable. Only if all checks pass does it run scripts/start.sh — locally, or inside a tmux+SSH session if meta_info.resources.ip is set. After execution, it archives the run per the BLOCK_DEFINITION rule and updates status. Triggers on phrases like "run this block", "execute the block", "kick off start.sh", "fire the block", "run /block:run".
+  Preflight and execute the block in the current working directory. Reads the bundled BLOCK_DEFINITION.md to recall the contract, then validates that the block in CWD is ready to run — config.yaml is well-formed, every runtime_info.input is filled, every inter-block dependency declared in meta_info.subblocks[].dependencies resolves to a non-null output of the named sibling block, repos under repos/ are present and at their pinned commits, the environment (venv_path) exists, and scripts/start.sh is present and executable. Only if all checks pass does it run scripts/start.sh — locally, or inside a tmux+SSH session if meta_info.resources.ip is set. Each run is archived automatically by scripts/archive_run.sh (installed by start.sh's EXIT trap). Triggers on phrases like "run this block", "execute the block", "kick off start.sh", "fire the block", "run /block:run".
 ---
 
 # /block:run
 
-Preflight the block in the **current working directory**, then execute `scripts/start.sh`. Refuse to execute if any prerequisite is missing — a missing input is the user's signal to fill it, never a signal to invent a value.
+Preflight the target block, then execute its `scripts/start.sh`. Refuse to execute if any prerequisite is missing — a missing input is the user's signal to fill it, never a signal to invent a value.
+
+## Arguments
+
+The args string is free-form natural language (may be empty). The agent reads the whole string holistically — no token parsing — to decide **which block to run** and **what (if anything) to change** beforehand.
+
+### Target resolution
+
+List `./subblock/` to get the set of valid block names, then read the args string and decide:
+
+- **Single block clearly identified** (literal name or unambiguous paraphrase — consult each block's `CLAUDE.md` when the user uses a description) → `TARGET_DIR=./subblock/<name>/`.
+- **Multiple blocks mentioned, or genuinely ambiguous** → ask the user which one. Do not guess.
+- **No block mentioned** (empty, generic, or refers to the whole pipeline) → `TARGET_DIR=CWD` (the root). The root may lack its own `config.yaml`; treat that as a warning, not an abort.
+- **Block inferred but `./subblock/<name>/` doesn't exist** → abort with the actual `./subblock/` listing and ask the user to pick. Never fall back to root silently.
+
+### Confirmation
+
+- Args empty, or names a block with no extra instruction → run directly.
+- Instruction implies a config edit or flag injection → propose the concrete change (file path, old → new value, or flag to inject) and confirm before applying.
+- Ambiguous target → ask before proceeding.
+
+Never silently mutate `runtime_info` or `meta_info` fields. A user instruction is permission to *propose*, not to act unilaterally.
+
+### Examples
+
+| Args | Target | Behavior |
+| ---- | ------ | -------- |
+| *(empty)* | root | run root `start.sh` directly |
+| `swegen` | swegen | run directly |
+| `swegen only 32 verified tasks` | swegen | propose config/flag change, confirm, run |
+| `run swegen with 32 tasks` | swegen | same — name embedded in text |
+| `run the trajectory generator` | trajgen | resolved via paraphrase + `CLAUDE.md` |
+| `run swegen and trajgen` | ambiguous | ask which block |
+| `start the data pipeline` | root | run root `start.sh` directly |
+| `run frobnicator` | abort | print valid list, ask user to pick |
+
+Every step below operates on `TARGET_DIR`. Where the rest of this document says "this block" or "CWD", read it as `TARGET_DIR`.
 
 ## Step 0 — Orient
 
 Read `references/BLOCK_DEFINITION.md` bundled in this plugin (sibling of the `skills/` folder containing this file). It is the contract. Pay particular attention to:
 
-- The `meta_info` / `runtime_info` / `status` / `evolving` schema.
+- The `meta_info` / `runtime_info` / `evolving` schema (config.yaml is one-shot per run — no live status field).
 - The **wiring rule**: inter-block values live only in `meta_info.subblocks[<child>].dependencies` (formatted `<source_block>.output.<key>` or the literal `human`), never in `runtime_info.input`. `runtime_info.input` is exclusively for values that originate **outside** the block tree (API keys, external dataset paths, human decisions).
 - The **remote-execution rule**: if `meta_info.resources.ip` is set, the block must be executed inside a tmux session on that remote node, reached over SSH. Never run a remote-resource block locally.
 - The **archiving rule**: after each run, create `artifacts/archives/run_NNN/` with `metadata.yaml`, snapshot `config.yaml`, snapshot `scripts/`, snapshot `repo/`, `session.log`, `monitor.md`; then append one entry to `artifacts/index.yaml` with `archive: artifacts/archives/run_NNN/`.
 
 ## Step 1 — Load this block
 
-The "current block" is the current working directory. Read, in order:
+The "current block" is `TARGET_DIR` (CWD when `block_name` is unset; `./subblock/<block_name>/` when set). Read, in order:
 
-1. `./config.yaml` — if missing, abort: "This directory is not a block (no `config.yaml`). Run `/block:create` to scaffold one first."
-2. `./CLAUDE.md` — read it; honor any block-specific rules it states.
-3. `./dashboard/overview.mdx` — useful context, not load-bearing.
+1. `<TARGET_DIR>/config.yaml`:
+   - If `block_name` is **set**, this file is required — abort with "Missing `config.yaml` under `subblock/<block_name>/`." if absent.
+   - If `block_name` is **unset** (root mode) and the file is absent, that's the SWE-Lego-Live coordinator pattern: skip config-driven preflight (Step 3 checks #3–#7 are scoped to subblocks via their own configs) and proceed. Emit a warning so the user knows the root config is missing intentionally.
+2. `<TARGET_DIR>/CLAUDE.md` — read it; honor any block-specific rules it states.
+3. `<TARGET_DIR>/dashboard/overview.mdx` — useful context, not load-bearing.
 
-Note that if you cannot find these files, go back to user and ask him to double check if this is really a block.
+If `config.yaml` is required but absent (subblock target), go back to user and ask them to double check this really is a block.
 
 ## Step 2 — Load subblocks
 
@@ -33,7 +71,7 @@ For each `name` listed under `meta_info.subblocks` in `./config.yaml`, read `./s
 
 ```
 <name> -> {
-  status: <child status.phase>,
+  latest_run: <newest entry in subblock/<name>/artifacts/index.yaml, or null>,
   output: <child runtime_info.output, may have null values>
 }
 ```
@@ -54,25 +92,11 @@ Walk through every check below. Collect failures. Only after the full pass, deci
 | 6 | If `meta_info.environment.venv_path` is set: that path exists on the host that will run the script (local for local execution; the remote node for remote). | "Virtual env `<path>` not found." |
 | 7 | If `meta_info.resources.ip` is set: `ssh -o BatchMode=yes -o ConnectTimeout=5 <ip> true` succeeds. Also, before executing, ask the user once: "Code at `<directory>` on remote — already in sync, or should I rsync the current tree first?" (per BLOCK_DEFINITION's remote-execution rule). | "Cannot SSH to `<ip>`." |
 
-If any check fails, print all failures in one message, do **not** flip `status.phase`, and stop. Do **not** invent values or skip checks just because the user said "just run it" — they need to know what is missing.
+If any check fails, print all failures in one message and stop. Do **not** invent values or skip checks just because the user said "just run it" — they need to know what is missing.
 
-## Step 4 — Stamp running state
+## Step 4 — Execute `scripts/start.sh`
 
-If all checks pass:
-
-1. Determine the next run id: scan `artifacts/index.yaml` for the highest `run_NNN`, use the next zero-padded id (e.g. `run_003`).
-2. In `./config.yaml`: set `status.phase: running`, `status.last_updated: <today ISO date>`, `status.progress: "<run_NNN> in flight"`, `status.blockers: null`.
-3. Append a starting entry to `artifacts/index.yaml`:
-   ```yaml
-   - id: run_NNN
-     started_at: "<UTC now ISO>"
-     status: running
-     notes: "<one-line summary of what this run is testing — derive from status.progress or ask the user briefly if non-obvious>"
-   ```
-
-## Step 5 — Execute `scripts/start.sh`
-
-- **Local execution** (no `meta_info.resources.ip`): run `bash ./scripts/start.sh` from CWD, streaming stdout/stderr. Capture the full session into a temporary log file you will later move into the archive as `session.log`.
+- **Local execution** (no `meta_info.resources.ip`): `cd <TARGET_DIR>` then run `bash ./scripts/start.sh`, streaming stdout/stderr. Optionally capture the session to a file you'd move into the archive as `session.log`.
 - **Remote execution** (`meta_info.resources.ip` is set):
   1. Open a local tmux window named after this block (`tmux new-window -n <meta_info.name>`).
   2. Inside it, `ssh <resources.ip>` (using credentials from `resources.pwd` per the contract).
@@ -80,22 +104,23 @@ If all checks pass:
   4. Inside that remote tmux session, `cd <resources.directory>` then `bash ./scripts/start.sh`.
   5. Do **not** execute `start.sh` on the local host.
 
-Keep `status.progress` in `./config.yaml` updated with meaningful milestones if the script exposes them (e.g. stage names in its output).
+`config.yaml` is **one-shot per run**: do not edit it during the run to track progress. Live state belongs in `artifacts/index.yaml`.
 
-## Step 6 — Archive on completion
+## Step 5 — Archive (mostly automatic)
 
-When `start.sh` exits, regardless of exit code:
+Each block's `start.sh` installs an EXIT trap that invokes `scripts/archive_run.sh`. When the run exits (success, error, SIGINT, SIGTERM) the helper automatically:
 
-1. Create `./artifacts/archives/run_NNN/`.
-2. Write `metadata.yaml` with: `id`, `started_at`, `completed_at`, `status` (`completed` if exit 0 else `failed`), `exit_code`, copy of `runtime_info.input` at run time, and for each entry in `meta_info.repos` the resolved commit id.
-3. Snapshot `./config.yaml` to `archives/run_NNN/config.yaml`.
-4. Copy `./scripts/` to `archives/run_NNN/scripts/`.
-5. Snapshot the repo state to `archives/run_NNN/repo/` — for submodules, a `commit_id.txt` per repo is sufficient if a full copy is wasteful; the BLOCK_DEFINITION allows reference-by-commit.
-6. Move the captured execution log to `archives/run_NNN/session.log`.
-7. Create `archives/run_NNN/monitor.md` as a brief human-readable narrative of what happened (one or two paragraphs).
-8. Update the matching entry in `./artifacts/index.yaml`: set `completed_at`, `status` (`completed` / `failed`), add `archive: artifacts/archives/run_NNN/`, and refine `notes`.
-9. Update `./config.yaml`: `status.phase` to `done` (on success) or `failed` (on non-zero exit), `status.progress: null`, `status.next_steps` set appropriately (e.g. "Inspect `artifacts/archives/run_NNN/`."), `status.blockers` set to the failure cause if any, `status.last_updated` to now.
+- creates `artifacts/archives/run_NNN/` with `metadata.yaml` (id, block, timestamps, status, exit_code, repo SHAs), a snapshot of `config.yaml`, and a snapshot of `scripts/`;
+- appends one entry to `artifacts/index.yaml` with the new run id, timestamps, status, and archive path.
 
-## Step 7 — Report
+The only post-run steps for the agent are optional and additive:
 
-Print a short summary (under 12 lines): run id, duration, exit status, archive path, the block's new `status.phase`, and either the produced outputs (from `runtime_info.output` if `start.sh` updated them) or the failure cause.
+1. Drop a captured `session.log` into `artifacts/archives/run_NNN/` if you streamed one in Step 4.
+2. Optionally write `artifacts/archives/run_NNN/monitor.md` as a 1–2 paragraph human-readable narrative of what happened.
+3. Optionally refine the `notes` field of the new `artifacts/index.yaml` entry.
+
+Do **not** edit `config.yaml` after the run to record what happened — the archive already does that.
+
+## Step 6 — Report
+
+Print a short summary (under 10 lines): run id, duration, exit status, archive path, and either the produced outputs (from `runtime_info.output` if `start.sh` updated them) or the failure cause. The live state is whatever the newest `artifacts/index.yaml` entry says.

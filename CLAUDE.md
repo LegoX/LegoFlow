@@ -33,13 +33,11 @@ runtime_info:
   input: {}          # ONLY external values (API keys, human decisions)
   output: {}         # values produced for downstream blocks
 
-status:
-  phase:             # idle | running | done | blocked
-  progress, next_steps, blockers, last_updated
-
 evolving:
   tunable_params: {} # auto-tuned parameters with bounds
 ```
+
+`config.yaml` is **one-shot per run**: every key is configuration. Live state (running / completed / failed) lives in `artifacts/index.yaml` (written automatically by `scripts/archive_run.sh`'s EXIT trap), not in `config.yaml`.
 
 **Wiring rule**: inter-block values go in `meta_info.subblocks[].dependencies`, never in `runtime_info.input`. Only values originating outside the block tree go in `runtime_info.input`.
 
@@ -58,7 +56,7 @@ If — and only if — `meta_info.resources.ip` is set to a real remote IP, the 
 ## What To Read First
 
 1. `dashboard/overview.mdx` — current state narrative and new-user quickstart
-2. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, runtime values, and live status of the two active subblocks
+2. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, and runtime values of the two active subblocks. Live state is in each subblock's `artifacts/index.yaml`, not `config.yaml`.
 3. `BLOCK_DEFINITION.md` — full block system specification
 
 The root block has no `config.yaml` of its own; inputs and outputs are owned by the subblock configs listed below. Each subblock has its own `CLAUDE.md` agent contract.
@@ -125,7 +123,7 @@ Append one entry to `artifacts/index.yaml`:
   notes: "one-line summary"
 ```
 
-## Memory and Status
+## Memory and Live State
 
 - Long-form notes and decisions: `dashboard/memory.mdx`
-- Keep `status` in `config.yaml` current throughout execution (phase, progress, next_steps, blockers)
+- Live state (what's running, what just finished): the newest entry in each subblock's `artifacts/index.yaml`, written automatically by `scripts/archive_run.sh` (invoked from `start.sh`'s EXIT trap). `config.yaml` is one-shot per run and is not edited during execution.

@@ -83,7 +83,7 @@ runtime_info:
       # scripts/start.sh exports this as TRAJGEN_HARBOR_JOBS_DIR.
       jobs_dir: artifacts/jobs
       n_concurrent: 8
-      n_tasks: 32                     # cap per swegen→trajgen run target (set to 1 for smoke tests, null for all manifest tasks)
+      n_tasks: 16                     # cap per swegen→trajgen run target (set to 1 for smoke tests, null for all manifest tasks)
       max_retries: 2
       timeout_multiplier: 2
 
@@ -107,26 +107,6 @@ environment:
     # Tasks excluded from trajgen runs: prior failures (timeout/OOM) + tasks already
     # consumed per artifacts/consumption_ledger.yaml (status: done | skipped).
     HARBOR_EXCLUDE_TASKS: elastic__elasticsearch-py-3329 elastic__elasticsearch-py-3332 cartography-cncf__cartography-1673 agentscope-ai__agentscope-885 agentscope-ai__agentscope-1342 aider-ai__aider-4146 agentscope-ai__agentscope-964 django-guardian__django-guardian-677 567-labs__instructor-1897 cartography-cncf__cartography-1751 cartography-cncf__cartography-2031
-
-status:
-  phase: idle
-  progress: null
-  next_steps: |
-    1. Wait for swegen verifiable_tasks.txt to reach 32 IDs.
-    2. Then run /block:run (root) to fire trajgen; prepare_tasks.sh will filter via the manifest.
-  blockers: null
-  last_updated: "2026-05-21T00:00:00Z"
-  reset_note: "2026-05-21: phase was stale 'running' from a 2026-05-14 job (artifacts/jobs/ no longer on disk). Reset to idle prior to fresh bootstrap. task_source rewired from HuggingFace to local swegen output, n_tasks capped at 32."
-  current_job:
-    name: swerebenchv2-200-260429-custom-claude-code-2.1.118-MiniMax-M2.7-20260513230507
-    started_at: "2026-05-13T23:06:02Z"
-    stopped_at: "2026-05-14T10:16:44Z"
-    detail: "200 tasks from HF dataset swerebenchv2-200-260429 (8 concurrent). 29 passed, 171 failed, 22 errors."
-  metrics:
-    tasks_attempted: 200
-    real_trajectories: 200
-    quota_failed: 22
-    unit_test_passes: 29
 
 evolving:
   description: Generates agent trajectories using Harbor. Tunable parameters include agent sampling settings, Harbor concurrency, and timeout multipliers.

@@ -17,6 +17,15 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SWEGEN_CFG="$ROOT_DIR/subblock/swegen/config.yaml"
 
+# Archive this run when start.sh exits (success, error, or signal).
+RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+_archive_run_on_exit() {
+    local rc=$?
+    bash "$(dirname "${BASH_SOURCE[0]}")/archive_run.sh" "$rc" "$RUN_STARTED_AT" || true
+    exit $rc
+}
+trap _archive_run_on_exit EXIT
+
 START_SWEGEN=1
 START_TRAJGEN=1
 DO_SYNC=1

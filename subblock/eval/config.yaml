@@ -150,21 +150,6 @@ environment:
     # LITELLM_STICKY_ROUTING_ALIASES without a default when CONFIG_NAME != "litellm_config".
     LITELLM_STICKY_ROUTING_ALIASES: ""
 
-status:
-  phase: idle
-  progress: ""
-  next_steps: |
-    1. Run bash scripts/update_repos.sh to clone repos/harbor at the pinned commit.
-    2. Run bash scripts/dryrun.sh to validate config and environments.
-    3. Run bash scripts/start.sh to launch the evaluation Harbor job.
-  blockers: ""
-  last_updated: "2026-05-18T00:00:00Z"
-  current_job: null
-  metrics:
-    tasks_attempted: 0
-    tasks_passed: 0
-    tasks_failed: 0
-
 evolving:
   description: Runs evaluation benchmarks via Harbor. Tunable parameters mirror trajgen (agent sampling, concurrency, timeouts) but selection of benchmark is the primary lever.
   tunable_params:
