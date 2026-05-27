@@ -183,6 +183,78 @@ python3 -c "import ray; ray.init(address='auto', ignore_reinit_error=True); \
 | `CUDA error: an illegal memory access` at first forward pass | `vllm.gen_tp` does not divide `num_key_value_heads` — re-run `dryrun.sh` |
 | LiteLLM started but `claude-code` returns 404 | model name mismatch — proxy serves `claude-*`, `hosted_vllm/<served>`, and `<served>` aliases |
 
+## Training Dashboard (Optional)
+
+A web-based monitoring dashboard for visualizing training metrics, browsing
+agent trajectories, comparing runs, and generating AI analysis reports.
+Launching it is **optional** — training works without it.
+
+### Quick Start
+
+```bash
+cd repos/harbor-verl-train/webui
+
+# 1. Install dependencies (first time only)
+npm install
+
+# 2. Build frontend
+npx vite build
+
+# 3. Start server
+python3 server.py \
+  --log-dir ../logs \
+  --extra-log-dir /path/to/other/logs \
+  --static-dir dist \
+  --port 8090
+```
+
+Then open `http://<host-ip>:8090` in a browser.
+
+### Background Mode
+
+```bash
+nohup python3 server.py \
+  --log-dir ../logs \
+  --static-dir dist \
+  --port 8090 \
+  > /tmp/dashboard_server.log 2>&1 &
+```
+
+### Server Options
+
+| Flag | Purpose | Default |
+|------|---------|---------|
+| `--log-dir` | Primary log directory (scans `.log`/`.out` files as runs) | `../logs` (auto-detected) |
+| `--extra-log-dir` | Additional log directories (repeatable) | — |
+| `--static-dir` | Frontend build output | `dist` (auto-detected) |
+| `--port` | Listen port | `8080` |
+| `--wandb-entity` | WandB entity for fetching runs | `$WANDB_ENTITY` |
+| `--wandb-project` | WandB project name | `swe-lego-live-rl` |
+| `--wandb-api-key` | WandB API key | `$WANDB_API_KEY` |
+
+### Features
+
+- **Overview / Rewards / Policy / Agent Loop / Sequences / Performance /
+  Validation / Stability** — real-time metric charts with smoothing, auto-fit
+  Y-axis, and PNG/CSV export per chart
+- **Compare** — multi-select runs, overlay metrics on the same charts
+- **Trajectory Viewer** — browse agent ReAct trajectories by step/task, view
+  system prompt and problem statement, download single or bulk trajectories
+- **AI Analysis** — generate LLM-powered diagnostic reports (requires an
+  external API key configured in Settings); supports custom analysis
+  directions
+- **Logs** — live log tailing with search/filter
+- **i18n** — Chinese/English toggle (auto-detects browser language)
+
+### Notes
+
+- The dashboard reads log files and `harbor_trials/` directories
+  **read-only** — it never modifies training state.
+- The `dist/` directory is gitignored; you must run `npx vite build` after
+  cloning or updating frontend source.
+- For AI Analysis, configure an LLM API profile in the Settings panel
+  (API key stays in browser localStorage, never stored on server).
+
 ## Artifact Archiving
 
 Per-run outputs land at:
