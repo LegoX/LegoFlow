@@ -1,7 +1,8 @@
 # rl
 
 Online RL training pipeline for SWE-bench coding agents (claude-code agent +
-Harbor k8s sandbox + verl trainer/rollout).
+Harbor sandbox + verl trainer/rollout). Supports K8s (production) and Docker
+(minimal / lightweight) as the sandbox backend.
 
 ## Block Identity
 
@@ -19,15 +20,15 @@ Harbor k8s sandbox + verl trainer/rollout).
 ## Architecture
 
 ```
-claude-code (in k8s pod, mounted runtime image)
+claude-code (in k8s pod or docker container, mounted runtime image)
   → LiteLLM proxy on training host :8002 (Anthropic API surface,
     trajectory_logger callback writes per-trial JSONL)
     → vLLM (verl-managed, DP×TP, OpenAI API surface)
 ```
 
-verl drives the training loop and Harbor executes each trial in a fresh k8s
-pod. The verifier inside the pod produces the reward signal that verl uses
-for PPO/GRPO/GSPO updates.
+verl drives the training loop and Harbor executes each trial in a fresh
+sandbox (K8s pod or Docker container). The verifier inside the sandbox
+produces the reward signal that verl uses for PPO/GRPO/GSPO updates.
 
 ## Repos (submodules under `repos/`)
 
@@ -52,7 +53,7 @@ is missing.
 To reuse an existing venv (e.g. a sibling block already bootstrapped one), set
 `runtime_info.input.environment.venv_path` in `config.yaml` to that venv's
 absolute path. The wrapper exports `VENV_PATH` and the upstream
-`sync_1nodes_cc.sh` sources `$VENV_PATH/bin/activate` instead of bootstrapping.
+`sync_1node_cc.sh` sources `$VENV_PATH/bin/activate` instead of bootstrapping.
 
 > WARNING: the venv must have **harbor / verl / harbor-verl-train installed
 > editable from the same source trees you intend to run**. A venv whose editable
@@ -66,17 +67,67 @@ All knobs live in `config.yaml`. Two tiers:
 
 | Tier | Sections | Plumbed via |
 |---|---|---|
-| **Env-driven** (live) | `model`, `data`, `infrastructure`, `environment`, `k8s`, `harbor_agent`, `harbor_runtime`, `experiment`, `credentials` | `scripts/train_1node_cc.sh` exports them as env vars consumed by `sync_1nodes_cc.sh` and forwarded into the Ray runtime env |
-| **Upstream-fixed** (documentation only) | `vllm`, `training`, `algorithm` | hardcoded in `repos/harbor-verl-train/scripts/sync_1nodes_cc.sh`. To change, edit the upstream script (or fork it) — they are mirrored here so this file documents the live state. |
+| **Env-driven** (live) | `model`, `data`, `infrastructure`, `environment`, `k8s`, `harbor_agent`, `harbor_runtime`, `experiment`, `credentials` | `scripts/train_1node_cc.sh` exports them as env vars consumed by `sync_1node_cc.sh` and forwarded into the Ray runtime env |
+| **Upstream-fixed** (documentation only) | `vllm`, `training`, `algorithm` | hardcoded in `repos/harbor-verl-train/scripts/sync_1node_cc.sh`. To change, edit the upstream script (or fork it) — they are mirrored here so this file documents the live state. |
 
 ### Common edits
 
 - **Switch model**: `runtime_info.input.model.model_path` (re-check `vllm.gen_tp` divides `num_key_value_heads` — `dryrun.sh` validates this).
 - **Different k8s cluster**: `runtime_info.input.k8s.kubeconfig`.
+- **Switch to Docker mode**: see [Docker Mode](#docker-mode-minimal-setup) below.
 - **Reuse a prebuilt venv**: `runtime_info.input.environment.venv_path` (skips `setup_env.sh`; see Environment section above for the editable-install gotcha).
 - **Bump parallelism**: `harbor_runtime.num_workers` (16 cold-start; 32–96 steady).
 - **Enable tail-killer**: `harbor_runtime.tail_kill_target=0.95` (kills slowest 5% per step after `tail_kill_grace_sec=180`).
 - **wandb**: NEVER hardcode the key in `config.yaml` — keep `credentials.wandb_api_key: ""` and `export WANDB_API_KEY=...` in your shell before launch (or set `wandb_mode: disabled` to opt out). `dryrun.sh` checks both sources.
+
+### Docker Mode (Minimal Setup)
+
+Docker mode is the lightweight alternative to K8s — no cluster or kubeconfig
+required. Each Harbor trial runs in a local (or remote) Docker container
+instead of a K8s pod.
+
+**Local Docker** (simplest — just needs `docker` on the training host):
+
+```yaml
+harbor_agent:
+  environment_import_path: harbor.environments.docker.docker:DockerEnvironment
+  environment_force_build: true
+  docker_host: ""
+```
+
+`docker_host: ""` means the wrapper does NOT export `DOCKER_HOST` at all.
+Docker SDK then defaults to `unix:///var/run/docker.sock` (the local daemon
+socket). You can also set it explicitly:
+`docker_host: "unix:///var/run/docker.sock"`.
+
+**Remote Docker** (sandbox runs on a separate machine):
+
+```yaml
+harbor_agent:
+  environment_import_path: harbor_patch.environments.remote_docker:RemoteDockerEnvironment
+  environment_force_build: true
+  docker_host: "tcp://192.168.35.240:2376"   # replace with your Docker host
+```
+
+> **Security**: `tcp://<ip>:2375` is the unencrypted Docker daemon port —
+> anyone who can reach it has equivalent root access to that host. For
+> production/shared environments use TLS (`tcp://<ip>:2376` with
+> `dockerd --tlsverify`). Port 2375 is acceptable only for isolated test
+> networks.
+
+Other fields (`environment_delete`, `environment_override_cpus`,
+`environment_override_memory_mb`) work the same in both modes.  The `k8s`
+section in `config.yaml` is ignored when using Docker.
+
+> **Dependency**: Docker mode requires the Python `docker` SDK installed in
+> the venv (`uv pip install --python $VENV/bin/python docker`). Harbor uses
+> `docker.DockerClient` to manage containers — the `docker` CLI is not
+> sufficient. Watch for namespace shadowing: if a repo on `sys.path` has a
+> `docker/` directory (e.g. `verl/docker/`), it can mask the real SDK.
+> Verify with: `$VENV/bin/python -c "from docker import DockerClient; print('ok')"`
+
+`dryrun.sh` auto-detects the mode and validates accordingly (docker CLI for
+local, TCP connectivity for remote).
 
 ## Execution
 
@@ -97,7 +148,7 @@ bash scripts/clean.sh --logs --pods  # also wipe logs and orphan k8s pods
 
 `scripts/start.sh` auto-runs `setup_env.sh` if `.venv` is missing, then execs
 `scripts/train_1node_cc.sh`, which is a thin wrapper that reads `config.yaml`
-and execs `repos/harbor-verl-train/scripts/sync_1nodes_cc.sh`.
+and execs `repos/harbor-verl-train/scripts/sync_1node_cc.sh`.
 
 ## Health Checks (during a run)
 

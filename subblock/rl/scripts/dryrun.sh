@@ -42,19 +42,69 @@ check "harbor"            "$BLOCK_DIR/repos/harbor"
 check "verl"              "$BLOCK_DIR/repos/verl"
 
 echo "[rl/dryrun] Upstream launch script..."
-check "sync_1nodes_cc.sh" "$REPO/scripts/sync_1nodes_cc.sh"
+check "sync_1node_cc.sh" "$REPO/scripts/sync_1node_cc.sh"
 check "verl_patch config" "$REPO/src/verl_patch/config/harbor_verl_sync.yaml"
 check "agent_loop_config_cc" "$REPO/src/verl_patch/config/agent_loop_config_cc.yaml"
 
 echo "[rl/dryrun] Python venv..."
-check ".venv/bin/python" "$REPO/.venv/bin/python"
+VENV_FROM_CFG="$(abspath "$(cfg runtime_info.input.environment.venv_path)")"
+if [[ -n "$VENV_FROM_CFG" ]]; then
+    VENV_PATH="$VENV_FROM_CFG"
+    VENV_MODE="custom"
+else
+    VENV_PATH="$REPO/.venv"
+    VENV_MODE="default"
+fi
+check "venv/bin/python ($VENV_MODE)" "$VENV_PATH/bin/python"
 
 echo "[rl/dryrun] Input paths from config.yaml..."
 check "model_path"            "$(abspath "$(cfg runtime_info.input.model.model_path)")"
 check "train_index"           "$(abspath "$(cfg runtime_info.input.data.train_index)")"
 check "val_index"             "$(abspath "$(cfg runtime_info.input.data.val_index)")"
-check "k8s.kubeconfig"        "$(abspath "$(cfg runtime_info.input.k8s.kubeconfig)")"
 check "trajectory_logger_src" "$(abspath "$(cfg runtime_info.input.experiment.trajectory_logger_src)")"
+
+ENV_IMPORT="$(cfg runtime_info.input.harbor_agent.environment_import_path)"
+DOCKER_HOST_CFG="$(cfg runtime_info.input.harbor_agent.docker_host)"
+
+if [[ "$ENV_IMPORT" == *"docker"* ]]; then
+    echo "[rl/dryrun] Environment: Docker mode"
+    if [[ "$DOCKER_HOST_CFG" == tcp://* ]]; then
+        echo "  REMOTE   docker_host=$DOCKER_HOST_CFG"
+        DOCKER_IP=$(echo "$DOCKER_HOST_CFG" | sed -E 's|^tcp://||; s|:.*||')
+        DOCKER_PORT=$(echo "$DOCKER_HOST_CFG" | sed -E 's|.*:||')
+        if [[ "$DOCKER_PORT" == "2375" ]]; then
+            echo "  WARN     port 2375 is unencrypted (root-equivalent). Consider TLS on :2376."
+        fi
+        if timeout 2 bash -c "echo >/dev/tcp/$DOCKER_IP/$DOCKER_PORT" 2>/dev/null; then
+            echo "  OK       remote Docker daemon reachable"; ok=$((ok+1))
+        else
+            echo "  MISSING  cannot reach $DOCKER_HOST_CFG (firewall or daemon not running)"; missing=$((missing+1))
+        fi
+    elif [[ "$DOCKER_HOST_CFG" == unix://* ]]; then
+        SOCK="${DOCKER_HOST_CFG#unix://}"
+        echo "  LOCAL    docker_host=$DOCKER_HOST_CFG"
+        if [[ -S "$SOCK" ]]; then
+            echo "  OK       socket exists: $SOCK"; ok=$((ok+1))
+        else
+            echo "  MISSING  socket not found: $SOCK"; missing=$((missing+1))
+        fi
+    else
+        # Empty or unrecognized → local Docker daemon via default socket
+        echo "  LOCAL    docker_host is empty — Docker defaults to unix:///var/run/docker.sock"
+        if command -v docker >/dev/null 2>&1; then
+            if docker info >/dev/null 2>&1; then
+                echo "  OK       docker daemon is running"; ok=$((ok+1))
+            else
+                echo "  MISSING  docker daemon not running (try: systemctl start docker)"; missing=$((missing+1))
+            fi
+        else
+            echo "  MISSING  docker CLI not found"; missing=$((missing+1))
+        fi
+    fi
+else
+    echo "[rl/dryrun] Environment: K8s mode"
+    check "k8s.kubeconfig"    "$(abspath "$(cfg runtime_info.input.k8s.kubeconfig)")"
+fi
 
 echo "[rl/dryrun] WANDB_API_KEY..."
 WANDB_FROM_CFG="$(cfg runtime_info.input.credentials.wandb_api_key)"
@@ -88,6 +138,25 @@ if [[ -f "$KV_HEADS_FILE" && -n "$GEN_TP" ]]; then
     fi
 fi
 
+echo
+echo "================================================================"
+echo "[rl/dryrun] Run Configuration Summary"
+echo "================================================================"
+echo "  Model:        $(cfg runtime_info.input.model.model_path)"
+echo "  Served as:    $(cfg runtime_info.input.model.served_model_name)"
+echo "  Train data:   $(cfg runtime_info.input.data.train_index)"
+echo "  Val data:     $(cfg runtime_info.input.data.val_index)"
+echo "  Backend:      $([[ "$ENV_IMPORT" == *docker* ]] && echo "Docker ($DOCKER_HOST_CFG)" || echo "K8s ($(cfg runtime_info.input.k8s.kubeconfig))")"
+echo "  Parallelism:  $(cfg runtime_info.input.harbor_runtime.num_workers) workers"
+echo "  Batch size:   $(cfg runtime_info.input.training.train_batch_size) prompts × $(cfg runtime_info.input.training.n_resp_per_prompt) responses = $(( $(cfg runtime_info.input.training.train_batch_size) * $(cfg runtime_info.input.training.n_resp_per_prompt) )) trials/step"
+echo "  Context:      prompt=$(cfg runtime_info.input.training.max_prompt_length) + response=$(cfg runtime_info.input.training.max_response_length)"
+echo "  vLLM:         TP=$(cfg runtime_info.input.vllm.gen_tp)  max_model_len=$(cfg runtime_info.input.vllm.max_model_length)  gpu_mem=$(cfg runtime_info.input.vllm.gpu_memory_utilization)"
+echo "  Algorithm:    $(cfg runtime_info.input.algorithm.adv_estimator) / $(cfg runtime_info.input.algorithm.policy_loss_mode)  lr=$(cfg runtime_info.input.algorithm.learning_rate)"
+echo "  Epochs:       $(cfg runtime_info.input.training.total_epochs)  save_freq=$(cfg runtime_info.input.training.save_freq)  test_freq=$(cfg runtime_info.input.training.test_freq)"
+echo "  Experiment:   project=$(cfg runtime_info.input.experiment.project_name)  exp=$(cfg runtime_info.input.experiment.exp_name || echo '<auto>')"
+echo "  wandb:        $(cfg runtime_info.input.credentials.wandb_mode)"
+echo "  Agent:        $(cfg runtime_info.input.harbor_agent.agent_name)  timeout=$(cfg runtime_info.input.harbor_agent.max_timeout_sec)s  retries=$(cfg runtime_info.input.harbor_agent.max_retries)"
+echo "================================================================"
 echo
 echo "[rl/dryrun] Done. ok=$ok missing/empty=$missing"
 [[ $missing -eq 0 ]] || exit 1

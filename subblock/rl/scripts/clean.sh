@@ -25,6 +25,32 @@ for arg in "$@"; do
     esac
 done
 
+echo "[rl/clean] killing residual LiteLLM proxy on port 8002"
+if [[ -f /tmp/litellm_cc_8002.pid ]]; then
+    kill "$(cat /tmp/litellm_cc_8002.pid)" 2>/dev/null || true
+fi
+# Kill anything holding port 8002 (including orphaned uvicorn spawn workers)
+python3 -c "
+import os, glob, signal
+with open('/proc/net/tcp') as f:
+    for line in f.readlines()[1:]:
+        parts = line.split()
+        port = int(parts[1].split(':')[1], 16)
+        if port == 8002:
+            inode = parts[9]
+            for fd in glob.glob('/proc/[0-9]*/fd/*'):
+                try:
+                    if f'socket:[{inode}]' in os.readlink(fd):
+                        pid = int(fd.split('/')[2])
+                        os.kill(pid, signal.SIGKILL)
+                        print(f'  killed pid {pid}')
+                except: pass
+" 2>/dev/null || true
+
+echo "[rl/clean] killing residual vLLM GPU workers"
+pgrep -f 'vllm_server|vLLMHttpServer|VLLM::Worker' 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+
 echo "[rl/clean] ray stop --force"
 ray stop --force 2>/dev/null || true
 

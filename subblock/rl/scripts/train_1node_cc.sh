@@ -15,7 +15,7 @@ set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="$BLOCK_DIR/repos/harbor-verl-train"
-UPSTREAM="$REPO/scripts/sync_1nodes_cc.sh"
+UPSTREAM="$REPO/scripts/sync_1node_cc.sh"
 CONFIG="$BLOCK_DIR/config.yaml"
 
 [[ -f "$UPSTREAM" ]] || { echo "ERROR: upstream script missing: $UPSTREAM" >&2; exit 1; }
@@ -55,8 +55,11 @@ export_if_set() {
 }
 
 # ---------------------------------------------------------------------------
-# runtime_info.input.* → env vars consumed by sync_1nodes_cc.sh
+# runtime_info.input.* → env vars consumed by sync_1node_cc.sh
 # ---------------------------------------------------------------------------
+
+# Workaround: FlashInfer allreduce workspace init bug with TP>1 on vLLM.
+export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
 
 # Python environment — user-overridable. Empty → upstream defaults to
 # $REPO/.venv (built by setup_env.sh on first run).
@@ -110,6 +113,10 @@ export_if_set HARBOR_ENVIRONMENT_IMPORT_PATH          "$(cfg runtime_info.input.
 export_if_set HARBOR_ENVIRONMENT_FORCE_BUILD          "$(cfg runtime_info.input.harbor_agent.environment_force_build)"
 export_if_set HARBOR_ENVIRONMENT_DELETE               "$(cfg runtime_info.input.harbor_agent.environment_delete)"
 export_if_set HARBOR_ENVIRONMENT_OVERRIDE_CPUS        "$(cfg runtime_info.input.harbor_agent.environment_override_cpus)"
+export_if_set HARBOR_ENVIRONMENT_OVERRIDE_MEMORY_MB   "$(cfg runtime_info.input.harbor_agent.environment_override_memory_mb)"
+export_if_set HARBOR_MAX_CONSECUTIVE_NO_TOOL          "$(cfg runtime_info.input.harbor_agent.max_consecutive_no_tool)"
+export_if_set HARBOR_HOSTPATH_MOUNTS                  "$(cfg runtime_info.input.harbor_agent.host_path_mounts)"
+export_if_set DOCKER_HOST                             "$(cfg runtime_info.input.harbor_agent.docker_host)"
 
 # Harbor runtime / tail-killer
 export_if_set NUM_WORKERS                "$(cfg runtime_info.input.harbor_runtime.num_workers)"
@@ -130,7 +137,7 @@ export_if_set WANDB_API_KEY "$(cfg runtime_info.input.credentials.wandb_api_key)
 export_if_set WANDB_MODE    "$(cfg runtime_info.input.credentials.wandb_mode)"
 
 # ---------------------------------------------------------------------------
-# Hand off to upstream — sync_1nodes_cc.sh handles vLLM/Ray/LiteLLM/verl wiring,
+# Hand off to upstream — sync_1node_cc.sh handles vLLM/Ray/LiteLLM/verl wiring,
 # applies its own defaults for anything we left empty, and resolves verl Hydra
 # overrides from the env vars above.
 # ---------------------------------------------------------------------------

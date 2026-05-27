@@ -12,7 +12,7 @@ artifacts:
     producer: scripts/train_1node_cc.sh
 
   training_log:
-    description: Per-run training log (stdout+stderr from sync_1nodes_cc.sh, tee'd live).
+    description: Per-run training log (stdout+stderr from sync_1node_cc.sh, tee'd live).
     path: repos/harbor-verl-train/logs/
     pattern: "<exp_name>.log"
     producer: scripts/train_1node_cc.sh

@@ -8,6 +8,11 @@ description: >
 
 Preflight the block in the **current working directory**, then execute `scripts/start.sh`. Refuse to execute if any prerequisite is missing — a missing input is the user's signal to fill it, never a signal to invent a value.
 
+**IMPORTANT: Before executing, the agent MUST:**
+1. Run `/block:check` (or this skill's built-in preflight) to validate all prerequisites.
+2. Present the check results and run configuration summary to the user.
+3. **Wait for explicit user confirmation** before launching `scripts/start.sh`. Never auto-launch — training runs consume GPUs for hours and are hard to reverse once started.
+
 ## Step 0 — Orient
 
 Read `references/BLOCK_DEFINITION.md` bundled in this plugin (sibling of the `skills/` folder containing this file). It is the contract. Pay particular attention to:
