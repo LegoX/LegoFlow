@@ -38,18 +38,18 @@ runtime_info:
   input:
     source:
       scaffold: claude-code       # choices: openhands-sdk | claude-code | open-code | terminus2
-      job_dir: "/public/storage/haoli/code/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/swerebenchv2-200-260429-custom-claude-code-2.1.118-MiniMax-M2.7-20260513230507"
+      job_dir: "/mnt/public/storage/haoli/code/SWE-Lego-Live-bak/subblock/trajgen/artifacts/jobs/swerebenchv2-200-260429-custom-claude-code-2.1.118-MiniMax-M2.7-20260513230507"
 
     conversion:
       max_instances: 64
       exclude_repos_file: artifacts/data/excluded_repos.txt
-      data_name: "glm5_swerebench_oraclesolved_oh_sdk_test"
+      data_name: "m_2.7_swerebenchv2-200-260429_cc_test"
 
     dataset:
       name: ""                      # auto-derived from conversion.data_name
 
     model:
-      model_name_or_path: /jyx_data/models/Qwen/Qwen3-8B
+      model_name_or_path: /mnt/public/models/Qwen3-8B
       trust_remote_code: true
 
     training:
@@ -62,7 +62,7 @@ runtime_info:
       max_samples: 1000000
       preprocessing_num_workers: 16
       dataloader_num_workers: 4
-      output_dir: "qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think"
+      output_dir: "qwen3_8b_m_2.7_swerebenchv2-200-260429_cc_test_gbs64pbs1acc8_lr1e-4_epo4_think"
       logging_steps: 1
       save_strategy: steps
       save_steps: 200
@@ -97,17 +97,20 @@ runtime_info:
   output:
     checkpoint_path:
       description: Path to the latest trained model checkpoint
-      value: /public/storage/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/checkpoint-4
-
+      value: /mnt/public/storage/yuxin/SWE-Lego-Live-sft/subblock/sft/artifacts/model/qwen3_8b_m_2.7_swerebenchv2-200-260429_cc_test_gbs64pbs1acc8_lr1e-4_epo4_think/checkpoint-4
     artifacts:
-      train_results: /public/storage/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/train_results.json
-      train_loss_plot: /public/storage/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/model/qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think/training_loss.png
-      training_log: /public/storage/haoli/code/SWE-Lego-Live/subblock/sft/artifacts/logs/qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_test_gbs64pbs1acc8_lr1e-4_epo4_think_20260428_012158.log
-
+      train_results: /mnt/public/storage/yuxin/SWE-Lego-Live-sft/subblock/sft/artifacts/model/qwen3_8b_m_2.7_swerebenchv2-200-260429_cc_test_gbs64pbs1acc8_lr1e-4_epo4_think/train_results.json
+      train_loss_plot: /mnt/public/storage/yuxin/SWE-Lego-Live-sft/subblock/sft/artifacts/model/qwen3_8b_m_2.7_swerebenchv2-200-260429_cc_test_gbs64pbs1acc8_lr1e-4_epo4_think/training_loss.png
+      training_log: /mnt/public/storage/yuxin/SWE-Lego-Live-sft/subblock/sft/artifacts/logs/qwen3_8b_m_2.7_swerebenchv2-200-260429_cc_test_gbs64pbs1acc8_lr1e-4_epo4_think_20260521_104746.log
     training_curves:
       description: WandB run id with loss, learning rate, and token metrics
-      value: null
-
+      value: lge1jzzt
+    training_metrics:
+      description: Final training metrics from LLaMA-Factory
+      value:
+        final_loss: 0.9048204869031906
+        train_runtime: 372.4313
+        total_steps: 4
 evolving:
   description: SFT training pipeline with tunable hyperparameters for learning rate, batch size, epochs, and model architecture.
   tunable_params:
