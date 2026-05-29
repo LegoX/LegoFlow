@@ -75,9 +75,10 @@ The root block does not consume external inputs directly. Required external valu
 
 **Outputs** (downstream-consumable artifacts):
 - `swegen.output.swe_tasks_dir`: verified SWE tasks under `subblock/swegen/artifacts/swe_tasks/{lang}-cc/`. The authoritative manifest is `{lang}-cc/verifiable_tasks.txt` — only task IDs in that file have passed NOP/Oracle validation.
-- `trajgen.output`: raw agent trajectories under `subblock/trajgen/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
+- `trajgen.output.raw_trajectories_dir`: raw agent trajectories under `subblock/trajgen/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
+- `trajgen.output.sft_data_dir`: LLaMA-Factory LF-format SFT JSON converted from those trajectories at `subblock/trajgen/artifacts/sft_data/<job>/lf.json` (produced by `subblock/trajgen/scripts/convert_trajectories.sh`, which runs the `swe_data_process` converters under their own uv env at `subblock/trajgen/artifacts/env/swe-data-process-uv`)
 
-**Producer→consumer contract**: trajgen consumes **only** tasks listed in swegen's `verifiable_tasks.txt`. `subblock/trajgen/scripts/prepare_tasks.sh` enforces this by filtering through the manifest when copying from a local task source; task IDs already processed are tracked in `subblock/trajgen/artifacts/consumption_ledger.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in trajgen's `config.yaml`.
+**Producer→consumer contract**: trajgen consumes **only** tasks listed in swegen's `verifiable_tasks.txt`. `subblock/trajgen/scripts/prepare_tasks.sh` enforces this by filtering through the manifest when copying from a local task source; task IDs already processed are tracked in `subblock/trajgen/artifacts/consumption_ledger.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in trajgen's `config.yaml`. When the `sft` subblock is added, it should wire `sft.meta_info.subblocks[].dependencies.training_data: trajgen.output.sft_data_dir` rather than reading raw trajectories directly.
 
 ## How To Run
 

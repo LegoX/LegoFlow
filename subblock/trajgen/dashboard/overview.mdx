@@ -108,8 +108,27 @@ profile unless you explicitly ask to replace it.
 Create a new trajgen config variant for <dataset/model/agent/concurrency>. Do not overwrite config.yaml. Save the variant next to config.yaml with a descriptive name and explain the changed fields.
 ```
 
+## Local Progress Dashboard
+
+`dashboard/progress_monitor.py` renders a self-contained HTML page that
+monitors all `artifacts/jobs/<job>/result.json` entries (Harbor rollouts)
+and `artifacts/sft_data/<job>/lf.stats.json` entries (SFT conversions).
+It runs through `uv run` (PEP 723 inline metadata + uv-run shebang),
+so no `pip install` step is required as long as `uv` is on `PATH`.
+
+Run from `subblock/trajgen/`:
+
+```bash
+./dashboard/progress_monitor.py                              # one-shot
+./dashboard/progress_monitor.py --loop 60 --serve --open     # auto-refresh + browser
+```
+
+Open `dashboard/site/index.html` directly or visit
+`http://127.0.0.1:8765/index.html`. See [README](./README.md) for all flags.
+
 ## Quick Links
 
 - [Status](./status.mdx) — live job progress and next steps
 - [Inputs & Outputs](./io.mdx) — current runtime config and produced paths
 - [Memory](./memory.mdx) — repo policy and handoff notes
+- [Progress Dashboard README](./README.md) — local HTML monitor for jobs and SFT data

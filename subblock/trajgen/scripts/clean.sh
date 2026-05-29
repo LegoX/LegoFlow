@@ -42,8 +42,13 @@ echo "=== trajgen clean ==="
 rm -rf "$BLOCK_DIR/artifacts/tasks" \
        "$BLOCK_DIR/artifacts/jobs" \
        "$BLOCK_DIR/artifacts/litellm" \
-       "$BLOCK_DIR/artifacts/logs"
+       "$BLOCK_DIR/artifacts/logs" \
+       "$BLOCK_DIR/artifacts/sft_data"
 echo "Removed gitignored runtime artifacts."
+
+rm -rf "$BLOCK_DIR/dashboard/site"
+rm -f  "$BLOCK_DIR/dashboard/memory/.progress_monitor_cache.json"
+echo "Removed dashboard generator output and cache."
 
 if [[ "$REMOVE_REPOS" == "1" ]]; then
   set_tree_writable "$BLOCK_DIR/repos"
