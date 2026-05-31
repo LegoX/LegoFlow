@@ -21,6 +21,9 @@ SWEGEN_CFG="$ROOT_DIR/subblock/swegen/config.yaml"
 RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 _archive_run_on_exit() {
     local rc=$?
+    if [[ "${DRY_RUN:-0}" -eq 1 ]]; then
+      exit $rc
+    fi
     bash "$(dirname "${BASH_SOURCE[0]}")/archive_run.sh" "$rc" "$RUN_STARTED_AT" || true
     exit $rc
 }
