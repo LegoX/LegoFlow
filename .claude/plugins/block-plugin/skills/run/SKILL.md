@@ -1,7 +1,7 @@
 ---
 name: run
 description: >
-  Preflight and execute the block in the current working directory. Reads the bundled BLOCK_DEFINITION.md to recall the contract, then validates that the block in CWD is ready to run — config.yaml is well-formed, every runtime_info.input is filled, every inter-block dependency declared in meta_info.subblocks[].dependencies resolves to a non-null output of the named sibling block, repos under repos/ are present and at their pinned commits, the environment (venv_path) exists, and scripts/start.sh is present and executable. Only if all checks pass does it run scripts/start.sh — locally, or inside a tmux+SSH session if meta_info.resources.ip is set. Each run is archived automatically by scripts/archive_run.sh (installed by start.sh's EXIT trap). Triggers on phrases like "run this block", "execute the block", "kick off start.sh", "fire the block", "run /block:run".
+  Preflight and execute the block in the current working directory. Reads the bundled BLOCK_DEFINITION.md to recall the contract, then validates that the block in CWD is ready to run — config.yaml is well-formed, every runtime_info.input is filled, every inter-block dependency declared in meta_info.subblocks[].dependencies resolves to a non-null output of the named sibling block, repos under repos/ are present and at their pinned commits, the environment (venv_path) exists, and scripts/start.sh is present and executable. Only if all checks pass does it run scripts/start.sh — locally when meta_info.resources.ip is absent, null, or "local"; inside a tmux+SSH session on the named host when meta_info.resources.ip is a real remote IP. Each run is archived automatically by scripts/archive_run.sh (installed by start.sh's EXIT trap). Triggers on phrases like "run this block", "execute the block", "kick off start.sh", "fire the block", "run /block:run".
 ---
 
 # /block:run
@@ -50,8 +50,8 @@ Read `references/BLOCK_DEFINITION.md` bundled in this plugin (sibling of the `sk
 
 - The `meta_info` / `runtime_info` / `evolving` schema (config.yaml is one-shot per run — no live status field).
 - The **wiring rule**: inter-block values live only in `meta_info.subblocks[<child>].dependencies` (formatted `<source_block>.output.<key>` or the literal `human`), never in `runtime_info.input`. `runtime_info.input` is exclusively for values that originate **outside** the block tree (API keys, external dataset paths, human decisions).
-- The **remote-execution rule**: if `meta_info.resources.ip` is set, the block must be executed inside a tmux session on that remote node, reached over SSH. Never run a remote-resource block locally.
-- The **archiving rule**: after each run, create `artifacts/archives/run_NNN/` with `metadata.yaml`, snapshot `config.yaml`, snapshot `scripts/`, snapshot `repo/`, `session.log`, `monitor.md`; then append one entry to `artifacts/index.yaml` with `archive: artifacts/archives/run_NNN/`.
+- The **remote-execution rule**: `meta_info.resources.ip: local` (or null/absent) means run on the current host — no SSH. Only a real remote IP triggers SSH+tmux. Never attempt to SSH to the literal value `local`.
+- The **archiving rule**: after each run, create `artifacts/archives/run_NNN/` with `metadata.yaml` (id, block, timestamps, status, exit_code, repo commit SHAs), snapshot `config.yaml`, snapshot `scripts/`, `session.log`, `monitor.md`; then append one entry to `artifacts/index.yaml` with `archive: artifacts/archives/run_NNN/`. Note: repo trees are **not** copied — only commit SHAs are recorded in `metadata.yaml`.
 
 ## Step 1 — Load this block
 
