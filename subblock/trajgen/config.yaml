@@ -59,7 +59,7 @@ runtime_info:
     # task_source: wired from swegen.output.swe_tasks_dir (dependency declared in meta_info.dependencies)
     task_source:
       provider: local
-      dataset_name: /gpufs/haoli/code/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc
+      dataset_name: ../swegen/artifacts/swe_tasks/py-cc
       # prepare_tasks.sh filters by py-cc/verifiable_tasks.txt before copying into artifacts/tasks/.
 
     # harbor_job:
