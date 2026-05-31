@@ -43,4 +43,11 @@ for entry in "$ARTIFACTS_DIR"/*; do
     fi
 done
 
+# Also clean Ray temp files from /tmp (original behavior).
+if [[ "$DRY_RUN" == "1" ]]; then
+    echo "  [dry-run] would remove: /tmp/ray /tmp/trajectory_output_dir /tmp/trajectory_output_dir.txt"
+else
+    rm -rf /tmp/ray /tmp/trajectory_output_dir /tmp/trajectory_output_dir.txt 2>/dev/null || true
+fi
+
 echo "  clean done for $(basename "$BLOCK_DIR")."

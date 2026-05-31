@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
 # Root clean: purge intermediate artifacts at the root and in every subblock.
-# Each block keeps only:
-#   - env/ or envs/   (environment caches)
-#   - index.yaml      (run index)
-#   - archives/       (archived runs per BLOCK_DEFINITION)
+# Each block keeps: env/, envs/, index.yaml, archives/, and its primary outputs.
+# Pass --outputs to also remove primary outputs (swe_tasks/, jobs/, model/, etc.).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACTS_DIR="$ROOT_DIR/artifacts"
 
 DRY_RUN=0
+REMOVE_OUTPUTS=0
 for arg in "$@"; do
     case "$arg" in
         -n|--dry-run) DRY_RUN=1 ;;
+        --outputs) REMOVE_OUTPUTS=1 ;;
         -h|--help)
             cat <<EOF
-Usage: $(basename "$0") [--dry-run]
+Usage: $(basename "$0") [--dry-run] [--outputs]
 
-Removes everything under <block>/artifacts/ except:
-  env/ or envs/, index.yaml, archives/
+Removes intermediates under <block>/artifacts/ (logs, caches, etc.).
+Each block's primary outputs (swe_tasks/, jobs/, model/, checkpoints/) are
+preserved unless --outputs is passed.
 
 Applies to the root block and every subblock under subblock/.
 EOF
@@ -28,6 +29,8 @@ EOF
     esac
 done
 
+# Fallback purge used when a subblock has no clean.sh.
+# Keeps env/envs/index.yaml/archives always; keeps primary outputs unless --outputs.
 clean_artifacts_dir() {
     local dir="$1"
     if [[ ! -d "$dir" ]]; then
@@ -50,6 +53,13 @@ clean_artifacts_dir() {
     done
 }
 
+build_subblock_args() {
+    local args=()
+    [[ "$DRY_RUN" == "1" ]] && args+=(--dry-run)
+    [[ "$REMOVE_OUTPUTS" == "1" ]] && args+=(--outputs)
+    echo "${args[@]}"
+}
+
 echo "=== Cleaning root: swe_lego_live ==="
 clean_artifacts_dir "$ARTIFACTS_DIR"
 
@@ -59,17 +69,11 @@ for block_dir in "$ROOT_DIR/subblock"/*/; do
     echo ""
     echo "=== Cleaning subblock: $block_name ==="
     if [[ -f "$clean_script" ]]; then
-        if [[ "$DRY_RUN" == "1" ]]; then
-            bash "$clean_script" --dry-run || {
-                echo "  WARN: $block_name clean.sh failed under --dry-run; falling back to direct purge"
-                clean_artifacts_dir "${block_dir}artifacts"
-            }
-        else
-            bash "$clean_script" || {
-                echo "  WARN: $block_name clean.sh exited non-zero; falling back to direct purge"
-                clean_artifacts_dir "${block_dir}artifacts"
-            }
-        fi
+        # shellcheck disable=SC2046
+        bash "$clean_script" $(build_subblock_args) || {
+            echo "  WARN: $block_name clean.sh exited non-zero; falling back to direct purge"
+            clean_artifacts_dir "${block_dir}artifacts"
+        }
     else
         echo "  (no scripts/clean.sh — falling back to direct purge)"
         clean_artifacts_dir "${block_dir}artifacts"
