@@ -1,6 +1,0 @@
-runs:
-  - id: run_001
-    started_at: "2026-05-21T04:11:00+08:00"
-    status: running
-    notes: "Fresh bootstrap by /block:run monitor. Goal: 32 verified Python tasks from swegen → trajgen consumes those 32. swegen-py tmux launched 04:11 against pre-built 67k PR list. 05:10 patched upstream `import re` bug. 05:40 hit hard blocker (Claude Code CLI refuses --dangerously-skip-permissions when EUID=0). 07:10 halted swegen to stop burning LLM credits — 65 task dirs created, all stuck at skeleton stage. Trajgen never launched (gated). Resume after fixing the permission issue per subblock/swegen/config.yaml status.blockers."
-# Agent appends an entry after each run completes.

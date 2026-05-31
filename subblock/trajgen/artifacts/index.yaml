@@ -1,7 +1,0 @@
-description: "Run index for trajgen Harbor rollouts"
-runs:
-  - id: run_001
-    started_at: "2026-05-25T00:00:00Z"
-    completed_at: null
-    status: pending
-    notes: "Coupled to swegen run_004. Orchestrator tmux session auto-fires prepare_tasks.sh + start.sh when swegen verifiable_tasks.txt reaches 16. n_tasks=16, n_concurrent=8."
