@@ -94,19 +94,6 @@ runtime_info:
       value: /tmp/trajectory_output_dir/
       note: Ephemeral — copy to artifacts after each run
 
-status:
-  phase: idle
-  progress: null
-  next_steps: |
-    1. Fill config.yaml and launch a training run: Edit config.yaml (model path, infra, data, credentials), then run bash scripts/start.sh
-  blockers: null
-  last_updated: "2026-05-06T00:00:00Z"
-  current_job:
-    name: null
-    started_at: null
-    detail: null
-  metrics: {}
-
 evolving:
   description: Online RL training with tunable hyperparameters for batch size, parallel tasks, max turns, and model serving configuration.
   tunable_params:

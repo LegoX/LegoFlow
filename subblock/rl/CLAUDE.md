@@ -11,7 +11,7 @@ Online RL training pipeline for SWE-bench coding agents.
 
 ## What To Read First
 
-1. `config.yaml` — block identity, RL training config, runtime values, and status
+1. `config.yaml` — block identity, RL training config, runtime values (one-shot per run; live state in `artifacts/index.yaml`)
 2. `dashboard/overview.mdx` — current state narrative
 
 ## Input/Output Contract
