@@ -117,6 +117,10 @@ else
     echo "ERROR: meta_info.resources.directory not set in subblock/swegen/config.yaml" >&2
     exit 1
   fi
+  if [[ -z "$REMOTE_USER" || "$REMOTE_USER" == "null" ]]; then
+    echo "ERROR: meta_info.resources.user not set in subblock/swegen/config.yaml" >&2
+    exit 1
+  fi
   REMOTE_HOST="${REMOTE_USER}@${REMOTE_IP}"
   REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
   echo "Execution   : remote"
