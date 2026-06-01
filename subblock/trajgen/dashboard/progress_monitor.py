@@ -14,7 +14,8 @@ Scans:
 Renders a single self-contained HTML file at dashboard/site/index.html with
 two sections (Harbor Jobs, SFT Datasets) plus a small KPI strip. Modeled
 after dashboard/swegen/progress_monitor_all.py on the swegen branch but
-stripped to stdlib-only and without the cloudflare publishing path.
+stripped to stdlib-only. The generated site/ can be published to Cloudflare
+Pages by dashboard/run_cloudflare_pages_sync.sh (not done by this script).
 """
 
 from __future__ import annotations
@@ -120,6 +121,13 @@ def fmt_num(v: Any, digits: int = 0) -> str:
     if isinstance(v, int):
         return f"{v:,}"
     return str(v)
+
+
+def fmt_pct(v: Any, digits: int = 2) -> str:
+    """Format a 0..1 ratio as a percentage, e.g. 0.064787 -> 6.48%."""
+    if not isinstance(v, (int, float)):
+        return "-"
+    return f"{v * 100:.{digits}f}%"
 
 
 def derive_scaffold(job_name: str) -> str:
@@ -279,6 +287,7 @@ def collect_sft(sft_dir: Path, cache: dict[str, Any]) -> list[dict[str, Any]]:
             "n_turns": stats.get("n_turns") or {},
             "scores": stats.get("scores") or {},
             "total_tokens": stats.get("total_tokens"),
+            "tool_call_errors": stats.get("tool_call_errors") or {},
             "im_size": im_size,
             "lf_size": lf_size,
         })
@@ -414,40 +423,19 @@ def render_job_row(job: dict[str, Any]) -> str:
     )
 
 
-def render_eval_breakdown(job: dict[str, Any]) -> str:
-    evals = job.get("evals") or []
-    if not evals:
-        return ""
-    rows = []
-    for ev in evals:
-        mean = ev.get("mean")
-        mean_str = f"{mean:.4f}" if isinstance(mean, (int, float)) else "-"
-        exc = ev.get("exception_summary") or {}
-        exc_str = ", ".join(f"{k}: {v}" for k, v in exc.items()) or "-"
-        rows.append(
-            "<tr>"
-            f"<td>{html.escape(ev.get('name') or '-')}</td>"
-            f'<td class="num">{fmt_num(ev.get("n_trials"))}</td>'
-            f'<td class="num">{fmt_num(ev.get("n_errors"))}</td>'
-            f'<td class="num">{mean_str}</td>'
-            f'<td class="num">{fmt_num(ev.get("reward_1_count"))}</td>'
-            f'<td class="num">{fmt_num(ev.get("reward_0_count"))}</td>'
-            f"<td>{html.escape(exc_str)}</td>"
-            "</tr>"
-        )
-    return (
-        f"<details><summary>Eval breakdown for {html.escape(job['job'])} ({len(evals)} eval(s))</summary>"
-        '<div class="table-wrap"><table class="eval-table">'
-        "<thead><tr><th>Eval</th><th class='num'>Trials</th><th class='num'>Errors</th>"
-        "<th class='num'>Mean</th><th class='num'>Reward=1</th><th class='num'>Reward=0</th><th>Exceptions</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table></div></details>"
-    )
-
-
 def render_sft_row(s: dict[str, Any]) -> str:
     tl = s.get("token_lens") or {}
     nt = s.get("n_turns") or {}
     sc = s.get("scores") or {}
+    tce = s.get("tool_call_errors") or {}
+    if tce:
+        tce_cell = (
+            f'{fmt_pct(tce.get("error_rate"))}'
+            f'<div class="muted">{fmt_num(tce.get("error_tool_calls"))} / {fmt_num(tce.get("total_tool_calls"))} calls'
+            f' &middot; traj: {fmt_pct(tce.get("trajectory_error_rate"))}</div>'
+        )
+    else:
+        tce_cell = '<span class="muted">-</span>'
     return (
         "<tr>"
         f'<td class="job">{html.escape(s["job"])}</td>'
@@ -458,6 +446,7 @@ def render_sft_row(s: dict[str, Any]) -> str:
         f'<td class="num">{fmt_num(nt.get("min"))} / {fmt_num(nt.get("mean"))} / {fmt_num(nt.get("max"))}'
         f'<div class="muted">gte_100: {fmt_num(nt.get("gte_100"))}</div></td>'
         f'<td class="num">{fmt_num(sc.get("min"), 4)} / {fmt_num(sc.get("mean"), 4)} / {fmt_num(sc.get("max"), 4)}</td>'
+        f'<td class="num">{tce_cell}</td>'
         f'<td class="num">{html.escape(fmt_bytes(s.get("im_size")))}</td>'
         f'<td class="num">{html.escape(fmt_bytes(s.get("lf_size")))}</td>'
         "</tr>"
@@ -478,7 +467,6 @@ def render_html(
 
     if jobs_sorted:
         job_rows = "".join(render_job_row(j) for j in jobs_sorted)
-        eval_blocks = "".join(render_eval_breakdown(j) for j in jobs_sorted)
         jobs_table = (
             '<div class="table-wrap"><table>'
             "<thead><tr><th>Job</th><th>Scaffold</th><th>Status</th><th>Started (BJT)</th>"
@@ -487,13 +475,8 @@ def render_html(
             "<th class='num'>Reward=1 (primary)</th></tr></thead>"
             f"<tbody>{job_rows}</tbody></table></div>"
         )
-        eval_panel = (
-            '<section class="panel"><h2>Eval Breakdown</h2>'
-            f"{eval_blocks or '<div class=\"empty\">No evals.</div>'}</section>"
-        )
     else:
         jobs_table = '<div class="empty">No jobs with result.json found under artifacts/jobs/.</div>'
-        eval_panel = ""
 
     if sft_sorted:
         sft_rows = "".join(render_sft_row(s) for s in sft_sorted)
@@ -503,6 +486,7 @@ def render_html(
             "<th class='num'>Token len (min/mean/max)</th>"
             "<th class='num'>Turns (min/mean/max)</th>"
             "<th class='num'>Scores (min/mean/max)</th>"
+            "<th class='num'>Tool-call errors</th>"
             "<th class='num'>im.jsonl</th><th class='num'>lf.json</th></tr></thead>"
             f"<tbody>{sft_rows}</tbody></table></div>"
         )
@@ -543,14 +527,12 @@ def render_html(
     {jobs_table}
   </section>
 
-  {eval_panel}
-
   <section class="panel">
     <h2>SFT Datasets</h2>
     {sft_table}
   </section>
 
-  <div class="footer">Generated by dashboard/progress_monitor.py &middot; local-only, no cloudflare.</div>
+  <div class="footer">Generated by dashboard/progress_monitor.py &middot; published to Cloudflare Pages via dashboard/run_cloudflare_pages_sync.sh.</div>
 </main>
 </body>
 </html>

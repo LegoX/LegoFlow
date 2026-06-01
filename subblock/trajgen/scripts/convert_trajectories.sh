@@ -14,6 +14,7 @@ Usage:
   bash scripts/convert_trajectories.sh --job <name|latest>
   bash scripts/convert_trajectories.sh --job latest --scaffold claude_code
   bash scripts/convert_trajectories.sh --job <name> --out-dir artifacts/sft_data --max-instances 100
+  bash scripts/convert_trajectories.sh --job latest --skip-unchanged
 
 Converts a Harbor job's trajectory logs into:
   <out_dir>/<job>/im.jsonl   (intermediate OpenAI-style messages)
@@ -21,6 +22,9 @@ Converts a Harbor job's trajectory logs into:
 
 Defaults are read from runtime_info.input.sft_conversion in config.yaml.
 --job latest resolves to the most recently modified directory under artifacts/jobs.
+--skip-unchanged exits early (no reconversion) when the job's resolved
+  (reward=1.0) instance set and conversion inputs are unchanged since the last
+  run, tracked via <out_dir>/<job>/.convert_sig.json. Useful for polling loops.
 EOF
 }
 
@@ -30,12 +34,17 @@ OUT_DIR_OVERRIDE=""
 MAX_INSTANCES_OVERRIDE=""
 EXCLUDE_REPOS_OVERRIDE=""
 EXCLUDE_REPOS_OVERRIDE_SET=0
+SKIP_UNCHANGED=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --job)
       [[ $# -ge 2 ]] || { echo "ERROR: --job requires a value" >&2; exit 2; }
       JOB_ARG="$2"
       shift 2
+      ;;
+    --skip-unchanged)
+      SKIP_UNCHANGED=1
+      shift
       ;;
     --scaffold)
       [[ $# -ge 2 ]] || { echo "ERROR: --scaffold requires a value" >&2; exit 2; }
@@ -224,6 +233,65 @@ if [[ "$EXCLUDE_REPOS_OVERRIDE_SET" == "1" || -n "$EXCLUDE_REPOS_FILE" ]]; then
   CMD+=("--exclude-repos-file" "$EXCLUDE_REPOS_FILE")
 fi
 
+SIG_FILE="$OUT_DIR/.convert_sig.json"
+
+# Signature of the conversion inputs. Based on the resolved (reward=1.0)
+# instance set (the only thing the converter consumes) plus scaffold/limits, so
+# it is stable while result.json metadata churns during a running job.
+compute_convert_sig() {
+  python3 - "$JOB_DIR/result.json" "$SCAFFOLD" "${MAX_INSTANCES:-}" "${EXCLUDE_REPOS_FILE:-}" <<'PY'
+import hashlib
+import json
+import sys
+
+result_path, scaffold, max_instances, exclude_file = sys.argv[1:5]
+parts = [scaffold, max_instances, exclude_file]
+try:
+    with open(result_path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    resolved = []
+    evals = (data.get("stats") or {}).get("evals") or {}
+    for ev in evals.values():
+        if not isinstance(ev, dict):
+            continue
+        reward = ((ev.get("reward_stats") or {}).get("reward") or {})
+        for key in ("1.0", 1.0):
+            vals = reward.get(key)
+            if isinstance(vals, list):
+                resolved.extend(str(v) for v in vals)
+    parts.append(str(len(resolved)))
+    parts.append("\n".join(sorted(resolved)))
+except FileNotFoundError:
+    parts.append("NO_RESULT_JSON")
+print(hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest())
+PY
+}
+
+NEW_SIG=""
+if [[ "$SKIP_UNCHANGED" == "1" ]]; then
+  NEW_SIG="$(compute_convert_sig)"
+  OLD_SIG=""
+  if [[ -f "$SIG_FILE" ]]; then
+    OLD_SIG="$(python3 - "$SIG_FILE" <<'PY'
+import json
+import sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        print((json.load(fh) or {}).get("sig", ""))
+except Exception:
+    print("")
+PY
+)"
+  fi
+  if [[ -n "$NEW_SIG" && "$NEW_SIG" == "$OLD_SIG" && -f "$LF_OUTPUT" && -f "$OUT_DIR/lf.stats.json" ]]; then
+    echo "=== trajgen: convert trajectories ==="
+    echo "Job:       $JOB_NAME"
+    echo "--skip-unchanged: resolved set and inputs unchanged; skipping reconversion."
+    echo "LF file:   $LF_OUTPUT (unchanged)"
+    exit 0
+  fi
+fi
+
 echo "=== trajgen: convert trajectories ==="
 echo "Job:       $JOB_NAME"
 echo "Job dir:   $JOB_DIR"
@@ -238,6 +306,25 @@ echo ""
   cd "$SWE_DP_DIR"
   UV_PROJECT_ENVIRONMENT="$SWE_DP_UV_ABS" "${CMD[@]}"
 )
+
+# Record the input signature so a subsequent --skip-unchanged run can short-circuit.
+if [[ "$SKIP_UNCHANGED" == "1" ]]; then
+  [[ -n "$NEW_SIG" ]] || NEW_SIG="$(compute_convert_sig)"
+  python3 - "$SIG_FILE" "$NEW_SIG" <<'PY'
+import datetime
+import json
+import sys
+
+sig_file, sig = sys.argv[1], sys.argv[2]
+with open(sig_file, "w", encoding="utf-8") as fh:
+    json.dump(
+        {"sig": sig, "converted_at": datetime.datetime.now().astimezone().isoformat()},
+        fh,
+        ensure_ascii=False,
+        indent=2,
+    )
+PY
+fi
 
 LF_COUNT=""
 if [[ -f "$LF_OUTPUT" ]]; then

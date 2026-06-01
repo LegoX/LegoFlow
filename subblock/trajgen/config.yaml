@@ -25,7 +25,7 @@ meta_info:
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
       branch: main
-      commit: ef78ae6e1f1fa327134446b594cd2326352d144a   # origin/main HEAD (fetched 2026-05-29), merges PR #3 "Add total token count to LF stats"
+      commit: 76cb50cea432fb8687cf192c8ab3f09bb726cb07   # origin/main HEAD (fetched 2026-06-01), merges PR #4 "Add dataset-level tool-call error rate to LF stats"
       path: repos/swe_data_process
       readonly: true
 
