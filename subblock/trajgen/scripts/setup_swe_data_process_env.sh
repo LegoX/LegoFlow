@@ -145,11 +145,22 @@ fi
 mkdir -p "$(dirname "$SWE_DP_UV_ABS")"
 
 # `uv sync` writes uv.lock into the repo even when readonly perms are set
-# (root bypasses chmod). Add it to .git/info/exclude so dryrun's worktree-clean
-# check stays green after setup. .git/ is preserved writable by update_repos.sh.
-LOCAL_EXCLUDE="$SWE_DP_DIR/.git/info/exclude"
-if [[ -f "$LOCAL_EXCLUDE" ]] && ! grep -qxF "uv.lock" "$LOCAL_EXCLUDE" 2>/dev/null; then
-  printf '%s\n' "uv.lock" >> "$LOCAL_EXCLUDE"
+# (root bypasses chmod). Add it to the repo's git exclude file so dryrun's
+# worktree-clean check stays green after setup. .git/ is preserved writable by
+# update_repos.sh. Resolve the exclude path via `git rev-parse --git-path` so
+# this works even when .git is a gitfile (worktree/submodule), and create the
+# file if a fresh clone did not leave one behind.
+LOCAL_EXCLUDE="$(git -C "$SWE_DP_DIR" rev-parse --git-path info/exclude 2>/dev/null || true)"
+if [[ -n "$LOCAL_EXCLUDE" ]]; then
+  case "$LOCAL_EXCLUDE" in
+    /*) : ;;                                  # already absolute
+    *)  LOCAL_EXCLUDE="$SWE_DP_DIR/$LOCAL_EXCLUDE" ;;
+  esac
+  mkdir -p "$(dirname "$LOCAL_EXCLUDE")"
+  [[ -f "$LOCAL_EXCLUDE" ]] || : > "$LOCAL_EXCLUDE"
+  if ! grep -qxF "uv.lock" "$LOCAL_EXCLUDE" 2>/dev/null; then
+    printf '%s\n' "uv.lock" >> "$LOCAL_EXCLUDE"
+  fi
 fi
 
 echo "=== trajgen: setup swe_data_process uv env ==="

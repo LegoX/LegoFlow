@@ -420,6 +420,15 @@ fi
 
 echo ""
 echo "--- 5b. swe_data_process Environment ---"
+# swe_data_process is only needed for the optional post-Harbor SFT conversion.
+# When sft_conversion.enabled is false, a missing/broken env must not block
+# trajectory generation, so downgrade these checks to warnings in that case.
+SFT_ENABLED_PRECHECK="$(cfg runtime_info.input.sft_conversion.enabled)"
+if [[ "$SFT_ENABLED_PRECHECK" == "true" ]]; then
+  swe_dp_problem() { fail "$1"; }
+else
+  swe_dp_problem() { warn "$1 (non-blocking: sft_conversion.enabled is not true)"; }
+fi
 if [[ -n "$SWE_DP_UV_RAW" ]]; then
   SWE_DP_UV_ABS="$(abspath "$SWE_DP_UV_RAW")"
   SWE_DP_PYTHON="$SWE_DP_UV_ABS/bin/python"
@@ -445,13 +454,13 @@ if [[ -n "$SWE_DP_UV_RAW" ]]; then
       if "$SWE_DP_PYTHON" -c "import swe_data_process" >/dev/null 2>&1; then
         ok "swe_data_process package is importable"
       else
-        fail "swe_data_process package is not importable; from repos/swe_data_process run: UV_PROJECT_ENVIRONMENT=$SWE_DP_UV_ABS uv sync --extra llm  (or use bash scripts/setup_swe_data_process_env.sh)"
+        swe_dp_problem "swe_data_process package is not importable; from repos/swe_data_process run: UV_PROJECT_ENVIRONMENT=$SWE_DP_UV_ABS uv sync --extra llm  (or use bash scripts/setup_swe_data_process_env.sh)"
       fi
     else
-      fail "swe_data_process python not found: $SWE_DP_PYTHON"
+      swe_dp_problem "swe_data_process python not found: $SWE_DP_PYTHON"
     fi
   else
-    fail "swe_data_process uv environment is missing; run bash scripts/setup_swe_data_process_env.sh"
+    swe_dp_problem "swe_data_process uv environment is missing; run bash scripts/setup_swe_data_process_env.sh"
   fi
 else
   fail "environment.swe_data_process_uv is required"

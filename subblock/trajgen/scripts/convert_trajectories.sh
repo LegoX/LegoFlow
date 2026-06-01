@@ -177,8 +177,13 @@ HARBOR_JOBS_DIR="$(abspath "$HARBOR_JOBS_DIR_RAW")"
 [[ -d "$HARBOR_JOBS_DIR" ]] || { echo "ERROR: Harbor jobs dir not found: $HARBOR_JOBS_DIR" >&2; exit 1; }
 
 if [[ "$JOB_ARG" == "latest" ]]; then
-  JOB_NAME="$(ls -1t "$HARBOR_JOBS_DIR" 2>/dev/null | head -n 1 || true)"
-  [[ -n "$JOB_NAME" ]] || { echo "ERROR: no jobs found under $HARBOR_JOBS_DIR" >&2; exit 1; }
+  # Most recently modified *directory* under the jobs root. Restrict to dirs
+  # (following symlinks) so stray non-directory entries can't be selected.
+  JOB_NAME="$(
+    find -L "$HARBOR_JOBS_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%T@\t%f\n' 2>/dev/null \
+      | sort -rn | head -n 1 | cut -f2-
+  )"
+  [[ -n "$JOB_NAME" ]] || { echo "ERROR: no job directories found under $HARBOR_JOBS_DIR" >&2; exit 1; }
 else
   JOB_NAME="$JOB_ARG"
 fi
