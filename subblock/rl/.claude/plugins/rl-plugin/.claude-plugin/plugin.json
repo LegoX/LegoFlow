@@ -1,0 +1,6 @@
+{
+  "name": "rl",
+  "description": "RL block specific skills — scaffold experiments, preflight (GPU/k8s/Docker/vLLM/wandb/venv editable installs), and launch sync_1node_cc training. Provides /rl:create, /rl:check, /rl:run.",
+  "version": "0.1.0",
+  "author": { "name": "ydu" }
+}

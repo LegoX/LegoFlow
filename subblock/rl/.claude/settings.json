@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "rl-local": {
+      "source": {
+        "source": "directory",
+        "path": ".claude/plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "rl@rl-local": true
+  }
+}
