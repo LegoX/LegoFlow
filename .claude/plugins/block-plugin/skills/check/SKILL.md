@@ -1,20 +1,12 @@
 ---
 name: check
 description: >
-<<<<<<< HEAD
   Recursively sanity-check every block at and beneath the current working directory: config.yaml schema, runtime_info.input completeness, inter-block dependency resolution, repos pin matches, environment (venv_path) existence, remote resource (SSH/directory) reachability, live availability of every OpenAI-compatible LLM endpoint declared in any block's runtime_info.input, AND block-specific dryrun validation (scripts/dryrun.sh — GPU, Docker, WANDB, model compatibility, etc.). Reports all failures in one consolidated message with a run configuration summary. Does not execute scripts/start.sh, does not flip status.phase, does not write archives. **MANDATORY before /block:run** — the agent must run this skill AND receive explicit user confirmation before launching any block. Triggers on phrases like "check my blocks", "validate the config", "sanity check everything", "are my API keys working", "is the remote reachable", "run /block:check", "diagnose this block".
-=======
-  Recursively sanity-check every block at and beneath the current working directory: config.yaml schema, runtime_info.input completeness, inter-block dependency resolution, repos pin matches, environment (venv_path) existence, remote resource (SSH/directory) reachability, and live availability of every OpenAI-compatible LLM endpoint declared in any block's runtime_info.input. Reports all failures in one consolidated message — does not execute scripts/start.sh, does not write archives, does not edit any file. Use before /block:run after a fresh clone or config edit, or to diagnose why a block is failing preflight. Triggers on phrases like "check my blocks", "validate the config", "sanity check everything", "are my API keys working", "is the remote reachable", "run /block:check", "diagnose this block".
->>>>>>> origin/dev
 ---
 
 # /block:check
 
-<<<<<<< HEAD
 Recursively walk the block tree rooted at the current working directory and validate every block's config, resources, external APIs, and block-specific runtime prerequisites. **Safe to run:** only `scripts/dryrun.sh` (a side-effect-free validation script) is executed — no `scripts/start.sh`, no `status.phase` flips, no archives written.
-=======
-Recursively walk the block tree rooted at the current working directory and validate every block's config, resources, and external APIs. **Read-only:** no scripts run, no files edited, no archives written.
->>>>>>> origin/dev
 
 **This skill is MANDATORY before `/block:run`.** The agent must:
 1. Run `/block:check` to surface all issues in one pass.
@@ -178,14 +170,9 @@ Rules for the report:
 
 ## Step 6 — What this skill must NOT do
 
-<<<<<<< HEAD
 - Do not edit any `config.yaml`, `status.phase`, or any other file.
 - Do not run `scripts/start.sh` or any script that has side effects.
 - `scripts/dryrun.sh` is the ONLY script this skill may execute (it is side-effect-free by design).
-=======
-- Do not edit any file.
-- Do not run `scripts/start.sh`, `scripts/dryrun.sh`, or any script under a block.
->>>>>>> origin/dev
 - Do not call chat-completion or embeddings endpoints — only `/models`.
 - Do not skip failed checks just because the user said "ignore that" — re-run after they fix it instead.
 - Do not invent values to "satisfy" a check (e.g. don't substitute env vars for null inputs). Surface the gap; let the user fill it.
