@@ -44,6 +44,11 @@ Never silently mutate `runtime_info` or `meta_info` fields. A user instruction i
 
 Every step below operates on `TARGET_DIR`. Where the rest of this document says "this block" or "CWD", read it as `TARGET_DIR`.
 
+**IMPORTANT: Before executing, the agent MUST:**
+1. Run `/block:check` (or this skill's built-in preflight) to validate all prerequisites.
+2. Present the check results and run configuration summary to the user.
+3. **Wait for explicit user confirmation** before launching `scripts/start.sh`. Never auto-launch — training runs consume GPUs for hours and are hard to reverse once started.
+
 ## Step 0 — Orient
 
 Read `references/BLOCK_DEFINITION.md` bundled in this plugin (sibling of the `skills/` folder containing this file). It is the contract. Pay particular attention to:

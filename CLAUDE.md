@@ -27,7 +27,7 @@ meta_info:
   repos: {}          # name → {commit_id, role}
   resources:
     ip:              # 'local' (default) or null = run on current host; remote IP = run via SSH+tmux
-    pwd:             # working directory on remote node (only used when ip is a remote IP)
+    directory:       # working directory on remote node (only used when ip is a remote IP)
 
 runtime_info:
   input: {}          # ONLY external values (API keys, human decisions)
@@ -81,9 +81,15 @@ The root block does not consume external inputs directly. Required external valu
 
 ## How To Run
 
+**Mandatory workflow: check → confirm → run.** Agents must never skip the confirmation step.
+
+1. **Check**: Run `/block:check` (or `bash scripts/dryrun.sh` for a single block). This validates config, inputs, paths, GPUs, Docker/K8s connectivity, credentials, and model compatibility — all in one pass, with no side effects.
+2. **Confirm**: Present the check results and run configuration summary to the user. **Wait for explicit user confirmation** ("yes", "go ahead", etc.) before proceeding. Never auto-launch — heavy operations (multi-hour GPU training, multi-container rollouts) are expensive and hard to reverse.
+3. **Run**: Only after user confirmation, execute `/block:run` (or `bash scripts/start.sh`).
+
 ```bash
 scripts/dryrun.sh   # validate config, inputs, and required paths (no side effects)
-scripts/start.sh    # execute the full pipeline
+scripts/start.sh    # execute the full pipeline (ONLY after user confirms)
 scripts/clean.sh    # remove temporary working files
 ```
 
