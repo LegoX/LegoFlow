@@ -267,6 +267,7 @@ runtime_info:
       path: repos/harbor-verl-train/harbor_trials/<project_name>/<exp_name>/
       pattern: "**/litellm-trajectory.jsonl"
 
+<<<<<<< HEAD
 status:
   phase: running
   progress: "verl initializing — Ray cluster booting, model loading onto 8×L20X GPUs"
@@ -294,6 +295,8 @@ status:
       Upstream log: repos/harbor-verl-train/logs/harbor-cc-sync-1n-20260527-080726.log
   metrics: {}
 
+=======
+>>>>>>> origin/dev
 evolving:
   description: >-
     Single-node sync RL training (claude-code agent + Harbor k8s sandbox).

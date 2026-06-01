@@ -13,9 +13,14 @@ Harbor sandbox + verl trainer/rollout). Supports K8s (production) and Docker
 
 ## What To Read First
 
+<<<<<<< HEAD
 1. `config.yaml` — block identity, all runtime knobs, current status
 2. `artifacts/index.yaml` — what each run produces and where
 3. `repos/harbor-verl-train/README.md` — full upstream pipeline docs
+=======
+1. `config.yaml` — block identity, RL training config, runtime values (one-shot per run; live state in `artifacts/index.yaml`)
+2. `dashboard/overview.mdx` — current state narrative
+>>>>>>> origin/dev
 
 ## Architecture
 
