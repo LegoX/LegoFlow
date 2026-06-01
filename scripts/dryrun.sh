@@ -135,8 +135,8 @@ REMOTE_USER="$(cfg "$SWEGEN_CFG" "meta_info.resources.user" 2>/dev/null || echo 
 REMOTE_DIR="$(cfg "$SWEGEN_CFG" "meta_info.resources.directory" 2>/dev/null || echo "")"
 
 SSH_OK=0
-if [[ -z "$REMOTE_IP" || "$REMOTE_IP" == "null" ]]; then
-  warn "meta_info.resources.ip not set in swegen config — skipping SSH check"
+if [[ -z "$REMOTE_IP" || "$REMOTE_IP" == "null" || "$REMOTE_IP" == "local" ]]; then
+  ok "local execution (ip=${REMOTE_IP:-<unset>}) — SSH check not required"
 else
   info "testing SSH to ${REMOTE_USER}@${REMOTE_IP} ..."
   if ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no \

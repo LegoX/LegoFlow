@@ -1,61 +1,59 @@
 #!/usr/bin/env bash
-# Remove trajgen runtime outputs. Does not remove repos/harbor unless --repos is passed.
+# Purge intermediate artifacts for this block.
+# Keeps: env/, envs/, index.yaml, archives/, jobs/, tasks/ under artifacts/.
+# jobs/ and tasks/ are primary outputs — pass --outputs to remove them too.
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ARTIFACTS_DIR="$BLOCK_DIR/artifacts"
 
-REMOVE_REPOS=0
-if [[ "${1:-}" == "--repos" ]]; then
-  REMOVE_REPOS=1
-elif [[ $# -gt 0 ]]; then
-  echo "Usage: bash scripts/clean.sh [--repos]" >&2
-  exit 2
+DRY_RUN=0
+REMOVE_OUTPUTS=0
+for arg in "$@"; do
+    case "$arg" in
+        -n|--dry-run) DRY_RUN=1 ;;
+        --outputs) REMOVE_OUTPUTS=1 ;;
+        -h|--help)
+            echo "Usage: $(basename "$0") [--dry-run] [--outputs]"
+            echo "Removes intermediates under $ARTIFACTS_DIR (logs/, litellm/, etc.)."
+            echo "Pass --outputs to also remove jobs/ and tasks/."
+            exit 0
+            ;;
+        *) echo "Unknown arg: $arg" >&2; exit 2 ;;
+    esac
+done
+
+if [[ ! -d "$ARTIFACTS_DIR" ]]; then
+    echo "  (no artifacts/ dir at $ARTIFACTS_DIR — nothing to clean)"
+    exit 0
 fi
 
-set_tree_writable() {
-  local root="$1"
-  [[ -d "$root" ]] || return 0
-  python3 - "$root" <<'PY'
-import os
-import stat
-import sys
+shopt -s nullglob dotglob
+for entry in "$ARTIFACTS_DIR"/*; do
+    name="$(basename "$entry")"
+    case "$name" in
+        env|envs|index.yaml|archives) continue ;;
+        jobs|tasks) [[ "$REMOVE_OUTPUTS" == "0" ]] && continue ;;
+    esac
+    if [[ "$DRY_RUN" == "1" ]]; then
+        echo "  [dry-run] would remove: $entry"
+    else
+        echo "  removing: $entry"
+        rm -rf "$entry"
+    fi
+done
 
-root = sys.argv[1]
-for dirpath, dirnames, filenames in os.walk(root):
-    for name in dirnames + filenames:
-        path = os.path.join(dirpath, name)
-        try:
-            mode = os.lstat(path).st_mode
-            if stat.S_ISLNK(mode):
-                continue
-            os.chmod(path, mode | stat.S_IWUSR)
-        except FileNotFoundError:
-            pass
-try:
-    os.chmod(root, os.lstat(root).st_mode | stat.S_IWUSR)
-except FileNotFoundError:
-    pass
-PY
-}
+# Dashboard generator outputs live outside artifacts/ (under dashboard/), so
+# the artifacts/ loop above won't catch them. Remove them here too.
+for extra in "$BLOCK_DIR/dashboard/site" \
+             "$BLOCK_DIR/dashboard/memory/.progress_monitor_cache.json"; do
+    [[ -e "$extra" ]] || continue
+    if [[ "$DRY_RUN" == "1" ]]; then
+        echo "  [dry-run] would remove: $extra"
+    else
+        echo "  removing: $extra"
+        rm -rf "$extra"
+    fi
+done
 
-echo "=== trajgen clean ==="
-rm -rf "$BLOCK_DIR/artifacts/tasks" \
-       "$BLOCK_DIR/artifacts/jobs" \
-       "$BLOCK_DIR/artifacts/litellm" \
-       "$BLOCK_DIR/artifacts/logs" \
-       "$BLOCK_DIR/artifacts/sft_data"
-echo "Removed gitignored runtime artifacts."
-
-rm -rf "$BLOCK_DIR/dashboard/site"
-rm -f  "$BLOCK_DIR/dashboard/memory/.progress_monitor_cache.json"
-echo "Removed dashboard generator output and cache."
-
-if [[ "$REMOVE_REPOS" == "1" ]]; then
-  set_tree_writable "$BLOCK_DIR/repos"
-  rm -rf "$BLOCK_DIR/repos"
-  echo "Removed local managed repos."
-else
-  echo "Kept local managed repos. Pass --repos to remove them."
-fi
-
-echo "Clean done."
+echo "  clean done for $(basename "$BLOCK_DIR")."

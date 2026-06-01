@@ -46,6 +46,10 @@ Thumbs.db
 *.safetensors
 artifacts/files/
 
+# Runtime run index — written by archive_run.sh, not committed
+artifacts/index.yaml
+subblock/*/artifacts/index.yaml
+
 # SWE-gen subblock — generated data and virtual env
 subblock/swegen/artifacts/*
 subblock/swegen/scripts/jobs/*

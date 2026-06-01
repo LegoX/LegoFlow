@@ -11,6 +11,10 @@ CONFIG="$BLOCK_DIR/config.yaml"
 LOG_DIR="$BLOCK_DIR/artifacts/logs"
 PRINT_COMMAND_ONLY=0
 
+# Captured early so the EXIT trap (defined later, combined with cleanup_litellm)
+# can record the true start time even if the script fails mid-setup.
+RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -518,7 +522,13 @@ cleanup_litellm() {
     wait "$LITELLM_PID" >/dev/null 2>&1 || true
   fi
 }
-trap cleanup_litellm EXIT
+_archive_run_on_exit() {
+    local rc=$?
+    cleanup_litellm || true
+    bash "$BLOCK_DIR/scripts/archive_run.sh" "$rc" "$RUN_STARTED_AT" || true
+    exit $rc
+}
+trap _archive_run_on_exit EXIT
 
 for _ in {1..30}; do
   if "$EVAL_LITELLM_PYTHON" - "$EVAL_LITELLM_ANTHROPIC_BASE_URL" <<'PY' >/dev/null 2>&1

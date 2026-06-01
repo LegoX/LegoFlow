@@ -26,26 +26,26 @@ meta_info:
         <input_key>: <source_block>.output.<key>  # or: human
   repos: {}          # name → {commit_id, role}
   resources:
-    ip:              # remote node IP; null = run locally
-    pwd:             # working directory on remote node
+    ip:              # 'local' (default) or null = run on current host; remote IP = run via SSH+tmux
+    directory:       # working directory on remote node (only used when ip is a remote IP)
 
 runtime_info:
   input: {}          # ONLY external values (API keys, human decisions)
   output: {}         # values produced for downstream blocks
 
-status:
-  phase:             # idle | running | done | blocked
-  progress, next_steps, blockers, last_updated
-
 evolving:
   tunable_params: {} # auto-tuned parameters with bounds
 ```
 
+`config.yaml` is **one-shot per run**: every key is configuration. Live state (running / completed / failed) lives in `artifacts/index.yaml` (written automatically by `scripts/archive_run.sh`'s EXIT trap), not in `config.yaml`.
+
 **Wiring rule**: inter-block values go in `meta_info.subblocks[].dependencies`, never in `runtime_info.input`. Only values originating outside the block tree go in `runtime_info.input`.
 
-### Remote execution rule
+### Execution location rule
 
-If `meta_info.resources.ip` is set, the agent **must** SSH into that node and run inside a tmux session — never run a remote-resource block locally. Confirm with the user whether code needs to be synced or is already present at the remote path.
+**Default: run locally.** Unless explicitly told otherwise, agents should treat `meta_info.resources.ip: local` (or null) as the intended setting and execute on the current host inside a local tmux session — no SSH, no rsync. Do not "restore" an old remote IP found in git history or older CLAUDE.md revisions; the local default is intentional.
+
+If — and only if — `meta_info.resources.ip` is set to a real remote IP, the agent **must** SSH into that node and run inside a tmux session there, and confirm with the user whether code needs to be synced or is already present at the remote path.
 
 ## Block Identity (Root)
 
@@ -56,7 +56,7 @@ If `meta_info.resources.ip` is set, the agent **must** SSH into that node and ru
 ## What To Read First
 
 1. `dashboard/overview.mdx` — current state narrative and new-user quickstart
-2. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, runtime values, and live status of the two active subblocks
+2. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, and runtime values of the two active subblocks. Live state is in each subblock's `artifacts/index.yaml`, not `config.yaml`.
 3. `BLOCK_DEFINITION.md` — full block system specification
 
 The root block has no `config.yaml` of its own; inputs and outputs are owned by the subblock configs listed below. Each subblock has its own `CLAUDE.md` agent contract.
@@ -82,20 +82,28 @@ The root block does not consume external inputs directly. Required external valu
 
 ## How To Run
 
+**Mandatory workflow: check → confirm → run.** Agents must never skip the confirmation step.
+
+1. **Check**: Run `/block:check` (or `bash scripts/dryrun.sh` for a single block). This validates config, inputs, paths, GPUs, Docker/K8s connectivity, credentials, and model compatibility — all in one pass, with no side effects.
+2. **Confirm**: Present the check results and run configuration summary to the user. **Wait for explicit user confirmation** ("yes", "go ahead", etc.) before proceeding. Never auto-launch — heavy operations (multi-hour GPU training, multi-container rollouts) are expensive and hard to reverse.
+3. **Run**: Only after user confirmation, execute `/block:run` (or `bash scripts/start.sh`).
+
 ```bash
 scripts/dryrun.sh   # validate config, inputs, and required paths (no side effects)
-scripts/start.sh    # execute the full pipeline
+scripts/start.sh    # execute the full pipeline (ONLY after user confirms)
 scripts/clean.sh    # remove temporary working files
 ```
 
 ## Subblocks
 
-| Block | Remote? | Key tool | Status |
+All subblocks run **locally** by default (`meta_info.resources.ip: local`). Override to a remote IP only on explicit user request.
+
+| Block | Execution | Key tool | Status |
 |---|---|---|---|
-| `subblock/swegen/` | Yes (192.168.35.240) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
-| `subblock/trajgen/` | Yes (192.168.35.240) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
-| `subblock/sft/` | No (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
-| `subblock/rl/` | No (needs 8× GPU) | Harbor + vLLM + verl | Online RL on Qwen3-30B |
+| `subblock/swegen/` | Local (CPU + Docker) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
+| `subblock/trajgen/` | Local (CPU + Docker) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
+| `subblock/sft/` | Local (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
+| `subblock/rl/` | Local (needs 8× GPU) | Harbor + vLLM + verl | Online RL on Qwen3-30B |
 
 Each subblock has its own `CLAUDE.md` with its full agent contract.
 
@@ -122,7 +130,7 @@ Append one entry to `artifacts/index.yaml`:
   notes: "one-line summary"
 ```
 
-## Memory and Status
+## Memory and Live State
 
 - Long-form notes and decisions: `dashboard/memory.mdx`
-- Keep `status` in `config.yaml` current throughout execution (phase, progress, next_steps, blockers)
+- Live state (what's running, what just finished): the newest entry in each subblock's `artifacts/index.yaml`, written automatically by `scripts/archive_run.sh` (invoked from `start.sh`'s EXIT trap). `config.yaml` is one-shot per run and is not edited during execution.
