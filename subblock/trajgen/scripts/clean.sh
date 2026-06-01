@@ -43,4 +43,17 @@ for entry in "$ARTIFACTS_DIR"/*; do
     fi
 done
 
+# Dashboard generator outputs live outside artifacts/ (under dashboard/), so
+# the artifacts/ loop above won't catch them. Remove them here too.
+for extra in "$BLOCK_DIR/dashboard/site" \
+             "$BLOCK_DIR/dashboard/memory/.progress_monitor_cache.json"; do
+    [[ -e "$extra" ]] || continue
+    if [[ "$DRY_RUN" == "1" ]]; then
+        echo "  [dry-run] would remove: $extra"
+    else
+        echo "  removing: $extra"
+        rm -rf "$extra"
+    fi
+done
+
 echo "  clean done for $(basename "$BLOCK_DIR")."

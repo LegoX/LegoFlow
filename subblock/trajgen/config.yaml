@@ -17,15 +17,23 @@ meta_info:
 
   repositories:
     harbor:
-      url: git@github.com:SWE-Lego/harbor.git
+      url: https://github.com/SWE-Lego/harbor.git
       branch: main
-      commit: 3062421c03d89a5e980684873840e6644e756771
+      commit: ff0434968e5b6975af10d72ca1d7ed20e7fa2465
       path: repos/harbor
+      readonly: true
+    swe_data_process:
+      url: https://github.com/SWE-Lego/swe_data_process.git
+      branch: main
+      commit: 76cb50cea432fb8687cf192c8ab3f09bb726cb07   # origin/main HEAD (fetched 2026-06-01), merges PR #4 "Add dataset-level tool-call error rate to LF stats"
+      path: repos/swe_data_process
       readonly: true
 
   environment:
     harbor_uv: artifacts/env/harbor-uv
     litellm_uv: artifacts/env/litellm-venv  # separate venv; harbor env is managed by uv run and resets to 1.83.0
+    swe_data_process_uv: artifacts/env/swe-data-process-uv
+    swe_data_process_extras: [llm]    # installs openai for optional LLM scoring
     litellm:
       python_version: "3.13"
       litellm_version: "1.83.14"
@@ -95,11 +103,24 @@ runtime_info:
       max_turns: 80
       temperature: 0.7
 
+    sft_conversion:
+      enabled: false               # if true, start.sh runs convert step after Harbor job finishes
+      scaffold: auto               # auto | claude_code | open_code | openhands_sdk | terminus2 (auto = derive from agent.name)
+      out_dir: artifacts/sft_data  # per-job subdir created inside this
+      max_instances: null
+      exclude_repos_file: ""       # "" = use repo default artifacts/excluded_repos.txt
+
   output:
     raw_trajectories_dir:
       description: Harbor job directories with LiteLLM trajectory logs
       path: artifacts/jobs
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
+      consumer_block: sft
+    sft_data_dir:
+      description: LF-format JSON arrays converted from Harbor trajectories, ready for LLaMA-Factory SFT.
+      path: artifacts/sft_data
+      format: llamafactory_lf_v0.1
+      trajectory_format: "artifacts/sft_data/<job>/lf.json"
       consumer_block: sft
 
 environment:

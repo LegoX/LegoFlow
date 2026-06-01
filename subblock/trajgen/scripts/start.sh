@@ -497,6 +497,13 @@ echo "" | tee -a "$LOG_FILE"
 
 (cd "$HARBOR_DIR" && bash -lc "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
 
+SFT_CONVERT_ENABLED="$(cfg runtime_info.input.sft_conversion.enabled)"
+if [[ "$SFT_CONVERT_ENABLED" == "true" ]]; then
+  echo "" | tee -a "$LOG_FILE"
+  echo "=== trajgen: post-run SFT conversion ===" | tee -a "$LOG_FILE"
+  bash "$BLOCK_DIR/scripts/convert_trajectories.sh" --job "$JOB_NAME" 2>&1 | tee -a "$LOG_FILE"
+fi
+
 echo "" | tee -a "$LOG_FILE"
 echo "trajgen complete. Expected job dir: $JOB_DIR_RAW" | tee -a "$LOG_FILE"
 echo "Expected trajectory files: $TRAJGEN_TRAJECTORY_FILE_PATTERN" | tee -a "$LOG_FILE"
