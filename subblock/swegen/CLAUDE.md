@@ -47,6 +47,10 @@ docker run --rm hello-world
 
 ## Core Workflow
 
+### Quick Verification
+
+Before running a large batch, a new AI agent should run the short verification flow in [`quick-verify.md`](quick-verify.md). It checks GitHub/LLM/Docker preflight, validates a known task, and runs a 10-PR Python smoke test with `--min-source-files 1`.
+
 ### Step 1: Collect PRs
 
 ```bash
