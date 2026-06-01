@@ -27,7 +27,7 @@ meta_info:
   repos: {}          # name → {commit_id, role}
   resources:
     ip:              # 'local' (default) or null = run on current host; remote IP = run via SSH+tmux
-    pwd:             # working directory on remote node (only used when ip is a remote IP)
+    directory:       # working directory on remote node (only used when ip is a remote IP)
 
 runtime_info:
   input: {}          # ONLY external values (API keys, human decisions)
