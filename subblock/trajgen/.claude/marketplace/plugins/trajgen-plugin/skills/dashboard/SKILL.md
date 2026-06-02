@@ -7,7 +7,7 @@ description: >
   restart the Cloudflare Pages sync loop (dashboard/run_cloudflare_pages_sync.sh,
   tmux session trajgen-cf) that publishes it online. Use when asked to "show
   trajgen progress", "open the dashboard", "start/restart the cloudflare sync",
-  or "why does dashboard/memory keep coming back". Triggers on "/trajgen:dashboard".
+  or "why does dashboard/.cache keep coming back". Triggers on "/trajgen:dashboard".
 ---
 
 # /trajgen:dashboard
@@ -15,7 +15,7 @@ description: >
 Generate, preview, or publish the trajgen progress board. Run from the block
 root `subblock/trajgen/`. The generator is stdlib-only via `uv run` (PEP 723
 inline metadata + uv-run shebang) — no env to maintain; `uv` must be on `PATH`.
-Full flag reference: `docs/reference/dashboard.mdx`.
+Full flag reference: `docs/content/docs/dashboard.mdx`.
 
 ## Local preview
 

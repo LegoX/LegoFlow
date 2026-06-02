@@ -8,11 +8,11 @@ Generates raw agent trajectories with Harbor for downstream SFT data conversion.
 ## Read first
 
 1. `config.yaml` — block identity, Harbor config, runtime values, and live `status` (source of truth alongside `artifacts/index.yaml`)
-2. `docs/index.mdx` — human-facing overview and quickstart (`README.md` is the short project intro; `docs/` holds the detailed docs)
+2. `docs/content/docs/index.mdx` — human-facing overview and quickstart (`README.md` is the short project intro; `docs/` is the user-facing fumadocs site)
 
 ## Input / Output contract
 
-Read from `config.yaml` before running (details in `docs/reference/io.mdx`):
+Read from `config.yaml` before running (details in `docs/content/docs/reference/io.mdx`):
 - `meta_info.repositories.{harbor,swe_data_process}` — Git url/branch/commit/path/readonly for the two managed local-only repos
 - `meta_info.environment` — `harbor_uv`, `litellm_uv`, `swe_data_process_uv`, `swe_data_process_extras`
 - `runtime_info.input.llm_api` — upstream API used to build the per-job LiteLLM proxy
@@ -62,7 +62,7 @@ Each run is archived by `scripts/archive_run.sh`, invoked from `scripts/start.sh
 
 ## Memory
 
-Long-form notes, repo policy, and decisions live in `memory/notes.md` (human-readable summary mirrored at `docs/memory.mdx`).
+Long-form notes, repo policy, and decisions live in `memory/notes.md`.
 
 ## Remote execution
 

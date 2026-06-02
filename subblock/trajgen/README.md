@@ -47,7 +47,7 @@ subblock/trajgen/
 ## Inputs / Outputs at a glance
 
 Everything is declared in [`config.yaml`](config.yaml); see
-[`docs/reference/io.mdx`](docs/reference/io.mdx) for the full reference.
+[`docs/content/docs/reference/io.mdx`](docs/content/docs/reference/io.mdx) for the full reference.
 
 | | Key items |
 |---|---|

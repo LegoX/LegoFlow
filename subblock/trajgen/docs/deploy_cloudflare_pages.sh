@@ -59,12 +59,14 @@ if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
 fi
 export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
 
-# 3. Install deps + static build.
-if [[ -d node_modules ]]; then
+# 3. Install deps + static build. Prefer a deterministic, lockfile-based
+# install (npm ci) whenever package-lock.json exists; fall back to npm install
+# only when there is no lockfile.
+if [[ -f package-lock.json ]]; then
   log "Installing dependencies (npm ci)"
   npm ci
 else
-  log "Installing dependencies (npm install)"
+  log "Installing dependencies (npm install; no lockfile found)"
   npm install
 fi
 log "Building static export to $OUT_DIR/"
