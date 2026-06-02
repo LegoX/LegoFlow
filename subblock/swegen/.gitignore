@@ -6,3 +6,8 @@ logs/
 artifacts/logs/
 config.json
 docs/site/
+docs/out/
+docs/.next/
+docs/.source/
+docs/node_modules/
+docs/next-env.d.ts

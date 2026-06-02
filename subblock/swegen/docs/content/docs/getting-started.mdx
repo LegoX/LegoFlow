@@ -3,10 +3,6 @@ title: Getting Started
 description: Set up the SWE-gen block and run the first task generation pass
 ---
 
-# Getting Started
-
-Set up the block and run your first task generation pass
-
 SWE-gen wraps the pinned `repos/swegen` checkout in the SWE-Lego-Live block
 layout. The pinned repository is recorded as a gitlink under
 `subblock/swegen/repos/swegen` and should match commit `e804af9`.
@@ -23,19 +19,19 @@ layout. The pinned repository is recorded as a gitlink under
 
 Run commands from the block root:
 
-```
+```bash
 cd subblock/swegen
 ```
 
 Confirm the pinned repo exists:
 
-```
+```bash
 git rev-parse HEAD:repos/swegen
 ```
 
 The expected pin for this docs site is:
 
-```
+```text
 e804af92aad81f42928453959e24e3f5dc666c44
 ```
 
@@ -43,7 +39,7 @@ e804af92aad81f42928453959e24e3f5dc666c44
 
 Create the block virtual environment and install SWE-gen:
 
-```
+```bash
 python3 -m venv artifacts/envs/swegen-env2
 source artifacts/envs/swegen-env2/bin/activate
 pip install -U pip
@@ -58,7 +54,7 @@ checkout.
 
 Set runtime inputs in the shell or in a local env file that is not committed:
 
-```
+```bash
 export GITHUB_TOKENS="ghp_xxx,ghp_yyy"
 export OPENAI_API_KEY="..."
 export OPENAI_API_BASE_URL="https://example.com/v1"
@@ -73,7 +69,7 @@ Do not commit tokens or local env files.
 
 Check the block before starting a large batch:
 
-```
+```bash
 bash scripts/dryrun.sh
 ```
 
@@ -84,13 +80,13 @@ dependencies. Fix dry-run failures before launching generation.
 
 For a small first pass, run a single language at low concurrency:
 
-```
+```bash
 N_CONCURRENT=1 bash scripts/create_py.sh
 ```
 
 For the full multi-language run:
 
-```
+```bash
 bash scripts/create_all_bg.sh
 ```
 

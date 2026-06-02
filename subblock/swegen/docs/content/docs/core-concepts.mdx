@@ -3,10 +3,6 @@ title: Core Concepts
 description: Core concepts and terminology in SWE-gen
 ---
 
-# Core Concepts
-
-Core concepts and terminology in SWE-gen
-
 SWE-gen has the following core concepts.
 
 ## PR pool
@@ -14,7 +10,7 @@ SWE-gen has the following core concepts.
 A PR pool is a language-specific input file containing GitHub pull requests in
 the form:
 
-```
+```text
 owner/repo:pr-123
 ```
 
@@ -29,8 +25,8 @@ patch, and verification tests.
 
 The stable structure is:
 
-```
-<task_id>/
+```text
+task_id/
 ├── task.toml
 ├── instruction.md
 ├── environment/
@@ -60,7 +56,7 @@ Only tasks that pass validation are considered verified.
 
 Each language output directory has a manifest:
 
-```
+```text
 artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt
 ```
 
@@ -73,7 +69,7 @@ for trajgen or other consumers when its task ID appears in
 
 Long runs resume through per-output batch state:
 
-```
+```text
 artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/<hash>.json
 ```
 

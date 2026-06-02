@@ -1,24 +1,88 @@
 #!/usr/bin/env bash
+# Build the SWE-gen docs (fumadocs/Next.js static export) and deploy to a
+# dedicated Cloudflare Pages project. Independent of the data dashboard project
+# (swe-databoard); this one defaults to swe-swegen-docs.
+#
+# Required credentials:
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+# read from $ENV_FILE (default ~/.config/swegen_docs_cloudflare.env), or from
+# already-exported env vars.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PUBLIC_DIR="${PUBLIC_DIR:-$SCRIPT_DIR/site}"
+cd "$SCRIPT_DIR"
+
 PROJECT_NAME="${PROJECT_NAME:-swe-swegen-docs}"
 BRANCH_NAME="${BRANCH_NAME:-swegen}"
-WRANGLER_PKG="${WRANGLER_PKG:-wrangler@3}"
+OUT_DIR="${OUT_DIR:-out}"
+WRANGLER_PKG="${WRANGLER_PKG:-wrangler@latest}"
+ENV_FILE="${ENV_FILE:-$HOME/.config/swegen_docs_cloudflare.env}"
 
+log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*"; }
+
+# 1. Activate Node >= 20 via nvm when available.
+if [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  # shellcheck disable=SC1091
+  . "$NVM_DIR/nvm.sh"
+  nvm use 22 >/dev/null 2>&1 || nvm use default >/dev/null 2>&1 || true
+fi
+
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+if (( NODE_MAJOR < 20 )); then
+  log "ERROR: Node >= 20 required to build the docs (found $(node -v 2>/dev/null || echo none))."
+  log "Install/activate it, e.g.: export NVM_DIR=\"\$HOME/.nvm\"; . \"\$NVM_DIR/nvm.sh\"; nvm install 22"
+  exit 1
+fi
+log "Using node $(node -v), npm $(npm -v)"
+
+# 2. Load Cloudflare credentials and the docs project config.
+WANT_PROJECT="$PROJECT_NAME"
+WANT_BRANCH="$BRANCH_NAME"
+if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" || -f "$ENV_FILE" ]]; then
+  if [[ -f "$ENV_FILE" ]]; then
+    log "Loading config from $ENV_FILE"
+    # shellcheck disable=SC1090
+    set -a; . "$ENV_FILE"; set +a
+  fi
+fi
+PROJECT_NAME="${DOCS_PROJECT_NAME:-$WANT_PROJECT}"
+BRANCH_NAME="${DOCS_BRANCH_NAME:-$WANT_BRANCH}"
 if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
-  echo "ERROR: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required" >&2
+  log "ERROR: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set (env or $ENV_FILE)."
+  exit 1
+fi
+export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+
+# 3. Install deps + static build. Prefer a deterministic, lockfile-based
+# install (npm ci) whenever package-lock.json exists; fall back to npm install
+# only when there is no lockfile.
+if [[ -f package-lock.json ]]; then
+  log "Installing dependencies (npm ci)"
+  npm ci
+else
+  log "Installing dependencies (npm install; no lockfile found)"
+  npm install
+fi
+log "Building static export to $OUT_DIR/"
+npm run build
+
+if [[ ! -d "$OUT_DIR" ]]; then
+  log "ERROR: build did not produce $OUT_DIR/ (check next.config.mjs output: 'export')."
   exit 1
 fi
 
-python3 "$SCRIPT_DIR/build_docs.py"
+# 4. Ensure the Pages project exists (idempotent), then deploy.
+if ! npx --yes "$WRANGLER_PKG" pages project list 2>/dev/null | grep -q "\b$PROJECT_NAME\b"; then
+  log "Creating Cloudflare Pages project '$PROJECT_NAME' (production branch '$BRANCH_NAME')"
+  npx --yes "$WRANGLER_PKG" pages project create "$PROJECT_NAME" \
+    --production-branch "$BRANCH_NAME"
+fi
 
-npx --yes "$WRANGLER_PKG" pages project create "$PROJECT_NAME" \
-  --production-branch "$BRANCH_NAME" >/tmp/swe_swegen_docs_pages_project_create.log 2>&1 || true
-
-npx --yes "$WRANGLER_PKG" pages deploy "$PUBLIC_DIR" \
+log "Deploying $OUT_DIR/ to Cloudflare Pages project '$PROJECT_NAME'"
+npx --yes "$WRANGLER_PKG" pages deploy "$OUT_DIR" \
   --project-name "$PROJECT_NAME" \
   --branch "$BRANCH_NAME" \
-  --commit-dirty=true \
-  --commit-message "Update SWE-gen docs $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  --commit-dirty=true
+
+log "Done. The public URL is printed above (https://$PROJECT_NAME.pages.dev)."

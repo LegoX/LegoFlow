@@ -3,10 +3,6 @@ title: Run Generation
 description: Prepare PR pools, run create scripts, and monitor generation
 ---
 
-# Run Generation
-
-Prepare PR pools, run create scripts, and monitor generation
-
 SWE-gen generation is driven by language-specific shell scripts in
 `subblock/swegen/scripts/`. Each script activates the environment, loads local
 runtime variables, configures Docker cache paths, and calls `swegen create`.
@@ -15,7 +11,7 @@ runtime variables, configures Docker cache paths, and calls `swegen create`.
 
 The PR collector writes language-specific input files:
 
-```
+```bash
 python repos/swegen/tools/collect_prs_wo_image.py \
   --languages python \
   --repo_num 100 \
@@ -25,7 +21,7 @@ python repos/swegen/tools/collect_prs_wo_image.py \
 
 The output file is:
 
-```
+```text
 artifacts/collected_prs/python_pr_ids.txt
 ```
 
@@ -35,19 +31,19 @@ Repeat or schedule collection for all enabled languages.
 
 Start with one language when validating a new node:
 
-```
+```bash
 N_CONCURRENT=1 bash scripts/create_py.sh
 ```
 
 The script writes tasks to:
 
-```
+```text
 artifacts/swe_tasks/py-cc
 ```
 
 and logs to:
 
-```
+```text
 artifacts/logs/swegen-create/cc_py_March.txt
 ```
 
@@ -55,7 +51,7 @@ artifacts/logs/swegen-create/cc_py_March.txt
 
 After the smoke test is healthy:
 
-```
+```bash
 bash scripts/create_all_bg.sh
 ```
 
@@ -74,7 +70,7 @@ Each language has its own defaults:
 
 You can override `N_CONCURRENT` at launch:
 
-```
+```bash
 N_CONCURRENT=8 bash scripts/create_rust.sh
 ```
 
@@ -107,4 +103,4 @@ A typical production loop is:
 4. Tune concurrency and timeouts.
 5. Export verified tasks or let downstream blocks read manifests directly.
 
-Open the [Dashboard](/docs/dashboard/) for the live progress view.
+Open the [Dashboard](/docs/dashboard) for the live progress view.

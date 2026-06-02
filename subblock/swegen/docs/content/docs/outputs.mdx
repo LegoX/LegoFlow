@@ -3,10 +3,6 @@ title: Outputs
 description: Files and directories produced by SWE-gen
 ---
 
-# Outputs
-
-Files and directories produced by SWE-gen
-
 SWE-gen outputs are designed for downstream blocks to consume verified tasks
 without guessing which generated directories are complete.
 
@@ -14,7 +10,7 @@ without guessing which generated directories are complete.
 
 Per-language task directories live under:
 
-```
+```text
 artifacts/swe_tasks/<lang>-cc/
 ```
 
@@ -34,7 +30,7 @@ Each verified task directory contains:
 
 The most important output is:
 
-```
+```text
 artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt
 ```
 
@@ -45,7 +41,7 @@ between "a task directory exists" and "the task is validated and safe to use".
 
 Batch state lives next to each language output:
 
-```
+```text
 artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/
 ```
 
@@ -57,7 +53,7 @@ to Git.
 
 Create logs live under:
 
-```
+```text
 artifacts/logs/swegen-create/
 ```
 
@@ -68,13 +64,13 @@ timeout tuning. They are audit artifacts rather than source files.
 
 The block can optionally flatten verified tasks into:
 
-```
+```text
 outputs/<task_id>/
 ```
 
 using:
 
-```
+```bash
 python scripts/extract_verified_tasks.py
 ```
 

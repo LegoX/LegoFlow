@@ -1,7 +1,7 @@
 # SWE-gen Docs Site
 
-Static documentation site for the SWE-gen block. The generated Cloudflare Pages
-project is `swe-swegen-docs`, published at:
+Fumadocs/Next.js documentation site for the SWE-gen block. The generated
+Cloudflare Pages project is `swe-swegen-docs`, published at:
 
 ```text
 https://swe-swegen-docs.pages.dev
@@ -13,30 +13,30 @@ The live progress databoard is a separate Pages project:
 https://swe-databoard.pages.dev/
 ```
 
+## Develop locally
+
+From this directory:
+
+```bash
+cd subblock/swegen/docs
+npm ci
+npm run dev
+```
+
+Then open the local Next.js URL printed by the command and visit `/docs`.
+
 ## Build locally
 
-From the repository root:
-
 ```bash
-python3 subblock/swegen/docs/build_docs.py
+cd subblock/swegen/docs
+npm ci
+npm run build
 ```
 
-Generated files are written to:
+Static export files are written to:
 
 ```text
-subblock/swegen/docs/site/
-```
-
-Preview locally:
-
-```bash
-python3 -m http.server 8788 --directory subblock/swegen/docs/site
-```
-
-Then open:
-
-```text
-http://127.0.0.1:8788/
+subblock/swegen/docs/out/
 ```
 
 ## Deploy to Cloudflare Pages
@@ -60,8 +60,9 @@ Optional overrides:
 | --- | --- | --- |
 | `PROJECT_NAME` | `swe-swegen-docs` | Cloudflare Pages project name |
 | `BRANCH_NAME` | `swegen` | Pages deployment branch |
-| `PUBLIC_DIR` | `subblock/swegen/docs/site` | Directory deployed by wrangler |
-| `WRANGLER_PKG` | `wrangler@3` | Wrangler package used through `npx --yes` |
+| `OUT_DIR` | `out` | Directory deployed by wrangler |
+| `WRANGLER_PKG` | `wrangler@latest` | Wrangler package used through `npx --yes` |
+| `ENV_FILE` | `~/.config/swegen_docs_cloudflare.env` | Optional credential/config file |
 
 The deploy script creates or reuses the Pages project, builds the docs, and
-deploys `site/` with `wrangler pages deploy`.
+deploys `out/` with `wrangler pages deploy`.
