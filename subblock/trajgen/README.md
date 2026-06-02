@@ -32,11 +32,10 @@ subblock/trajgen/
 ├── README.md            # this file — project intro (humans)
 ├── CLAUDE.md            # agent contract — how the agent operates the block
 ├── config.yaml          # identity, repos, inputs/outputs, status (one-shot per run)
-├── docs/                # detailed human docs and records
-│   ├── index.mdx        #   overview + quickstart
-│   ├── status.mdx       #   where live status lives
-│   ├── reference/io.mdx #   full inputs/outputs reference
-│   └── memory.mdx       #   notes summary
+├── docs/                # fumadocs site (user-facing docs) → Cloudflare Pages
+│   ├── content/docs/    #   MDX: motivation, getting-started, core-concepts, run-jobs, sft-data, dashboard, reference
+│   ├── src/             #   minimal Next.js + fumadocs app shell
+│   └── deploy_cloudflare_pages.sh  # build (static export) + deploy to swe-trajgen-docs
 ├── dashboard/           # progress board: progress_monitor.py + Cloudflare sync + site/
 ├── memory/notes.md      # long-form notes, repo policy, decisions
 ├── scripts/             # update_repos, setup env, prepare_tasks, dryrun, start, convert, clean
@@ -95,7 +94,9 @@ generic lifecycle (`/block:check`, `/block:run`); these are trajgen-specific:
 
 ## Links
 
-- [`docs/index.mdx`](docs/index.mdx) — detailed overview and step-by-step quickstart
+- **Docs site**: <https://swe-trajgen-docs.pages.dev> (source under [`docs/content/docs/`](docs/content/docs/); fumadocs site published to Cloudflare Pages)
+- [`docs/content/docs/getting-started.mdx`](docs/content/docs/getting-started.mdx) — step-by-step setup and first job
+- [`docs/content/docs/dashboard.mdx`](docs/content/docs/dashboard.mdx) — progress board and Cloudflare sync reference
+- [`docs/content/docs/reference/config-variants.mdx`](docs/content/docs/reference/config-variants.mdx) — config variants + how to build/deploy the docs site
 - [`CLAUDE.md`](CLAUDE.md) — agent contract
-- [`docs/reference/dashboard.mdx`](docs/reference/dashboard.mdx) — progress board and Cloudflare sync reference
 - [root `README.md`](../../README.md) and [`BLOCK_DEFINITION.md`](../../BLOCK_DEFINITION.md) — the block system

@@ -1,0 +1,88 @@
+---
+title: Getting Started
+description: Set up the block and run your first trajectory job
+---
+
+This page walks through preparing the trajgen block and running a job end to end. trajgen wraps a pinned [Harbor](https://github.com/SWE-Lego/harbor) checkout, so most steps are about getting that runtime and your task set in place.
+
+## Prerequisites
+
+- **Docker** — Harbor rolls each task out inside a container, so a working Docker daemon is required on the run host.
+- **[uv](https://docs.astral.sh/uv/)** — used to build the Harbor and `swe_data_process` environments and to run the dashboard.
+- **An OpenAI-compatible LLM endpoint** — the model the agent will call, fronted by a per-job LiteLLM proxy.
+- **Verified tasks from swegen** — a task source containing a `verifiable_tasks.txt` manifest (see [Core Concepts](/docs/core-concepts#verified-task-and-manifest)).
+
+<Callout title="Where to run" type="info">
+trajgen runs on the node declared in `config.yaml` (`meta_info.resources.ip`). Run its scripts inside a `tmux` session on that host so a job survives shell disconnects.
+</Callout>
+
+## 1. Update the managed repos
+
+trajgen depends on two local-only repositories, `harbor` and `swe_data_process`, pinned to specific commits in `config.yaml`. Clone or update them to the pinned refs:
+
+```bash
+bash scripts/update_repos.sh
+```
+
+The script refuses to update a repo whose worktree has local modifications, and sets each repo read-only after checkout. Narrow to one repo with `--repo harbor`.
+
+## 2. Build the environments
+
+Build the `uv` environments for Harbor, LiteLLM, and the SFT converter:
+
+```bash
+bash scripts/setup_swe_data_process_env.sh
+```
+
+This creates the `swe_data_process` environment outside the read-only repo at `artifacts/env/swe-data-process-uv`. The Harbor and LiteLLM environments are created on demand by `start.sh`.
+
+## 3. Prepare tasks
+
+Copy task directories into `artifacts/tasks/<dataset>/`, filtered through the verified-tasks manifest:
+
+```bash
+bash scripts/prepare_tasks.sh
+```
+
+Only task IDs listed in the source's `verifiable_tasks.txt` are copied. See [Prepare Tasks](/docs/run-jobs/prepare-tasks) for the full filtering and ledger rules.
+
+## 4. Validate the config
+
+Run the dry-run preflight. It checks the pinned repos, both `uv` environments, the LiteLLM env, prepared tasks, model API metadata, and Harbor job settings — without side effects:
+
+```bash
+bash scripts/dryrun.sh
+```
+
+Fix anything it reports before launching a job.
+
+## 5. Launch a job
+
+Only after the dry run passes, launch a job. `start.sh` generates the per-job LiteLLM config, starts the proxy, builds the Harbor command from `config.yaml`, and writes results under `artifacts/jobs/`:
+
+```bash
+bash scripts/start.sh
+```
+
+If `sft_conversion.enabled` is `true` in `config.yaml`, conversion runs automatically once Harbor finishes. See [Run Jobs](/docs/run-jobs) for details.
+
+## 6. Inspect results
+
+Each rollout writes a trajectory to:
+
+```text
+artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+```
+
+Aggregate job results land in `artifacts/jobs/<job>/result.json`. For a visual view, open the [dashboard](/docs/dashboard).
+
+## Operating with the agent plugin
+
+If you operate the block through its Claude plugin, the same lifecycle maps to slash commands:
+
+```text
+/block:check trajgen     # preflight: config, repos, envs, tasks, LLM endpoint
+/trajgen:setup           # update repos, build envs, copy verified tasks
+/block:run trajgen       # execute scripts/start.sh (proxy + Harbor) and archive
+/trajgen:dashboard       # view progress locally or sync online
+```

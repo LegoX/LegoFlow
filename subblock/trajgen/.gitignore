@@ -9,6 +9,14 @@ artifacts/
 dashboard/site/
 dashboard/.cache/
 
+# Docs site (fumadocs/Next.js) build artifacts and deps.
+docs/node_modules/
+docs/.next/
+docs/.source/
+docs/out/
+docs/next-env.d.ts
+docs/tsconfig.tsbuildinfo
+
 # Local environment and caches.
 .env
 .env.*
