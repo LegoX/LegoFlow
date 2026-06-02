@@ -1,6 +1,7 @@
 [submodule "subblock/swegen/repos/swegen"]
 	path = subblock/swegen/repos/swegen
-	url = git@github.com:SWE-Lego/SWE-gen.git
+	url = https://github.com/SWE-Lego/SWE-Lego-Live-SWEgen.git
+	branch = main
 [submodule "subblock/sft/repos/swe_data_process"]
 	path = subblock/sft/repos/swe_data_process
 	url = git@github.com:SWE-Lego/swe_data_process.git

@@ -28,16 +28,16 @@ meta_info:
 
 runtime_info:
   input:
-    github_tokens: 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              # Comma-separated GitHub API tokens for PR collection
+    github_tokens: human              # Comma-separated GitHub API tokens for PR collection
 
     llm_api:
       api_key: dummy-key
       api_base_url: "http://llm10.jierungogogo.com/v1"
-      pr_model: "MiniMax-M2.7"
-      task_model: "MiniMax-M2.7"
+      pr_model: "openai/MiniMax-M2.7"
+      task_model: "openai/MiniMax-M2.7"
 
     # llm_api:
-    #   api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY             # LLM API key for PR evaluation and instruction generation
+    #   api_key: human             # LLM API key for PR evaluation and instruction generation
     #   api_base_url: https://az.gptplus5.com/v1        # OpenAI-compatible API endpoint
     #   pr_model: deepseek-v4-flash               # Model for PR evaluation and instruction generation
     #   task_model: deepseek-v4-flash            # Model for Claude Code SDK task completion
@@ -227,6 +227,15 @@ runtime_info:
         description: Rust task creation log
       - path: artifacts/logs/adaptive_decisions.jsonl
         description: Adaptive tuning decisions log (JSONL format)
+
+status:
+  phase: idle
+  progress: "Ready for the next SWE task generation run."
+  next_steps: |
+    1. Run scripts/dryrun.sh before starting a new SWE-gen batch.
+    2. Use quick-verify.md for a small preflight when changing the SWEgen runtime.
+  blockers: null
+  last_updated: null
 
 evolving:
   description: Adaptive agent that monitors per-language success rates and tunes pipeline parameters (timeout, cc_timeout, n_concurrent) automatically every 30 minutes.

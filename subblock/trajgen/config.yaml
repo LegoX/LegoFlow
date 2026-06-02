@@ -129,6 +129,15 @@ environment:
     # consumed per artifacts/consumption_ledger.yaml (status: done | skipped).
     HARBOR_EXCLUDE_TASKS: elastic__elasticsearch-py-3329 elastic__elasticsearch-py-3332 cartography-cncf__cartography-1673 agentscope-ai__agentscope-885 agentscope-ai__agentscope-1342 aider-ai__aider-4146 agentscope-ai__agentscope-964 django-guardian__django-guardian-677 567-labs__instructor-1897 cartography-cncf__cartography-1751 cartography-cncf__cartography-2031
 
+status:
+  phase: idle
+  progress: "Ready for the next trajectory generation run."
+  next_steps: |
+    1. Run scripts/dryrun.sh before starting a new Harbor job.
+    2. Confirm swegen has verified tasks before preparing trajgen inputs.
+  blockers: null
+  last_updated: null
+
 evolving:
   description: Generates agent trajectories using Harbor. Tunable parameters include agent sampling settings, Harbor concurrency, and timeout multipliers.
   tunable_params:
