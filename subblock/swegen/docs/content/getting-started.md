@@ -1,0 +1,116 @@
+---
+title: Getting Started
+description: Set up the SWE-gen block and run the first task generation pass
+---
+
+# Getting Started
+
+Set up the block and run your first task generation pass
+
+SWE-gen wraps the pinned `repos/swegen` checkout in the SWE-Lego-Live block
+layout. The pinned repository is recorded as a gitlink under
+`subblock/swegen/repos/swegen` and should match commit `e804af9`.
+
+## Prerequisites
+
+- Docker - task validation and task execution use containerized Harbor tasks.
+- Python - install the SWE-gen package from `repos/swegen`.
+- GitHub tokens - used for PR collection and PR metadata lookup.
+- OpenAI-compatible LLM endpoint - used for PR evaluation and task instruction generation.
+- Claude-compatible task model - used by the task completion stage.
+
+## 1. Enter the block
+
+Run commands from the block root:
+
+```
+cd subblock/swegen
+```
+
+Confirm the pinned repo exists:
+
+```
+git rev-parse HEAD:repos/swegen
+```
+
+The expected pin for this docs site is:
+
+```
+e804af92aad81f42928453959e24e3f5dc666c44
+```
+
+## 2. Install the environment
+
+Create the block virtual environment and install SWE-gen:
+
+```
+python3 -m venv artifacts/envs/swegen-env2
+source artifacts/envs/swegen-env2/bin/activate
+pip install -U pip
+pip install -e repos/swegen/
+```
+
+If you already maintain a compatible environment, activate it before running
+the scripts. The important requirement is that `swegen` resolves to the pinned
+checkout.
+
+## 3. Configure credentials
+
+Set runtime inputs in the shell or in a local env file that is not committed:
+
+```
+export GITHUB_TOKENS="ghp_xxx,ghp_yyy"
+export OPENAI_API_KEY="..."
+export OPENAI_API_BASE_URL="https://example.com/v1"
+export OPENAI_MODEL="openai/MiniMax-M2.7"
+export ANTHROPIC_MODEL="claude-sonnet-4-6"
+```
+
+`GITHUB_TOKEN` may also be derived from the first entry in `GITHUB_TOKENS`.
+Do not commit tokens or local env files.
+
+## 4. Run a dry run
+
+Check the block before starting a large batch:
+
+```
+bash scripts/dryrun.sh
+```
+
+This validates expected directories, config values, and basic runtime
+dependencies. Fix dry-run failures before launching generation.
+
+## 5. Run a smoke generation
+
+For a small first pass, run a single language at low concurrency:
+
+```
+N_CONCURRENT=1 bash scripts/create_py.sh
+```
+
+For the full multi-language run:
+
+```
+bash scripts/create_all_bg.sh
+```
+
+Per-language scripts are available for `py`, `js`, `ts`, `go`, `c`, `cpp`,
+`java`, and `rust`.
+
+## 6. Resume after moving nodes
+
+If you restored a March state package into a new clone, check the batch state
+before running generation. SWE-gen stores batch state under a filename derived
+from `input_ids_file.resolve()`. A new clone path creates a new hash even when
+the relative input file is the same.
+
+For portable recovery, keep these files together:
+
+- `artifacts/swe_tasks/<lang>-cc/`
+- `artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt`
+- `artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/*.json`
+- the matching PR input files in `artifacts/collected_prs/`
+
+If the clone path changes, rewrite or regenerate the `.swegen-create-batch`
+state filenames so they match the current resolved input file paths before
+launching `scripts/create_{lang}.sh`.

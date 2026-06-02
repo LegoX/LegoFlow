@@ -1,0 +1,108 @@
+---
+title: Outputs
+description: Files and directories produced by SWE-gen
+---
+
+# Outputs
+
+Files and directories produced by SWE-gen
+
+SWE-gen outputs are designed for downstream blocks to consume verified tasks
+without guessing which generated directories are complete.
+
+## Task directories
+
+Per-language task directories live under:
+
+```
+artifacts/swe_tasks/<lang>-cc/
+```
+
+Each verified task directory contains:
+
+| File | Purpose |
+| --- | --- |
+| `instruction.md` | Natural-language problem statement |
+| `environment/Dockerfile` | Reproducible build environment |
+| `environment/bug.patch` | Patch that introduces the failing behavior |
+| `solution/fix.patch` | Ground-truth fix |
+| `solution/solve.sh` | Applies the fix patch |
+| `tests/test.sh` | Verification entrypoint |
+| `task.toml` | Metadata, scoring, timeouts, and tags |
+
+## Verified manifest
+
+The most important output is:
+
+```
+artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt
+```
+
+Downstream consumers should filter through this manifest. It is the difference
+between "a task directory exists" and "the task is validated and safe to use".
+
+## Batch state
+
+Batch state lives next to each language output:
+
+```
+artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/
+```
+
+This directory is needed for resume, deduplication, failure analysis, and
+progress accounting. It should be included in state packages, but not committed
+to Git.
+
+## Logs
+
+Create logs live under:
+
+```
+artifacts/logs/swegen-create/
+```
+
+These logs are useful for debugging model failures, Docker failures, and
+timeout tuning. They are audit artifacts rather than source files.
+
+## Merged verified tasks
+
+The block can optionally flatten verified tasks into:
+
+```
+outputs/<task_id>/
+```
+
+using:
+
+```
+python scripts/extract_verified_tasks.py
+```
+
+This is convenient for tools that expect one task root, but manifest-gated
+in-place consumption is preferred for large runs.
+
+## State packages
+
+When moving to another node, package runtime state separately from source code.
+A complete resume package should include:
+
+- `artifacts/swe_tasks/<lang>-cc/`
+- `verifiable_tasks.txt`
+- `.swegen-create-batch/*.json`
+- PR input files in `artifacts/collected_prs/`
+- optional logs for audit
+
+Do not commit large runtime state to Git. Store it in Cloud storage, a release
+artifact, or a shared filesystem.
+
+## Dataset handoff
+
+The trajgen block consumes tasks after SWE-gen writes manifests. The handoff
+contract is simple:
+
+1. SWE-gen writes task directories and `verifiable_tasks.txt`.
+2. Trajgen copies or reads only task IDs listed in the manifest.
+3. Trajgen rolls out agents and captures trajectories.
+
+This keeps incomplete, failed, or partially generated task skeletons out of
+training data.
