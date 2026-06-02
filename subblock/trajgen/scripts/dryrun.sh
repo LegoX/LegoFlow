@@ -135,7 +135,7 @@ echo ""
 echo "--- 1. Block files ---"
 # Note: meta_info and status are merged into config.yaml in this block, so
 # standalone metainfo.yaml / status.yaml are not expected.
-for file in CLAUDE.md config.yaml dashboard/overview.mdx artifacts/index.yaml; do
+for file in CLAUDE.md config.yaml docs/index.mdx artifacts/index.yaml; do
   if [[ -f "$BLOCK_DIR/$file" ]]; then
     ok "$file exists"
   else

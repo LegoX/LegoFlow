@@ -7,7 +7,7 @@ artifacts/
 
 # Dashboard generator outputs and cache (progress_monitor.py).
 dashboard/site/
-dashboard/memory/.progress_monitor_cache.json
+dashboard/.cache/
 
 # Local environment and caches.
 .env

@@ -1,0 +1,28 @@
+---
+title: Status
+block: trajgen
+source: config.yaml (status block) + artifacts/index.yaml
+---
+
+# Status
+
+## Source Of Truth
+
+Read `config.yaml` -> `status` for the current `phase`, `progress`, `next_steps`,
+and `blockers`. Read `artifacts/index.yaml` for archived run entries. For a live
+visual view of jobs and SFT stats, see the
+[progress dashboard](./reference/dashboard.mdx).
+
+Time convention: `started_at` and `last_updated` are recorded in UTC. Existing
+job directory names may include the local launch timestamp (`UTC+8`) so they
+continue to match the actual artifact path.
+
+## Next Steps
+
+Use `config.yaml` -> `status.next_steps` for the live checklist. During an active
+job, monitor `artifacts/jobs/<job>` and update the `status` block after inspection.
+
+## Experiment Runs
+
+Use `artifacts/index.yaml` for archived run records and the `status` block in
+`config.yaml` for the current operational snapshot.

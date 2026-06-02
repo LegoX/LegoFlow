@@ -40,7 +40,7 @@ BLOCK_DIR = SCRIPT_DIR.parent
 DEFAULT_JOBS = BLOCK_DIR / "artifacts" / "jobs"
 DEFAULT_SFT = BLOCK_DIR / "artifacts" / "sft_data"
 DEFAULT_HTML = SCRIPT_DIR / "site" / "index.html"
-DEFAULT_CACHE = SCRIPT_DIR / "memory" / ".progress_monitor_cache.json"
+DEFAULT_CACHE = SCRIPT_DIR / ".cache" / ".progress_monitor_cache.json"
 CACHE_VERSION = 1
 
 SCAFFOLD_PATTERNS: list[tuple[re.Pattern[str], str]] = [

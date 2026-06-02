@@ -1,16 +1,17 @@
 ---
 title: Inputs & Outputs
 block: trajgen
-source: config.yaml + metainfo.yaml
+source: config.yaml
 ---
 
 # Inputs & Outputs
 
 ## Inputs
 
-Defined in `metainfo.yaml` and filled in `config.yaml`.
-`trajgen` intentionally uses `config.yaml` instead of `inputs.yaml` because the
-file describes a full Harbor run profile, not only upstream inputs.
+Defined and filled in `config.yaml` (this block merges `meta_info` and `status`
+into `config.yaml`; there is no standalone `metainfo.yaml`). `trajgen`
+intentionally uses `config.yaml` instead of `inputs.yaml` because the file
+describes a full Harbor run profile, not only upstream inputs.
 
 | Name | Description | Source | Required |
 |---|---|---|---|

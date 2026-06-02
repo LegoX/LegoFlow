@@ -1,0 +1,234 @@
+---
+title: Progress Dashboard
+block: trajgen
+source: dashboard/progress_monitor.py + dashboard/run_cloudflare_pages_sync.sh
+---
+
+# Trajgen Local Dashboard
+
+Reference for the trajgen progress board tooling that lives under
+`../../dashboard/` (`progress_monitor.py` and `run_cloudflare_pages_sync.sh`).
+
+A small, local-only HTML dashboard for the `trajgen` subblock. It scans two
+artifact directories and renders a single self-contained HTML file you can
+either open directly in a browser or serve over the loopback interface.
+
+Modeled after [`dashboard/swegen/`](https://github.com/SWE-Lego/SWE-Lego-Live/tree/swegen/dashboard/swegen)
+on the `swegen` branch, but stripped to stdlib-only (no `tiktoken`,
+no `tomllib`). For remote viewing it can publish `site/` to Cloudflare
+Pages via [`run_cloudflare_pages_sync.sh`](../../dashboard/run_cloudflare_pages_sync.sh)
+(see [Cloudflare Pages sync](#cloudflare-pages-sync) below).
+
+## Runtime
+
+The script ships with [PEP 723](https://peps.python.org/pep-0723/) inline
+script metadata and a `uv run` shebang, so the runtime Python is provided
+by `uv` (no `pip install`, no shared venv). Requires `uv` on `PATH` and
+a Python interpreter `>= 3.11` (uv will download one if needed).
+
+```text
+#!/usr/bin/env -S uv run --no-project --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+```
+
+Because dependencies are empty (stdlib-only), there is no `dashboard-uv`
+environment to maintain. If a third-party package is ever needed (e.g.
+`tiktoken` for token accounting), add it to the `dependencies = [...]`
+list and uv will resolve it transparently on the next run.
+
+## What it monitors
+
+| Source | Files | Shown as |
+| --- | --- | --- |
+| Harbor jobs | `../artifacts/jobs/<job>/result.json` (only jobs that actually have one) | Harbor Jobs table + per-job eval breakdown |
+| SFT conversion | `../artifacts/sft_data/<job>/lf.stats.json` | SFT Datasets table |
+
+Key fields surfaced for each Harbor job:
+
+- `id`, `started_at`, `finished_at`, `n_total_trials`
+- `stats.n_trials`, `stats.n_errors`
+- For each `stats.evals.<eval>`: `n_trials`, `n_errors`, `metrics[0].mean`,
+  number of `reward == 1.0` / `reward == 0.0` outcomes, and a summary of
+  `exception_stats`.
+
+Key fields surfaced for each SFT dataset:
+
+- `count`
+- `token_lens` (min / mean / max, `gt_128k`)
+- `n_turns` (min / mean / max, `gte_100`)
+- `scores` (min / mean / max)
+- Sizes of `im.jsonl` and `lf.json` on disk.
+
+## Files
+
+```text
+dashboard/
+├── progress_monitor.py                     # generator (this script)
+├── run_cloudflare_pages_sync.sh            # loop-generate + deploy to Cloudflare Pages
+├── README.md                               # this file
+├── site/index.html                         # generated, gitignored
+└── .cache/.progress_monitor_cache.json     # mtime-based parse cache, gitignored
+```
+
+`site/` and `.cache/` are added to
+[`.gitignore`](../../.gitignore) and wiped by
+[`scripts/clean.sh`](../../scripts/clean.sh).
+
+## How to run
+
+From the subblock root (`subblock/trajgen/`). The script is executable;
+prefer invoking it directly so the uv-run shebang takes effect:
+
+```bash
+./dashboard/progress_monitor.py                                  # one-shot generate
+./dashboard/progress_monitor.py --serve --open                   # generate + local preview + open browser
+./dashboard/progress_monitor.py --loop 60 --serve --port 8765    # continuous refresh every 60s
+```
+
+Equivalent explicit forms (useful in CI or when `./` execution is blocked):
+
+```bash
+uv run --no-project --script dashboard/progress_monitor.py [args...]
+```
+
+The plain `python3 dashboard/progress_monitor.py` invocation also still
+works (the script is stdlib-only), but it bypasses uv's Python pinning.
+
+Then either open the file directly:
+
+```text
+subblock/trajgen/dashboard/site/index.html
+```
+
+or visit the local server (default port `8765`):
+
+```text
+http://127.0.0.1:8765/index.html
+```
+
+The HTML also self-refreshes every `--refresh` seconds (default 60) so an
+opened tab stays current while `--loop` keeps writing new snapshots.
+
+## CLI flags
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `--output-html` | `dashboard/site/index.html` | Where to write the HTML. |
+| `--cache-file` | `dashboard/.cache/.progress_monitor_cache.json` | Per-file mtime cache to skip re-parsing unchanged `result.json` / `lf.stats.json`. |
+| `--jobs-dir` | `../artifacts/jobs` | Harbor jobs root. |
+| `--sft-dir` | `../artifacts/sft_data` | SFT conversion root. |
+| `--refresh` | `60` | Browser-side `<meta refresh>` interval (seconds). |
+| `--loop [N]` | off (60 if bare flag) | Regenerate every N seconds in a loop. |
+| `--serve` | off | Start `ThreadingHTTPServer` over `site/`. |
+| `--host` / `--port` | `127.0.0.1` / `8765` | HTTP bind. |
+| `--open` | off | Open the HTML in the default browser after the first write. |
+| `--force-full-scan` | off | Ignore cache for this run. |
+
+## Cloudflare Pages sync
+
+`--serve` only previews on the local loopback address. To make progress
+viewable elsewhere, use
+[`run_cloudflare_pages_sync.sh`](../../dashboard/run_cloudflare_pages_sync.sh) to loop-deploy
+the generated `site/` to Cloudflare Pages (via `wrangler`), which yields a
+public `*.pages.dev` URL.
+
+Current live URL (always points at the latest deployment):
+**[swe-trajgen-databoard.pages.dev](https://swe-trajgen-databoard.pages.dev)**
+
+Start the sync (from the subblock root `subblock/trajgen/`):
+
+```bash
+bash dashboard/run_cloudflare_pages_sync.sh
+```
+
+Each iteration first regenerates `dashboard/site/index.html` with
+`progress_monitor.py`, then deploys it with `wrangler pages deploy`, while
+keeping a local preview server running for debugging.
+
+In addition, the loop calls `scripts/convert_trajectories.sh --skip-unchanged`
+once every `CONVERT_EVERY_SECONDS` (default 2 hours) to convert the latest
+Harbor job's trajectories into SFT data, so the dashboard's SFT stats also
+refresh online. `--skip-unchanged` skips reconversion when the job's resolved
+(reward=1.0) instance set is unchanged. The scaffold is auto-detected from the
+**job name** (not `agent.name` in `config.yaml`, since the two may differ); a
+conversion failure does not block HTML generation or deployment.
+
+Configuration is read by default from
+`~/.config/trajgen_progress_cloudflare.env` (override the path with
+`ENV_FILE`). `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are required:
+
+```bash
+CLOUDFLARE_API_TOKEN="..."
+CLOUDFLARE_ACCOUNT_ID="..."
+PROJECT_NAME="swe-trajgen-databoard"
+BRANCH_NAME="trajgen"
+LOOP_SECONDS="3600"
+PORT="8770"
+CONVERT_ENABLED="1"
+CONVERT_JOB="latest"
+CONVERT_EVERY_SECONDS="7200"
+```
+
+| Variable | How to fill it | Default |
+| --- | --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with edit/deploy permission for the target account's Pages projects. | none, required |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID, found on the account page in the dashboard. | none, required |
+| `PROJECT_NAME` | Cloudflare Pages project name (determines the public URL). | `swe-trajgen-databoard` |
+| `BRANCH_NAME` | Cloudflare Pages deployment branch name. | `trajgen` |
+| `LOOP_SECONDS` | Seconds to wait between generate/deploy iterations. | `3600` |
+| `PORT` | Local preview HTTP server port. | `8770` |
+| `CONVERT_ENABLED` | Whether to auto-run SFT conversion in the loop (`0` disables). | `1` |
+| `CONVERT_JOB` | Harbor job name to convert, or `latest`. | `latest` |
+| `CONVERT_EVERY_SECONDS` | Minimum interval between conversion attempts (decoupled from the deploy cadence). | `7200` |
+| `ENV_FILE` | Override the env file path. | `~/.config/trajgen_progress_cloudflare.env` |
+
+### How to create the API token
+
+`wrangler pages deploy` needs the **account-level `Cloudflare Pages: Edit`**
+permission. None of Cloudflare's built-in templates (Edit Cloudflare Workers,
+Read all resources, etc.) map to it exactly, so on the
+[API Tokens page](https://dash.cloudflare.com/profile/api-tokens) choose
+**Create Custom Token** and configure it as follows:
+
+- **Permissions**:
+  - `Account` → `Cloudflare Pages` → `Edit` (required)
+  - Optional `Account` → `Account Settings` → `Read` (handy for confirming the Account ID)
+- **Account Resources**: `Include` → select your account
+- **Zone Resources**: leave the default (Pages needs no zone permission unless you bind a custom domain)
+
+Put the generated token in `CLOUDFLARE_API_TOKEN`. If you cannot find the custom
+token option in the UI, the closest template is `Edit Cloudflare Workers`
+(Workers and Pages share the same deployment system, so it usually can deploy
+Pages too), but it carries extra unused permissions; **a custom token with
+Cloudflare Pages: Edit remains the least-privilege choice**.
+
+`CLOUDFLARE_ACCOUNT_ID` is not part of the token; copy the 32-character Account
+ID separately from the Cloudflare dashboard account home page.
+
+The node needs `node`/`npx` (the script auto-installs wrangler on demand via
+`npx --yes`) and `uv`. The script defaults to `wrangler@3` (variable
+`WRANGLER_PKG`), because the latest `wrangler` (v4+) requires Node.js >= 22 while
+this node currently runs Node 18; once a newer Node is installed you can set
+`WRANGLER_PKG=wrangler` to use the latest version. Run it inside a `trajgen`
+tmux session so it keeps syncing after you disconnect:
+
+```bash
+tmux new-session -d -s trajgen-cf "ENV_FILE=.env.cf bash dashboard/run_cloudflare_pages_sync.sh 2>&1 | tee /tmp/trajgen_cf_sync.log"
+```
+
+Difference between `--serve` and the sync script:
+
+- `./dashboard/progress_monitor.py --serve`: generate and preview locally only, no deploy.
+- `bash dashboard/run_cloudflare_pages_sync.sh`: long-running online sync that loops
+  generation and publishes `dashboard/site/` to Cloudflare Pages via `wrangler pages deploy`.
+
+## Out of scope
+
+- Per-trial trajectory browsing (only `result.json` aggregates are shown).
+- Historical 1h / 24h deltas via a `state.jsonl` snapshot file.
+
+If any of those are needed later, lift the corresponding helpers directly
+from `dashboard/swegen/progress_monitor_all.py` on the `swegen` branch.

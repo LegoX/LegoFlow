@@ -4,6 +4,12 @@ block: trajgen
 updated_at: "2026-04-29T00:00:00Z"
 ---
 
+{/*
+  Human-facing documentation entry point for the trajgen block.
+  - Agent contract: ../CLAUDE.md + ../config.yaml
+  - Live progress board (HTML): ../dashboard/ (progress_monitor.py)
+*/}
+
 # Trajectory Generation
 
 Trajectory generation block for Harbor-based SWE task rollouts. This block
@@ -12,9 +18,11 @@ tasks, Harbor jobs, LiteLLM trajectories, and logs under `artifacts/`.
 
 ## Operational State
 
-The active operational snapshot lives in `status.yaml`. Use that file for the
-current phase, active job, blockers, and next operator action; this overview
-stays focused on the stable workflow.
+The active operational snapshot lives in `config.yaml` (the `status` block) and
+`artifacts/index.yaml`. Use those for the current phase, active job, blockers,
+and next operator action; this overview stays focused on the stable workflow.
+For an at-a-glance live view of job/SFT progress, see the
+[progress dashboard](./reference/dashboard.mdx).
 
 ## Pipeline
 
@@ -95,7 +103,7 @@ Expected trajectory files are under
 `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`.
 
 ```text
-Inspect the latest trajgen job under artifacts/jobs. Summarize job status and save to subblock/trajgen/status.yaml.
+Inspect the latest trajgen job under artifacts/jobs. Summarize job status and update the status block in subblock/trajgen/config.yaml.
 ```
 
 ### Step 7: Create A Config Variant
@@ -124,11 +132,12 @@ Run from `subblock/trajgen/`:
 ```
 
 Open `dashboard/site/index.html` directly or visit
-`http://127.0.0.1:8765/index.html`. See [README](./README.md) for all flags.
+`http://127.0.0.1:8765/index.html`. See the
+[dashboard reference](./reference/dashboard.mdx) for all flags.
 
 ## Quick Links
 
 - [Status](./status.mdx) — live job progress and next steps
-- [Inputs & Outputs](./io.mdx) — current runtime config and produced paths
+- [Inputs & Outputs](./reference/io.mdx) — current runtime config and produced paths
 - [Memory](./memory.mdx) — repo policy and handoff notes
-- [Progress Dashboard README](./README.md) — local HTML monitor for jobs and SFT data
+- [Progress Dashboard](./reference/dashboard.mdx) — local HTML monitor for jobs and SFT data
