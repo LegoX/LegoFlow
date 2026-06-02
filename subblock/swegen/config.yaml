@@ -228,6 +228,15 @@ runtime_info:
       - path: artifacts/logs/adaptive_decisions.jsonl
         description: Adaptive tuning decisions log (JSONL format)
 
+status:
+  phase: idle
+  progress: "Ready for the next SWE task generation run."
+  next_steps: |
+    1. Run scripts/dryrun.sh before starting a new SWE-gen batch.
+    2. Use quick-verify.md for a small preflight when changing the SWEgen runtime.
+  blockers: null
+  last_updated: null
+
 evolving:
   description: Adaptive agent that monitors per-language success rates and tunes pipeline parameters (timeout, cc_timeout, n_concurrent) automatically every 30 minutes.
   tunable_params:
