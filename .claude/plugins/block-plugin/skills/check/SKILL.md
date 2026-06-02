@@ -1,7 +1,7 @@
 ---
 name: check
 description: >
-  Recursively sanity-check every block at and beneath the current working directory: config.yaml schema, runtime_info.input completeness, inter-block dependency resolution, repos pin matches, environment (venv_path) existence, remote resource (SSH/directory) reachability, live availability of every OpenAI-compatible LLM endpoint declared in any block's runtime_info.input, AND block-specific dryrun validation (scripts/dryrun.sh — GPU, Docker, WANDB, model compatibility, etc.). Reports all failures in one consolidated message with a run configuration summary. Does not execute scripts/start.sh, does not flip status.phase, does not write archives. **MANDATORY before /block:run** — the agent must run this skill AND receive explicit user confirmation before launching any block. Triggers on phrases like "check my blocks", "validate the config", "sanity check everything", "are my API keys working", "is the remote reachable", "run /block:check", "diagnose this block".
+  Recursively sanity-check every block at and beneath the current working directory: config.yaml schema, runtime_info.input completeness, inter-block dependency resolution, repos pin matches, environment (venv_path) existence, remote resource (SSH/directory) reachability, live availability of every OpenAI-compatible LLM endpoint declared in any block's runtime_info.input, AND block-specific dryrun validation (scripts/dryrun.sh — GPU, Docker, WANDB, model compatibility, etc.). Reports all failures in one consolidated message, grouped by source into **dryrun checks** (scripts/dryrun.sh verdicts, reported as-is) and **live checks** (probes the agent runs itself — /models, SSH, dependency resolution, and mine-vs-foreign GPU/port classification), plus a run configuration summary. Does not execute scripts/start.sh, does not flip status.phase, does not write archives. **MANDATORY before /block:run** — the agent must run this skill AND receive explicit user confirmation before launching any block. Triggers on phrases like "check my blocks", "validate the config", "sanity check everything", "are my API keys working", "is the remote reachable", "run /block:check", "diagnose this block".
 ---
 
 # /block:check
@@ -31,6 +31,26 @@ Starting at CWD, decide where to begin:
 3. Else, abort: "This directory is not a block (no `config.yaml`) and has no `subblock/` children. Run `/block:check` from inside a block's directory or from a directory whose `subblock/` contains blocks."
 
 Build a flat list `[(block_path, parsed_config_yaml)]` of every reachable block. Record any declared subblock whose directory is missing as a `tree:missing-child` failure on its parent.
+
+## Step 1.5 — Per-block delegation (block-specific check skills)
+
+A block may ship its **own** check skill at
+`<block_path>/.claude/plugins/block-plugin/skills/check/SKILL.md`. When it
+does, that file — not this one — is the authoritative check procedure for
+that block: it encodes the block's specific checks and its own report format.
+
+For each discovered block:
+
+- **If `<block_path>/.claude/plugins/block-plugin/skills/check/SKILL.md`
+  exists** → read it and **follow that file's instructions** for this block.
+  Its steps and report template supersede the generic Step 2–6 below for this
+  block. (Example: `subblock/rl` ships its own check skill; defer to it.)
+- **Otherwise** → fall back to the generic **Step 2–6** in this file.
+
+This keeps one source of truth per block: to change how a block is validated,
+edit *that block's* check skill. The generic Step 2–6 here are only the
+default for blocks that don't provide their own. When you delegate, say so in
+the report (e.g. `subblock/rl → followed block-local check skill`).
 
 ## Step 2 — Per-block static checks
 
@@ -131,10 +151,57 @@ Rules for the report:
 - For `api:*` failures, include the URL and the HTTP status / error string verbatim so the user can paste it into their endpoint dashboard.
 - For `dep:unresolved`, name both the consumer (`subblock/<child>.<dep_key>`) and the producer (`subblock/<src>.output.<key>`).
 - For `dryrun:*` failures/warnings, include the exact line from dryrun.sh output.
+- **Separate findings by source.** Group every check into one of two classes so the user can tell a script verdict from an agent verdict:
+  - **Dryrun checks** — produced verbatim by `scripts/dryrun.sh` (Step 3). The verdict is the script's own `OK` / `WARN` / `MISSING` / `FAIL`. Do **not** upgrade or downgrade these; report them as-is.
+  - **Live checks** — performed by `/block:check` itself (the agent), not by `dryrun.sh`: LLM `/models` probes (Step 4), SSH reachability (Step 2 #8), inter-block dependency resolution (Step 2 #5), and any **agent classification of a `dryrun.sh` `WARN`** that `dryrun.sh` explicitly delegates (e.g. a GPU-occupancy line tagged `classifies mine vs foreign`, or a `status.phase: running` staleness judgement). A live verdict that escalates a dryrun `WARN` to a blocker MUST say so explicitly and cite the dryrun line it is escalating — never merge it silently into the dryrun FAIL count.
+- When a block prints a table-form report, follow the **rl worked example** below: one table per class (Dryrun checks, Live checks), each row carrying its own `Class` (pass / WARN-optional / FAIL-blocking / N/A / live-blocking).
 - Warnings (e.g. `scripts:no-start`, `api:no-models-endpoint`, `dryrun:warn`) print as `⚠` and do **not** count toward the failure total.
 - If a block's `dryrun.sh` printed a Run Configuration Summary, include it verbatim in the report so the user can review the full configuration before confirming.
 - If every block is clean, end with: `All blocks healthy. Please confirm to proceed with /block:run.` **Do NOT auto-proceed — always wait for explicit user confirmation.**
 - If there are failures, end with actionable fix steps and: `Fix the above, then re-run /block:check.`
+
+### Worked example — `rl` block (table form, dryrun vs live-check)
+
+For a single leaf block like `subblock/rl` the table-form report looks like this. Two tables: one for what `scripts/dryrun.sh` reported verbatim, one for what `/block:check` verified live. Every row carries its own `Class`.
+
+**Block:** `subblock/rl`  ·  **dryrun exit:** 1 (`ok=25 missing/empty=2`)
+
+**Dryrun checks** (verdict = `scripts/dryrun.sh` output, reported as-is):
+
+| Check | Result | Class |
+|---|---|---|
+| config.yaml parseable | `OK` | ✓ pass |
+| repos present (harbor-verl-train / harbor / verl) | `OK` | ✓ pass |
+| repo pins (harbor `9f98f9d`, verl `bcb638649`) | `OK` | ✓ pass |
+| upstream launch script + verl_patch configs | `OK` | ✓ pass |
+| launch script syntax (`bash -n`) | `OK` | ✓ pass |
+| venv python present (default `.venv`) | `OK` | ✓ pass |
+| venv editable installs resolve under `repos/` | `FAIL` | ✗ **blocking** |
+| input paths (model, train/val parquet, traj logger) | `OK` | ✓ pass |
+| docker backend reachable (`tcp://192.168.35.240:2375`) | `OK` | ✓ pass |
+| docker_host `:2375` unencrypted | `WARN` | ⚠ optional |
+| host ports free (6379 / 8265 / 8002) | `OK` | ✓ pass |
+| output dirs writable (logs / checkpoints) | `OK` | ✓ pass |
+| `WANDB_API_KEY` set | `MISSING` | ✗ **blocking** |
+| GPU count ≥ `ngpus_per_node` (8 ≥ 8) | `OK` | ✓ pass |
+| GPU occupancy | `WARN` | ⚠ optional → *delegated to live-check* |
+| checkpoint disk space | `OK` | ✓ pass |
+| cache / temp residue | `WARN` | ⚠ optional |
+| `gen_tp` divides `num_key_value_heads` (4 \| 4) | `OK` | ✓ pass |
+
+**Live checks** (verdict = `/block:check` itself, not `dryrun.sh`):
+
+| Check | Result | Class |
+|---|---|---|
+| LLM endpoint `/models` probe (Step 4) | no OpenAI-compatible endpoint in `runtime_info.input` (`anthropic_api_key` is a dummy shim) | — N/A |
+| SSH reachability (`resources.ip`) | `ip: null` → runs locally | — N/A |
+| inter-block dep `base_model_checkpoint` → `sft.output.checkpoint_path` | `model_path` filled directly; not consuming sft output | ✓ resolved |
+| GPU mine-vs-foreign (escalates dryrun `WARN` GPU occupancy) | all 8× L20X held by a **foreign** job (`/mnt/ydu/ydu_rl_train/` qwen3.5-35B eval, pids 1154947 / 1161057) | ✗ **live-blocking** |
+| stale-run detection (`status.phase: running`) | `current_job` (2026-05-27) pids 494383/495806 dead → status is stale | ⚠ note |
+
+**Summary:** dryrun → 2 blocking (`FAIL` editable installs, `MISSING` WANDB) + 3 WARN · live → 1 live-blocking (GPUs held by foreign job) + 1 stale note. **Not runnable.**
+
+> Note the discipline this example enforces: GPU occupancy is `WARN` in the dryrun table (the script's verdict, unchanged) and appears a **second** time in the live table as the agent's `live-blocking` escalation, with the foreign-job evidence cited. The two are never collapsed into the dryrun FAIL count.
 
 ## Step 6 — What this skill must NOT do
 
