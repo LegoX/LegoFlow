@@ -3,7 +3,7 @@
     "trajgen-blocks": {
       "source": {
         "source": "directory",
-        "path": ".claude/marketplace"
+        "path": ".claude/plugins"
       }
     }
   },

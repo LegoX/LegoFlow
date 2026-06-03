@@ -29,22 +29,21 @@ post-run ledger bookkeeping). Use `/block:run` to execute; consult
 ## Layout
 
 This plugin lives inside the block-local marketplace at
-`subblock/trajgen/.claude/marketplace/` (manifest at
-`.claude/marketplace/.claude-plugin/marketplace.json`, registered by
-`.claude/settings.json`):
+`subblock/trajgen/.claude/plugins/` (manifest at
+`.claude/plugins/.claude-plugin/marketplace.json`, registered by
+`.claude/settings.json`) — the same layout as the root block's `.claude/plugins/`:
 
 ```
-.claude/marketplace/
+.claude/plugins/
 ├── .claude-plugin/marketplace.json    # marketplace catalog (name: "trajgen-blocks")
-└── plugins/
-    └── trajgen-plugin/
-        ├── .claude-plugin/plugin.json # manifest (name: "trajgen")
-        ├── README.md                  # this file
-        └── skills/
-            ├── setup/SKILL.md         # /trajgen:setup
-            ├── run-job/SKILL.md       # /trajgen:run-job
-            ├── convert-sft/SKILL.md   # /trajgen:convert-sft
-            └── dashboard/SKILL.md     # /trajgen:dashboard
+└── trajgen-plugin/
+    ├── .claude-plugin/plugin.json     # manifest (name: "trajgen")
+    ├── README.md                      # this file
+    └── skills/
+        ├── setup/SKILL.md             # /trajgen:setup
+        ├── run-job/SKILL.md           # /trajgen:run-job
+        ├── convert-sft/SKILL.md       # /trajgen:convert-sft
+        └── dashboard/SKILL.md         # /trajgen:dashboard
 ```
 
 Every skill wraps scripts under `subblock/trajgen/scripts/` (and

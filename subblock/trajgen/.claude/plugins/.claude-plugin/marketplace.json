@@ -4,7 +4,7 @@
   "plugins": [
     {
       "name": "trajgen",
-      "source": "./plugins/trajgen-plugin",
+      "source": "./trajgen-plugin",
       "description": "trajgen-specific operating skills: setup, run-job, convert-sft, dashboard"
     }
   ]
