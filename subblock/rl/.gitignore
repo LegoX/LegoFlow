@@ -12,4 +12,4 @@ repos/harbor-verl-train/wandb/
 # Local state
 *.log
 .DS_Store
-.claude/
+.claude/settings.local.json
