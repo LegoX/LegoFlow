@@ -153,9 +153,9 @@ HARBOR_COMMIT="$(cfg meta_info.repositories.harbor.commit)"
 HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
 READONLY="$(cfg meta_info.repositories.harbor.readonly)"
 
-[[ -n "$HARBOR_URL" ]] || { echo "ERROR: repositories.harbor.url is empty" >&2; exit 1; }
-[[ -n "$HARBOR_REF" || -n "$HARBOR_COMMIT" ]] || { echo "ERROR: repositories.harbor.branch/ref or commit is required" >&2; exit 1; }
-[[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: repositories.harbor.path is empty" >&2; exit 1; }
+[[ -n "$HARBOR_URL" ]] || { echo "ERROR: meta_info.repositories.harbor.url is empty" >&2; exit 1; }
+[[ -n "$HARBOR_REF" || -n "$HARBOR_COMMIT" ]] || { echo "ERROR: meta_info.repositories.harbor.branch/ref or commit is required" >&2; exit 1; }
+[[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.harbor.path is empty" >&2; exit 1; }
 
 HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
 mkdir -p "$(dirname "$HARBOR_DIR")"
@@ -166,7 +166,7 @@ echo "Harbor ref:  ${HARBOR_REF:-<none>}"
 echo "Harbor pin:  ${HARBOR_COMMIT:-<none>}"
 echo "Harbor path: $HARBOR_PATH_RAW"
 
-if [[ -d "$HARBOR_DIR/.git" ]]; then
+if git -C "$HARBOR_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   set_tree_writable "$HARBOR_DIR"
 
   CURRENT_URL="$(git -C "$HARBOR_DIR" remote get-url origin)"

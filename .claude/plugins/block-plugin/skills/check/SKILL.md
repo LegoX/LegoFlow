@@ -15,22 +15,54 @@ Recursively walk the block tree rooted at the current working directory and vali
 
 Never skip the confirmation step — even if all checks pass. Heavy operations (GPU training, multi-hour jobs) are expensive and hard to reverse once started.
 
+## Arguments
+
+The args string is free-form natural language (may be empty). The agent reads the whole string holistically — no token parsing — to decide **which block to check** and **how to focus the report**.
+
+### Target resolution
+
+Same rule as `/block:run`. List `./subblock/` for valid names, then read args and decide:
+
+- **Single block clearly identified** (literal name or unambiguous paraphrase) → `TARGET_DIR=./subblock/<name>/`. Check that block only — no recursion into its children, no walking of siblings.
+- **Multiple blocks mentioned or ambiguous** → ask. Do not guess.
+- **No block mentioned** → `TARGET_DIR=CWD` (full subblock tree walk).
+- **Block inferred but `./subblock/<name>/` doesn't exist** → abort with the actual listing and ask the user to pick.
+
+When `TARGET_DIR` is a subblock, cross-block dependency checks (Step 2, check #5) still read sibling configs to validate producer outputs — but don't recursively check those siblings' health.
+
+### Report focusing
+
+Any extra context in args (beyond identifying the block) is a hint for **how to present the report** — not what to scan. `/block:check` always runs every check; the instruction only shapes which findings lead and which collapse to a one-line tail. If the hint is ambiguous, default to the full report.
+
+### Examples
+
+| Args | Target | Behavior |
+| ---- | ------ | -------- |
+| *(empty)* | root | full report across all blocks |
+| `swegen` | swegen | full report for swegen |
+| `trajgen focus on api connectivity` | trajgen | lead with `api:*` findings |
+| `are my api keys working` | root | full tree; lead with `api:*` findings |
+| `check swegen for missing inputs` | swegen | lead with `input:*` / `schema:*` findings |
+| `compare swegen and trajgen configs` | ambiguous | ask which block |
+| `check frobnicator` | abort | print valid list, ask user to pick |
+
 ## Step 0 — Orient
 
 Read `references/BLOCK_DEFINITION.md` bundled in this plugin (sibling of the `skills/` folder containing this file). It is the contract — pay particular attention to:
 
-- The `meta_info` / `runtime_info` / `status` schema and the **wiring rule** (inter-block values live in `meta_info.subblocks[<child>].dependencies` formatted `<source_block>.output.<key>` or the literal `human`; `runtime_info.input` is exclusively for values originating outside the block tree).
+- The `meta_info` / `runtime_info` schema and the **wiring rule** (inter-block values live in `meta_info.subblocks[<child>].dependencies` formatted `<source_block>.output.<key>` or the literal `human`; `runtime_info.input` is exclusively for values originating outside the block tree). Note that `config.yaml` no longer contains a top-level `status` section — live state lives in `artifacts/index.yaml`.
 - The **remote-execution rule** (if `meta_info.resources.ip` is set, the block runs on that host — so its environment and repos must exist there, not locally).
 
 ## Step 1 — Discover the block tree
 
-Starting at CWD, decide where to begin:
+Starting at `TARGET_DIR` (resolved in the Arguments section), decide where to begin:
 
-1. If `./config.yaml` exists, this directory is the root of the check. Read it and recurse into every child named under `meta_info.subblocks` by descending into `./subblock/<name>/`.
-2. Else if `./subblock/` exists and contains child block directories (each with its own `config.yaml`), treat CWD as a pseudo-root (the SWE-Lego-Live pattern: a coordinator with no config.yaml of its own). Check each child as an independent block; do **not** synthesize a config for the parent.
-3. Else, abort: "This directory is not a block (no `config.yaml`) and has no `subblock/` children. Run `/block:check` from inside a block's directory or from a directory whose `subblock/` contains blocks."
+1. **If `block_name` was passed** (`TARGET_DIR=./subblock/<block_name>/`): treat that directory as the single block under check. Its `config.yaml` must exist — if not, abort: `"subblock/<block_name>/config.yaml not found."`. Do **not** recurse into its `meta_info.subblocks` (leaf scope by user choice). Skip cases 2 and 3 below.
+2. **No `block_name`, and `./config.yaml` exists**: this directory is the root of the check. Read it and recurse into every child named under `meta_info.subblocks` by descending into `./subblock/<name>/`.
+3. **No `block_name`, no `./config.yaml`, but `./subblock/` exists** with child block directories (each with its own `config.yaml`): treat CWD as a pseudo-root (the SWE-Lego-Live pattern: a coordinator with no config.yaml of its own). Check each child as an independent block; do **not** synthesize a config for the parent.
+4. **None of the above**: abort: `"This directory is not a block (no config.yaml) and has no subblock/ children. Run /block:check from inside a block's directory or from a directory whose subblock/ contains blocks."`.
 
-Build a flat list `[(block_path, parsed_config_yaml)]` of every reachable block. Record any declared subblock whose directory is missing as a `tree:missing-child` failure on its parent.
+Build a flat list `[(block_path, parsed_config_yaml)]` of every reachable block — exactly one entry when `block_name` is set, more when walking the full tree. Record any declared subblock whose directory is missing as a `tree:missing-child` failure on its parent (only applicable when walking the tree).
 
 ## Step 1.5 — Per-block delegation (block-specific check skills)
 
@@ -59,13 +91,13 @@ For each discovered block, run every check below. **Never abort early** — coll
 | # | Check | Failure label |
 | - | ----- | ------------- |
 | 1 | `config.yaml` parses as YAML. | `schema:parse-error` |
-| 2 | Top-level sections present: `meta_info`, `runtime_info`, `status`. (`evolving` is optional.) | `schema:missing-section` |
+| 2 | Top-level sections present: `meta_info`, `runtime_info`. (`evolving` is optional. No `status` section: it was retired — flag it as a stale schema if encountered.) | `schema:missing-section` / `schema:legacy-status` |
 | 3 | `meta_info.name` is a non-empty string and matches the directory name. | `schema:name-mismatch` |
-| 4 | Every key under `runtime_info.input` has a non-null, non-empty value. Recurse into nested objects — every leaf must be filled. Treat obvious placeholders (`YOUR_API_KEY`, `xxx`, `<...>`, `changeme`, `ghp_YOUR_TOKEN_HERE`) as unfilled. | `input:unfilled` / `input:placeholder` |
+| 4 | For keys under `runtime_info.input`, require values to be non-null unless the block intentionally uses an empty string for an optional or auto-derived field. Recurse into nested objects, but do **not** treat every empty string leaf as a failure. Treat obvious placeholders (`YOUR_API_KEY`, `xxx`, `<...>`, `changeme`, `ghp_YOUR_TOKEN_HERE`) as unfilled even if non-null. | `input:unfilled` / `input:placeholder` |
 | 5 | For each `child` in `meta_info.subblocks`, for each `dep_key: dep_value` in `subblocks[child].dependencies`: if `dep_value` is the literal `human`, then this block's `runtime_info.input.<dep_key>` must be non-null. Otherwise `dep_value` parses as `<src>.output.<key>` and `subblock/<src>/config.yaml`'s `runtime_info.output.<key>` must be non-null. | `dep:unresolved` |
-| 6 | For each entry under `meta_info.repos`: `./repos/<name>/` exists. If a `commit_id` is pinned, the checked-out HEAD matches it. Treat a submodule gitlink whose recorded SHA matches `commit_id` as a pass even if the working tree isn't materialized. | `repo:missing` / `repo:pin-drift` |
-| 7 | If `meta_info.environment.venv_path` is set: that path exists on the host that will run the block — local if no `meta_info.resources.ip`, remote (`ssh <ip> test -d <path>`) if set. | `env:venv-missing` |
-| 8 | If `meta_info.resources.ip` is set: `ssh -o BatchMode=yes -o ConnectTimeout=5 <ip> true` succeeds. If `meta_info.resources.directory` is also set, also verify `ssh <ip> test -d <directory>`. | `resource:ssh-unreachable` / `resource:dir-missing` |
+| 6 | For each entry under `meta_info.repos` **or** `meta_info.repositories`: `./repos/<name>/` exists. If a pin is provided under `commit_id`, `commit`, or `pinned_commit`, the checked-out HEAD matches that pinned SHA. Treat a submodule gitlink whose recorded SHA matches the pinned SHA as a pass even if the working tree isn't materialized. | `repo:missing` / `repo:pin-drift` |
+| 7 | If `meta_info.environment.venv_path` is set: that path exists on the host that will run the block — local if `meta_info.resources.ip` is absent or set to `local`, remote (`ssh <ip> test -d <path>`) only if `meta_info.resources.ip` is set to a non-local host. | `env:venv-missing` |
+| 8 | If `meta_info.resources.ip` is set to a non-local host: `ssh -o BatchMode=yes -o ConnectTimeout=5 <ip> true` succeeds. If `meta_info.resources.directory` is also set, also verify `ssh <ip> test -d <directory>`. If `meta_info.resources.ip` is absent or equal to `local`, treat the block as local and do **not** perform SSH reachability checks. | `resource:ssh-unreachable` / `resource:dir-missing` |
 | 9 | `scripts/start.sh` exists (warning, not failure — a block may be a coordinator-only parent). | `scripts:no-start` (warning) |
 
 ## Step 3 — Block-specific dryrun (scripts/dryrun.sh)

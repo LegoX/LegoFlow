@@ -3,7 +3,7 @@
 # Block-level launcher: 1-node sync-mode online RL with claude-code agent.
 #
 # This is a thin wrapper around the upstream launch script:
-#   repos/harbor-verl-train/scripts/sync_1nodes_cc.sh
+#   repos/harbor-verl-train/scripts/sync_1node_cc.sh
 #
 # Responsibility split:
 #   - This file:    parse config.yaml → export env vars → exec upstream

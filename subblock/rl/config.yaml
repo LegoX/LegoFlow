@@ -267,33 +267,6 @@ runtime_info:
       path: repos/harbor-verl-train/harbor_trials/<project_name>/<exp_name>/
       pattern: "**/litellm-trajectory.jsonl"
 
-status:
-  phase: running
-  progress: "verl initializing — Ray cluster booting, model loading onto 8×L20X GPUs"
-  next_steps: |
-    Monitor:
-      tail -F repos/harbor-verl-train/logs/harbor-cc-sync-1n-20260527-062831.log
-      curl -sS http://127.0.0.1:8002/health/liveliness   # once LiteLLM up
-    Stop:
-      ps -ef | grep -E "sync_1node_cc|main_ppo" | grep -v grep   # then kill the PIDs
-  blockers: null
-  last_updated: "2026-05-27T06:28:31Z"
-  current_job:
-    name: harbor-cc-sync-1n-20260527-080726
-    started_at: "2026-05-27T08:07:26Z"
-    detail: |
-      Docker-mode single-node RL training on 8×NVIDIA L20X.
-      Backend: RemoteDockerEnvironment → tcp://192.168.35.240:2375.
-      Model: Qwen3-30B-A3B-Instruct-2507, TP=4 DP=2.
-      Algorithm: GRPO/GSPO, lr=1e-6, batch=64×8=512.
-      All fixes: FlashInfer cache, VLLM_ATTENTION_BACKEND, docker SDK,
-        Compose V2, runtime image bind mount (staged on remote host).
-      NODE0_IP auto-detected: 192.168.16.183.
-      Process tree: sync_1node_cc.sh pid 494383, main_ppo pid 495806.
-      Launch log: logs/launch_20260527-080656.log
-      Upstream log: repos/harbor-verl-train/logs/harbor-cc-sync-1n-20260527-080726.log
-  metrics: {}
-
 evolving:
   description: >-
     Single-node sync RL training (claude-code agent + Harbor k8s sandbox).

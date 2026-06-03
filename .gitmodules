@@ -21,3 +21,6 @@
 	path = subblock/rl/repos/harbor
 	url = https://github.com/SWE-Lego/harbor.git
 	branch = ydu_dev
+[submodule "subblock/eval/repos/harbor"]
+	path = subblock/eval/repos/harbor
+	url = git@github.com:SWE-Lego/harbor.git

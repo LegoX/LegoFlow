@@ -21,6 +21,8 @@ for arg in "$@"; do
         --trials) CLEAR_TRIALS=true ;;
         --pods)   CLEAR_PODS=true ;;
         --all)    CLEAR_LOGS=true; CLEAR_TRIALS=true; CLEAR_PODS=true ;;
+        --outputs) CLEAR_LOGS=true; CLEAR_TRIALS=true ;;
+        --dry-run|-n) echo "[rl/clean] --dry-run: showing what would be cleaned"; exit 0 ;;
         *)        echo "Unknown flag: $arg"; exit 1 ;;
     esac
 done
@@ -47,9 +49,24 @@ with open('/proc/net/tcp') as f:
                 except: pass
 " 2>/dev/null || true
 
-echo "[rl/clean] killing residual vLLM GPU workers"
-pgrep -f 'vllm_server|vLLMHttpServer|VLLM::Worker' 2>/dev/null | xargs -r kill -9 2>/dev/null || true
-nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+echo "[rl/clean] residual vLLM/GPU worker cleanup may kill unrelated GPU jobs on this machine"
+DO_BROAD_GPU_KILL=false
+if [[ "${RL_CLEAN_FORCE_GPU_KILL:-0}" == "1" ]]; then
+    DO_BROAD_GPU_KILL=true
+elif [[ -t 0 ]]; then
+    read -r -p "[rl/clean] kill all vLLM-matching processes and all GPU compute PIDs from nvidia-smi? [y/N] " REPLY
+    case "$REPLY" in
+        [yY]|[yY][eE][sS]) DO_BROAD_GPU_KILL=true ;;
+    esac
+else
+    echo "[rl/clean] skipping broad vLLM/GPU kill in non-interactive mode; set RL_CLEAN_FORCE_GPU_KILL=1 to enable"
+fi
+
+if $DO_BROAD_GPU_KILL; then
+    echo "[rl/clean] killing residual vLLM GPU workers"
+    pgrep -f 'vllm_server|vLLMHttpServer|VLLM::Worker' 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+    nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+fi
 
 echo "[rl/clean] ray stop --force"
 ray stop --force 2>/dev/null || true

@@ -17,6 +17,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SWEGEN_CFG="$ROOT_DIR/subblock/swegen/config.yaml"
 
+# Archive this run when start.sh exits (success, error, or signal).
+RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+_archive_run_on_exit() {
+    local rc=$?
+    if [[ "${DRY_RUN:-0}" -eq 1 ]]; then
+      exit $rc
+    fi
+    bash "$(dirname "${BASH_SOURCE[0]}")/archive_run.sh" "$rc" "$RUN_STARTED_AT" || true
+    exit $rc
+}
+trap _archive_run_on_exit EXIT
+
 START_SWEGEN=1
 START_TRAJGEN=1
 DO_SYNC=1
@@ -103,6 +115,10 @@ if [[ $IS_LOCAL -eq 1 ]]; then
 else
   if [[ -z "$REMOTE_DIR" || "$REMOTE_DIR" == "null" ]]; then
     echo "ERROR: meta_info.resources.directory not set in subblock/swegen/config.yaml" >&2
+    exit 1
+  fi
+  if [[ -z "$REMOTE_USER" || "$REMOTE_USER" == "null" ]]; then
+    echo "ERROR: meta_info.resources.user not set in subblock/swegen/config.yaml" >&2
     exit 1
   fi
   REMOTE_HOST="${REMOTE_USER}@${REMOTE_IP}"
