@@ -50,10 +50,12 @@ PY
 ```bash
 export OPENAI_API_KEY="..."
 export ANTHROPIC_API_KEY="$OPENAI_API_KEY"
-export OPENAI_API_BASE_URL="https://yunwu.ai/"
-export ANTHROPIC_BASE_URL="https://yunwu.ai/"
-export OPENAI_MODEL="gpt-5.4"
-export ANTHROPIC_MODEL="claude-opus-4-6"
+export OPENAI_API_BASE_URL="https://your-openai-compatible-endpoint/v1"
+export ANTHROPIC_BASE_URL="https://your-anthropic-compatible-endpoint"
+export OPENAI_MODEL="..."
+export ANTHROPIC_MODEL="..."
+export CLAUDE_CONFIG_DIR="$PWD/artifacts/claude-config/swegen-clean"
+mkdir -p "$CLAUDE_CONFIG_DIR"
 ```
 
 ```bash
@@ -69,7 +71,7 @@ client = OpenAI(api_key=key, base_url=base, timeout=60)
 client.chat.completions.create(
     model=model,
     messages=[{"role": "user", "content": "ping"}],
-    max_tokens=1,
+    max_tokens=16,
 )
 print("llm_preflight=ok")
 PY
@@ -146,11 +148,11 @@ electricitymaps/electricitymaps-contrib:pr-8119
 
 ```bash
 swegen create \
-  --input-ids-file artifacts/experiments/quick-verify/collected_prs/python_pr_ids.txt \
+  --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
   --max-pr 1 \
   --n-concurrent 1 \
-  --output artifacts/experiments/quick-verify/swe_tasks/py-cc \
-  --state-dir artifacts/experiments/quick-verify/state \
+  --output artifacts/swe_tasks/py-cc \
+  --state-dir scripts/.swegen-py \
   --timeout 2400 \
   --cc-timeout 1800 \
   --no-require-issue \
@@ -163,7 +165,7 @@ swegen create \
 成功标准：
 
 ```bash
-test -s artifacts/experiments/quick-verify/swe_tasks/py-cc/verifiable_tasks.txt
+test -s artifacts/swe_tasks/py-cc/verifiable_tasks.txt
 ```
 
 `verifiable_tasks.txt` 应至少包含一个 task ID，例如：
@@ -176,7 +178,7 @@ tox-dev__tox-3813
 
 | 现象 | 优先检查 |
 |---|---|
-| `LLM API preflight failed` | `OPENAI_API_KEY`、`OPENAI_API_BASE_URL`、`OPENAI_MODEL`、`ANTHROPIC_MODEL` 是否匹配同一服务 |
+| `LLM API preflight failed` | `OPENAI_API_KEY`、`OPENAI_API_BASE_URL`、`OPENAI_MODEL`、`ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL` 是否匹配同一 provider 配置；旧环境变量是否污染当前 run |
 | `401 Invalid token` | API key 是否有效，是否误用了旧环境变量 |
 | `403 unsupported_country_region_territory` | 是否误走官方 OpenAI endpoint，而不是代理/兼容 endpoint |
 | `Docker daemon is not running` 但 `docker info` 成功 | 设置 `DOCKER_HOST=unix:///var/run/docker.sock` |

@@ -9,7 +9,19 @@ runtime variables, configures Docker cache paths, and calls `swegen create`.
 
 ## Collect PRs
 
-The PR collector writes language-specific input files:
+For a quick validation run, collect a small Python pool first:
+
+```bash
+python repos/swegen/tools/collect_prs_wo_image.py \
+  --languages python \
+  --repo_num 2 \
+  --max_prs_per_repo 10 \
+  --max-candidate-repos 60 \
+  --output_dir ./artifacts/collected_prs \
+  --disable_progress_bar
+```
+
+For a production refresh, increase the collection target:
 
 ```bash
 python repos/swegen/tools/collect_prs_wo_image.py \
@@ -25,23 +37,44 @@ The output file is:
 artifacts/collected_prs/python_pr_ids.txt
 ```
 
-Repeat or schedule collection for all enabled languages.
+The production command can take a long time before writing the final PR ID file.
+Use the smaller command above for smoke tests and node validation. Repeat or
+schedule collection for all enabled languages when preparing production pools.
 
 ## Run one language
 
-Start with one language when validating a new node:
+Start with an explicit one-task command when validating a new node:
 
 ```bash
-N_CONCURRENT=1 bash scripts/create_py.sh
+swegen create \
+  --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
+  --max-pr 1 \
+  --n-concurrent 1 \
+  --output artifacts/swe_tasks/py-cc \
+  --state-dir scripts/.swegen-py \
+  --timeout 2400 \
+  --cc-timeout 1800 \
+  --no-require-issue \
+  --min-source-files 1 \
+  --max-source-files 10 \
+  --docker-prune-batch 0
 ```
 
-The script writes tasks to:
+The command writes tasks to:
 
 ```text
 artifacts/swe_tasks/py-cc
 ```
 
-and logs to:
+For production Python generation, use the language script:
+
+```bash
+bash scripts/create_py.sh
+```
+
+The script reads runtime parameters from `config.yaml`, including concurrency.
+Setting `N_CONCURRENT=1` in front of the script may not override the configured
+value. Script logs are written to:
 
 ```text
 artifacts/logs/swegen-create/cc_py_March.txt
@@ -73,6 +106,37 @@ You can override `N_CONCURRENT` at launch:
 ```bash
 N_CONCURRENT=8 bash scripts/create_rust.sh
 ```
+
+If the script loads concurrency from `config.yaml`, update the config value
+instead of relying only on a shell prefix.
+
+## LLM and Claude SDK notes
+
+`swegen create` uses both OpenAI-compatible and Anthropic-compatible environment
+variables. On shared machines, clear stale values before a run, or set both
+provider families explicitly:
+
+```bash
+export OPENAI_API_KEY="..."
+export ANTHROPIC_API_KEY="$OPENAI_API_KEY"
+export OPENAI_API_BASE_URL="https://your-openai-compatible-endpoint/v1"
+export ANTHROPIC_BASE_URL="https://your-anthropic-compatible-endpoint"
+export OPENAI_MODEL="..."
+export ANTHROPIC_MODEL="..."
+```
+
+For reproducible task completion, prefer a clean Claude Code config directory:
+
+```bash
+export CLAUDE_CONFIG_DIR="$PWD/artifacts/claude-config/swegen-clean"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+```
+
+The current pinned CLI performs a small OpenAI-compatible preflight before
+generation. If your endpoint rejects that tiny response limit, first verify the
+same key, base URL, and model with a manual API call using a slightly larger
+`max_tokens` value, then use a compatible model/base combination for generation
+or update the pinned CLI before a production run.
 
 ## Docker and local caches
 
