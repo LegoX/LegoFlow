@@ -1,6 +1,6 @@
 {
   "extraKnownMarketplaces": {
-    "rl-local": {
+    "trajgen-local": {
       "source": {
         "source": "directory",
         "path": ".claude/plugins"
@@ -8,6 +8,6 @@
     }
   },
   "enabledPlugins": {
-    "rl@rl-local": true
+    "trajgen@trajgen-local": true
   }
 }

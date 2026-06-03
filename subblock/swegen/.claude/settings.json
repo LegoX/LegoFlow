@@ -1,6 +1,6 @@
 {
   "extraKnownMarketplaces": {
-    "rl-local": {
+    "swegen-local": {
       "source": {
         "source": "directory",
         "path": ".claude/plugins"
@@ -8,6 +8,6 @@
     }
   },
   "enabledPlugins": {
-    "rl@rl-local": true
+    "swegen@swegen-local": true
   }
 }

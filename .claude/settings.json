@@ -1,13 +1,26 @@
 {
   "extraKnownMarketplaces": {
-    "local-blocks": {
-      "source": {
-        "source": "directory",
-        "path": ".claude/plugins"
-      }
+    "root-block": {
+      "source": { "source": "directory", "path": ".claude/plugins" }
+    },
+    "swegen-block": {
+      "source": { "source": "directory", "path": "subblock/swegen/.claude/plugins" }
+    },
+    "trajgen-block": {
+      "source": { "source": "directory", "path": "subblock/trajgen/.claude/plugins" }
+    },
+    "sft-block": {
+      "source": { "source": "directory", "path": "subblock/sft/.claude/plugins" }
+    },
+    "rl-block": {
+      "source": { "source": "directory", "path": "subblock/rl/.claude/plugins" }
     }
   },
   "enabledPlugins": {
-    "block@local-blocks": true
+    "root@root-block": true,
+    "swegen@swegen-block": true,
+    "trajgen@trajgen-block": true,
+    "sft@sft-block": true,
+    "rl@rl-block": true
   }
 }

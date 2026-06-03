@@ -1,10 +1,10 @@
 {
-  "name": "block-plugin",
+  "name": "root-block",
   "owner": { "name": "haoli" },
   "plugins": [
     {
-      "name": "block",
-      "source": "./block-plugin",
+      "name": "root",
+      "source": "./root-plugin",
       "description": "create and run blocks according to BLOCK_DEFINITION.md and config.yaml"
     }
   ]

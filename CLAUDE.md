@@ -8,9 +8,7 @@ Root orchestration block for the self-evolving LLM development pipeline. Coordin
 
 ## Block System
 
-This repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md` and `config.yaml`.
-
-**Full specification**: `BLOCK_DEFINITION.md` — every agent with this repo SHOULD READ it before any actions.
+This repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md`, and follows the principles in `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`. Every agent with this repo SHOULD READ that file before any actions.
 
 ### config.yaml schema
 
@@ -84,9 +82,9 @@ The root block does not consume external inputs directly. Required external valu
 
 **Mandatory workflow: check → confirm → run.** Agents must never skip the confirmation step.
 
-1. **Check**: Run `/block:check` (or `bash scripts/dryrun.sh` for a single block). This validates config, inputs, paths, GPUs, Docker/K8s connectivity, credentials, and model compatibility — all in one pass, with no side effects.
+1. **Check**: Run `/root:check` (or `bash scripts/dryrun.sh` for a single block). This validates config, inputs, paths, GPUs, Docker/K8s connectivity, credentials, and model compatibility — all in one pass, with no side effects.
 2. **Confirm**: Present the check results and run configuration summary to the user. **Wait for explicit user confirmation** ("yes", "go ahead", etc.) before proceeding. Never auto-launch — heavy operations (multi-hour GPU training, multi-container rollouts) are expensive and hard to reverse.
-3. **Run**: Only after user confirmation, execute `/block:run` (or `bash scripts/start.sh`).
+3. **Run**: Only after user confirmation, execute `/root:run` (or `bash scripts/start.sh`).
 
 ```bash
 scripts/dryrun.sh   # validate config, inputs, and required paths (no side effects)

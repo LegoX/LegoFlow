@@ -4,6 +4,8 @@ Runs registered evaluation benchmarks (SWE-bench Verified, SWE-bench Multilingua
 SWE-bench Pro, Terminal-Bench 2.0, plus 100-task subsets and a handful of
 general coding benchmarks) through Harbor against a configurable upstream LLM.
 
+This repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md`, and follows the principles in `<repo_root>/.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md` (resolve from the repo root, not from this block's directory). Every agent with this repo SHOULD READ that file before any actions.
+
 ## Block Identity
 
 - **Name**: eval
