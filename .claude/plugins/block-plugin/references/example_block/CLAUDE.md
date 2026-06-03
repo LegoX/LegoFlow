@@ -7,7 +7,7 @@ Trains a language model using supervised fine-tuning (SFT).
 
 ## Read first
 
-1. `config.yaml` — block identity, inputs, outputs, resources (one-shot per run; live state in `artifacts/index.yaml`)
+1. `config.yaml` — block identity, inputs, outputs, resources, live status
 2. `dashboard/overview.mdx` — human-readable current state
 
 ## Input / Output contract
@@ -32,19 +32,32 @@ Write to `runtime_info.output` in `config.yaml` after running:
 
 ## Artifact archiving
 
-Each run is archived automatically by `scripts/archive_run.sh`, invoked from `scripts/start.sh`'s EXIT trap. The helper creates `artifacts/archives/run_NNN/` with `metadata.yaml` (id, block, timestamps, status, exit_code, repo SHAs), a `config.yaml` snapshot, and a `scripts/` snapshot, and appends one entry to `artifacts/index.yaml`. Agent may optionally drop `session.log` or `monitor.md` into the archive after the run for additional context.
+After each run, create `artifacts/archives/run_NNN/` containing:
 
-Example index.yaml entry written by `archive_run.sh`:
+| File | Content |
+|------|---------|
+| `metadata.yaml` | Run id, timestamps, stage, results summary, repo commit ids, copy of inputs |
+| `config.yaml` | Snapshot of config.yaml as it was at run time |
+| `scripts/` | Copy of all scripts executed during this run |
+| `repo/` | Snapshot or reference of the repo code at the pinned commit |
+| `session.log` | Claude Code session record (tool calls, agent reasoning, decisions) |
+| `monitor.md` | Human-readable monitor output produced by the agent during the run |
+
+Then append one entry to `artifacts/index.yaml`:
 ```yaml
 - id: run_001
   started_at: "2026-05-04T08:00:00Z"
   completed_at: "2026-05-04T10:11:35Z"
-  status: completed        # completed | failed | interrupted
+  status: completed
   archive: artifacts/archives/run_001/
-  notes: ""                # agent may refine after the run
+  notes: "lr=1e-4, epochs=3; val_loss=0.42"
 ```
 
-`config.yaml` is **one-shot per run** — do not edit it during execution to track progress. Live state lives in `artifacts/index.yaml`.
+## Status updates
+
+Keep the `status` section in `config.yaml` current throughout execution:
+- set `phase` to `running` when starting, `done` or `blocked` when finished
+- update `progress`, `next_steps`, `blockers`, and `last_updated` continuously
 
 ## Remote execution
 

@@ -11,7 +11,7 @@ Each block is operated by a dedicated agent. The agent reads `CLAUDE.md` for its
 - **Inter-block wiring** — declared in `meta_info.subblocks[].dependencies`: one block's `runtime_info.output` key is referenced by name in a child's dependency map. This is the primary coordination channel.
 - **External inputs** — declared in `runtime_info.input`: values that come from outside the block tree (API keys, human decisions, external dataset paths). These are filled manually before a run.
 
-Each agent maintains its block's `memory/` and `artifacts/` independently. Live run state lives in `artifacts/index.yaml` (most recent entry's `status` field — written automatically by `archive_run.sh`), not in `config.yaml`.
+Each agent maintains its block's `status` and `memory/` independently.
 
 ## Directory Layout
 
@@ -27,17 +27,17 @@ Each agent maintains its block's `memory/` and `artifacts/` independently. Live 
 ├── scripts/
 │   ├── start.sh
 │   ├── dryrun.sh
-│   ├── clean.sh
-│   └── archive_run.sh
+│   └── clean.sh
 ├── artifacts/
 │   ├── index.yaml
 │   └── archives/
 │       └── run_NNN/
-│           ├── metadata.yaml      ← required (written by archive_run.sh)
-│           ├── config.yaml        ← required (snapshot)
-│           ├── scripts/           ← required (snapshot)
-│           ├── session.log        ← optional (agent adds manually)
-│           └── monitor.md         ← optional (agent adds manually)
+│           ├── metadata.yaml
+│           ├── config.yaml
+│           ├── scripts/
+│           ├── repo/
+│           ├── session.log
+│           └── monitor.md
 └── subblock/
 ```
 
@@ -70,77 +70,69 @@ runtime_info:
   input: {}
   output: {}            # values produced for other blocks or downstream consumers
 
+status:
+  phase:                # idle | running | done | blocked
+  progress:
+  next_steps:
+  blockers:
+  last_updated:
+
 evolving:
   description:
   tunable_params: {}
 ```
-
-`config.yaml` is **one-shot per run**: every key is configuration the block reads at launch time. Live state (whether a run is in flight, how it ended, what it produced) lives in `artifacts/index.yaml` and the per-run `artifacts/archives/run_NNN/` snapshots — not in `config.yaml`.
 
 ## File Roles
 
 | File | Updated by | Purpose |
 |---|---|---|
 | `CLAUDE.md` | Agent or human | Agent contract: role, I/O, run rules, archiving rules |
-| `config.yaml` | Agent or human | Identity, resources, runtime I/O, tunable params. One-shot per run — no live state. |
+| `config.yaml` | Agent or human | Identity, resources, runtime I/O, live status, tunable params |
 | `dashboard/overview.mdx` | Agent | Human-readable current state: done, in progress, next |
 | `artifacts/index.yaml` | Agent | Append-only run index |
 | `memory/notes.md` | Agent | Long-form observations, decisions, postmortems |
 
 ## Artifacts — Archiving Each Run
 
-Archiving is **automated** by `scripts/archive_run.sh`, which every block keeps next to `start.sh`. Each block's `start.sh` installs an EXIT trap that invokes its sibling `archive_run.sh` — so an archive entry is created whether the run exits cleanly, fails (`set -e`), or is interrupted (SIGINT / SIGTERM). The script picks the next `run_NNN` id by scanning both `artifacts/archives/run_*/` and existing `id: run_NNN` entries in `artifacts/index.yaml`, so manual narrative entries and automated entries share one id space.
+Every run must be fully archived. After each run, the agent:
 
-Each run produces `artifacts/archives/run_NNN/` containing:
+1. Creates `artifacts/archives/run_NNN/` with these six items:
 
-| File | Content | Produced by |
-|---|---|---|
-| `metadata.yaml` | Run id, block name, timestamps, status, exit code, repo commit SHAs | `archive_run.sh` |
-| `config.yaml` | Snapshot of `config.yaml` as it was at run time | `archive_run.sh` |
-| `scripts/` | Copy of all scripts (top-level files + non-hidden subdirs; hidden state dirs like `.swegen-py` are skipped) | `archive_run.sh` |
-| `session.log` *(optional)* | Claude Code session record (tool calls, agent reasoning, decisions) | Agent, manually after the run |
-| `monitor.md` *(optional)* | Human-readable monitor output produced by the agent during the run | Agent, manually after the run |
+   | File | Content |
+   |---|---|
+   | `metadata.yaml` | Run id, timestamps, phase/stage, results summary, repo commit ids |
+   | `config.yaml` | Snapshot of `config.yaml` as it was at run time |
+   | `scripts/` | Copy of all scripts executed during this run |
+   | `repo/` | Snapshot or reference of the repo code at the pinned commit |
+   | `session.log` | Claude Code session record (tool calls, agent reasoning, decisions) |
+   | `monitor.md` | Human-readable monitor output produced by the agent during the run |
 
-Note: the spec previously required a full `repo/` snapshot — that's been replaced by the `repos:` field in `metadata.yaml`, which records each `repos/<name>/`'s `git rev-parse HEAD`. The SHA carries the same information as a tree copy provided the commit is published.
-
-`archive_run.sh` also appends one entry to `artifacts/index.yaml` (using PyYAML for a clean round-trip; falls back to a plain text append if PyYAML is unavailable):
+2. Appends one entry to `artifacts/index.yaml`:
 
 ```yaml
 - id: run_001
   started_at: "2026-05-03T08:00:00Z"
   completed_at: "2026-05-03T10:11:35Z"
-  status: completed        # completed | failed | interrupted
+  status: completed        # running | completed | failed
   archive: artifacts/archives/run_001/
-  notes: ""                # one-line summary; agent may edit after the run
-```
-
-The `status` field is derived from the script's exit code: `0` → `completed`, `130`/`143` (SIGINT / SIGTERM) → `interrupted`, anything else → `failed`.
-
-Manual invocation is supported for ad-hoc archives or to backfill:
-
-```bash
-bash scripts/archive_run.sh [exit_code] [started_at_iso8601] [notes]
+  notes: "one-line summary of what this run tested"
 ```
 
 ### `metadata.yaml` schema
 
 ```yaml
 id: run_001
-block: <block_name>              # name of the block this archive belongs to
 started_at: "2026-05-03T08:00:00Z"
 completed_at: "2026-05-03T10:11:35Z"
-status: completed                # completed | failed | interrupted
-exit_code: 0                     # raw exit code of start.sh (0, 130, 143, etc.)
+status: completed
+stage: <pipeline stage name>
+results:
+  <metric_key>: <value>   # key results, e.g. verified_tasks: 16
 repos:
-  <repo_name>: <commit_sha>      # one entry per directory under repos/
+  <repo_name>: <commit_id>
+inputs:                   # copy of runtime_info.input used for this run
+  <key>: <value>
 notes: ""
-
-# Optional fields the agent may add manually after the run:
-# stage: <pipeline stage name>
-# results:
-#   <metric_key>: <value>          # e.g. verified_tasks: 16
-# inputs:                          # copy of runtime_info.input used for this run
-#   <key>: <value>
 ```
 
 ## Inter-Block Dependencies
@@ -176,4 +168,4 @@ If `meta_info.resources.ip` is set, the agent **must** execute remotely:
 
 1. Fill `runtime_info.input` in `config.yaml` with external values.
 2. Run `scripts/start.sh` to execute, or `scripts/dryrun.sh` to validate without side effects.
-3. `start.sh`'s EXIT trap invokes `scripts/archive_run.sh`, which archives the run to `artifacts/archives/run_NNN/` and appends one entry to `artifacts/index.yaml` — automatically, on success, failure, or interrupt. The agent may add `session.log` / `monitor.md` to the archive afterwards.
+3. The agent archives the full run to `artifacts/archives/run_NNN/` and appends to `artifacts/index.yaml`.
