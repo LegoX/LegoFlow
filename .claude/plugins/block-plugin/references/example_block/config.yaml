@@ -31,13 +31,6 @@ runtime_info:
   output:
     model_checkpoint: null  # path to saved model checkpoint after training
 
-status:
-  phase: idle
-  progress: null
-  next_steps: Fill runtime_info.input in config.yaml, then run scripts/dryrun.sh.
-  blockers: null
-  last_updated: 2026-05-04
-
 evolving:
   description: Tune learning_rate and num_epochs to minimize validation loss.
   tunable_params:

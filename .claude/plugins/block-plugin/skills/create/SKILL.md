@@ -111,13 +111,6 @@ runtime_info:
     <output_name>: null  # <description>
     # one entry per declared output; omit section if none
 
-status:
-  phase: idle
-  progress: null
-  next_steps: Fill runtime_info.input in config.yaml, then run scripts/dryrun.sh.
-  blockers: null
-  last_updated: <today's date ISO format>
-
 evolving:
   description: <evolving description or null>
   tunable_params:
@@ -133,9 +126,9 @@ Concise agent contract, under 60 lines. Include:
 - Input/output contract: what values to read from `runtime_info.input`, what to write to `runtime_info.output`
 - Repos: list any repos under `repos/` and their purpose; note each is a git submodule pinned to a specific commit
 - How to run: `scripts/start.sh` to execute, `scripts/dryrun.sh` to validate. Mention that `/block:run` (from the `block` plugin) preflights and executes this contract.
-- Artifact archiving rule: after each run, create `artifacts/archives/run_NNN/` with: `metadata.yaml` (id, timestamps, stage, results, repo commits, copy of inputs), `config.yaml` snapshot, `scripts/` copy, `repo/` snapshot, `session.log` (Claude Code session record), `monitor.md` (agent monitor output); append one entry to `artifacts/index.yaml` with `archive: artifacts/archives/run_NNN/`
+- Artifact archiving rule: each run is archived automatically by `scripts/archive_run.sh`, which `start.sh` invokes via an EXIT trap. The helper writes `artifacts/archives/run_NNN/` (metadata.yaml + config snapshot + scripts copy + repo SHAs) and appends one entry to `artifacts/index.yaml`. Agent may optionally drop `session.log` or `monitor.md` into the archive after the run.
 - Inter-block wiring: values from other blocks are declared in `meta_info.subblocks[].dependencies` — do not duplicate them in `runtime_info.input`. Only external values (API keys, human decisions) go in `runtime_info.input`.
-- Status update rule: keep `status` in `config.yaml` current throughout execution
+- One-shot config: `config.yaml` is configuration for one run; do not edit it during execution to track progress. Live state lives in `artifacts/index.yaml`.
 - Remote execution rule: if `meta_info.resources.ip` is set, open a local tmux window, SSH into the remote node, attach to a tmux session there, and run scripts inside it — never run a remote-resource block locally
 
 ### `dashboard/overview.mdx`
@@ -149,9 +142,38 @@ Short MDX with: Status, What this block does, Inputs table, Outputs table, Last 
 
 ```
 
-### `scripts/start.sh`, `dryrun.sh`, `clean.sh`
+### `scripts/start.sh`, `dryrun.sh`, `clean.sh`, `archive_run.sh`
 
-Stub scripts with shebang, purpose comment, `set -euo pipefail`, and a TODO. Make all three executable (`chmod +x`).
+Stub `start.sh`, `dryrun.sh`, `clean.sh` with shebang, purpose comment, `set -euo pipefail`, and a TODO. Make all executable (`chmod +x`).
+
+Copy the canonical archive helper from this plugin into the new block, **unmodified**:
+
+```bash
+cp <plugin_root>/references/archive_run.sh <new_block>/scripts/archive_run.sh
+chmod +x <new_block>/scripts/archive_run.sh
+```
+
+The script is block-agnostic — it resolves its own `BLOCK_DIR` from `BASH_SOURCE`, so no per-block edits are needed.
+
+Wire `start.sh` to invoke it on EXIT (place this near the top, before any real work):
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Archive this run when start.sh exits (success, error, or signal).
+RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+_archive_run_on_exit() {
+    local rc=$?
+    bash "$BLOCK_DIR/scripts/archive_run.sh" "$rc" "$RUN_STARTED_AT" || true
+    exit $rc
+}
+trap _archive_run_on_exit EXIT
+
+# TODO: actual work goes here
+```
 
 ### `artifacts/index.yaml`
 
@@ -159,15 +181,17 @@ Stub scripts with shebang, purpose comment, `set -euo pipefail`, and a TODO. Mak
 runs: []
 ```
 
-Each entry appended after a run:
+Each entry is appended automatically by `scripts/archive_run.sh` after a run:
 ```yaml
 - id: run_001
   started_at: "2026-05-03T08:00:00Z"
   completed_at: "2026-05-03T10:11:35Z"
-  status: completed        # running | completed | failed
+  status: completed        # completed | failed | interrupted
   archive: artifacts/archives/run_001/
-  notes: "one-line summary of what this run tested"
+  notes: ""                # agent may refine after the run
 ```
+
+Status vocabulary (derived from exit code): `0 → completed`, `130/143 → interrupted` (SIGINT/SIGTERM), anything else → `failed`.
 
 ### `repos/`
 
