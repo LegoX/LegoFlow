@@ -13,20 +13,20 @@ these are scoped to `rl` and know its plumbing.
 
 | Command | What it does |
 | --- | --- |
-| `/rl:create` | Scaffold a new RL experiment slot under `artifacts/runs/<exp_name>/` (config snapshot, hypothesis, notes). Does not launch. |
-| `/rl:check`  | RL-specific preflight: schema + dryrun.sh + kubectl reachability + port conflicts + venv editable-install verification + running-job sanity. Read-only. |
-| `/rl:run`    | Preflight, then launch `scripts/start.sh` (background by default with `nohup setsid`, since training runs for hours). Stamps `status.phase: running` and writes the launch metadata into `config.yaml`. |
+| `/block:create` | Scaffold a new RL experiment slot under `artifacts/runs/<exp_name>/` (config snapshot, hypothesis, notes). Does not launch. |
+| `/block:check`  | RL-specific preflight: schema + dryrun.sh + kubectl reachability + port conflicts + venv editable-install verification + running-job sanity. Read-only. |
+| `/block:run`    | Preflight, then launch `scripts/start.sh` (background by default with `nohup setsid`, since training runs for hours). Stamps `status.phase: running` and writes the launch metadata into `config.yaml`. |
 
 Run them from inside `subblock/rl/`.
 
 ## Layout
 
 ```
-rl-plugin/
+block-plugin/
 ├── .claude-plugin/plugin.json
 ├── README.md
 └── skills/
-    ├── create/SKILL.md   # /rl:create
-    ├── check/SKILL.md    # /rl:check
-    └── run/SKILL.md      # /rl:run
+    ├── create/SKILL.md   # /block:create
+    ├── check/SKILL.md    # /block:check
+    └── run/SKILL.md      # /block:run
 ```

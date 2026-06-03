@@ -2,19 +2,19 @@
 name: run
 description: >
   Preflight and launch the rl block in the current working directory.
-  Runs /rl:check internally (rejects on any failure), then launches
+  Runs /block:check internally (rejects on any failure), then launches
   scripts/start.sh in the background by default — training takes hours,
   so the foreground default of /block:run is wrong here. After launch,
   stamps status.phase: running with the auto-generated exp_name, parent
   PID, and launch log path in config.yaml; appends a row to
   artifacts/index.yaml; and prints monitoring commands. Does not block
-  on completion — archive on exit is left to /rl:check / a future
-  /rl:finish skill. Triggers on phrases like "run rl", "launch rl
+  on completion — archive on exit is left to /block:check / a future
+  /block:finish skill. Triggers on phrases like "run rl", "launch rl
   training", "kick off the rl block", "start the rl run",
   "fire off rl training", "launch sync_1node_cc".
 ---
 
-# /rl:run
+# /block:run
 
 Preflight, then launch RL training in the background. Refuses if any check
 fails, or if there's already a live training process whose PID is recorded
@@ -25,7 +25,7 @@ in `status.current_job`.
 The "rl block" is the current working directory. Validate:
 
 1. `./config.yaml` exists and `meta_info.name == 'rl'`. Otherwise abort:
-   "/rl:run must be run from inside the rl block (`subblock/rl/`)."
+   "/block:run must be run from inside the rl block (`subblock/rl/`)."
 2. `./scripts/start.sh` exists.
 
 Read `./config.yaml` and `./CLAUDE.md` for context.
@@ -48,18 +48,18 @@ If `status.phase == 'running'` in `config.yaml`:
    (`kill <pid>` then `bash scripts/clean.sh`) or wait for it to finish.
    ```
 4. If no PIDs are alive but `status.phase == 'running'`, do not abort —
-   warn that the status is stale, and tell the user `/rl:run` will overwrite
+   warn that the status is stale, and tell the user `/block:run` will overwrite
    it. (This is the common case after a crash.)
 
-## Step 2 — Preflight via /rl:check
+## Step 2 — Preflight via /block:check
 
 Invoke the `check` skill's logic on the current block (you can call into
 that skill, or inline its Step 1–5 directly: `bash scripts/dryrun.sh` plus
 the k8s / port / venv / submodule checks).
 
 If any **failure** is reported (warnings are fine), abort with the same
-consolidated report `/rl:check` would have printed, prefixed:
-"Preflight failed — fix the items below before `/rl:run`."
+consolidated report `/block:check` would have printed, prefixed:
+"Preflight failed — fix the items below before `/block:run`."
 
 Do **not** invent values, skip checks, or pass `--force` flags. If the
 user says "just run it", explain which check failed and ask them to
@@ -94,7 +94,7 @@ Proceed with this configuration? [Y]es / [N]o (edit config.yaml first)
 ```
 
 If the user says No, abort cleanly and tell them to edit `config.yaml`,
-then re-run `/rl:run`.
+then re-run `/block:run`.
 
 If `dryrun.sh` already printed the summary (it does at the end), you may
 reference it instead of reprinting, but you MUST still ask for confirmation.
@@ -159,7 +159,7 @@ Append to `./artifacts/index.yaml`:
 - id: <run_NNN>
   started_at: "<UTC now ISO>"
   status: running
-  archive: artifacts/runs/<exp_name>/    # if /rl:create scaffolded a slot for this exp_name; else null
+  archive: artifacts/runs/<exp_name>/    # if /block:create scaffolded a slot for this exp_name; else null
   notes: "<short summary — derive from experiment.yaml if the slot exists; else ask the user briefly>"
 ```
 

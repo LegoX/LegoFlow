@@ -4,7 +4,7 @@ description: >
   Scaffold a new RL experiment slot inside the rl block — a directory under
   artifacts/runs/<exp_name>/ that captures the hypothesis, the config diff
   vs the current baseline, a snapshot of config.yaml at scaffold time, and
-  an empty notes file. Does NOT launch training (use /rl:run for that).
+  an empty notes file. Does NOT launch training (use /block:run for that).
   Use whenever the user wants to try a new RL variant: a different model,
   a new algorithm setting, a parallelism sweep, a debugging re-run with
   one knob changed. Triggers on phrases like "create an experiment", "set
@@ -13,7 +13,7 @@ description: >
   working directory is not the rl block (must contain rl-shaped config.yaml).
 ---
 
-# /rl:create
+# /block:create
 
 Scaffold one experiment slot for the RL block. Each slot is a self-contained
 record of *intent + baseline*, written before launch — so when the run
@@ -25,7 +25,7 @@ was being tested. Does not modify `config.yaml` and does not launch.
 The "rl block" is the current working directory. Validate:
 
 1. `./config.yaml` exists, parses, and has `meta_info.name == 'rl'`. If not,
-   abort: "/rl:create must be run from inside the rl block (`subblock/rl/`)."
+   abort: "/block:create must be run from inside the rl block (`subblock/rl/`)."
 2. `./artifacts/` exists; create `./artifacts/runs/` if missing.
 
 Read these as context (don't load them into the user's response — just use them):
@@ -91,7 +91,7 @@ expected_metrics:
   notes: null
 
 actual:
-  # filled by /rl:run once the run completes — leave null here
+  # filled by /block:run once the run completes — leave null here
   started_at: null
   completed_at: null
   exit_status: null
@@ -106,7 +106,7 @@ Verbatim copy of the rl block's `./config.yaml` at scaffold time. This is
 the source of truth for what the run intends to use — if the user later
 wants to apply the slot's knob changes, they can diff `config.yaml.snapshot`
 against this file and apply the deltas to the live `config.yaml` before
-`/rl:run`. (`/rl:create` does **not** mutate the live config.)
+`/block:run`. (`/block:create` does **not** mutate the live config.)
 
 ### `notes.md`
 
@@ -123,8 +123,8 @@ against this file and apply the deltas to the live `config.yaml` before
 ## TODO
 
 - [ ] Apply the changes above to `subblock/rl/config.yaml` (or confirm baseline reproduction).
-- [ ] Run `/rl:check` to preflight.
-- [ ] Run `/rl:run` to launch.
+- [ ] Run `/block:check` to preflight.
+- [ ] Run `/block:run` to launch.
 - [ ] After launch, update `runtime_info.input.experiment.exp_name` to `<exp_name>` so the upstream log filename matches this slot.
 ```
 
@@ -141,12 +141,12 @@ Created: artifacts/runs/<exp_name>/
 Next:
   1. Apply the knob changes to subblock/rl/config.yaml.
   2. Set runtime_info.input.experiment.exp_name: <exp_name>.
-  3. /rl:check, then /rl:run.
+  3. /block:check, then /block:run.
 ```
 
 ## What this skill must NOT do
 
 - Do not edit `./config.yaml` — only snapshot it. The user applies their own knob changes.
-- Do not append to `./artifacts/index.yaml` — `/rl:run` does that when the run actually starts.
+- Do not append to `./artifacts/index.yaml` — `/block:run` does that when the run actually starts.
 - Do not launch training, set up venvs, or call any upstream script.
 - Do not invent values for `goal` or `hypothesis`; if the user is reproducing baseline, write that literally.
