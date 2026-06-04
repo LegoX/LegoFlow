@@ -4,7 +4,7 @@ A small, local-only HTML dashboard for the `trajgen` subblock. It scans two
 artifact directories and renders a single self-contained HTML file you can
 either open directly in a browser or serve over the loopback interface.
 
-Modeled after [`dashboard/swegen/`](https://github.com/SWE-Lego/SWE-Lego-Live/tree/swegen/dashboard/swegen)
+Modeled after [`subblock/swegen/dashboard/`](https://github.com/SWE-Lego/SWE-Lego-Live/tree/swegen/subblock/swegen/dashboard)
 on the `swegen` branch, but stripped to stdlib-only (no `tiktoken`,
 no `tomllib`). For remote viewing it can publish `site/` to Cloudflare
 Pages via [`run_cloudflare_pages_sync.sh`](run_cloudflare_pages_sync.sh)
@@ -212,4 +212,4 @@ tmux new-session -d -s trajgen-cf "ENV_FILE=.env.cf bash dashboard/run_cloudflar
 - Historical 1h / 24h deltas via a `state.jsonl` snapshot file.
 
 If any of those are needed later, lift the corresponding helpers directly
-from `dashboard/swegen/progress_monitor_all.py` on the `swegen` branch.
+from `subblock/swegen/dashboard/progress_monitor_all.py` on the `swegen` branch.

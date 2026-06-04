@@ -3,5 +3,16 @@ swegen-env2/
 .swegen/
 .swegen-*/
 logs/
+artifacts/collected_prs/
+artifacts/swe_tasks/
+artifacts/merged_swe_tasks/
+artifacts/envs/
+artifacts/claude-config/
 artifacts/logs/
 config.json
+docs/site/
+docs/out/
+docs/.next/
+docs/.source/
+docs/node_modules/
+docs/next-env.d.ts

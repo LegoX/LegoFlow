@@ -18,12 +18,6 @@
 git submodule update --init subblock/swegen/repos/swegen
 ```
 
-本流程使用 submodule 固定携带的少量对照数据作为输入和已验证样本：
-
-- PR 输入：`repos/swegen/artifacts/collected_prs/python_pr_ids.txt`
-- 已验证 Python task：`repos/swegen/artifacts/swe_tasks/py-cc/tox-dev__tox-3813`
-- 已验证 manifest：`repos/swegen/artifacts/swe_tasks/py-cc/verifiable_tasks.txt`
-
 安装 SWEgen：
 
 ```bash
@@ -56,10 +50,12 @@ PY
 ```bash
 export OPENAI_API_KEY="..."
 export ANTHROPIC_API_KEY="$OPENAI_API_KEY"
-export OPENAI_API_BASE_URL="https://yunwu.ai/"
-export ANTHROPIC_BASE_URL="https://yunwu.ai/"
-export OPENAI_MODEL="gpt-5.4"
-export ANTHROPIC_MODEL="claude-opus-4-6"
+export OPENAI_API_BASE_URL="https://your-openai-compatible-endpoint/v1"
+export ANTHROPIC_BASE_URL="https://your-anthropic-compatible-endpoint"
+export OPENAI_MODEL="..."
+export ANTHROPIC_MODEL="..."
+export CLAUDE_CONFIG_DIR="$PWD/artifacts/claude-config/swegen-clean"
+mkdir -p "$CLAUDE_CONFIG_DIR"
 ```
 
 ```bash
@@ -75,7 +71,7 @@ client = OpenAI(api_key=key, base_url=base, timeout=60)
 client.chat.completions.create(
     model=model,
     messages=[{"role": "user", "content": "ping"}],
-    max_tokens=1,
+    max_tokens=16,
 )
 print("llm_preflight=ok")
 PY
@@ -95,13 +91,13 @@ export DOCKER_HOST=unix:///var/run/docker.sock
 
 ## 2. Harbor 快速验证
 
-先用 submodule 内置的 Python verified task 验证 Harbor/NOP/Oracle 链路：
+如果已有 Python verified task，可先验证已知样本：
 
 ```bash
 swegen validate \
-  repos/swegen/artifacts/swe_tasks/py-cc \
+  artifacts/swe_tasks/py-cc \
   --task tox-dev__tox-3813 \
-  --jobs-dir artifacts/experiments/quick-verify/harbor-jobs-quick \
+  --jobs-dir artifacts/swe_tasks/.swegen/harbor-jobs-quick \
   --env docker
 ```
 
@@ -127,27 +123,36 @@ export DOCKER_HOST=unix:///var/run/docker.sock
 
 如果 Harbor 找不到 task，确认命令参数：
 
-- dataset root 必须是包含 task 子目录的父目录，例如 `repos/swegen/artifacts/swe_tasks/py-cc`
+- dataset root 必须是包含 task 子目录的父目录，例如 `artifacts/swe_tasks/py-cc`
 - 本地 task 过滤必须使用 `-i/--include-task-name`
 - 不要把本地 task id 传给 Harbor 的 `-t/--task`
 
 ## 3. 小样本生成验证
 
-submodule 已内置 10 个 Python PR 输入，可先确认内容：
+准备 10 个 Python PR 输入。建议优先把轻量且已验证过的 `tox-dev/tox:pr-3813` 放在第一行：
 
-```bash
-sed -n '1,20p' repos/swegen/artifacts/collected_prs/python_pr_ids.txt
+```text
+tox-dev/tox:pr-3813
+tox-dev/tox:pr-3814
+AnswerDotAI/RAGatouille:pr-157
+tox-dev/tox:pr-3810
+electricitymaps/electricitymaps-contrib:pr-8113
+tox-dev/tox:pr-3803
+morpheus65535/bazarr:pr-2691
+tox-dev/tox:pr-3804
+tox-dev/tox:pr-3800
+electricitymaps/electricitymaps-contrib:pr-8119
 ```
 
-运行小样本。输入读取 submodule 的固定 PR 列表，输出写入当前 block 的 `artifacts/experiments/quick-verify/`，避免修改 submodule：
+运行小样本：
 
 ```bash
 swegen create \
-  --input-ids-file repos/swegen/artifacts/collected_prs/python_pr_ids.txt \
+  --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
   --max-pr 1 \
   --n-concurrent 1 \
-  --output artifacts/experiments/quick-verify/swe_tasks/py-cc \
-  --state-dir artifacts/experiments/quick-verify/state \
+  --output artifacts/swe_tasks/py-cc \
+  --state-dir scripts/.swegen-py \
   --timeout 2400 \
   --cc-timeout 1800 \
   --no-require-issue \
@@ -160,7 +165,7 @@ swegen create \
 成功标准：
 
 ```bash
-test -s artifacts/experiments/quick-verify/swe_tasks/py-cc/verifiable_tasks.txt
+test -s artifacts/swe_tasks/py-cc/verifiable_tasks.txt
 ```
 
 `verifiable_tasks.txt` 应至少包含一个 task ID，例如：
@@ -173,7 +178,7 @@ tox-dev__tox-3813
 
 | 现象 | 优先检查 |
 |---|---|
-| `LLM API preflight failed` | `OPENAI_API_KEY`、`OPENAI_API_BASE_URL`、`OPENAI_MODEL`、`ANTHROPIC_MODEL` 是否匹配同一服务 |
+| `LLM API preflight failed` | `OPENAI_API_KEY`、`OPENAI_API_BASE_URL`、`OPENAI_MODEL`、`ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL` 是否匹配同一 provider 配置；旧环境变量是否污染当前 run |
 | `401 Invalid token` | API key 是否有效，是否误用了旧环境变量 |
 | `403 unsupported_country_region_territory` | 是否误走官方 OpenAI endpoint，而不是代理/兼容 endpoint |
 | `Docker daemon is not running` 但 `docker info` 成功 | 设置 `DOCKER_HOST=unix:///var/run/docker.sock` |

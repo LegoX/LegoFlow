@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Loop-generate the trajgen dashboard and publish dashboard/site/ to Cloudflare
 # Pages via wrangler, so progress is viewable remotely. Mirrors the swegen
-# branch reference (dashboard/swegen/run_cloudflare_pages_sync.sh), adapted to
+# branch reference (subblock/swegen/dashboard/run_cloudflare_pages_sync.sh), adapted to
 # trajgen's progress_monitor.py (no --state-file).
 set -u
 
