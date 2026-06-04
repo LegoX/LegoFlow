@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Extract verified SWE tasks from all languages into a unified outputs/ directory."""
+"""Extract verified SWE tasks from all languages into a unified artifacts directory."""
 
 import shutil
 import sys
 from pathlib import Path
 
 LANGUAGES = ["py", "js", "ts", "go", "c", "cpp", "java", "rust"]
-ARTIFACTS_ROOT = Path(__file__).parent / "artifacts" / "swe_tasks"
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+BLOCK_DIR = Path(__file__).resolve().parents[1]
+ARTIFACTS_ROOT = BLOCK_DIR / "artifacts" / "swe_tasks"
+OUTPUT_DIR = BLOCK_DIR / "artifacts" / "merged_swe_tasks"
 
 
 def main():

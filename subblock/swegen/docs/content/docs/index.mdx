@@ -1,0 +1,35 @@
+---
+title: Motivation
+description: Why we built SWE-gen
+---
+
+SWE-gen turns real GitHub pull requests into verified SWE-style coding tasks.
+It is the task-curation stage of the SWE-Lego-Live pipeline, sitting before
+trajectory generation, SFT, and RL.
+
+```text
+GitHub PRs -> swegen -> trajgen -> sft -> rl
+```
+
+SWE-gen exists because high-quality agent training data needs more than a
+patch and a repository URL. Each task must have a reproducible container,
+a clear instruction, a bug-introducing patch, a ground-truth fix, and a test
+script that separates solved from unsolved attempts.
+
+SWE-gen provides:
+
+- Multi-language PR collection across Python, JavaScript, TypeScript, Go, C, C++, Java, and Rust
+- LLM-assisted PR filtering and task instruction generation
+- Harbor-compatible task directories with Docker environments and tests
+- NOP and Oracle validation before a task is exposed downstream
+- `verifiable_tasks.txt` manifests that downstream blocks can trust
+- Batch state and resume support for long-running data construction
+- Static difficulty scoring and task metadata for dataset analysis
+
+## Where to go next
+
+- [Getting Started](/docs/getting-started) - set up the block and run a smoke generation
+- [Core Concepts](/docs/core-concepts) - PR pools, task skeletons, validation, and manifests
+- [Run Generation](/docs/run-generation) - run per-language generation scripts safely
+- [Outputs](/docs/outputs) - understand task directories, manifests, logs, and state packages
+- [Dashboard](/docs/dashboard) - monitor SWE-gen progress online

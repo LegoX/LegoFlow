@@ -13,7 +13,7 @@ Scans:
 
 Renders a single self-contained HTML file at dashboard/site/index.html with
 two sections (Harbor Jobs, SFT Datasets) plus a small KPI strip. Modeled
-after dashboard/swegen/progress_monitor_all.py on the swegen branch but
+after subblock/swegen/dashboard/progress_monitor_all.py on the swegen branch but
 stripped to stdlib-only. The generated site/ can be published to Cloudflare
 Pages by dashboard/run_cloudflare_pages_sync.sh (not done by this script).
 """
