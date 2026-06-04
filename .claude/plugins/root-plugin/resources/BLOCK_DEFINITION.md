@@ -57,7 +57,9 @@ Key invariants the template encodes:
 
 ### 2.1 Setup → check → run → stop
 
-Each block is operated through the five skills described in §4.1: `:setup` bootstraps a fresh clone, `:check` validates without side effects, `:run` executes, `:stop` terminates, `:dashboard` surfaces state. The full playbook for each skill lives in its own `SKILL.md`. The root plugin additionally exposes `:create` for scaffolding new blocks.
+Each block is operated through the skills described in §4.1: `:setup` bootstraps a fresh clone, `:check` validates without side effects, `:run` executes, `:dashboard` surfaces state. The full playbook for each skill lives in its own `SKILL.md`. The root plugin additionally exposes `:create` for scaffolding new blocks.
+
+**Termination is a script, not a skill.** Each block ships `scripts/stop.sh` next to `start.sh`. The script enumerates the block's live processes (PIDs recorded in `artifacts/index.yaml`, the block's tmux session, the `start.sh` process tree, and any per-block sidecars the block knows about) and signals SIGTERM → grace period → SIGKILL. Block-specific sidecar logic (Docker containers, K8s pods, port-bound proxies) lives in that block's `scripts/stop.sh`; there is no central stop orchestrator. To stop a parent block's tree, invoke each child's `scripts/stop.sh` in reverse dependency order — `:stop` is not a skill because the confirmation gate is well-handled by a TTY `read -p` and there is no agent value-add worth the indirection.
 
 ### 2.2 Archiving
 
@@ -113,11 +115,13 @@ subblocks:
 
 ### 3.2 Parent dispatches to children — never to `start.sh`
 
-When a parent block has subblocks declared, the parent's skills (`:run`, `:stop`, `:check`, `:setup`) MUST delegate to each child's corresponding `/<child>:<skill>` rather than reaching into the child's `scripts/start.sh` or shelling into the child's directory. Bypassing the child's skill bypasses its preflight, confirmation, archiving, and remote-execution decision — and silently shifts those responsibilities up to the parent.
+When a parent block has subblocks declared, the parent's skills (`:run`, `:check`, `:setup`) MUST delegate to each child's corresponding `/<child>:<skill>` rather than reaching into the child's `scripts/start.sh` or shelling into the child's directory. Bypassing the child's skill bypasses its preflight, confirmation, archiving, and remote-execution decision — and silently shifts those responsibilities up to the parent.
 
 A parent block has no `scripts/start.sh` to run; its `:run` is purely an orchestrator.
 
-The order in which a parent walks its children (dependency-resolved forward for `:run` / `:setup`, reverse for `:stop`, unconstrained for `:check` / `:dashboard`) is the responsibility of each parent skill's `SKILL.md`; see those files for the precise rules.
+The order in which a parent walks its children (dependency-resolved forward for `:run` / `:setup`, unconstrained for `:check` / `:dashboard`) is the responsibility of each parent skill's `SKILL.md`; see those files for the precise rules.
+
+Termination follows the same parent-doesn't-reach-into-children spirit but is handled by `scripts/stop.sh` (§2.1), not a skill. To stop a parent block's tree, a stop script (or a human) invokes each child's `scripts/stop.sh` in reverse dependency order.
 
 ---
 
@@ -135,8 +139,9 @@ Every block plugin exposes the same skill surface (uniform interface across the 
 | `/<block>:check`     | Read-only preflight: schema, env vars, repo pins, environment integrity, dependency reachability (LLM endpoints, k8s, docker), and `scripts/dryrun.sh`. Reports all failures in one consolidated message with a run-configuration summary. **Mandatory before `:run`.** | yes |
 | `/<block>:dashboard` | Surface block state — textual table by default (last run, status, key metrics) plus an optional webui launcher. Read-only. | yes |
 | `/<block>:run`       | Preflight → confirm → execute the block. At a leaf block, runs `scripts/start.sh`. At a parent block, dispatches to each child's `/<child>:run` in dependency order (see §3.2) — **never** reaches into a child's `scripts/start.sh` directly. May split into block-specific substeps (e.g. `/trajgen:rollout`, `/trajgen:convert-sft`); when split, `:run` is the orchestrator that calls them in sequence. | no (mutates state) |
-| `/<block>:stop`      | Identify → confirm → terminate the running processes of the block. At a leaf block, enumerates candidate PIDs (from `artifacts/index.yaml`, the block's tmux session, the `scripts/start.sh` process tree, and per-block sidecars), shows them to the user, then SIGTERM → grace period → SIGKILL. At a parent block, dispatches to each running child's `/<child>:stop` in reverse dependency order. Never uses pattern-based mass kills. | no (mutates state) |
 | `/root:create` *(root only)* | Scaffold a new block under `subblock/<name>/` from the canonical [`example_block/`](./example_block/) layout, fill in its `config.yaml` from an intake form or chat-driven Q&A, and wire it into the parent's `meta_info.subblocks`. **Only the root plugin exposes this skill** — subblocks do not create further blocks (the tree is flat under each subblock). | no (mutates state) |
+
+Termination is intentionally not a skill — see §2.1. Each block ships a `scripts/stop.sh` that does the SIGTERM → grace → SIGKILL work directly.
 
 ### 4.2 Plugin layout
 
@@ -155,7 +160,6 @@ Every block plugin exposes the same skill surface (uniform interface across the 
             ├── check/SKILL.md
             ├── dashboard/SKILL.md
             ├── run/SKILL.md
-            ├── stop/SKILL.md
             └── create/SKILL.md                     # root plugin only
 ```
 
