@@ -80,6 +80,21 @@ ssh_run() {
   fi
 }
 
+check_remote_git_repo() {
+  local label="$1"
+  local path="$2"
+  local hint="$3"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "  [DRY-RUN] check remote git repo ${path} (${label})"
+    return 0
+  fi
+  if ! ssh_run "$REMOTE_HOST" "git -C '${path}' rev-parse --is-inside-work-tree >/dev/null 2>&1"; then
+    echo "ERROR: remote ${label} checkout is missing at ${path}" >&2
+    echo "       ${hint}" >&2
+    exit 1
+  fi
+}
+
 echo "=== Starting Block: swe_lego_live ==="
 echo ""
 
@@ -134,6 +149,19 @@ if [[ $DO_SYNC -eq 1 ]]; then
   echo "  synced to ${REMOTE_HOST}:${REMOTE_REPO}"
   echo ""
 fi
+
+# Managed repos are intentionally not rsynced with the Live source tree. They
+# must be provisioned on the remote host before starting block sessions.
+echo "Step 2b: Checking remote managed repos ..."
+check_remote_git_repo \
+  "SWE-gen" \
+  "${REMOTE_REPO}/subblock/swegen/repos/swegen" \
+  "Run on remote: mkdir -p '${REMOTE_REPO}/subblock/swegen/repos' && git clone https://github.com/SWE-Lego/SWE-Lego-Live-SWEgen.git '${REMOTE_REPO}/subblock/swegen/repos/swegen' && git -C '${REMOTE_REPO}/subblock/swegen/repos/swegen' checkout e804af92aad81f42928453959e24e3f5dc666c44"
+check_remote_git_repo \
+  "Harbor" \
+  "${REMOTE_REPO}/subblock/trajgen/repos/harbor" \
+  "Run on remote: cd '${REMOTE_REPO}/subblock/trajgen' && bash scripts/update_repos.sh"
+echo ""
 
 # ── 3. Start swegen ───────────────────────────────────────────────────────────
 if [[ $START_SWEGEN -eq 1 ]]; then

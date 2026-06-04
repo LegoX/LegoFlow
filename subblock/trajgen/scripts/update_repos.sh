@@ -137,6 +137,11 @@ except FileNotFoundError:
 PY
 }
 
+is_git_worktree() {
+  local root="$1"
+  [[ -e "$root" ]] && git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
 command -v git >/dev/null 2>&1 || { echo "ERROR: git is required" >&2; exit 1; }
 [[ -f "$CONFIG" ]] || { echo "ERROR: config.yaml not found at $CONFIG" >&2; exit 1; }
 
@@ -166,7 +171,7 @@ echo "Harbor ref:  ${HARBOR_REF:-<none>}"
 echo "Harbor pin:  ${HARBOR_COMMIT:-<none>}"
 echo "Harbor path: $HARBOR_PATH_RAW"
 
-if [[ -d "$HARBOR_DIR/.git" ]]; then
+if is_git_worktree "$HARBOR_DIR"; then
   set_tree_writable "$HARBOR_DIR"
 
   CURRENT_URL="$(git -C "$HARBOR_DIR" remote get-url origin)"

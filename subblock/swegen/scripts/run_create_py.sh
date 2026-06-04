@@ -1,15 +1,22 @@
 #!/bin/bash
 set -euo pipefail
-cd "$(dirname "$0")/.."
+BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$BLOCK_DIR"
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 export DOCKER_BUILDKIT=0
 export COMPOSE_DOCKER_CLI_BUILD=0
-source .env
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
 source scripts/load_runtime_env.sh
 load_runtime_env
-source swegen-env2/bin/activate
+VENV_DIR="${SWEGEN_VENV_DIR:-artifacts/envs/swegen-env2}"
+source "$VENV_DIR/bin/activate"
 
-exec swegen-env2/bin/swegen create \
+exec "$VENV_DIR/bin/swegen" create \
   --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
   --max-pr 5000 \
   --n-concurrent 20 \

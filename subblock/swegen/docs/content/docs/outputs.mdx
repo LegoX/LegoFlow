@@ -65,7 +65,7 @@ timeout tuning. They are audit artifacts rather than source files.
 The block can optionally flatten verified tasks into:
 
 ```text
-outputs/<task_id>/
+artifacts/merged_swe_tasks/<task_id>/
 ```
 
 using:
@@ -74,8 +74,9 @@ using:
 python scripts/extract_verified_tasks.py
 ```
 
-This is convenient for tools that expect one task root, but manifest-gated
-in-place consumption is preferred for large runs.
+This is convenient for tools that expect one task root. It remains under
+`artifacts/` because runtime outputs are kept out of the source tree's root
+layout. Manifest-gated in-place consumption is preferred for large runs.
 
 ## State packages
 

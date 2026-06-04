@@ -65,9 +65,9 @@ Long-form notes, repo policy, and operational decisions are kept in `dashboard/m
 
 ## Remote Execution
 
-This block runs on the node declared in `config.yaml` → `meta_info.resources.ip` (currently `192.168.35.240`).
+This block runs on the node declared in `config.yaml` → `meta_info.resources.ip` (currently `local`).
 
-- If your shell is on a **different** host: SSH into `192.168.35.240` and operate inside a tmux session there — never invoke this block's scripts from a different node.
-- If your shell is **already on** `192.168.35.240`: skip the SSH step and run scripts directly in a local tmux session (`tmux new-session -d -s trajgen …`). The remote-execution rule is satisfied by being on the named host; SSH would be a self-loop.
+- If the configured value is `local`: run scripts directly on the current host in a named tmux session (`tmux new-session -d -s trajgen …`).
+- If the configured value is a remote host/IP: SSH into that host and operate inside a tmux session there — never invoke this block's scripts from a different node.
 
-Either way, all execution must happen on the configured IP, in a named tmux session (e.g. `trajgen`), so the run survives shell disconnects.
+Either way, all execution must happen on the configured resource target, in a named tmux session (e.g. `trajgen`), so the run survives shell disconnects.
