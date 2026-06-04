@@ -229,26 +229,13 @@ runtime_info:
         description: Adaptive tuning decisions log (JSONL format)
 
 status:
-  phase: running
-  progress: "run_002: generating 40 new tasks (9/40 new tasks so far). CC sessions now working with llm10.jierungogogo.com/MiniMax-M2.7."
+  phase: idle
+  progress: "Ready for the next SWE task generation run."
   next_steps: |
-    1. Monitor swegen-py tmux session on 192.168.35.240 for progress.
-    2. When 40 new tasks are verified, run python scripts/extract_verified_tasks.py to merge outputs.
-    3. Trajgen will process tasks as they become available.
+    1. Run scripts/dryrun.sh before starting a new SWE-gen batch.
+    2. Use quick-verify.md for a small preflight when changing the SWEgen runtime.
   blockers: null
-  last_updated: "2026-05-12T04:00:00Z"
-  metrics:
-    py_verified: 12
-    total_verified: 12
-    pre_existing: 3
-    new_tasks: 9
-    target_new: 40
-  run_002:
-    started_at: "2026-05-10T12:09:00Z"
-    description: "Generating 40 new tasks from python_pr_ids.txt. Fixed: import re bug, stale ANTHROPIC_BASE_URL (was https://az.gptplus5.com, now http://llm.jierungogogo.com). 7 new tasks generated so far."
-    input_file: "artifacts/collected_prs/python_pr_ids.txt"
-    state_dir: "scripts/.swegen-py"
-    log: "artifacts/logs/swegen-create/cc_py_March.txt"
+  last_updated: null
 
 evolving:
   description: Adaptive agent that monitors per-language success rates and tunes pipeline parameters (timeout, cc_timeout, n_concurrent) automatically every 30 minutes.

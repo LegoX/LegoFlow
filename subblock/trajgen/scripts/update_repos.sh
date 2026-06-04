@@ -9,17 +9,28 @@ usage() {
   cat <<'EOF'
 Usage:
   bash scripts/update_repos.sh
-  bash scripts/update_repos.sh --ref <branch|tag|commit>
+  bash scripts/update_repos.sh [--repo <name|all>] [--ref <branch|tag|commit>]
 
-Updates repos/harbor from config.yaml. If repositories.harbor.commit is set,
-that exact commit is checked out after fetching the configured branch/ref. The
-Harbor worktree must be clean before an existing checkout is updated.
+Updates every entry under meta_info.repositories in config.yaml (default --repo
+all). For each selected repo, if repositories.<name>.commit is set, that exact
+commit is checked out after fetching the configured branch/ref. The worktree
+must be clean before an existing checkout is updated.
+
+Examples:
+  bash scripts/update_repos.sh --repo harbor
+  bash scripts/update_repos.sh --repo swe_data_process --ref main
 EOF
 }
 
+REPO_FILTER="all"
 REF_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --repo)
+      [[ $# -ge 2 ]] || { echo "ERROR: --repo requires a value" >&2; exit 2; }
+      REPO_FILTER="$2"
+      shift 2
+      ;;
     --ref)
       [[ $# -ge 2 ]] || { echo "ERROR: --ref requires a value" >&2; exit 2; }
       REF_OVERRIDE="$2"
@@ -64,6 +75,28 @@ elif isinstance(value, bool):
     print("true" if value else "false")
 else:
     print(value)
+PY
+}
+
+list_repos() {
+  python3 - "$CONFIG" <<'PY'
+import sys
+
+try:
+    import yaml
+except ImportError:
+    print("ERROR: PyYAML is required to read config.yaml", file=sys.stderr)
+    sys.exit(2)
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = yaml.safe_load(fh) or {}
+
+repos = ((data.get("meta_info") or {}).get("repositories") or {})
+if not isinstance(repos, dict):
+    print("ERROR: meta_info.repositories must be a mapping", file=sys.stderr)
+    sys.exit(2)
+for name in repos:
+    print(name)
 PY
 }
 
@@ -137,87 +170,126 @@ except FileNotFoundError:
 PY
 }
 
-is_git_worktree() {
-  local root="$1"
-  [[ -e "$root" ]] && git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1
+update_one_repo() {
+  local NAME="$1"
+  local URL
+  local BRANCH
+  local REF
+  local COMMIT
+  local PATH_RAW
+  local READONLY
+  URL="$(cfg "meta_info.repositories.$NAME.url")"
+  BRANCH="$(cfg "meta_info.repositories.$NAME.branch")"
+  REF="$(cfg "meta_info.repositories.$NAME.ref")"
+  if [[ -z "$REF" ]]; then
+    REF="$BRANCH"
+  fi
+  if [[ -n "$REF_OVERRIDE" ]]; then
+    REF="$REF_OVERRIDE"
+  fi
+  COMMIT="$(cfg "meta_info.repositories.$NAME.commit")"
+  PATH_RAW="$(cfg "meta_info.repositories.$NAME.path")"
+  READONLY="$(cfg "meta_info.repositories.$NAME.readonly")"
+
+  [[ -n "$URL" ]] || { echo "ERROR: meta_info.repositories.$NAME.url is empty" >&2; exit 1; }
+  [[ -n "$REF" || -n "$COMMIT" ]] || { echo "ERROR: meta_info.repositories.$NAME.branch/ref or commit is required" >&2; exit 1; }
+  [[ -n "$PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.$NAME.path is empty" >&2; exit 1; }
+
+  local REPO_DIR
+  REPO_DIR="$(abspath "$PATH_RAW")"
+  mkdir -p "$(dirname "$REPO_DIR")"
+
+  echo "=== trajgen repo update: $NAME ==="
+  echo "URL:  $URL"
+  echo "ref:  ${REF:-<none>}"
+  echo "pin:  ${COMMIT:-<none>}"
+  echo "path: $PATH_RAW"
+
+  if git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    set_tree_writable "$REPO_DIR"
+
+    local CURRENT_URL
+    CURRENT_URL="$(git -C "$REPO_DIR" remote get-url origin)"
+    if [[ "$CURRENT_URL" != "$URL" ]]; then
+      echo "ERROR: $PATH_RAW origin is '$CURRENT_URL', expected '$URL'" >&2
+      exit 1
+    fi
+
+    if [[ -n "$(git -C "$REPO_DIR" status --porcelain)" ]]; then
+      echo "ERROR: $PATH_RAW has local modifications; clean it before updating" >&2
+      git -C "$REPO_DIR" status --short >&2
+      exit 1
+    fi
+
+    git -C "$REPO_DIR" fetch --prune origin
+  else
+    if [[ -e "$REPO_DIR" ]]; then
+      echo "ERROR: $PATH_RAW exists but is not a git repo" >&2
+      exit 1
+    fi
+    git clone "$URL" "$REPO_DIR"
+    git -C "$REPO_DIR" fetch --prune origin
+  fi
+
+  local TARGET="$COMMIT"
+  if [[ -z "$TARGET" ]]; then
+    TARGET="$REF"
+    if git -C "$REPO_DIR" rev-parse --verify --quiet "${REF}^{commit}" >/dev/null; then
+      TARGET="$REF"
+    elif git -C "$REPO_DIR" rev-parse --verify --quiet "origin/${REF}^{commit}" >/dev/null; then
+      TARGET="origin/$REF"
+    fi
+  fi
+
+  git -C "$REPO_DIR" checkout --detach "$TARGET"
+  git -C "$REPO_DIR" submodule update --init --recursive
+
+  local FINAL_COMMIT
+  FINAL_COMMIT="$(git -C "$REPO_DIR" rev-parse HEAD)"
+
+  if [[ "$READONLY" == "true" ]]; then
+    set_tree_readonly "$REPO_DIR"
+    echo "Set $PATH_RAW working tree read-only (excluding .git)."
+  fi
+
+  echo "$NAME ready at $PATH_RAW"
+  echo "Commit: $FINAL_COMMIT"
+  echo ""
 }
 
 command -v git >/dev/null 2>&1 || { echo "ERROR: git is required" >&2; exit 1; }
 [[ -f "$CONFIG" ]] || { echo "ERROR: config.yaml not found at $CONFIG" >&2; exit 1; }
 
-HARBOR_URL="$(cfg meta_info.repositories.harbor.url)"
-HARBOR_BRANCH="$(cfg meta_info.repositories.harbor.branch)"
-HARBOR_REF="$(cfg meta_info.repositories.harbor.ref)"
-if [[ -z "$HARBOR_REF" ]]; then
-  HARBOR_REF="$HARBOR_BRANCH"
+mapfile -t ALL_REPOS < <(list_repos)
+if [[ ${#ALL_REPOS[@]} -eq 0 ]]; then
+  echo "ERROR: meta_info.repositories is empty in $CONFIG" >&2
+  exit 1
 fi
-if [[ -n "$REF_OVERRIDE" ]]; then
-  HARBOR_REF="$REF_OVERRIDE"
-fi
-HARBOR_COMMIT="$(cfg meta_info.repositories.harbor.commit)"
-HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
-READONLY="$(cfg meta_info.repositories.harbor.readonly)"
 
-[[ -n "$HARBOR_URL" ]] || { echo "ERROR: repositories.harbor.url is empty" >&2; exit 1; }
-[[ -n "$HARBOR_REF" || -n "$HARBOR_COMMIT" ]] || { echo "ERROR: repositories.harbor.branch/ref or commit is required" >&2; exit 1; }
-[[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: repositories.harbor.path is empty" >&2; exit 1; }
-
-HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
-mkdir -p "$(dirname "$HARBOR_DIR")"
-
-echo "=== trajgen repo update ==="
-echo "Harbor URL:  $HARBOR_URL"
-echo "Harbor ref:  ${HARBOR_REF:-<none>}"
-echo "Harbor pin:  ${HARBOR_COMMIT:-<none>}"
-echo "Harbor path: $HARBOR_PATH_RAW"
-
-if is_git_worktree "$HARBOR_DIR"; then
-  set_tree_writable "$HARBOR_DIR"
-
-  CURRENT_URL="$(git -C "$HARBOR_DIR" remote get-url origin)"
-  if [[ "$CURRENT_URL" != "$HARBOR_URL" ]]; then
-    echo "ERROR: repos/harbor origin is '$CURRENT_URL', expected '$HARBOR_URL'" >&2
-    exit 1
-  fi
-
-  if [[ -n "$(git -C "$HARBOR_DIR" status --porcelain)" ]]; then
-    echo "ERROR: repos/harbor has local modifications; clean it before updating" >&2
-    git -C "$HARBOR_DIR" status --short >&2
-    exit 1
-  fi
-
-  git -C "$HARBOR_DIR" fetch --prune origin
+SELECTED=()
+if [[ "$REPO_FILTER" == "all" ]]; then
+  SELECTED=("${ALL_REPOS[@]}")
 else
-  if [[ -e "$HARBOR_DIR" ]]; then
-    echo "ERROR: $HARBOR_PATH_RAW exists but is not a git repo" >&2
+  FOUND=0
+  for name in "${ALL_REPOS[@]}"; do
+    if [[ "$name" == "$REPO_FILTER" ]]; then
+      SELECTED=("$name")
+      FOUND=1
+      break
+    fi
+  done
+  if [[ "$FOUND" -ne 1 ]]; then
+    echo "ERROR: --repo '$REPO_FILTER' not found in meta_info.repositories" >&2
+    echo "Configured repos: ${ALL_REPOS[*]}" >&2
     exit 1
   fi
-  git clone "$HARBOR_URL" "$HARBOR_DIR"
-  git -C "$HARBOR_DIR" fetch --prune origin
 fi
 
-TARGET="$HARBOR_COMMIT"
-OUTPUT_REF="$HARBOR_REF"
-if [[ -z "$TARGET" ]]; then
-  TARGET="$HARBOR_REF"
-  if git -C "$HARBOR_DIR" rev-parse --verify --quiet "${HARBOR_REF}^{commit}" >/dev/null; then
-    TARGET="$HARBOR_REF"
-  elif git -C "$HARBOR_DIR" rev-parse --verify --quiet "origin/${HARBOR_REF}^{commit}" >/dev/null; then
-    TARGET="origin/$HARBOR_REF"
-  fi
-else
-  OUTPUT_REF="${HARBOR_REF:-$HARBOR_COMMIT}"
+if [[ -n "$REF_OVERRIDE" && ${#SELECTED[@]} -gt 1 ]]; then
+  echo "ERROR: --ref requires --repo <name> (cannot apply one ref to multiple repos)" >&2
+  exit 2
 fi
 
-git -C "$HARBOR_DIR" checkout --detach "$TARGET"
-git -C "$HARBOR_DIR" submodule update --init --recursive
-
-COMMIT="$(git -C "$HARBOR_DIR" rev-parse HEAD)"
-
-if [[ "$READONLY" == "true" ]]; then
-  set_tree_readonly "$HARBOR_DIR"
-  echo "Set Harbor working tree read-only (excluding .git)."
-fi
-
-echo "Harbor ready at $HARBOR_PATH_RAW"
-echo "Commit: $COMMIT"
+for name in "${SELECTED[@]}"; do
+  update_one_repo "$name"
+done

@@ -1,16 +1,20 @@
 id: run_001
+block: sft_training
 started_at: "2026-05-04T08:00:00Z"
 completed_at: "2026-05-04T10:11:35Z"
 status: completed
+exit_code: 0
+repos:
+  trl: a1b2c3d4
+notes: "Baseline run with default lr; val_loss converged by epoch 2"
+
+# Optional fields the agent may add manually after the run:
 stage: sft_training
 results:
   val_loss: 0.42
   train_loss: 0.31
   model_checkpoint: /mnt/shared/sft_training/ckpt_001
-repos:
-  trl: a1b2c3d4
 inputs:
   dataset_path: /data/sft_dataset_v2.jsonl
   learning_rate: 1e-4
   num_epochs: 3
-notes: "Baseline run with default lr; val_loss converged by epoch 2"

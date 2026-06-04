@@ -1,8 +1,8 @@
 # Monitor — run_001
 
-**Block:** sft_training
-**Run:** run_001
-**Started:** 2026-05-04T08:00:00Z
+**Block:** sft_training  
+**Run:** run_001  
+**Started:** 2026-05-04T08:00:00Z  
 **Completed:** 2026-05-04T10:11:35Z
 
 ## Progress

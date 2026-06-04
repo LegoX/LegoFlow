@@ -17,6 +17,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SWEGEN_CFG="$ROOT_DIR/subblock/swegen/config.yaml"
 
+# Archive this run when start.sh exits (success, error, or signal).
+RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+_archive_run_on_exit() {
+    local rc=$?
+    if [[ "${DRY_RUN:-0}" -eq 1 ]]; then
+      exit $rc
+    fi
+    bash "$(dirname "${BASH_SOURCE[0]}")/archive_run.sh" "$rc" "$RUN_STARTED_AT" || true
+    exit $rc
+}
+trap _archive_run_on_exit EXIT
+
 START_SWEGEN=1
 START_TRAJGEN=1
 DO_SYNC=1
@@ -80,43 +92,41 @@ ssh_run() {
   fi
 }
 
-check_remote_git_repo() {
-  local label="$1"
-  local path="$2"
-  local hint="$3"
-  if [[ $DRY_RUN -eq 1 ]]; then
-    echo "  [DRY-RUN] check remote git repo ${path} (${label})"
-    return 0
-  fi
-  if ! ssh_run "$REMOTE_HOST" "git -C '${path}' rev-parse --is-inside-work-tree >/dev/null 2>&1"; then
-    echo "ERROR: remote ${label} checkout is missing at ${path}" >&2
-    echo "       ${hint}" >&2
-    exit 1
-  fi
-}
-
 echo "=== Starting Block: swe_lego_live ==="
 echo ""
 
-# ── Read remote config ────────────────────────────────────────────────────────
+# ── Read execution-location config ───────────────────────────────────────────
+# Default: run locally. Treat ip == 'local' or empty/null as local execution.
+# Only opt into remote SSH+rsync if ip is a real remote host.
 REMOTE_IP="$(cfg "meta_info.resources.ip")"
 REMOTE_USER="$(cfg "meta_info.resources.user")"
 REMOTE_DIR="$(cfg "meta_info.resources.directory")"
 
-if [[ -z "$REMOTE_IP" || "$REMOTE_IP" == "null" ]]; then
-  echo "ERROR: meta_info.resources.ip not set in subblock/swegen/config.yaml" >&2
-  exit 1
-fi
-if [[ -z "$REMOTE_DIR" || "$REMOTE_DIR" == "null" ]]; then
-  echo "ERROR: meta_info.resources.directory not set in subblock/swegen/config.yaml" >&2
-  exit 1
+if [[ -z "$REMOTE_IP" || "$REMOTE_IP" == "null" || "$REMOTE_IP" == "local" ]]; then
+  IS_LOCAL=1
+else
+  IS_LOCAL=0
 fi
 
-REMOTE_HOST="${REMOTE_USER}@${REMOTE_IP}"
-REMOTE_REPO="${REMOTE_DIR%/}/SWE-Lego-Live"
-
-echo "Remote node : ${REMOTE_HOST}"
-echo "Remote path : ${REMOTE_REPO}"
+if [[ $IS_LOCAL -eq 1 ]]; then
+  REPO_DIR="$ROOT_DIR"
+  echo "Execution   : local (ip=${REMOTE_IP:-<unset>})"
+  echo "Repo path   : ${REPO_DIR}"
+else
+  if [[ -z "$REMOTE_DIR" || "$REMOTE_DIR" == "null" ]]; then
+    echo "ERROR: meta_info.resources.directory not set in subblock/swegen/config.yaml" >&2
+    exit 1
+  fi
+  if [[ -z "$REMOTE_USER" || "$REMOTE_USER" == "null" ]]; then
+    echo "ERROR: meta_info.resources.user not set in subblock/swegen/config.yaml" >&2
+    exit 1
+  fi
+  REMOTE_HOST="${REMOTE_USER}@${REMOTE_IP}"
+  REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
+  echo "Execution   : remote"
+  echo "Remote node : ${REMOTE_HOST}"
+  echo "Remote path : ${REPO_DIR}"
+fi
 echo ""
 
 # ── 1. Dryrun validation ──────────────────────────────────────────────────────
@@ -135,52 +145,81 @@ fi
 
 # ── 2. Sync code to remote ────────────────────────────────────────────────────
 if [[ $DO_SYNC -eq 1 ]]; then
-  echo "Step 2: Syncing code to remote ..."
-  run rsync -az --delete \
-    --exclude='.git/' \
-    --exclude='artifacts/' \
-    --exclude='.claude/' \
-    --exclude='subblock/swegen/repos/' \
-    --exclude='subblock/trajgen/repos/' \
-    --exclude='subblock/swegen/artifacts/' \
-    --exclude='subblock/trajgen/artifacts/' \
-    --exclude='subblock/swegen/gh_token.txt' \
-    "${ROOT_DIR}/" "${REMOTE_HOST}:${REMOTE_REPO}/"
-  echo "  synced to ${REMOTE_HOST}:${REMOTE_REPO}"
-  echo ""
+  if [[ $IS_LOCAL -eq 1 ]]; then
+    echo "Step 2: Skipping rsync (local execution)"
+    echo ""
+  else
+    echo "Step 2: Syncing code to remote ..."
+    run rsync -az --delete \
+      --exclude='.git/' \
+      --exclude='artifacts/' \
+      --exclude='.claude/' \
+      --exclude='subblock/swegen/repos/' \
+      --exclude='subblock/trajgen/repos/' \
+      --exclude='subblock/swegen/artifacts/' \
+      --exclude='subblock/trajgen/artifacts/' \
+      --exclude='subblock/swegen/gh_token.txt' \
+      "${ROOT_DIR}/" "${REMOTE_HOST}:${REPO_DIR}/"
+    echo "  synced to ${REMOTE_HOST}:${REPO_DIR}"
+    echo ""
+  fi
 fi
 
-# Managed repos are intentionally not rsynced with the Live source tree. They
-# must be provisioned on the remote host before starting block sessions.
-echo "Step 2b: Checking remote managed repos ..."
-check_remote_git_repo \
-  "SWE-gen" \
-  "${REMOTE_REPO}/subblock/swegen/repos/swegen" \
-  "Run on remote: mkdir -p '${REMOTE_REPO}/subblock/swegen/repos' && git clone https://github.com/SWE-Lego/SWE-Lego-Live-SWEgen.git '${REMOTE_REPO}/subblock/swegen/repos/swegen' && git -C '${REMOTE_REPO}/subblock/swegen/repos/swegen' checkout e804af92aad81f42928453959e24e3f5dc666c44"
-check_remote_git_repo \
-  "Harbor" \
-  "${REMOTE_REPO}/subblock/trajgen/repos/harbor" \
-  "Run on remote: cd '${REMOTE_REPO}/subblock/trajgen' && bash scripts/update_repos.sh"
-echo ""
+# Helper: start a tmux session running CMD, locally or via SSH depending on IS_LOCAL.
+tmux_start() {
+  local session="$1"; shift
+  local cmd="$1"; shift
+  if [[ $IS_LOCAL -eq 1 ]]; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+      echo "  [DRY-RUN] tmux new-session -d -s '${session}' && tmux send-keys -t '${session}' '${cmd}' Enter"
+    else
+      tmux new-session -d -s "${session}" -x 220 -y 50
+      tmux send-keys -t "${session}" "${cmd}" Enter
+    fi
+  else
+    ssh_run "$REMOTE_HOST" \
+      "tmux new-session -d -s '${session}' -x 220 -y 50 && \
+       tmux send-keys -t '${session}' '${cmd}' Enter"
+  fi
+}
+
+# Helper: check if a tmux session already exists (locally or remotely).
+tmux_has_session() {
+  local session="$1"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    return 1   # in dry-run, never claim a session exists
+  fi
+  if [[ $IS_LOCAL -eq 1 ]]; then
+    tmux has-session -t "${session}" 2>/dev/null
+  else
+    ssh_run "$REMOTE_HOST" "tmux has-session -t '${session}'" 2>/dev/null
+  fi
+}
+
+# Helper: print the attach hint for a session.
+attach_hint() {
+  local session="$1"
+  if [[ $IS_LOCAL -eq 1 ]]; then
+    echo "         attach with: tmux attach -t ${session}"
+  else
+    echo "         attach with: ssh ${REMOTE_HOST} -t tmux attach -t ${session}"
+  fi
+}
 
 # ── 3. Start swegen ───────────────────────────────────────────────────────────
 if [[ $START_SWEGEN -eq 1 ]]; then
   echo "Step 3: Starting swegen ..."
   SWEGEN_SESSION="swegen-py"
-  SWEGEN_DIR="${REMOTE_REPO}/subblock/swegen"
+  SWEGEN_DIR="${REPO_DIR}/subblock/swegen"
 
-  # Check if session already exists
-  if [[ $DRY_RUN -eq 0 ]] && \
-     ssh_run "$REMOTE_HOST" "tmux has-session -t '${SWEGEN_SESSION}'" 2>/dev/null; then
-    echo "  [SKIP] tmux session '${SWEGEN_SESSION}' already exists on remote"
-    echo "         attach with: ssh ${REMOTE_HOST} -t tmux attach -t ${SWEGEN_SESSION}"
+  if tmux_has_session "${SWEGEN_SESSION}"; then
+    echo "  [SKIP] tmux session '${SWEGEN_SESSION}' already exists"
+    attach_hint "${SWEGEN_SESSION}"
   else
     SWEGEN_CMD="cd '${SWEGEN_DIR}' && bash scripts/create_py.sh"
-    ssh_run "$REMOTE_HOST" \
-      "tmux new-session -d -s '${SWEGEN_SESSION}' -x 220 -y 50 && \
-       tmux send-keys -t '${SWEGEN_SESSION}' '${SWEGEN_CMD}' Enter"
+    tmux_start "${SWEGEN_SESSION}" "${SWEGEN_CMD}"
     echo "  started tmux session '${SWEGEN_SESSION}'"
-    echo "  attach with: ssh ${REMOTE_HOST} -t tmux attach -t ${SWEGEN_SESSION}"
+    attach_hint "${SWEGEN_SESSION}"
   fi
   echo ""
 fi
@@ -189,19 +228,16 @@ fi
 if [[ $START_TRAJGEN -eq 1 ]]; then
   echo "Step 4: Starting trajgen ..."
   TRAJGEN_SESSION="trajgen"
-  TRAJGEN_DIR="${REMOTE_REPO}/subblock/trajgen"
+  TRAJGEN_DIR="${REPO_DIR}/subblock/trajgen"
 
-  if [[ $DRY_RUN -eq 0 ]] && \
-     ssh_run "$REMOTE_HOST" "tmux has-session -t '${TRAJGEN_SESSION}'" 2>/dev/null; then
-    echo "  [SKIP] tmux session '${TRAJGEN_SESSION}' already exists on remote"
-    echo "         attach with: ssh ${REMOTE_HOST} -t tmux attach -t ${TRAJGEN_SESSION}"
+  if tmux_has_session "${TRAJGEN_SESSION}"; then
+    echo "  [SKIP] tmux session '${TRAJGEN_SESSION}' already exists"
+    attach_hint "${TRAJGEN_SESSION}"
   else
     TRAJGEN_CMD="cd '${TRAJGEN_DIR}' && bash scripts/prepare_tasks.sh && bash scripts/start.sh"
-    ssh_run "$REMOTE_HOST" \
-      "tmux new-session -d -s '${TRAJGEN_SESSION}' -x 220 -y 50 && \
-       tmux send-keys -t '${TRAJGEN_SESSION}' '${TRAJGEN_CMD}' Enter"
+    tmux_start "${TRAJGEN_SESSION}" "${TRAJGEN_CMD}"
     echo "  started tmux session '${TRAJGEN_SESSION}'"
-    echo "  attach with: ssh ${REMOTE_HOST} -t tmux attach -t ${TRAJGEN_SESSION}"
+    attach_hint "${TRAJGEN_SESSION}"
   fi
   echo ""
 fi
@@ -209,12 +245,15 @@ fi
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo "=== Done ==="
 echo ""
-echo "Monitor sessions on the remote node:"
-echo "  ssh ${REMOTE_HOST}"
-echo "  tmux ls"
-if [[ $START_SWEGEN -eq 1 ]]; then
-  echo "  tmux attach -t swegen-py    # swegen task generation"
-fi
-if [[ $START_TRAJGEN -eq 1 ]]; then
-  echo "  tmux attach -t trajgen      # trajgen trajectory generation"
+if [[ $IS_LOCAL -eq 1 ]]; then
+  echo "Monitor sessions locally:"
+  echo "  tmux ls"
+  [[ $START_SWEGEN  -eq 1 ]] && echo "  tmux attach -t swegen-py    # swegen task generation"
+  [[ $START_TRAJGEN -eq 1 ]] && echo "  tmux attach -t trajgen      # trajgen trajectory generation"
+else
+  echo "Monitor sessions on the remote node:"
+  echo "  ssh ${REMOTE_HOST}"
+  echo "  tmux ls"
+  [[ $START_SWEGEN  -eq 1 ]] && echo "  tmux attach -t swegen-py    # swegen task generation"
+  [[ $START_TRAJGEN -eq 1 ]] && echo "  tmux attach -t trajgen      # trajgen trajectory generation"
 fi

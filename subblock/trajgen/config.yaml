@@ -17,15 +17,23 @@ meta_info:
 
   repositories:
     harbor:
-      url: git@github.com:SWE-Lego/harbor.git
+      url: https://github.com/SWE-Lego/harbor.git
       branch: main
-      commit: 3062421c03d89a5e980684873840e6644e756771
+      commit: ff0434968e5b6975af10d72ca1d7ed20e7fa2465
       path: repos/harbor
+      readonly: true
+    swe_data_process:
+      url: https://github.com/SWE-Lego/swe_data_process.git
+      branch: main
+      commit: 76cb50cea432fb8687cf192c8ab3f09bb726cb07   # origin/main HEAD (fetched 2026-06-01), merges PR #4 "Add dataset-level tool-call error rate to LF stats"
+      path: repos/swe_data_process
       readonly: true
 
   environment:
     harbor_uv: artifacts/env/harbor-uv
     litellm_uv: artifacts/env/litellm-venv  # separate venv; harbor env is managed by uv run and resets to 1.83.0
+    swe_data_process_uv: artifacts/env/swe-data-process-uv
+    swe_data_process_extras: [llm]    # installs openai for optional LLM scoring
     litellm:
       python_version: "3.13"
       litellm_version: "1.83.14"
@@ -45,7 +53,7 @@ runtime_info:
       # output_cost_per_token: 0.0000084
 
     # llm_api:
-    #   api_key: human             # LLM API key for PR evaluation and instruction generation
+    #   api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY             # LLM API key for PR evaluation and instruction generation
     #   api_base_url: https://az.gptplus5.com/v1        # OpenAI-compatible API endpoint
     #   model: openai/deepseek-v4-flash
     #   description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
@@ -56,11 +64,11 @@ runtime_info:
       port: 4001
       master_key: dummy-key-cf
 
-    # task_source: wired from swegen.output.swe_tasks_dir
-    # Use local swegen output; fall back to HuggingFace for smoke tests.
-    # task_source:
-    #   provider: local
-    #   dataset_name: /gpufs/haoli/code/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks
+    # task_source: wired from swegen.output.swe_tasks_dir (dependency declared in meta_info.dependencies)
+    task_source:
+      provider: local
+      dataset_name: ../swegen/artifacts/swe_tasks/py-cc
+      # prepare_tasks.sh filters by py-cc/verifiable_tasks.txt before copying into artifacts/tasks/.
 
     # harbor_job:
     #   jobs_dir: artifacts/jobs
@@ -71,20 +79,19 @@ runtime_info:
     #   timeout_multiplier: 5
 
 
-    # TESTRUN: use HuggingFace dataset as test run, do not delete this
-    task_source:
-      provider: huggingface           # currently supported by prepare_tasks.sh
-      dataset_name: SWE-Lego/swerebenchv2-200-260429
-      split: train
+    # TESTRUN (disabled): HuggingFace dataset path, do not delete — used for smoke tests.
+    # task_source:
+    #   provider: huggingface
+    #   dataset_name: SWE-Lego/swerebenchv2-200-260429
+    #   split: train
 
-    # TESTRUN: use HuggingFace dataset as test run, do not delete this
     harbor_job:
       # This is the trajgen block output root for Harbor job results.
       # Store jobs under this block's artifacts directory, not under repos/harbor.
       # scripts/start.sh exports this as TRAJGEN_HARBOR_JOBS_DIR.
       jobs_dir: artifacts/jobs
       n_concurrent: 8
-      n_tasks: null                   # set to 1 for smoke tests
+      n_tasks: 16                     # cap per swegen→trajgen run target (set to 1 for smoke tests, null for all manifest tasks)
       max_retries: 2
       timeout_multiplier: 2
 
@@ -96,11 +103,24 @@ runtime_info:
       max_turns: 80
       temperature: 0.7
 
+    sft_conversion:
+      enabled: false               # if true, start.sh runs convert step after Harbor job finishes
+      scaffold: auto               # auto | claude_code | open_code | openhands_sdk | terminus2 (auto = derive from agent.name)
+      out_dir: artifacts/sft_data  # per-job subdir created inside this
+      max_instances: null
+      exclude_repos_file: ""       # "" = use repo default artifacts/excluded_repos.txt
+
   output:
     raw_trajectories_dir:
       description: Harbor job directories with LiteLLM trajectory logs
       path: artifacts/jobs
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
+      consumer_block: sft
+    sft_data_dir:
+      description: LF-format JSON arrays converted from Harbor trajectories, ready for LLaMA-Factory SFT.
+      path: artifacts/sft_data
+      format: llamafactory_lf_v0.1
+      trajectory_format: "artifacts/sft_data/<job>/lf.json"
       consumer_block: sft
 
 environment:
@@ -110,23 +130,13 @@ environment:
     HARBOR_EXCLUDE_TASKS: elastic__elasticsearch-py-3329 elastic__elasticsearch-py-3332 cartography-cncf__cartography-1673 agentscope-ai__agentscope-885 agentscope-ai__agentscope-1342 aider-ai__aider-4146 agentscope-ai__agentscope-964 django-guardian__django-guardian-677 567-labs__instructor-1897 cartography-cncf__cartography-1751 cartography-cncf__cartography-2031
 
 status:
-  phase: running
-  progress: "DONE. 200/200 tasks scored. 29 reward=1.0 (14.5%). 171 reward=0. 22 errors."
+  phase: idle
+  progress: "Ready for the next trajectory generation run."
   next_steps: |
-    1. Hand off 29 passing trajectories to sft block.
-    2. Optionally re-run failing tasks with higher timeout or different model.
-  blockers: ""
-  last_updated: "2026-05-14T02:17:00Z"
-  current_job:
-    name: swerebenchv2-200-260429-custom-claude-code-2.1.118-MiniMax-M2.7-20260513230507
-    started_at: "2026-05-13T23:06:02Z"
-    stopped_at: "2026-05-14T10:16:44Z"
-    detail: "200 tasks from HF dataset swerebenchv2-200-260429 (8 concurrent). 29 passed, 171 failed, 22 errors."
-  metrics:
-    tasks_attempted: 200
-    real_trajectories: 200
-    quota_failed: 22
-    unit_test_passes: 29
+    1. Run scripts/dryrun.sh before starting a new Harbor job.
+    2. Confirm swegen has verified tasks before preparing trajgen inputs.
+  blockers: null
+  last_updated: null
 
 evolving:
   description: Generates agent trajectories using Harbor. Tunable parameters include agent sampling settings, Harbor concurrency, and timeout multipliers.

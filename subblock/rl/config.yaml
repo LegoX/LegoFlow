@@ -1,7 +1,11 @@
 meta_info:
   name: rl
   label: "RL Training"
-  description: Online RL training pipeline for SWE-bench. Trains a configurable coding agent against a local LLM served by vLLM, using Harbor on Kubernetes as the task execution layer and rLLM + verl as the RL backbone (GRPO/GSPO).
+  description: >-
+    Online RL training pipeline for SWE-bench. Wraps the
+    harbor-verl-train sync_1node_cc launch path: claude-code (mounted in a k8s
+    pod) → LiteLLM proxy → vLLM (verl-managed). PPO/GRPO updates are driven by
+    verl over Harbor-executed agent trajectories.
   parent: swe_lego_live
   subblocks: {}
   dependencies:
@@ -10,14 +14,24 @@ meta_info:
   repos:
     harbor_verl_train:
       name: harbor-verl-train
-      commit_id: null
-      role: RL training framework (rLLM + verl, GRPO/GSPO)
+      url: https://github.com/Elvin-Yiming-Du/harbor-verl-train.git
+      branch: ydu_dev
+      role: RL training framework (verl trainer/rollout + Harbor agent loop bridge)
     harbor:
       name: harbor
-      commit_id: null
-      role: task execution layer (Harbor on Kubernetes)
+      url: https://github.com/SWE-Lego/harbor.git
+      branch: ydu_dev
+      pinned_commit: 9f98f9d69e37b1c7423fb2ec0fdf50b754877057  # see harbor-verl-train/scripts/setup_env.sh
+      role: Task execution layer (Harbor on Kubernetes) + verifier reward
+    verl:
+      name: verl
+      url: https://github.com/verl-project/verl.git
+      pinned_commit: bcb638649  # see harbor-verl-train/scripts/setup_env.sh; patched with patches/verl_bcb638649.patch
+      role: Trainer + rollout (FSDP, PPO/GRPO/GSPO)
 
   environment:
+    bootstrap_script: repos/harbor-verl-train/scripts/setup_env.sh
+    venv_path: repos/harbor-verl-train/.venv
     requirements: repos/harbor-verl-train/pyproject.toml
 
   resources:
@@ -31,49 +45,203 @@ meta_info:
 
 runtime_info:
   input:
+    # ---------------------------------------------------------------------
+    # Model
+    # ---------------------------------------------------------------------
     model:
       model_path: /mnt/public/models/Qwen3-30B-A3B-Instruct-2507
-      served_model_name: Qwen3-30B-A3B-Instruct-2507
+      served_model_name: vllm_model
 
+    # ---------------------------------------------------------------------
+    # Data — pre-built parquet task indexes (output of create_task_index.py)
+    # ---------------------------------------------------------------------
+    data:
+      data_dir: /mnt/ydu/data/harbor_indexes
+      train_index: /mnt/ydu/data/harbor_indexes/train_rebench1663.parquet
+      val_index: /mnt/ydu/data/harbor_indexes/val_official500.parquet
+
+    # ---------------------------------------------------------------------
+    # Infrastructure
+    # ---------------------------------------------------------------------
     infrastructure:
-      node0_ip: ""
-      n_nodes: 1
-      n_gpus_per_node: 8
-      vllm_tp_size: 2
-      vllm_port: 8000
+      node0_ip: ""               # auto-detected via `hostname -I` if empty
+      nnodes: 1
+      ngpus_per_node: 8
       ray_port: 6379
-      k8s_kubeconfig: /mnt/public/SWE-Lego-Live-Training-RL/k8s-cpu-240.yaml
-      k8s_namespace: default
-      k8s_pod_startup_timeout: 3000
+      ray_dashboard_port: 8265
+      litellm_port: 8002
+      vllm_logging_level: INFO
+      anthropic_api_key: sk-dummy   # dummy placeholder for LiteLLM's Anthropic shim — proxied to local vLLM, not real Anthropic
 
+    # ---------------------------------------------------------------------
+    # Python environment
+    # ---------------------------------------------------------------------
+    environment:
+      # Empty → use the default `repos/harbor-verl-train/.venv` (built by
+      # setup_env.sh on first run via scripts/start.sh).
+      # Set this to point at an existing venv (absolute path or relative to
+      # this block) to skip bootstrap and reuse a prebuilt environment.
+      # The venv MUST have harbor / verl / harbor-verl-train installed
+      # editable; mismatched paths will silently run the wrong code.
+      venv_path: ""
+
+    # ---------------------------------------------------------------------
+    # Kubernetes (Harbor sandbox)
+    # ---------------------------------------------------------------------
+    k8s:
+      kubeconfig: /mnt/ydu/k8s-cpu-221.yaml
+      namespace: default
+      pod_startup_timeout: 1200
+      pod_active_deadline_seconds: 6000
+
+    # ---------------------------------------------------------------------
+    # vLLM rollout — UPSTREAM-FIXED. These mirror the hardcoded values in
+    # repos/harbor-verl-train/scripts/sync_1nodes_cc.sh (gen_tp,
+    # vllm_max_model_length, gpu_memory_utilization, etc.) so this file
+    # documents the run-time state. Editing here does NOT change the run;
+    # to override, edit the upstream script.
+    # ---------------------------------------------------------------------
+    vllm:
+      gen_tp: 4                  # TP=4 + DP=2 on 8GPU; matches Qwen3-30B-A3B's 4 KV heads
+      max_model_length: 128000
+      gpu_memory_utilization: 0.85
+      max_num_seqs: 96
+      enforce_eager: false
+      dtype: bfloat16
+      enable_chunked_prefill: true
+
+    # ---------------------------------------------------------------------
+    # Training — UPSTREAM-FIXED (same caveat as vllm above). Only test_freq
+    # is currently env-driven; the rest are documentation of upstream values.
+    # ---------------------------------------------------------------------
     training:
       train_batch_size: 64
-      n_parallel_tasks: 32
-      max_turns: 100
-      max_prompt_length: 20000
-      max_response_length: 80000
-      vllm_max_model_len: 100000
+      val_batch_size: 500
+      n_resp_per_prompt: 8
+      train_prompt_mini_batch_size: 64
+      max_prompt_length: 40000
+      max_response_length: 68000
+      sp_size: 4                  # ulysses sequence parallel
+      use_dynamic_bsz: true
+      ref_offload: true
+      actor_offload: true
+      total_epochs: 3
+      save_freq: 5
+      test_freq: 5
+      val_before_train: false
 
-    data:
-      swe_parquet: /mnt/public/SWE-Lego-Live-Training-RL/data/rebench_p01_p23_5872/swerebench_sc4to7_877instances.parquet
-      val_parquet: /mnt/public/SWE-Lego-Live-Training-RL/data/SWE-Bench-Verified/test_verl_official.parquet
-      tasks_dir: /mnt/public/SWE-Lego-Live-Training-RL/data/harbor_swe_tasks
-      val_tasks_dir: /mnt/public/SWE-Lego-Live-Training-RL/data/harbor_swe_val_tasks
-      data_dir: /mnt/public/SWE-Lego-Live-Training-RL/data/harbor_swe_task_index
+    # ---------------------------------------------------------------------
+    # Algorithm — UPSTREAM-FIXED (documentation only).
+    # ---------------------------------------------------------------------
+    algorithm:
+      adv_estimator: grpo
+      policy_loss_mode: gspo
+      learning_rate: 1.0e-6
+      use_kl_loss: false
+      kl_loss_coef: 0.001
+      kl_loss_type: low_var_kl
+      clip_ratio_low: 3.0e-4
+      clip_ratio_high: 4.0e-4
+      entropy_coeff: 0.0
+      loss_agg_mode: seq-mean-token-mean
+      temperature: 1.0
+      top_p: 1.0
+      top_k: -1
+      val_temperature: 0
+      val_top_p: 1.0
+      val_top_k: -1
 
+    # ---------------------------------------------------------------------
+    # Harbor agent loop (claude-code, mounted runtime image)
+    # ---------------------------------------------------------------------
+    harbor_agent:
+      agent_name: claude-code
+      agent_import_path: harbor_patch.agents.image_mounted_claude_code:ClaudeCode
+      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
+      runtime_mount_path: /opt/custom-agent-runtime/claude-code
+      runtime_image_subpath: opt/custom-agent-runtime/claude-code
+      max_iterations: 100
+      max_timeout_sec: 2400        # per-trial agent_execute cap
+      override_timeout_sec: 2400
+      disable_tool_calls: false
+      temperature: 1.0
+      max_retries: 2
+      verifier_enabled: true
+      pod_name_prefix: swe-lego-live-rl
+      agent_setup_timeout_multiplier: 1.0
+      agent_timeout_multiplier: 1.0
+      verifier_timeout_multiplier: 1.0
+      environment_build_timeout_multiplier: 1.0
+      # --- Environment backend -----------------------------------------
+      # Two modes: K8s (default) or Docker (minimal, lower requirements).
+      #
+      # K8s mode (current):
+      #   environment_import_path: harbor_patch.environments.kubernetes.kubernetes:KubernetesEnvironment
+      #   environment_force_build: false
+      #   docker_host: ""
+      #   Requires: k8s.kubeconfig pointing at a working cluster.
+      #
+      # Docker mode (minimal — no k8s needed):
+      #   Local Docker:
+      #     environment_import_path: harbor.environments.docker.docker:DockerEnvironment
+      #     environment_force_build: true
+      #     docker_host: ""   (empty → not exported → Docker uses unix:///var/run/docker.sock)
+      #   Remote Docker:
+      #     environment_import_path: harbor_patch.environments.remote_docker:RemoteDockerEnvironment
+      #     environment_force_build: true
+      #     docker_host: "tcp://<ip>:2376"    (TLS, recommended)
+      #     docker_host: "tcp://<ip>:2375"    (unencrypted, equivalent to root — NOT for production)
+      #
+      # docker_host values:
+      #   ""                              → not exported; Docker defaults to local socket
+      #   "unix:///var/run/docker.sock"   → explicit local (same as empty, but clear)
+      #   "tcp://<ip>:2376"              → remote + TLS (dockerd --tlsverify)
+      #   "tcp://<ip>:2375"              → remote unencrypted (security risk, test only)
+      # ----------------------------------------------------------------
+      environment_type: null
+      environment_import_path: harbor_patch.environments.remote_docker:RemoteDockerEnvironment
+      environment_force_build: true
+      environment_delete: true
+      environment_override_cpus: 1
+      environment_override_memory_mb: 8192  # per-container memory limit (mainly for Docker mode)
+      max_consecutive_no_tool: 0   # stop session after N consecutive no-tool turns; 0 = disabled
+      host_path_mounts: null       # JSON list of extra hostPath mounts for task pods (K8s only)
+      docker_host: "tcp://192.168.35.240:2375"  # remote Docker daemon (test network, unencrypted)
+
+    # ---------------------------------------------------------------------
+    # Harbor parallelism + tail-killer
+    # ---------------------------------------------------------------------
+    harbor_runtime:
+      num_workers: 16              # parallel Harbor trials per training step (16 cold; 32–96 steady)
+      tail_kill_target: 1.0        # 1.0 = OFF; 0.95 → kill slowest 5% after grace
+      tail_kill_grace_sec: 180
+      tail_kill_min_tasks: 32
+
+    # ---------------------------------------------------------------------
+    # Experiment / logging
+    # ---------------------------------------------------------------------
     experiment:
-      project_name: SWE-Lego-Live-Training-RL
-      exp_name: SWE-Lego-Live-Training-RL-1node
-      trials_base_dir: /mnt/public/SWE-Lego-Live-Training-RL/harbor_trials_cc
+      project_name: swe-lego-live-rl
+      exp_name: ""                 # empty → auto-generated as harbor-cc-sync-1n-<UTC timestamp>
+      trials_dir: ""               # empty → repos/harbor-verl-train/harbor_trials/<project>/<exp>
+      trajectory_logger_src: /mnt/ydu/SWE-Lego-Live-RL/subblock/rl/repos/harbor/scripts/serve_llm/trajectory_logger.py
 
+    # ---------------------------------------------------------------------
+    # Credentials — do NOT commit secrets here.
+    # Set WANDB_API_KEY via env var (e.g. in your shell rc, or `export
+    # WANDB_API_KEY=...` before `bash scripts/start.sh`). dryrun.sh fails
+    # if neither this field nor $WANDB_API_KEY is set. To opt out entirely,
+    # set wandb_mode: disabled.
+    # ---------------------------------------------------------------------
     credentials:
-      wandb_api_key: ""
+      wandb_api_key: ""            # leave empty — provide via $WANDB_API_KEY env
+      wandb_mode: online           # online | offline | disabled
 
   output:
     checkpoint_path:
-      description: Path to the latest trained actor model checkpoint
+      description: Path to the latest trained actor model checkpoint (verl FSDP shards)
       value: null
-      path: repos/harbor-verl-train/outputs/
+      path: repos/harbor-verl-train/checkpoints/
 
     val_resolve_rate:
       description: SWE-bench-Verified resolve rate (%) for the best checkpoint
@@ -85,32 +253,32 @@ runtime_info:
       wandb_run_id: null
 
     training_log:
-      description: Per-run log file written by train_1node.sh
+      description: Per-run training log written by sync_1node_cc.sh
       path: repos/harbor-verl-train/logs/
-      pattern: "harbor_swe_cc_1node_*.log"
+      pattern: "<exp_name>.log"
 
-    trajectory_log_dir:
-      description: JSONL files of all agent API traffic from rollouts
-      value: /tmp/trajectory_output_dir/
-      note: Ephemeral — copy to artifacts after each run
+    vllm_log:
+      description: vLLM throughput-only filtered log (tee'd from main log)
+      path: repos/harbor-verl-train/logs/
+      pattern: "<exp_name>_vllm.log"
 
-status:
-  phase: idle
-  progress: null
-  next_steps: |
-    1. Fill config.yaml and launch a training run: Edit config.yaml (model path, infra, data, credentials), then run bash scripts/start.sh
-  blockers: null
-  last_updated: "2026-05-06T00:00:00Z"
-  current_job:
-    name: null
-    started_at: null
-    detail: null
-  metrics: {}
+    trajectory_log:
+      description: Per-trial JSONL of all LiteLLM API traffic (litellm trajectory_logger callback)
+      path: repos/harbor-verl-train/harbor_trials/<project_name>/<exp_name>/
+      pattern: "**/litellm-trajectory.jsonl"
 
 evolving:
-  description: Online RL training with tunable hyperparameters for batch size, parallel tasks, max turns, and model serving configuration.
+  description: >-
+    Single-node sync RL training (claude-code agent + Harbor k8s sandbox).
+    Most knobs surface as env vars to sync_1node_cc.sh — anything in
+    runtime_info.input can be tuned without touching scripts.
   tunable_params:
-    train_batch_size: "Training batch size"
-    n_parallel_tasks: "Number of parallel Harbor tasks"
-    max_turns: "Maximum agent turns per task"
-    vllm_tp_size: "vLLM tensor parallelism size (must divide num_key_value_heads)"
+    train_batch_size: "Training batch size (data.train_batch_size)"
+    n_resp_per_prompt: "Rollouts sampled per prompt"
+    max_prompt_length: "Per-trial prompt budget (40k default)"
+    max_response_length: "Per-trial response budget (68k default)"
+    vllm.gen_tp: "vLLM tensor parallelism — must divide num_key_value_heads"
+    vllm.max_model_length: "vLLM context window (128k default)"
+    harbor_runtime.num_workers: "Parallel Harbor trials per training step (16 cold → 96 steady)"
+    harbor_runtime.tail_kill_target: "1.0 OFF; 0.95 kills slowest 5% per step after grace"
+    harbor_agent.max_timeout_sec: "Per-trial agent_execute cap (2400s = sync-tuned p99)"

@@ -7,6 +7,10 @@ CONFIG="$BLOCK_DIR/config.yaml"
 LOG_DIR="$BLOCK_DIR/artifacts/logs"
 PRINT_COMMAND_ONLY=0
 
+# Captured early so the EXIT trap (defined later, combined with cleanup_litellm)
+# can record the true start time even if the script fails mid-setup.
+RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -448,7 +452,13 @@ cleanup_litellm() {
     wait "$LITELLM_PID" >/dev/null 2>&1 || true
   fi
 }
-trap cleanup_litellm EXIT
+_archive_run_on_exit() {
+    local rc=$?
+    cleanup_litellm || true
+    bash "$BLOCK_DIR/scripts/archive_run.sh" "$rc" "$RUN_STARTED_AT" || true
+    exit $rc
+}
+trap _archive_run_on_exit EXIT
 
 for _ in {1..30}; do
   if "$TRAJGEN_LITELLM_PYTHON" - "$TRAJGEN_LITELLM_ANTHROPIC_BASE_URL" <<'PY' >/dev/null 2>&1
@@ -486,6 +496,13 @@ echo "Command:    $RUN_COMMAND" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
 (cd "$HARBOR_DIR" && bash -lc "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
+
+SFT_CONVERT_ENABLED="$(cfg runtime_info.input.sft_conversion.enabled)"
+if [[ "$SFT_CONVERT_ENABLED" == "true" ]]; then
+  echo "" | tee -a "$LOG_FILE"
+  echo "=== trajgen: post-run SFT conversion ===" | tee -a "$LOG_FILE"
+  bash "$BLOCK_DIR/scripts/convert_trajectories.sh" --job "$JOB_NAME" 2>&1 | tee -a "$LOG_FILE"
+fi
 
 echo "" | tee -a "$LOG_FILE"
 echo "trajgen complete. Expected job dir: $JOB_DIR_RAW" | tee -a "$LOG_FILE"

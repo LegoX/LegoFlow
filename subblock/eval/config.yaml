@@ -1,0 +1,160 @@
+meta_info:
+  name: eval
+  label: "Evaluation"
+  description: Runs registered benchmark evaluations through Harbor against a configurable upstream LLM. Mirrors trajgen's runtime shell, but loads tasks from Harbor's registry.json instead of a local swegen export.
+  parent: swe_lego_live
+  subblocks: {}
+  # Eval is standalone: no upstream block dependency. The benchmark is selected
+  # from Harbor's registry below (runtime_info.input.task_source).
+  dependencies: {}
+
+  resources:
+    ip: 192.168.35.240        # CPU-only; runs on any node with Docker available
+    user: root
+    pwd: k9#mP2$vL7@nQ4!xZ8
+    directory: /gpufs/haoli/code/
+    description: cpu node server for k8s cluster. By default you should work at ${directory}
+    public_storage: /gpufs/haoli/swedata
+
+  repositories:
+    harbor:
+      url: git@github.com:SWE-Lego/harbor.git
+      branch: main
+      # Pinned to the latest Harbor commit so this block tracks the current
+      # registry contents (independent of subblock/trajgen's older pin).
+      commit: 149e75770f8c369d6fae31c158ea761d676b4d3a
+      path: repos/harbor
+      readonly: true
+
+  environment:
+    harbor_uv: artifacts/env/harbor-uv
+    litellm_uv: artifacts/env/litellm-venv  # separate venv; harbor env is managed by uv run
+    litellm:
+      python_version: "3.13"
+      litellm_version: "1.83.14"
+
+# ---------------------------------------------------------------------------
+
+runtime_info:
+  input:
+    llm_api:
+      api_key: dummy-key
+      api_base_url: "https://qwen.jierungogogo.com/v1"
+      model: "openai/Qwen3.5-35B-A3B"
+      description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
+      protocols: [openai_compatible, anthropic_compatible]
+      served_via: per_job_litellm_proxy
+      # input_cost_per_token: 0.0000021
+      # output_cost_per_token: 0.0000084
+
+    litellm_proxy:
+      config_template: scripts/serve_llm/litellm_config.example.yaml
+      port: 4101
+      master_key: dummy-key-cf
+
+    # Harbor-registry-backed benchmark selection. Switch by editing `dataset_name`
+    # (and optionally `version`) to one of the supported choices:
+    #
+    # SWE / terminal (validated end-to-end with custom-claude-code):
+    #   - swebench-verified             @ 1.0    (500 tasks)
+    #   - swebench-verified-100         @ 1.0    (100-task subset)
+    #   - swebench_multilingual         @ 1.0    (300 tasks)
+    #   - swebench_multilingual-100     @ 1.0    (100-task subset, seed=42)
+    #   - swebenchpro                   @ 1.0    (731 tasks)
+    #   - swebenchpro-100               @ 1.0    (100-task subset)
+    #   - terminal-bench                @ 2.0    (89 tasks)
+    #
+    # Other coding benchmarks (Harbor adapters exist; confirm agent fit first):
+    #   - aider-polyglot                @ 1.0    (225 tasks, polyglot code editing)
+    #   - livecodebench                 @ 6.0    (100 tasks, competitive programming)
+    #   - humanevalfix                  @ 1.0    (164 tasks, bug fixing)
+    #   - bigcodebench-hard-complete    @ 1.0.0  (145 tasks, function-level completion)
+    #
+    # `provider: harbor_registry` tells the eval scripts to invoke Harbor with
+    # `--dataset <name> --registry-path repos/harbor/registry.json`, so no local
+    # task copy step is required.
+    task_source:
+      provider: harbor_registry
+      dataset_name: swebench-verified-100
+      version: "1.0"
+      registry_path: repos/harbor/registry.json
+
+    harbor_job:
+      jobs_dir: artifacts/jobs
+      n_concurrent: 6
+      n_tasks: null               # null = run the full benchmark; set an int for a smoke run
+      max_retries: 2
+      timeout_multiplier: 1
+
+    # Supported agents — switch by editing the four fields below (name, version,
+    # runtime_image, runtime_host_path) together. `max_turns` is reused as
+    # `max_iterations` when agent is openhands-sdk (same semantics).
+    #
+    #   custom-claude-code (Anthropic protocol, validated end-to-end):
+    #     name: custom-claude-code
+    #     version: 2.1.118
+    #     runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
+    #     runtime_host_path: artifacts/runtime/claude-code
+    #
+    #   custom-openhands-sdk (OpenAI protocol):
+    #     name: custom-openhands-sdk
+    #     version: 1.14.0
+    #     runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
+    #     runtime_host_path: artifacts/runtime/openhands-sdk
+    #
+    #   custom-opencode (OpenAI-compatible via @ai-sdk/openai-compatible):
+    #     name: custom-opencode
+    #     version: 1.14.22
+    #     runtime_image: docker.io/yjiangcm/c-oc-1.14.22:v0.2
+    #     runtime_host_path: artifacts/runtime/opencode
+    agent:
+      name: custom-opencode
+      version: 1.14.22
+      runtime_image: docker.io/jierun/c-oc-1.14.22:v0.1
+      # `runtime_host_path` must be a directory that already contains the
+      # extracted agent runtime tree from `runtime_image` (bind-mount source).
+      # If the dir is empty, the agent falls back to an in-container install
+      # step (curl https://claude.ai/install.sh for claude-code, pip for
+      # openhands-sdk), which 403s/times out on isolated networks. Bind-mount
+      # is preferred over image-mount because the latter trips an overlayfs
+      # filename-too-long bug for some task images.
+      #
+      # Pre-extract once per runtime_image (idempotent — re-run if you bump
+      # the image). Set SUBPATH to claude-code or oh-sdk to match the agent:
+      #   RUNTIME_IMAGE=<runtime_image from this config>
+      #   SUBPATH=claude-code   # or: oh-sdk
+      #   HOST_DIR=artifacts/runtime/<runtime_host_path basename>
+      #   docker pull "$RUNTIME_IMAGE" && \
+      #   CID=$(docker create "$RUNTIME_IMAGE") && \
+      #   rm -rf "$HOST_DIR" && mkdir -p "$(dirname "$HOST_DIR")" && \
+      #   docker cp "$CID:/opt/custom-agent-runtime/$SUBPATH" "$HOST_DIR" && \
+      #   docker rm "$CID"
+      runtime_host_path: artifacts/runtime/opencode
+      max_turns: 200
+      temperature: 0.7
+
+  output:
+    eval_results_dir:
+      description: Harbor job directories containing per-task evaluation results and LiteLLM trajectory logs
+      path: artifacts/jobs
+      job_layout: "artifacts/jobs/<job>/<task>/{agent,evaluation}/"
+      trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
+      results_summary_format: "artifacts/jobs/<job>/results.json"
+      consumer_block: null        # eval is a terminal block; no downstream consumer
+
+environment:
+  extra:
+    # Tasks excluded from this eval run (e.g. previously confirmed timeouts/OOMs).
+    HARBOR_EXCLUDE_TASKS: ""
+    # Workaround for Harbor's serve_litellm.sh: under `set -u` it dereferences
+    # LITELLM_STICKY_ROUTING_ALIASES without a default when CONFIG_NAME != "litellm_config".
+    LITELLM_STICKY_ROUTING_ALIASES: ""
+
+evolving:
+  description: Runs evaluation benchmarks via Harbor. Tunable parameters mirror trajgen (agent sampling, concurrency, timeouts) but selection of benchmark is the primary lever.
+  tunable_params:
+    temperature: "Agent sampling temperature (0.0-1.0)"
+    max_turns: "Maximum agent turns per task"
+    n_concurrent: "Harbor concurrent tasks"
+    timeout_multiplier: "Task timeout multiplier"
+    n_tasks: "Smoke-run cap on number of tasks (null = full benchmark)"

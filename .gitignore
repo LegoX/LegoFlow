@@ -1,5 +1,12 @@
-# Claude Code local settings (machine-specific, never commit)
+# Claude Code local state (machine-specific, never commit)
 .claude/settings.local.json
+
+# Secrets
+*token*.txt
+*token*.json
+*.token
+*.pem
+*.key
 
 # Environment variables
 .env
@@ -19,6 +26,10 @@ build/
 venv/
 env/
 
+# Extra untracked checkouts under subblock repos/ (submodules are tracked via .gitmodules)
+subblock/*/repos/*
+!subblock/*/repos/.gitkeep
+
 # Node
 node_modules/
 npm-debug.log*
@@ -34,6 +45,18 @@ Thumbs.db
 *.bin
 *.safetensors
 artifacts/files/
+
+# Runtime run index — written by archive_run.sh, not committed
+artifacts/index.yaml
+subblock/*/artifacts/index.yaml
+
+# SWE-gen subblock — generated data and virtual env
+subblock/swegen/artifacts/*
+subblock/swegen/scripts/jobs/*
+subblock/swegen/scripts/.swegen-*/
+
+# Trajgen subblock — runtime mount + per-run artifacts (kept manifest yamls tracked)
+subblock/trajgen/artifacts/*
 
 # Dashboard transient runtime output
 subblock/swegen/dashboard/memory/.progress_monitor_all_state.jsonl.*

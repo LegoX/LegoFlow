@@ -1,0 +1,26 @@
+---
+title: Status
+block: trajgen
+source: status.yaml + artifacts/index.yaml
+---
+
+# Status
+
+## Source Of Truth
+
+Read `status.yaml` for the current `phase`, `stage`, `current_job`, blockers,
+and operator next steps. Read `artifacts/index.yaml` for archived run entries.
+
+Time convention: `started_at` and `updated_at` are recorded in UTC. Existing
+job directory names may include the local launch timestamp (`UTC+8`) so they
+continue to match the actual artifact path.
+
+## Next Steps
+
+Use `status.yaml` -> `next_steps` for the live checklist. During an active job,
+monitor `artifacts/jobs/<job>` and update `status.yaml` after inspection.
+
+## Experiment Runs
+
+Use `status.yaml` -> `history` for operational events and `artifacts/index.yaml`
+for archived run records.

@@ -1,0 +1,52 @@
+---
+title: Overview
+block: sft_training
+updated_at: "2026-04-24T16:16:45Z"
+---
+
+# SFT Training
+
+SFT training pipeline for SWE-bench coding models. Converts Harbor job trajectories
+into LLaMA-Factory ShareGPT format and trains via LLaMA-Factory + DeepSpeed ZeRO-3.
+
+## Current Stage
+
+The active run state is generated from `config.yaml` and training artifacts in
+[Status](./status.mdx). Use `bash scripts/dryrun.sh` before launching a run to
+verify the configured source data, model path, output directory, and GPU count.
+
+## Pipeline
+
+```
+Harbor job trajectories (job_dir, per-scaffold)
+    └─▶  python -m swe_data_process.<subpackage>.convert_*_to_im
+              └─▶  Intermediate "IM" format (PangUML v2 JSONL, score in meta_info.unique_info)
+                        └─▶  rule_score.py (auto-invoked) + optional llm_score.py
+                                  └─▶  LLaMA-Factory "LF" format (ShareGPT JSON)
+                                            └─▶  artifacts/data/lf_data/<dataset>.json
+                                                      └─▶  python -m llamafactory.cli train <generated_config.yaml>
+                                                                └─▶  artifacts/model/<run>/
+```
+
+## Supported Converter Matrix
+
+| Scaffold | Converter module |
+|---|---|
+| claude-code | `swe_data_process.claudecode_opencode.convert_cc_to_im` |
+| open-code | `swe_data_process.claudecode_opencode.convert_oc_to_im` |
+| openhands-sdk | `swe_data_process.openhands.convert_openhands_sdk_to_im` |
+| terminus2 | `swe_data_process.terminus2.convert_terminus2_to_im` |
+
+## Quick Links
+
+- [Status](./status.mdx) — live job progress, experiment runs, next steps
+- [Inputs & Outputs](./io.mdx) — current runtime values and produced outputs
+- [Memory](./memory.mdx) — decisions, notes, and long-form context
+
+## Environment
+
+Run `bash scripts/install_env.sh` from `subblock/sft` to recreate the uv environment
+configured at `meta_info.environment.sft_uv`. The script installs
+`swe_data_process[llm]`, PyTorch 2.8.0 CUDA 12.8 wheels,
+`LLaMA-Factory[torch,metrics,deepspeed,liger-kernel]`, the pinned flash-attn
+2.8.3 wheel under `artifacts/wheels/`, and `wandb`.

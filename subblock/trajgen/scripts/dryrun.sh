@@ -133,7 +133,9 @@ echo "=== trajgen dryrun: $BLOCK_DIR ==="
 echo ""
 
 echo "--- 1. Block files ---"
-for file in CLAUDE.md metainfo.yaml status.yaml config.yaml dashboard/overview.mdx artifacts/index.yaml; do
+# Note: meta_info and status are merged into config.yaml in this block, so
+# standalone metainfo.yaml / status.yaml are not expected.
+for file in CLAUDE.md config.yaml dashboard/overview.mdx artifacts/index.yaml; do
   if [[ -f "$BLOCK_DIR/$file" ]]; then
     ok "$file exists"
   else
@@ -143,7 +145,7 @@ done
 
 echo ""
 echo "--- 2. YAML syntax ---"
-for file in "$CONFIG" "$BLOCK_DIR/metainfo.yaml" "$BLOCK_DIR/status.yaml" "$BLOCK_DIR/artifacts/index.yaml"; do
+for file in "$CONFIG" "$BLOCK_DIR/artifacts/index.yaml"; do
   if python3 - "$file" <<'PY' >/dev/null 2>&1
 import sys
 import yaml
@@ -164,7 +166,14 @@ if [[ $FAIL -eq 0 ]]; then
   HARBOR_COMMIT="$(cfg meta_info.repositories.harbor.commit)"
   HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
   READONLY="$(cfg meta_info.repositories.harbor.readonly)"
+  SWE_DP_URL="$(cfg meta_info.repositories.swe_data_process.url)"
+  SWE_DP_BRANCH="$(cfg meta_info.repositories.swe_data_process.branch)"
+  SWE_DP_REF="$(cfg meta_info.repositories.swe_data_process.ref)"
+  SWE_DP_COMMIT="$(cfg meta_info.repositories.swe_data_process.commit)"
+  SWE_DP_PATH_RAW="$(cfg meta_info.repositories.swe_data_process.path)"
+  SWE_DP_READONLY="$(cfg meta_info.repositories.swe_data_process.readonly)"
   UV_PROJECT_ENVIRONMENT_RAW="$(cfg meta_info.environment.harbor_uv)"
+  SWE_DP_UV_RAW="$(cfg meta_info.environment.swe_data_process_uv)"
   LITELLM_UV_RAW="$(cfg meta_info.environment.litellm_uv)"
   LITELLM_PYTHON_VERSION="$(cfg meta_info.environment.litellm.python_version)"
   LITELLM_VERSION="$(cfg meta_info.environment.litellm.litellm_version)"
@@ -187,7 +196,14 @@ else
   HARBOR_COMMIT=""
   HARBOR_PATH_RAW=""
   READONLY=""
+  SWE_DP_URL=""
+  SWE_DP_BRANCH=""
+  SWE_DP_REF=""
+  SWE_DP_COMMIT=""
+  SWE_DP_PATH_RAW=""
+  SWE_DP_READONLY=""
   UV_PROJECT_ENVIRONMENT_RAW=""
+  SWE_DP_UV_RAW=""
   LITELLM_UV_RAW=""
   LITELLM_PYTHON_VERSION=""
   LITELLM_VERSION=""
@@ -199,57 +215,77 @@ else
   RUN_COMMAND=""
 fi
 
-echo ""
-echo "--- 3. Harbor repo config ---"
-[[ -n "$HARBOR_URL" ]] && ok "meta_info.repositories.harbor.url = $HARBOR_URL" || fail "meta_info.repositories.harbor.url is empty"
-if [[ -n "$HARBOR_COMMIT" ]]; then
-  ok "meta_info.repositories.harbor.commit = $HARBOR_COMMIT"
-elif [[ -n "$HARBOR_REF" ]]; then
-  ok "meta_info.repositories.harbor.ref = $HARBOR_REF"
-elif [[ -n "$HARBOR_BRANCH" ]]; then
-  ok "meta_info.repositories.harbor.branch = $HARBOR_BRANCH"
-else
-  fail "meta_info.repositories.harbor.branch/ref or commit is required"
-fi
-[[ -n "$HARBOR_PATH_RAW" ]] && ok "meta_info.repositories.harbor.path = $HARBOR_PATH_RAW" || fail "meta_info.repositories.harbor.path is empty"
-[[ "$READONLY" == "true" || "$READONLY" == "false" ]] && ok "meta_info.repositories.harbor.readonly = $READONLY" || fail "meta_info.repositories.harbor.readonly must be true or false"
+check_managed_repo() {
+  # Args: NAME URL BRANCH REF COMMIT PATH_RAW READONLY OUT_DIR_VAR
+  local NAME="$1"
+  local R_URL="$2"
+  local R_BRANCH="$3"
+  local R_REF="$4"
+  local R_COMMIT="$5"
+  local R_PATH_RAW="$6"
+  local R_READONLY="$7"
+  local OUT_DIR_VAR="$8"
 
-if [[ -n "$HARBOR_PATH_RAW" ]]; then
-  if git -C "$BLOCK_DIR" check-ignore -q "$HARBOR_PATH_RAW" 2>/dev/null; then
-    ok "$HARBOR_PATH_RAW is gitignored"
+  echo ""
+  echo "--- $NAME repo config ---"
+  [[ -n "$R_URL" ]] && ok "meta_info.repositories.$NAME.url = $R_URL" || fail "meta_info.repositories.$NAME.url is empty"
+  if [[ -n "$R_COMMIT" ]]; then
+    ok "meta_info.repositories.$NAME.commit = $R_COMMIT"
+  elif [[ -n "$R_REF" ]]; then
+    ok "meta_info.repositories.$NAME.ref = $R_REF"
+  elif [[ -n "$R_BRANCH" ]]; then
+    ok "meta_info.repositories.$NAME.branch = $R_BRANCH"
   else
-    warn "$HARBOR_PATH_RAW is not reported as gitignored"
+    fail "meta_info.repositories.$NAME.branch/ref or commit is required"
   fi
-fi
+  [[ -n "$R_PATH_RAW" ]] && ok "meta_info.repositories.$NAME.path = $R_PATH_RAW" || fail "meta_info.repositories.$NAME.path is empty"
+  [[ "$R_READONLY" == "true" || "$R_READONLY" == "false" ]] && ok "meta_info.repositories.$NAME.readonly = $R_READONLY" || fail "meta_info.repositories.$NAME.readonly must be true or false"
 
-echo ""
-echo "--- 4. Local Harbor checkout ---"
-if [[ -n "$HARBOR_PATH_RAW" ]]; then
-  HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
-  if [[ -e "$HARBOR_DIR/.git" ]]; then
-    ok "$HARBOR_PATH_RAW exists"
-    CURRENT_URL="$(git -C "$HARBOR_DIR" remote get-url origin 2>/dev/null || true)"
-    COMMIT="$(git -C "$HARBOR_DIR" rev-parse HEAD 2>/dev/null || true)"
-    [[ "$CURRENT_URL" == "$HARBOR_URL" ]] && ok "origin URL matches config.yaml" || fail "origin URL mismatch: $CURRENT_URL"
-    [[ -n "$COMMIT" ]] && ok "current commit: $COMMIT" || fail "cannot resolve current commit"
-    if [[ -n "$HARBOR_COMMIT" ]]; then
-      [[ "$COMMIT" == "$HARBOR_COMMIT" ]] && ok "current commit matches config.yaml pin" || fail "current commit $COMMIT does not match config.yaml pin $HARBOR_COMMIT"
-    elif [[ -n "$HARBOR_REF" || -n "$HARBOR_BRANCH" ]]; then
-      EXPECTED_REF="${HARBOR_REF:-$HARBOR_BRANCH}"
-      EXPECTED_COMMIT="$(git -C "$HARBOR_DIR" rev-parse "origin/${EXPECTED_REF}^{commit}" 2>/dev/null || true)"
-      if [[ -n "$EXPECTED_COMMIT" ]]; then
-        [[ "$COMMIT" == "$EXPECTED_COMMIT" ]] && ok "current commit matches origin/$EXPECTED_REF" || fail "current commit $COMMIT does not match origin/$EXPECTED_REF ($EXPECTED_COMMIT)"
-      else
-        warn "could not resolve origin/$EXPECTED_REF for branch consistency check"
-      fi
-    fi
-    if [[ -n "$(git -C "$HARBOR_DIR" status --porcelain 2>/dev/null || true)" ]]; then
-      fail "$HARBOR_PATH_RAW has local modifications"
+  if [[ -n "$R_PATH_RAW" ]]; then
+    if git -C "$BLOCK_DIR" check-ignore -q "$R_PATH_RAW" 2>/dev/null; then
+      ok "$R_PATH_RAW is gitignored"
     else
-      ok "$HARBOR_PATH_RAW worktree is clean"
+      warn "$R_PATH_RAW is not reported as gitignored"
     fi
-    if [[ "$READONLY" == "true" ]]; then
-      WRITABLE_COUNT="$(python3 - "$HARBOR_DIR" <<'PY'
+  fi
+
+  echo ""
+  echo "--- $NAME local checkout ---"
+  if [[ -n "$R_PATH_RAW" ]]; then
+    local R_DIR
+    R_DIR="$(abspath "$R_PATH_RAW")"
+    # Export to caller for downstream sections (Harbor needs HARBOR_DIR; swe_dp needs SWE_DP_DIR)
+    printf -v "$OUT_DIR_VAR" '%s' "$R_DIR"
+    export "$OUT_DIR_VAR"
+    if [[ -e "$R_DIR/.git" ]]; then
+      ok "$R_PATH_RAW exists"
+      local CURRENT_URL
+      local COMMIT
+      CURRENT_URL="$(git -C "$R_DIR" remote get-url origin 2>/dev/null || true)"
+      COMMIT="$(git -C "$R_DIR" rev-parse HEAD 2>/dev/null || true)"
+      [[ "$CURRENT_URL" == "$R_URL" ]] && ok "origin URL matches config.yaml" || fail "origin URL mismatch: $CURRENT_URL"
+      [[ -n "$COMMIT" ]] && ok "current commit: $COMMIT" || fail "cannot resolve current commit"
+      if [[ -n "$R_COMMIT" ]]; then
+        [[ "$COMMIT" == "$R_COMMIT" ]] && ok "current commit matches config.yaml pin" || fail "current commit $COMMIT does not match config.yaml pin $R_COMMIT"
+      elif [[ -n "$R_REF" || -n "$R_BRANCH" ]]; then
+        local EXPECTED_REF
+        local EXPECTED_COMMIT
+        EXPECTED_REF="${R_REF:-$R_BRANCH}"
+        EXPECTED_COMMIT="$(git -C "$R_DIR" rev-parse "origin/${EXPECTED_REF}^{commit}" 2>/dev/null || true)"
+        if [[ -n "$EXPECTED_COMMIT" ]]; then
+          [[ "$COMMIT" == "$EXPECTED_COMMIT" ]] && ok "current commit matches origin/$EXPECTED_REF" || fail "current commit $COMMIT does not match origin/$EXPECTED_REF ($EXPECTED_COMMIT)"
+        else
+          warn "could not resolve origin/$EXPECTED_REF for branch consistency check"
+        fi
+      fi
+      if [[ -n "$(git -C "$R_DIR" status --porcelain 2>/dev/null || true)" ]]; then
+        fail "$R_PATH_RAW has local modifications"
+      else
+        ok "$R_PATH_RAW worktree is clean"
+      fi
+      if [[ "$R_READONLY" == "true" ]]; then
+        local WRITABLE_COUNT
+        WRITABLE_COUNT="$(python3 - "$R_DIR" <<'PY'
 import os
 import stat
 import sys
@@ -279,16 +315,22 @@ for dirpath, dirnames, filenames in os.walk(root):
 print(count)
 PY
 )"
-      if [[ "$WRITABLE_COUNT" == "0" ]]; then
-        ok "Harbor working tree is read-only"
-      else
-        warn "Harbor working tree has writable paths ($WRITABLE_COUNT sampled)"
+        if [[ "$WRITABLE_COUNT" == "0" ]]; then
+          ok "$NAME working tree is read-only"
+        else
+          warn "$NAME working tree has writable paths ($WRITABLE_COUNT sampled)"
+        fi
       fi
+    else
+      warn "$R_PATH_RAW is missing; run bash scripts/update_repos.sh --repo $NAME"
     fi
-  else
-    warn "$HARBOR_PATH_RAW is missing; run bash scripts/update_repos.sh"
   fi
-fi
+}
+
+echo ""
+echo "=== 3+4. Managed repos ==="
+check_managed_repo "harbor" "$HARBOR_URL" "$HARBOR_BRANCH" "$HARBOR_REF" "$HARBOR_COMMIT" "$HARBOR_PATH_RAW" "$READONLY" HARBOR_DIR
+check_managed_repo "swe_data_process" "$SWE_DP_URL" "$SWE_DP_BRANCH" "$SWE_DP_REF" "$SWE_DP_COMMIT" "$SWE_DP_PATH_RAW" "$SWE_DP_READONLY" SWE_DP_DIR
 
 echo ""
 echo "--- 5. Environment ---"
@@ -367,13 +409,61 @@ if [[ -n "${HARBOR_DIR:-}" && -e "$HARBOR_DIR/.git" ]]; then
   esac
 fi
 
-if run_in_harbor_env "$HARBOR_CHECK_COMMAND --help >/dev/null" 2>/dev/null; then
+if run_in_harbor_env "timeout 15 $HARBOR_CHECK_COMMAND --help >/dev/null" 2>/dev/null; then
   ok "harbor check command works: $HARBOR_CHECK_COMMAND"
 else
-  fail "harbor check command failed: $HARBOR_CHECK_COMMAND"
+  fail "harbor check command failed or timed out (>15s): $HARBOR_CHECK_COMMAND"
 fi
 else
   warn "skipping Harbor import/CLI health checks because the configured uv environment is missing"
+fi
+
+echo ""
+echo "--- 5b. swe_data_process Environment ---"
+# swe_data_process is only needed for the optional post-Harbor SFT conversion.
+# When sft_conversion.enabled is false, a missing/broken env must not block
+# trajectory generation, so downgrade these checks to warnings in that case.
+SFT_ENABLED_PRECHECK="$(cfg runtime_info.input.sft_conversion.enabled)"
+if [[ "$SFT_ENABLED_PRECHECK" == "true" ]]; then
+  swe_dp_problem() { fail "$1"; }
+else
+  swe_dp_problem() { warn "$1 (non-blocking: sft_conversion.enabled is not true)"; }
+fi
+if [[ -n "$SWE_DP_UV_RAW" ]]; then
+  SWE_DP_UV_ABS="$(abspath "$SWE_DP_UV_RAW")"
+  SWE_DP_PYTHON="$SWE_DP_UV_ABS/bin/python"
+  ok "swe_data_process uv environment path = $SWE_DP_UV_RAW"
+  if [[ -n "${SWE_DP_DIR:-}" && -e "$SWE_DP_DIR/.git" ]]; then
+    case "$SWE_DP_UV_ABS" in
+      "$SWE_DP_DIR"/*)
+        if [[ "$SWE_DP_READONLY" == "true" ]]; then
+          fail "environment.swe_data_process_uv must be outside repos/swe_data_process when the repo is read-only"
+        else
+          warn "environment.swe_data_process_uv is inside repos/swe_data_process; this is only safe while repositories.swe_data_process.readonly is false"
+        fi
+        ;;
+      *)
+        ok "swe_data_process uv environment is outside repos/swe_data_process"
+        ;;
+    esac
+  fi
+  if [[ -d "$SWE_DP_UV_ABS" ]]; then
+    ok "swe_data_process uv environment exists"
+    if [[ -x "$SWE_DP_PYTHON" ]]; then
+      ok "swe_data_process python exists: $SWE_DP_PYTHON"
+      if "$SWE_DP_PYTHON" -c "import swe_data_process" >/dev/null 2>&1; then
+        ok "swe_data_process package is importable"
+      else
+        swe_dp_problem "swe_data_process package is not importable; from repos/swe_data_process run: UV_PROJECT_ENVIRONMENT=$SWE_DP_UV_ABS uv sync --extra llm  (or use bash scripts/setup_swe_data_process_env.sh)"
+      fi
+    else
+      swe_dp_problem "swe_data_process python not found: $SWE_DP_PYTHON"
+    fi
+  else
+    swe_dp_problem "swe_data_process uv environment is missing; run bash scripts/setup_swe_data_process_env.sh"
+  fi
+else
+  fail "environment.swe_data_process_uv is required"
 fi
 
 echo ""
@@ -538,6 +628,31 @@ case "$RUN_JOB_DIR" in
 esac
 value="$(cfg runtime_info.input.agent.runtime_image)"
 [[ -n "$value" ]] && ok "runtime_info.input.agent.runtime_image = $value" || fail "runtime_info.input.agent.runtime_image is required"
+
+echo ""
+echo "--- 8b. SFT conversion config ---"
+SFT_ENABLED="$(cfg runtime_info.input.sft_conversion.enabled)"
+if [[ "$SFT_ENABLED" == "true" || "$SFT_ENABLED" == "false" ]]; then
+  ok "runtime_info.input.sft_conversion.enabled = $SFT_ENABLED"
+else
+  fail "runtime_info.input.sft_conversion.enabled must be true or false (got: '${SFT_ENABLED:-<empty>}')"
+fi
+SFT_SCAFFOLD="$(cfg runtime_info.input.sft_conversion.scaffold)"
+case "$SFT_SCAFFOLD" in
+  auto|claude_code|open_code|openhands_sdk|terminus2)
+    ok "runtime_info.input.sft_conversion.scaffold = $SFT_SCAFFOLD"
+    ;;
+  "")
+    fail "runtime_info.input.sft_conversion.scaffold is required (one of: auto, claude_code, open_code, openhands_sdk, terminus2)"
+    ;;
+  *)
+    fail "runtime_info.input.sft_conversion.scaffold must be one of: auto, claude_code, open_code, openhands_sdk, terminus2 (got: $SFT_SCAFFOLD)"
+    ;;
+esac
+SFT_OUT_DIR="$(cfg runtime_info.input.sft_conversion.out_dir)"
+[[ -n "$SFT_OUT_DIR" ]] && ok "runtime_info.input.sft_conversion.out_dir = $SFT_OUT_DIR" || fail "runtime_info.input.sft_conversion.out_dir is required"
+SFT_DATA_DIR_OUT="$(cfg runtime_info.output.sft_data_dir.path)"
+[[ -n "$SFT_DATA_DIR_OUT" ]] && ok "runtime_info.output.sft_data_dir.path = $SFT_DATA_DIR_OUT" || fail "runtime_info.output.sft_data_dir.path is required"
 
 echo ""
 echo "--- 9. Run command ---"
