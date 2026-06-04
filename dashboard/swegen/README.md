@@ -89,4 +89,3 @@ bash dashboard/swegen/run_cloudflare_pages_sync.sh
 
 - `python3 dashboard/swegen/progress_monitor_all.py --serve`：只在本机生成和预览页面，会启动一个本地 HTTP 服务，适合调试或查看本地结果；它不会部署到 Cloudflare。
 - `bash dashboard/swegen/run_cloudflare_pages_sync.sh`：用于长期在线同步。它会循环生成页面、启动本地预览服务，并通过 `wrangler pages deploy` 把 `dashboard/swegen/site/` 发布到 Cloudflare Pages。
-
