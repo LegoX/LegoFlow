@@ -1,13 +1,1 @@
-{
-  "extraKnownMarketplaces": {
-    "trajgen-local": {
-      "source": {
-        "source": "directory",
-        "path": ".claude/plugins"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "trajgen@trajgen-local": true
-  }
-}
+{}

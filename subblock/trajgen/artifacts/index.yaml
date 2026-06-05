@@ -12,3 +12,15 @@ runs:
   status: completed
   archive: artifacts/archives/run_002/
   notes: ''
+- id: run_003
+  started_at: '2026-06-05T03:09:37Z'
+  completed_at: '2026-06-05T08:27:46Z'
+  status: interrupted
+  archive: artifacts/archives/run_003/
+  notes: ''
+- id: run_004
+  started_at: '2026-06-05T03:09:37Z'
+  completed_at: '2026-06-05T08:33:29Z'
+  status: completed
+  archive: artifacts/archives/run_004/
+  notes: ''

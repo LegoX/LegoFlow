@@ -1,13 +1,1 @@
-{
-  "extraKnownMarketplaces": {
-    "swegen-local": {
-      "source": {
-        "source": "directory",
-        "path": ".claude/plugins"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "swegen@swegen-local": true
-  }
-}
+{}

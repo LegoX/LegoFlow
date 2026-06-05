@@ -14,6 +14,9 @@
     },
     "rl-block": {
       "source": { "source": "directory", "path": "subblock/rl/.claude/plugins" }
+    },
+    "eval-block": {
+      "source": { "source": "directory", "path": "subblock/eval/.claude/plugins" }
     }
   },
   "enabledPlugins": {
@@ -21,6 +24,7 @@
     "swegen@swegen-block": true,
     "trajgen@trajgen-block": true,
     "sft@sft-block": true,
-    "rl@rl-block": true
+    "rl@rl-block": true,
+    "eval@eval-block": true
   }
 }

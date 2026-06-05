@@ -1,13 +1,1 @@
-{
-  "extraKnownMarketplaces": {
-    "sft-local": {
-      "source": {
-        "source": "directory",
-        "path": ".claude/plugins"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "sft@sft-local": true
-  }
-}
+{}
