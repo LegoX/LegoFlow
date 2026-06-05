@@ -53,9 +53,8 @@ If — and only if — `meta_info.resources.ip` is set to a real remote IP, the 
 
 ## What To Read First
 
-1. `dashboard/overview.mdx` — current state narrative and new-user quickstart
-2. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, and runtime values of the two active subblocks. Live state is in each subblock's `artifacts/index.yaml`, not `config.yaml`.
-3. `BLOCK_DEFINITION.md` — full block system specification
+1. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, and runtime values of the two active subblocks. Live state is in each subblock's `artifacts/index.yaml`, not `config.yaml`.
+2. `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md` — full block system specification
 
 The root block has no `config.yaml` of its own; inputs and outputs are owned by the subblock configs listed below. Each subblock has its own `CLAUDE.md` agent contract.
 
@@ -128,7 +127,6 @@ Append one entry to `artifacts/index.yaml`:
   notes: "one-line summary"
 ```
 
-## Memory and Live State
+## Live State
 
-- Long-form notes and decisions: `dashboard/memory.mdx`
-- Live state (what's running, what just finished): the newest entry in each subblock's `artifacts/index.yaml`, written automatically by `scripts/archive_run.sh` (invoked from `start.sh`'s EXIT trap). `config.yaml` is one-shot per run and is not edited during execution.
+Live state (what's running, what just finished) lives in the newest entry of each subblock's `artifacts/index.yaml`, written automatically by `scripts/archive_run.sh` (invoked from `start.sh`'s EXIT trap). `config.yaml` is one-shot per run and is not edited during execution.

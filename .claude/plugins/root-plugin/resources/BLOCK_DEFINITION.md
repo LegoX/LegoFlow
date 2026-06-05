@@ -51,6 +51,18 @@ Key invariants the template encodes:
 | `artifacts/index.yaml` | `archive_run.sh` (and agent for `notes`) | Append-only run index. Example: [`example_block/artifacts/index.yaml`](./example_block/artifacts/index.yaml). |
 | `memory/notes.md` | Agent | Long-form observations, decisions, postmortems |
 
+### 1.5 `repos/` is read-only by default
+
+Anything under `<block_dir>/repos/` is **vendored code** — a git submodule or clone pinned to the commit declared in `meta_info.repos.<name>.commit_id`. The operating agent **MUST NOT** modify files under `repos/` as part of normal operation (setup, check, run, dashboard). The pin is what makes a run reproducible and what `archive_run.sh` records in `metadata.yaml`'s `repos:` field; silent edits drift the working tree away from the pin and break that contract without leaving a trace.
+
+If the agent encounters a situation where it believes it must modify code under `repos/` (e.g. a bug in a vendored tool blocks the block from running, a hotfix the upstream hasn't released yet), it must:
+
+1. **Stop** and surface the proposed change to the user, with a verbatim WARNING along the lines of: *"This edit modifies vendored code under `repos/<name>/`. This is not expected by design — the canonical fix is upstream. Proceeding will diverge the working tree from the pinned commit `<sha>` and break the reproducibility contract recorded in `metadata.yaml`."*
+2. **Wait for explicit user confirmation** before applying the edit. A user saying "just fix it" without acknowledging the warning is not sufficient — the agent must show the warning text and require a fresh ack.
+3. After applying the edit, **flag the pin as stale**: either bump `meta_info.repos.<name>.commit_id` to the new local SHA (if the user will commit upstream), or add a `notes:` entry to the next archive recording the local divergence and the reason. Do not silently leave a pinned commit pointing at a different working tree.
+
+This rule applies symmetrically across all skills: `:setup` configures and pins, it does not patch; `:check` validates against the pin, it does not "fix"; `:run` executes the pinned code, it does not edit it. Edits to `scripts/`, `config.yaml`, `dashboard/`, `memory/`, or `artifacts/` are normal block operation and not subject to this rule.
+
 ---
 
 ## 2. Lifecycle
