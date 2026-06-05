@@ -1,0 +1,11 @@
+{
+  "name": "trajgen-block",
+  "owner": { "name": "haoli" },
+  "plugins": [
+    {
+      "name": "trajgen",
+      "source": "./trajgen-plugin",
+      "description": "trajgen block skills — setup, check, dashboard, run."
+    }
+  ]
+}

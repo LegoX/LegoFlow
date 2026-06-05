@@ -12,8 +12,8 @@ meta_info:
       role: core pipeline — CLI, task generation, validation, scoring
 
   environment:
-    venv_name: swegen-env2
-    venv_path: artifacts/envs/swegen-env2
+    venv_name: swegen-env
+    venv_path: artifacts/envs/swegen-env
     requirements: repos/swegen/pyproject.toml
     python_version: "3.10+"
     description: Virtual environment for swegen CLI and dependencies
@@ -30,17 +30,18 @@ runtime_info:
   input:
     github_tokens: human              # Comma-separated GitHub API tokens for PR collection
 
-    llm_api:
-      api_key: dummy-key
-      api_base_url: "http://llm10.jierungogogo.com/v1"
-      pr_model: "openai/MiniMax-M2.7"
-      task_model: "openai/MiniMax-M2.7"
-
     # llm_api:
-    #   api_key: human             # LLM API key for PR evaluation and instruction generation
-    #   api_base_url: https://az.gptplus5.com/v1        # OpenAI-compatible API endpoint
-    #   pr_model: deepseek-v4-flash               # Model for PR evaluation and instruction generation
-    #   task_model: deepseek-v4-flash            # Model for Claude Code SDK task completion
+    #   api_key: dummy-cf
+    #   api_base_url: "http://llm10.jierungogogo.com/v1"
+    #   pr_model: "GLM-5-FP8"
+    #   task_model: "GLM-5-FP8"
+
+    # Backup provider (uncomment block and comment the one above to switch):
+    llm_api:
+      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
+      api_base_url: https://az.gptplus5.com/v1
+      pr_model: deepseek-v4-flash
+      task_model: deepseek-v4-flash
 
     # Adaptive tuning configuration
     global:

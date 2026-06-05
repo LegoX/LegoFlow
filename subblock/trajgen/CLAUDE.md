@@ -2,6 +2,8 @@
 
 Generates raw agent trajectories with Harbor for downstream SFT data conversion.
 
+This repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md`, and follows the principles in `<repo_root>/.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md` (resolve from the repo root, not from this block's directory). Every agent with this repo SHOULD READ that file before any actions.
+
 ## Block Identity
 
 - **Name**: trajgen

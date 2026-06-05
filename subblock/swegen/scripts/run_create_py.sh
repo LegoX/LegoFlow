@@ -13,7 +13,7 @@ if [[ -f .env ]]; then
 fi
 source scripts/load_runtime_env.sh
 load_runtime_env
-VENV_DIR="${SWEGEN_VENV_DIR:-artifacts/envs/swegen-env2}"
+VENV_DIR="${SWEGEN_VENV_DIR:-artifacts/envs/swegen-env}"
 source "$VENV_DIR/bin/activate"
 
 exec "$VENV_DIR/bin/swegen" create \

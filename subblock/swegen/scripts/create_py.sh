@@ -1,10 +1,10 @@
 #!/bin/bash
 cd "$(dirname "$0")/.."
 PROJECT_ROOT="$(pwd)"
-# python -m venv swegen-env2
-source artifacts/envs/swegen-env2/bin/activate  # Linux/Mac
+# python -m venv swegen-env
+source artifacts/envs/swegen-env/bin/activate  # Linux/Mac
 source scripts/load_runtime_env.sh
-echo 'activate swegen-env2'
+echo 'activate swegen-env'
 
 load_runtime_env
 

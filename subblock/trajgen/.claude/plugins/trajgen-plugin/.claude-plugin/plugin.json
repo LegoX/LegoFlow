@@ -1,0 +1,6 @@
+{
+  "name": "trajgen",
+  "description": "trajgen block skills — Harbor + LiteLLM env bootstrap, preflight (uv env + LiteLLM venv + LLM endpoint + swegen task source), dashboard (jobs/tasks/trajectories), and run (prepare_tasks → harbor → convert_trajectories). Provides /trajgen:setup, /trajgen:check, /trajgen:dashboard, /trajgen:run.",
+  "version": "0.1.0",
+  "author": { "name": "haoli" }
+}
