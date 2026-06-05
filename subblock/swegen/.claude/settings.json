@@ -1,1 +1,10 @@
-{}
+{
+  "extraKnownMarketplaces": {
+    "swegen-block": {
+      "source": { "source": "directory", "path": ".claude/plugins" }
+    }
+  },
+  "enabledPlugins": {
+    "swegen@swegen-block": true
+  }
+}
