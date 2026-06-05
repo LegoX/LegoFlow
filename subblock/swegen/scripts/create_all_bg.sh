@@ -3,7 +3,7 @@ cd "$(dirname "$0")/.."
 # Run all 8 create scripts in background.
 
 set -euo pipefail
-source artifacts/envs/swegen-env2/bin/activate
+source artifacts/envs/swegen-env/bin/activate
 source scripts/load_runtime_env.sh
 
 load_runtime_env

@@ -1,9 +1,9 @@
 #!/bin/bash
 cd "$(dirname "$0")/.."
 PROJECT_ROOT="$(pwd)"
-source artifacts/envs/swegen-env2/bin/activate
+source artifacts/envs/swegen-env/bin/activate
 source scripts/load_runtime_env.sh
-echo 'activate swegen-env2'
+echo 'activate swegen-env'
 
 load_runtime_env
 
