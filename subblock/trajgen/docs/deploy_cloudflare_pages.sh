@@ -78,7 +78,7 @@ if [[ ! -d "$OUT_DIR" ]]; then
 fi
 
 # 4. Ensure the Pages project exists (idempotent), then deploy.
-if ! npx --yes "$WRANGLER_PKG" pages project list 2>/dev/null | grep -q "\b$PROJECT_NAME\b"; then
+if ! npx --yes "$WRANGLER_PKG" pages project list 2>/dev/null | awk -v name="$PROJECT_NAME" '{ for (i = 1; i <= NF; i++) if ($i == name) found = 1 } END { exit found ? 0 : 1 }'; then
   log "Creating Cloudflare Pages project '$PROJECT_NAME' (production branch '$BRANCH_NAME')"
   npx --yes "$WRANGLER_PKG" pages project create "$PROJECT_NAME" \
     --production-branch "$BRANCH_NAME"

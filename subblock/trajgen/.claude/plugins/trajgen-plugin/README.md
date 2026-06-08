@@ -1,7 +1,7 @@
 # trajgen — block-local operating plugin
 
 Packages the trajgen block's detailed operating procedures into slash
-commands. These complement the repo-wide [`root-plugin`](../../../../../../.claude/plugins/root-plugin/)
+commands. These complement the repo-wide [`root-plugin`](../../../../../.claude/plugins/root-plugin/)
 plugin (`/root:create`, `/root:check`, `/root:run`): `root` handles the
 generic block contract (preflight, execute `start.sh`, archive); this plugin
 holds the trajgen-specific know-how that the generic commands cannot infer.
@@ -13,7 +13,7 @@ procedure, so the contract stays short and the detail lives here.
 
 | Command | What it does |
 | --- | --- |
-| `/trajgen:setup` | Bootstrap: clone or update the read-only `harbor` and `swe_data_process` repos at their pinned commits, build the uv/venv environments, and copy verified tasks into `artifacts/tasks/<dataset>/` (filtered by swegen's `verifiable_tasks.txt`). |
+| `/trajgen:setup` | Bootstrap: clone or update the read-only `harbor` and `swe_data_process` repos at their pinned commits, build the uv/venv environments, initialise the ledger if needed, and run dryrun. Task staging is handled by `scripts/start.sh` or an explicit `prepare_tasks.sh` request. |
 | `/trajgen:check` | Preflight: schema + uv envs + LLM endpoint `/models` + swegen task source + LiteLLM port free + consumption ledger sanity. Read-only. |
 | `/trajgen:dashboard` | Generate or serve the local HTML progress board, run/restart the Cloudflare Pages sync loop (`trajgen-cf` tmux session), and manually refresh one job's SFT data/stats via `scripts/convert_trajectories.sh`. |
 | `/trajgen:run` | Preflight via `/trajgen:check`, then `scripts/start.sh` — `prepare_tasks.sh` → Harbor → optional conversion — plus post-run ledger / exclude-list / status bookkeeping. |

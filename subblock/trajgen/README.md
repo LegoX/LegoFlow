@@ -63,7 +63,7 @@ Run from the repo root with the `block` plugin loaded, or from this directory.
 
 ```text
 /root:check trajgen     # preflight: config, repos, envs, tasks, LLM endpoint
-/trajgen:setup           # clone/update repos, build uv envs, copy verified tasks
+/trajgen:setup           # clone/update repos, build uv envs, run dryrun
 /root:run trajgen       # execute scripts/start.sh (proxy + Harbor) and archive
 /trajgen:dashboard       # view progress locally or sync online
 ```
@@ -80,7 +80,7 @@ generic lifecycle (`/root:check`, `/root:run`); these are trajgen-specific:
 
 | Command | What it does |
 |---|---|
-| `/trajgen:setup` | Clone/update `harbor` + `swe_data_process`, build uv envs, copy manifest-filtered tasks |
+| `/trajgen:setup` | Clone/update `harbor` + `swe_data_process`, build uv envs, initialise ledger if needed, run dryrun |
 | `/trajgen:check` | Read-only preflight |
 | `/trajgen:run` | LiteLLM proxy + Harbor job + post-run ledger / exclude-list / status bookkeeping |
 | `/trajgen:dashboard` | Local HTML board, Cloudflare Pages online sync, or SFT stats refresh |
