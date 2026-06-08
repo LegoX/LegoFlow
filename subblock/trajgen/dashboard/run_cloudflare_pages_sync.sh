@@ -11,7 +11,7 @@ DASHBOARD_SCRIPT="$SCRIPT_DIR/progress_monitor.py"
 RUN_DIR="$SCRIPT_DIR"
 BLOCK_DIR="$(cd "$RUN_DIR/.." && pwd)"
 PUBLIC_DIR="${PUBLIC_DIR:-$RUN_DIR/site}"
-CACHE_FILE="${CACHE_FILE:-$RUN_DIR/memory/.progress_monitor_cache.json}"
+CACHE_FILE="${CACHE_FILE:-$RUN_DIR/.cache/.progress_monitor_cache.json}"
 ENV_FILE="${ENV_FILE:-$HOME_DIR/.config/trajgen_progress_cloudflare.env}"
 
 PROJECT_NAME="${PROJECT_NAME:-swe-trajgen-databoard}"

@@ -1,6 +1,6 @@
 {
   "name": "trajgen-block",
-  "owner": { "name": "haoli" },
+  "owner": { "name": "trajgen" },
   "plugins": [
     {
       "name": "trajgen",

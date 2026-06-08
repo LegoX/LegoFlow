@@ -1,0 +1,29 @@
+---
+title: Motivation
+description: Why we built trajgen
+---
+
+trajgen turns verified SWE tasks into agent trajectories and ready-to-train SFT data.
+
+It is the trajectory-generation stage of the [SWE-Lego-Live](https://github.com/SWE-Lego/SWE-Lego-Live) pipeline, sitting between task curation (`swegen`) and model training (`sft`, `rl`). It rolls a coding agent out across verified tasks in reproducible containers, captures every rollout, and converts the good ones into SFT data — all driven by a single config around a pinned [Harbor](https://github.com/SWE-Lego/harbor) checkout.
+
+```text
+swegen ─▶ trajgen ─▶ sft ─▶ rl
+```
+
+trajgen provides:
+
+- **Manifest-gated consumption** — only swegen-verified tasks run, and a ledger guarantees each is rolled out exactly once
+- **A per-job LiteLLM proxy** fronting your model API with OpenAI- and Anthropic-compatible endpoints
+- **Containerized rollouts at scale** via Harbor, with configurable concurrency, retries, and timeouts
+- **Pluggable agent scaffolds** — Claude Code, OpenCode, OpenHands SDK, and Terminus-2 pre-integrated
+- **Automatic SFT conversion** to LLaMA-Factory format, with rule- and LLM-based quality scoring
+- **A live progress dashboard** you can preview locally or publish to Cloudflare Pages
+
+## Where to go next
+
+- [Getting Started](/docs/getting-started) — install the dependencies and run your first job
+- [Core Concepts](/docs/core-concepts) — tasks, trajectories, jobs, scaffolds, and SFT data
+- [Run Jobs](/docs/run-jobs) — prepare tasks, start the proxy, and roll the agent out
+- [SFT Data](/docs/sft-data) — convert trajectories into training datasets
+- [Dashboard](/docs/dashboard) — monitor progress locally or online
