@@ -75,13 +75,13 @@ runtime_info:
     # task copy step is required.
     task_source:
       provider: harbor_registry
-      dataset_name: swebench-verified-100
+      dataset_name: swebench-verified
       version: "1.0"
       registry_path: repos/harbor/registry.json
 
     harbor_job:
       jobs_dir: artifacts/jobs
-      n_concurrent: 6
+      n_concurrent: 16
       n_tasks: null               # null = run the full benchmark; set an int for a smoke run
       max_retries: 2
       timeout_multiplier: 1
@@ -108,9 +108,9 @@ runtime_info:
     #     runtime_image: docker.io/yjiangcm/c-oc-1.14.22:v0.2
     #     runtime_host_path: artifacts/runtime/opencode
     agent:
-      name: custom-opencode
-      version: 1.14.22
-      runtime_image: docker.io/jierun/c-oc-1.14.22:v0.1
+      name: custom-openhands-sdk
+      version: 1.14.0
+      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
       # `runtime_host_path` must be a directory that already contains the
       # extracted agent runtime tree from `runtime_image` (bind-mount source).
       # If the dir is empty, the agent falls back to an in-container install
@@ -129,7 +129,7 @@ runtime_info:
       #   rm -rf "$HOST_DIR" && mkdir -p "$(dirname "$HOST_DIR")" && \
       #   docker cp "$CID:/opt/custom-agent-runtime/$SUBPATH" "$HOST_DIR" && \
       #   docker rm "$CID"
-      runtime_host_path: artifacts/runtime/opencode
+      runtime_host_path: artifacts/runtime/openhands-sdk
       max_turns: 200
       temperature: 0.7
 

@@ -7,6 +7,10 @@ artifacts/jobs/
 artifacts/litellm/
 artifacts/logs/
 artifacts/env/
+artifacts/runtime/
+
+# Local Claude Code settings (not shared).
+.claude/settings.local.json
 
 # Local environment and caches.
 .env

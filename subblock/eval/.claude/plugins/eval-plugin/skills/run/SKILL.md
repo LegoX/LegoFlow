@@ -15,63 +15,100 @@ description: >
 
 # /eval:run
 
-**STATUS: stub — fill in.**
+Preflight-then-execute entry point. Always invoke `/eval:check` first;
+require explicit user confirmation before launching. eval is a **leaf
+block** — no subblocks — so this skill runs `scripts/start.sh` directly
+(per BLOCK_DEFINITION.md §3.2, no child dispatch applies).
 
-Per the block plugin guidelines, `:run` is the preflight-then-execute
-entry point. Always invoke `/eval:check` first; require explicit user
-confirmation before launching. eval is a **leaf block** — no subblocks,
-so this skill runs `scripts/start.sh` directly (per BLOCK_DEFINITION.md
-§3.2, no child dispatch applies).
+## Procedure
 
-## Intent
-
-1. **Preflight** — invoke `/eval:check`; abort on any FAIL.
+1. **Preflight** — invoke `/eval:check`; abort on any FAIL. Never launch
+   on a stale/unvalidated config.
 2. **Confirm** — present the run-configuration summary from `:check`
-   plus the benchmark `n_tasks` (post-`HARBOR_EXCLUDE_TASKS`), the
-   `agent.runtime_image`, and the estimated wall time. Wait for
-   explicit user `yes`.
-3. **Launch** — `bash scripts/start.sh` (background by default for long
-   runs; ask the user once). Per `meta_info.resources.ip`:
-   - `local` / null / absent → execute on the current host;
-   - real remote IP → open a local tmux window named `eval`, SSH to the
-     remote, attach to (or create) a remote tmux session named `eval`,
-     and run `start.sh` inside that remote session per
-     BLOCK_DEFINITION.md §2.3. Confirm with the user whether the code is
-     already in sync at `meta_info.resources.directory` or needs rsync.
-4. **Archive** — `start.sh`'s EXIT trap calls
-   `scripts/archive_run.sh`, which appends to `artifacts/index.yaml` with
-   `status: completed | failed | interrupted` and snapshots config +
-   scripts under `artifacts/archives/run_NNN/`. Do not write to
-   `index.yaml` from this skill.
+   plus the benchmark task count (post-`HARBOR_EXCLUDE_TASKS`), the
+   `agent.name@version` + `runtime_image`, and a rough wall-time
+   estimate. **Wait for an explicit `yes`** (root `CLAUDE.md`
+   "check → confirm → run"). Never auto-launch — a full benchmark is
+   many container-hours.
+3. **Launch** — `bash scripts/start.sh`, background by default (eval runs
+   are long; ask the user once if they want foreground). Per
+   `meta_info.resources.ip`:
+   - `local` / null / absent → run on the current host inside a tmux
+     session named `eval`.
+   - real remote IP (currently `192.168.35.240`) → open a local tmux
+     window, SSH to the remote, attach to (or create) a remote tmux
+     session named `eval`, and run `start.sh` inside it from
+     `meta_info.resources.directory` (per BLOCK_DEFINITION.md §2.3).
+     Confirm with the user whether the code is already in sync at that
+     path or needs rsync first. A tmux session keeps the run alive across
+     shell disconnects.
+4. **Archive** — `start.sh`'s EXIT trap runs `cleanup_litellm` then
+   `scripts/archive_run.sh "$rc" "$RUN_STARTED_AT"`, which appends to
+   `artifacts/index.yaml` and snapshots config + scripts under
+   `artifacts/archives/run_NNN/`. Do not write `index.yaml` from this
+   skill.
+
+## What `scripts/start.sh` does internally
+
+1. Optional `update_repos.sh` (only with `--update-repos` /
+   `EVAL_UPDATE_REPOS=1`).
+2. Re-runs `scripts/dryrun.sh` as its own preflight (exits on FAIL).
+3. Generates a per-job LiteLLM config from
+   `runtime_info.input.{llm_api, litellm_proxy}` + the Harbor template
+   into `artifacts/litellm/<job>/`, copying Harbor's
+   `trajectory_logger.py` alongside it.
+4. Starts the LiteLLM proxy (`serve_litellm.sh`) on
+   `litellm_proxy.port`, waits up to 30 s for it to accept connections,
+   and aborts if it exits early.
+5. Builds the default Harbor command (`uv run harbor run --dataset …
+   --registry-path … --agent-import-path … --mounts-json … --model …`)
+   with per-agent flags, `--retry-exclude AgentTimeoutError`, and one
+   `--exclude-task-name` per entry in `HARBOR_EXCLUDE_TASKS`, then runs
+   it inside `repos/harbor`, teeing to `artifacts/logs/eval_<ts>.log`.
+
+Use `bash scripts/start.sh --dry-run-command` to print the generated
+LiteLLM config path and Harbor command **without** launching — useful in
+the confirm step.
 
 ## Modes
 
 | Mode | Trigger | What runs |
 |---|---|---|
-| `smoke` | Args mention "smoke" / "quick" / "n_tasks=N" for small N; or `runtime_info.input.harbor_job.n_tasks` is set to a small integer. | Standard `start.sh` flow, but Harbor honours the `n_tasks` cap. Use a `-100` benchmark subset for the cleanest smoke. |
-| `full`  | Args empty or say "everything" / "all tasks". | `start.sh` against the full benchmark. |
+| `smoke` | Args mention "smoke"/"quick"; or `harbor_job.n_tasks` is a small int; or a `-100` benchmark subset is selected. | Standard `start.sh` flow; Harbor honours the `n_tasks` cap. A `-100` subset is the cleanest smoke. |
+| `full`  | Args empty or say "everything"/"all tasks". | `start.sh` against the full benchmark. |
 
 ## Conventions to honour
 
 - **Benchmark selection lives in `config.yaml`, not flags.** To change
   benchmark, edit `runtime_info.input.task_source.{dataset_name,version}`
-  and re-run `/eval:check`. `:run` should refuse to override these
-  via free-form args — there is no scenario where launching a different
-  benchmark than the one `:check` validated is correct.
-- **Excluded tasks come from `HARBOR_EXCLUDE_TASKS`.** Do not pass
-  exclusions via skill args; record them in `config.yaml`'s
-  `environment.extra.HARBOR_EXCLUDE_TASKS` so they survive across runs
-  and show up in archives.
-- **One LiteLLM proxy per run.** If `:check` flagged the port as held
-  by a foreign process, do not start a second proxy on a different
-  port without the user explicitly OK-ing the config change.
+  and re-run `/eval:check`. Refuse to override these via free-form args —
+  launching a different benchmark than the one `:check` validated is
+  never correct.
+- **Agent selection lives in `config.yaml`, not flags.** Switch agents by
+  editing `agent.{name, version, runtime_image, runtime_host_path}`
+  together and re-running `/eval:check` (so the runtime-extraction check
+  re-runs). Don't inject agent overrides via args.
+- **Excluded tasks come from `HARBOR_EXCLUDE_TASKS`.** Record them in
+  `config.yaml`'s `environment.extra.HARBOR_EXCLUDE_TASKS` so they
+  survive across runs and appear in archives — don't pass exclusions via
+  skill args.
+- **One LiteLLM proxy per run.** If `:check` flagged the port as held by
+  a foreign process, do not start a second proxy on a different port
+  without the user explicitly OK-ing the config change.
+- **Timed-out tasks are not retried.** `start.sh` always passes
+  `--retry-exclude AgentTimeoutError`; a task that times out will time
+  out again and only burns budget. If a task repeatedly times out, add it
+  to `HARBOR_EXCLUDE_TASKS`.
 
-## TODO
+## Resume on interrupt
 
-- [ ] Decide whether `:run` should split into substeps
-      (`/eval:proxy`, `/eval:harbor`, `/eval:score`) following the
-      trajgen pattern. Probably yes once Harbor's score aggregation
-      stabilises; not yet.
-- [ ] Spec resume-on-interrupt — Harbor's job state under
-      `artifacts/jobs/<job>/` already supports it; `:run` should detect
-      an interrupted prior run and offer to resume vs. start fresh.
+Harbor's per-job state under `artifacts/jobs/<job>/` lets an interrupted
+run be re-driven. If a prior `eval` run was interrupted, surface it and
+ask whether to resume that job dir vs. start a fresh one, rather than
+silently launching a duplicate.
+
+## Out of scope
+
+- Editing `config.yaml`, building envs, or extracting agent runtimes —
+  those belong in `/eval:setup`.
+- Writing `artifacts/index.yaml` — owned by `archive_run.sh`.
