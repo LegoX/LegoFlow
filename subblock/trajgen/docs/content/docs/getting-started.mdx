@@ -84,5 +84,6 @@ If you operate the block through its Claude plugin, the same lifecycle maps to s
 /root:check trajgen     # preflight: config, repos, envs, tasks, LLM endpoint
 /trajgen:setup           # update repos, build envs, copy verified tasks
 /root:run trajgen       # execute scripts/start.sh (proxy + Harbor) and archive
+/trajgen:run             # trajgen-specific run procedure + post-run bookkeeping
 /trajgen:dashboard       # view progress locally or sync online
 ```

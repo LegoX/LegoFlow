@@ -40,7 +40,7 @@ Trajgen **only** runs tasks listed in swegen's `verifiable_tasks.txt`, and never
 2. `artifacts/consumption_ledger.yaml` is the source of truth for processed task IDs (`pending | running | done | failed | skipped`).
 3. Every `done`/`failed`/`skipped` task must also appear in `HARBOR_EXCLUDE_TASKS` so Harbor skips it next time.
 
-Operating detail for the run + post-run bookkeeping is in the `/trajgen:run-job` skill.
+Operating detail for the run + post-run bookkeeping is in the `/trajgen:run` skill.
 
 ## Repos
 
@@ -57,10 +57,8 @@ Generic lifecycle via the repo-wide `root` plugin: `/root:check trajgen` to pref
 |---|---|---|
 | `/trajgen:setup` | `update_repos.sh`, `setup_harbor_env.sh`, `setup_swe_data_process_env.sh`, `dryrun.sh` | Clone/update repos, build uv envs |
 | `/trajgen:check` | `dryrun.sh` | Read-only preflight |
-| `/trajgen:run-job` | `dryrun.sh`, `start.sh` | LiteLLM proxy + Harbor job + post-run ledger / `HARBOR_EXCLUDE_TASKS` / status |
-| `/trajgen:convert-sft` | `convert_trajectories.sh` | One job's trajectories → `im.jsonl` + `lf.json` |
-| `/trajgen:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh` | Local HTML board / Cloudflare online sync |
-| `/trajgen:run` | `dryrun.sh`, `start.sh` | Full pipeline: prepare_tasks → harbor → convert |
+| `/trajgen:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh`, `convert_trajectories.sh` | Local HTML board / Cloudflare online sync / SFT stats refresh |
+| `/trajgen:run` | `dryrun.sh`, `start.sh` | Full pipeline: prepare_tasks → Harbor → optional convert + post-run bookkeeping |
 
 `scripts/clean.sh` removes gitignored runtime outputs (`artifacts/sft_data`, `dashboard/site/`, `dashboard/.cache/`). Trajgen scripts need PyYAML in the runtime Python; on `ERROR: PyYAML is required`, `pip install pyyaml`.
 

@@ -17,7 +17,7 @@ description: >
 
 Brings the trajgen block from a fresh clone to "`/trajgen:check` passes."
 The skill is idempotent: any step that is already satisfied is skipped.
-The skill never launches Harbor — that's `/trajgen:run-job` or `/trajgen:run`.
+The skill never launches Harbor — that's `/trajgen:run`.
 All commands run from the block root `subblock/trajgen/`.
 
 ## Procedure
@@ -121,7 +121,7 @@ runs: []
 ### 7. Final check
 
 Run `bash scripts/dryrun.sh` and report PASS/WARN/FAIL counts. If FAIL is
-zero, point the user at `/trajgen:run-job` or `/trajgen:run`. Setup is done.
+zero, point the user at `/trajgen:run`. Setup is done.
 
 ## Notes
 

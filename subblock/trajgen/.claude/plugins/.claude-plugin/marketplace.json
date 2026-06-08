@@ -5,7 +5,7 @@
     {
       "name": "trajgen",
       "source": "./trajgen-plugin",
-      "description": "trajgen block skills — setup, check, run-job, convert-sft, dashboard."
+      "description": "trajgen block skills — setup, check, dashboard, run."
     }
   ]
 }

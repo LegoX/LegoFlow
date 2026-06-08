@@ -5,9 +5,12 @@ description: >
   self-contained HTML board (dashboard/progress_monitor.py, scans
   artifacts/jobs/*/result.json and artifacts/sft_data/*/lf.stats.json), or run /
   restart the Cloudflare Pages sync loop (dashboard/run_cloudflare_pages_sync.sh,
-  tmux session trajgen-cf) that publishes it online. Use when asked to "show
-  trajgen progress", "open the dashboard", "start/restart the cloudflare sync",
-  or "why does dashboard/.cache keep coming back". Triggers on "/trajgen:dashboard".
+  tmux session trajgen-cf) that publishes it online. Also covers manually
+  refreshing one job's SFT data/stats with scripts/convert_trajectories.sh.
+  Use when asked to "show trajgen progress", "open the dashboard",
+  "start/restart the cloudflare sync", "convert trajectories to SFT data",
+  "make the LF dataset", "refresh SFT stats", or "why does dashboard/.cache
+  keep coming back". Triggers on "/trajgen:dashboard".
 ---
 
 # /trajgen:dashboard
@@ -16,6 +19,10 @@ Generate, preview, or publish the trajgen progress board. Run from the block
 root `subblock/trajgen/`. The generator is stdlib-only via `uv run` (PEP 723
 inline metadata + uv-run shebang) — no env to maintain; `uv` must be on `PATH`.
 Full flag reference: `docs/content/docs/dashboard.mdx`.
+
+This skill also owns SFT stats refresh. The dashboard reads
+`artifacts/sft_data/<job>/lf.stats.json`, and the Cloudflare sync loop can keep
+those stats fresh by running `scripts/convert_trajectories.sh --skip-unchanged`.
 
 ## Local preview
 
@@ -63,3 +70,43 @@ redeploys within seconds) and does not affect any running Harbor job.
 
 - `./dashboard/progress_monitor.py --serve` — local generate + preview only, no deploy.
 - `bash dashboard/run_cloudflare_pages_sync.sh` — long-running online sync that loops generation and publishes via `wrangler pages deploy`.
+
+## Refresh SFT data and stats
+
+Use `scripts/convert_trajectories.sh` when a finished Harbor job needs
+LLaMA-Factory SFT data, or when the dashboard's SFT table needs fresh stats.
+Requires the `swe_data_process` repo and its uv env
+(`artifacts/env/swe-data-process-uv`) — provision via `/trajgen:setup` if
+missing.
+
+```bash
+scripts/convert_trajectories.sh                                   # job=latest, defaults from config
+scripts/convert_trajectories.sh --job <name|latest>
+scripts/convert_trajectories.sh --job latest --scaffold claude_code
+scripts/convert_trajectories.sh --job <name> --out-dir artifacts/sft_data --max-instances 100
+scripts/convert_trajectories.sh --job latest --skip-unchanged
+```
+
+Defaults are read from `runtime_info.input.sft_conversion` in `config.yaml`
+(`enabled`, `scaffold`, `out_dir`, `max_instances`, `exclude_repos_file`).
+
+Outputs are written under `<out_dir>/<job>/` (default
+`artifacts/sft_data/<job>/`):
+
+- `im.jsonl` — intermediate OpenAI-style messages
+- `lf.json` — LLaMA-Factory ShareGPT array (consumed by the `sft` block)
+- `lf.stats.json` — counts, token lengths, turns, scores (surfaced by the dashboard)
+- `.convert_sig.json` — signature of the resolved instance set + inputs (drives `--skip-unchanged`)
+
+| Flag | Meaning |
+| --- | --- |
+| `--job <name\|latest>` | Which job under `artifacts/jobs/`. `latest` = most recently modified dir. |
+| `--scaffold <auto\|claude_code\|open_code\|openhands_sdk\|terminus2>` | Trajectory format. `auto` derives from the **job name** and falls back to `runtime_info.input.agent.name`, e.g. `custom-claude-code → claude_code`. Override when job name and agent disagree. |
+| `--out-dir <path>` | Output root (default `artifacts/sft_data`). |
+| `--max-instances <N>` | Cap converted instances. |
+| `--exclude-repos-file <path>` | Repos to drop; `""` = converter default `artifacts/excluded_repos.txt`. |
+| `--skip-unchanged` | Exit early without reconverting when the job's resolved (reward=1.0) instance set and inputs are unchanged since the last run. Used by the dashboard sync loop. |
+
+If `runtime_info.input.sft_conversion.enabled: true`, `scripts/start.sh` calls
+`scripts/convert_trajectories.sh --job "$JOB_NAME"` after Harbor exits; no
+manual step is needed.

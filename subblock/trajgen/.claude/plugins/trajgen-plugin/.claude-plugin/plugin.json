@@ -1,6 +1,6 @@
 {
   "name": "trajgen",
-  "description": "Operate the trajgen block: prepare repos/env/tasks, preflight, run a Harbor trajectory job behind a per-job LiteLLM proxy, convert trajectories to SFT data, and drive the progress dashboard. Provides /trajgen:setup, /trajgen:check, /trajgen:run-job, /trajgen:convert-sft, /trajgen:dashboard, /trajgen:run.",
+  "description": "Operate the trajgen block: prepare repos/env/tasks, preflight, run Harbor trajectory jobs behind a per-job LiteLLM proxy, refresh SFT data/stats, and drive the progress dashboard. Provides /trajgen:setup, /trajgen:check, /trajgen:dashboard, /trajgen:run.",
   "version": "0.1.0",
   "author": { "name": "trajgen" }
 }

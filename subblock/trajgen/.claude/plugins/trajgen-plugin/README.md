@@ -15,18 +15,16 @@ procedure, so the contract stays short and the detail lives here.
 | --- | --- |
 | `/trajgen:setup` | Bootstrap: clone or update the read-only `harbor` and `swe_data_process` repos at their pinned commits, build the uv/venv environments, and copy verified tasks into `artifacts/tasks/<dataset>/` (filtered by swegen's `verifiable_tasks.txt`). |
 | `/trajgen:check` | Preflight: schema + uv envs + LLM endpoint `/models` + swegen task source + LiteLLM port free + consumption ledger sanity. Read-only. |
-| `/trajgen:run-job` | Run one Harbor trajectory job: dryrun preflight, generate the per-job LiteLLM proxy config and start the proxy, launch Harbor with `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS`, then stop the proxy, inspect `artifacts/jobs/<job>/`, and update `consumption_ledger.yaml` + `HARBOR_EXCLUDE_TASKS` + `config.yaml`'s `status`. |
-| `/trajgen:convert-sft` | Convert one Harbor job's trajectories into `artifacts/sft_data/<job>/im.jsonl` and `lf.json` (LLaMA-Factory ShareGPT) via the `swe_data_process` converter, with scaffold auto-detection and `--skip-unchanged` polling support. |
-| `/trajgen:dashboard` | Generate or serve the local HTML progress board, or run/restart the Cloudflare Pages sync loop (`trajgen-cf` tmux session) that publishes it online. |
-| `/trajgen:run` | Preflight via `/trajgen:check`, then `scripts/start.sh` — `prepare_tasks.sh` → harbor → `convert_trajectories.sh`. |
+| `/trajgen:dashboard` | Generate or serve the local HTML progress board, run/restart the Cloudflare Pages sync loop (`trajgen-cf` tmux session), and manually refresh one job's SFT data/stats via `scripts/convert_trajectories.sh`. |
+| `/trajgen:run` | Preflight via `/trajgen:check`, then `scripts/start.sh` — `prepare_tasks.sh` → Harbor → optional conversion — plus post-run ledger / exclude-list / status bookkeeping. |
 
 ## Relationship to `/root:run`
 
 `/root:run trajgen` runs the generic preflight then executes `scripts/start.sh`
-and archives the result. `/trajgen:run-job` documents the trajgen-specific layer
+and archives the result. `/trajgen:run` documents the trajgen-specific layer
 that `start.sh` orchestrates (LiteLLM proxy lifecycle, task-exclusion wiring,
 post-run ledger bookkeeping). Use `/root:run` to execute; consult
-`/trajgen:run-job` for the operating detail and the manual post-run steps.
+`/trajgen:run` for the operating detail and the manual post-run steps.
 
 Per the block plugin guidelines, **no `/trajgen:create`** — new blocks are
 only created via `/root:create`.
@@ -49,9 +47,7 @@ This plugin lives inside the block-local marketplace at
     └── skills/
         ├── setup/SKILL.md             # /trajgen:setup
         ├── check/SKILL.md             # /trajgen:check
-        ├── run-job/SKILL.md           # /trajgen:run-job
-        ├── convert-sft/SKILL.md       # /trajgen:convert-sft
-        ├── dashboard/SKILL.md       # /trajgen:dashboard
+        ├── dashboard/SKILL.md         # /trajgen:dashboard
         └── run/SKILL.md               # /trajgen:run
 ```
 

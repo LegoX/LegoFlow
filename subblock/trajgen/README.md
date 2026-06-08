@@ -69,8 +69,8 @@ Run from the repo root with the `block` plugin loaded, or from this directory.
 ```
 
 After a job, do the trajgen-specific bookkeeping (ledger + `HARBOR_EXCLUDE_TASKS`
-+ status) described in `/trajgen:run-job`, and optionally `/trajgen:convert-sft`
-to produce SFT data.
++ status) described in `/trajgen:run`, and use `/trajgen:dashboard` to refresh
+SFT data/stats when needed.
 
 ## Operating skills (`.claude/`)
 
@@ -81,9 +81,9 @@ generic lifecycle (`/root:check`, `/root:run`); these are trajgen-specific:
 | Command | What it does |
 |---|---|
 | `/trajgen:setup` | Clone/update `harbor` + `swe_data_process`, build uv envs, copy manifest-filtered tasks |
-| `/trajgen:run-job` | LiteLLM proxy + Harbor job + post-run ledger / exclude-list / status bookkeeping |
-| `/trajgen:convert-sft` | Convert one job's trajectories into `im.jsonl` + `lf.json` |
-| `/trajgen:dashboard` | Local HTML board or Cloudflare Pages online sync |
+| `/trajgen:check` | Read-only preflight |
+| `/trajgen:run` | LiteLLM proxy + Harbor job + post-run ledger / exclude-list / status bookkeeping |
+| `/trajgen:dashboard` | Local HTML board, Cloudflare Pages online sync, or SFT stats refresh |
 
 ## Where things live
 

@@ -16,6 +16,8 @@ Live board: **[swe-trajgen-databoard.pages.dev](https://swe-trajgen-databoard.pa
 
 For each Harbor job it surfaces trial counts, error counts, per-eval reward means, and `reward == 1.0 / 0.0` outcome counts. For each SFT dataset it surfaces token-length, turn-count, and score distributions plus on-disk sizes.
 
+When operating through the trajgen plugin, `/trajgen:dashboard` covers both the visual dashboard and one-off SFT data/stat refreshes via `scripts/convert_trajectories.sh`.
+
 ## Run it locally
 
 The generator is `dashboard/progress_monitor.py`. It carries [PEP 723](https://peps.python.org/pep-0723/) inline metadata and a `uv run` shebang, so it needs no `pip install` — just `uv` on `PATH`. Run from `subblock/trajgen/`:
