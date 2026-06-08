@@ -12,8 +12,8 @@ meta_info:
       role: core pipeline — CLI, task generation, validation, scoring
 
   environment:
-    venv_name: swegen-env2
-    venv_path: artifacts/envs/swegen-env2
+    venv_name: swegen-env
+    venv_path: artifacts/envs/swegen-env
     requirements: repos/swegen/pyproject.toml
     python_version: "3.10+"
     description: Virtual environment for swegen CLI and dependencies
@@ -28,19 +28,20 @@ meta_info:
 
 runtime_info:
   input:
-    github_tokens: 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              # Comma-separated GitHub API tokens for PR collection
-
-    llm_api:
-      api_key: dummy-key
-      api_base_url: "http://llm10.jierungogogo.com/v1"
-      pr_model: "MiniMax-M2.7"
-      task_model: "MiniMax-M2.7"
+    github_tokens: human              # Comma-separated GitHub API tokens for PR collection
 
     # llm_api:
-    #   api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY             # LLM API key for PR evaluation and instruction generation
-    #   api_base_url: https://az.gptplus5.com/v1        # OpenAI-compatible API endpoint
-    #   pr_model: deepseek-v4-flash               # Model for PR evaluation and instruction generation
-    #   task_model: deepseek-v4-flash            # Model for Claude Code SDK task completion
+    #   api_key: dummy-cf
+    #   api_base_url: "http://llm10.jierungogogo.com/v1"
+    #   pr_model: "GLM-5-FP8"
+    #   task_model: "GLM-5-FP8"
+
+    # Backup provider (uncomment block and comment the one above to switch):
+    llm_api:
+      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
+      api_base_url: https://az.gptplus5.com/v1
+      pr_model: deepseek-v4-flash
+      task_model: deepseek-v4-flash
 
     # Adaptive tuning configuration
     global:
@@ -203,9 +204,9 @@ runtime_info:
       structure: "artifacts/swe_tasks/{lang}-cc/{task_id}/ with instruction.md, environment/, solution/, tests/"
 
     merged_tasks_dir:
-      path: artifacts/swe_tasks
-      description: Merged directory containing all verified tasks from all languages (populated by scripts/extract_verified_tasks.py)
-      structure: "artifacts/swe_tasks/{task_id}/ with instruction.md, environment/, solution/, tests/"
+      path: artifacts/merged_swe_tasks
+      description: Optional flattened directory containing all verified tasks from all languages (populated by scripts/extract_verified_tasks.py)
+      structure: "artifacts/merged_swe_tasks/{task_id}/ with instruction.md, environment/, solution/, tests/"
       extract_command: python scripts/extract_verified_tasks.py
 
     logs:
@@ -227,6 +228,15 @@ runtime_info:
         description: Rust task creation log
       - path: artifacts/logs/adaptive_decisions.jsonl
         description: Adaptive tuning decisions log (JSONL format)
+
+status:
+  phase: idle
+  progress: "Ready for the next SWE task generation run."
+  next_steps: |
+    1. Run scripts/dryrun.sh before starting a new SWE-gen batch.
+    2. Use quick-verify.md for a small preflight when changing the SWEgen runtime.
+  blockers: null
+  last_updated: null
 
 evolving:
   description: Adaptive agent that monitors per-language success rates and tunes pipeline parameters (timeout, cc_timeout, n_concurrent) automatically every 30 minutes.

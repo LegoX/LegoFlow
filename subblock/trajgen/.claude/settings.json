@@ -1,13 +1,10 @@
 {
   "extraKnownMarketplaces": {
-    "trajgen-blocks": {
-      "source": {
-        "source": "directory",
-        "path": ".claude/plugins"
-      }
+    "trajgen-block": {
+      "source": { "source": "directory", "path": ".claude/plugins" }
     }
   },
   "enabledPlugins": {
-    "trajgen@trajgen-blocks": true
+    "trajgen@trajgen-block": true
   }
 }

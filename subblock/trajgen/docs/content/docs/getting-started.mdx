@@ -81,8 +81,8 @@ Aggregate job results land in `artifacts/jobs/<job>/result.json`. For a visual v
 If you operate the block through its Claude plugin, the same lifecycle maps to slash commands:
 
 ```text
-/block:check trajgen     # preflight: config, repos, envs, tasks, LLM endpoint
+/root:check trajgen     # preflight: config, repos, envs, tasks, LLM endpoint
 /trajgen:setup           # update repos, build envs, copy verified tasks
-/block:run trajgen       # execute scripts/start.sh (proxy + Harbor) and archive
+/root:run trajgen       # execute scripts/start.sh (proxy + Harbor) and archive
 /trajgen:dashboard       # view progress locally or sync online
 ```

@@ -1,8 +1,8 @@
 # SWE-gen — Inputs & Outputs
 
-See `metainfo.yaml` for the full dependency schema.
+See `config.yaml` for the full dependency schema.
 
-## Runtime Inputs (`inputs.yaml`)
+## Runtime Inputs (`config.yaml`)
 
 | Field | Description |
 |-------|-------------|
@@ -20,9 +20,9 @@ Environment variables required before running:
 | `OPENAI_MODEL` | Model for PR evaluation |
 | `ANTHROPIC_MODEL` | Model for Claude Code SDK |
 
-## Runtime Outputs (`outputs.yaml`)
+## Runtime Outputs (`config.yaml`)
 
-Verified SWE tasks are merged into `outputs/{task_id}/`. Each task contains:
+Verified SWE tasks can be merged into `artifacts/merged_swe_tasks/{task_id}/`. Each task contains:
 - `instruction.md` — problem description
 - `environment/Dockerfile` — build environment
 - `environment/bug.patch` — bug-introducing patch

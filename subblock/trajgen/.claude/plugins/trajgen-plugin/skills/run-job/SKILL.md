@@ -2,7 +2,7 @@
 name: run-job
 description: >
   Run one trajgen Harbor trajectory job end to end and do the trajgen-specific
-  bookkeeping the generic /block:run does not: dryrun preflight, generate the
+  bookkeeping the generic /root:run does not: dryrun preflight, generate the
   per-job LiteLLM proxy config and start the proxy, launch Harbor with
   --exclude-task-name flags built from HARBOR_EXCLUDE_TASKS, then stop the proxy,
   inspect artifacts/jobs/<job>/, and update consumption_ledger.yaml,
@@ -18,10 +18,10 @@ Execute and account for a single Harbor trajectory job. Run from the block root
 `meta_info.resources.ip` (currently `local` → this host) so the job survives
 disconnects.
 
-> Relationship to `/block:run`: `/block:run trajgen` runs the generic preflight,
+> Relationship to `/root:run`: `/root:run trajgen` runs the generic preflight,
 > executes `scripts/start.sh`, and archives the run via the EXIT trap. This skill
 > describes what `start.sh` orchestrates and the **manual post-run steps** that
-> keep the task-consumption contract correct. Prefer `/block:run` to launch;
+> keep the task-consumption contract correct. Prefer `/root:run` to launch;
 > follow Steps 4–5 here afterward.
 
 ## Step 1 — Preflight

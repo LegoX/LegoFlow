@@ -23,7 +23,7 @@ tunes `timeout`, `cc_timeout`, and `n_concurrent` automatically.
 
 ```bash
 # 1. Install
-python -m venv swegen-env2 && source swegen-env2/bin/activate
+python -m venv swegen-env && source swegen-env/bin/activate
 pip install -e repos/swegen/
 # 2. Set env vars (or place tokens in ~/gh_token.txt)
 # 3. Validate
@@ -36,8 +36,8 @@ bash scripts/start.sh
 
 | File | Purpose |
 |------|---------|
-| `inputs.yaml` | Adaptive tuning params + per-language status |
-| `outputs/` | Merged verified SWE tasks (flat directory) |
+| `config.yaml` | Adaptive tuning params + per-language status |
+| `artifacts/merged_swe_tasks/` | Optional merged verified SWE tasks (flat directory) |
 | `artifacts/swe_tasks/` | Per-language task directories |
 | `artifacts/collected_prs/` | PR ID lists per language |
 | `artifacts/logs/adaptive_decisions.jsonl` | Adaptive tuning decision log |

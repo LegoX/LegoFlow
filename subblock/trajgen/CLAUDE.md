@@ -2,8 +2,14 @@
 
 Generates raw agent trajectories with Harbor for downstream SFT data conversion.
 
-**Parent:** swe_lego_live  
-**Children:** none (leaf block)
+This repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md`, and follows the principles in `<repo_root>/.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md` (resolve from the repo root, not from this block's directory). Every agent with this repo SHOULD READ that file before any actions.
+
+## Block Identity
+
+- **Name**: trajgen
+- **Role**: Data generation - creates agent trajectories from SWE tasks
+- **Parent**: swe_lego_live
+- **Children**: none (leaf block)
 
 ## Read first
 
@@ -45,14 +51,16 @@ Do not edit repo sources here. Use `scripts/update_repos.sh` to clone/fetch/chec
 
 ## How to run
 
-Generic lifecycle via the repo-wide `block` plugin: `/block:check trajgen` to preflight, `/block:run trajgen` to execute `scripts/start.sh` and archive. Trajgen-specific procedures live in this block's `.claude/` plugin:
+Generic lifecycle via the repo-wide `root` plugin: `/root:check trajgen` to preflight, `/root:run trajgen` to execute `scripts/start.sh` and archive. Trajgen-specific procedures live in this block's `.claude/` plugin:
 
 | Skill | Wraps | Purpose |
 |---|---|---|
-| `/trajgen:setup` | `update_repos.sh`, `setup_swe_data_process_env.sh`, `prepare_tasks.sh`, `dryrun.sh` | Clone/update repos, build uv envs, copy manifest-filtered tasks |
+| `/trajgen:setup` | `update_repos.sh`, `setup_harbor_env.sh`, `setup_swe_data_process_env.sh`, `dryrun.sh` | Clone/update repos, build uv envs |
+| `/trajgen:check` | `dryrun.sh` | Read-only preflight |
 | `/trajgen:run-job` | `dryrun.sh`, `start.sh` | LiteLLM proxy + Harbor job + post-run ledger / `HARBOR_EXCLUDE_TASKS` / status |
 | `/trajgen:convert-sft` | `convert_trajectories.sh` | One job's trajectories → `im.jsonl` + `lf.json` |
 | `/trajgen:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh` | Local HTML board / Cloudflare online sync |
+| `/trajgen:run` | `dryrun.sh`, `start.sh` | Full pipeline: prepare_tasks → harbor → convert |
 
 `scripts/clean.sh` removes gitignored runtime outputs (`artifacts/sft_data`, `dashboard/site/`, `dashboard/.cache/`). Trajgen scripts need PyYAML in the runtime Python; on `ERROR: PyYAML is required`, `pip install pyyaml`.
 

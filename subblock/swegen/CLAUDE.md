@@ -2,7 +2,7 @@
 
 This file declares that the current directory is a `block`.
 
-For the canonical definition of a block, the field semantics, and the default directory contract, read `BLOCK_DEFINITION.md`.
+This repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md`, and follows the principles in `<repo_root>/.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md` (resolve from the repo root, not from this block's directory). Every agent with this repo SHOULD READ that file before any actions.
 
 ## Block Summary
 
@@ -46,6 +46,10 @@ docker run --rm hello-world
 ```
 
 ## Core Workflow
+
+### Quick Verification
+
+Before running a large batch, a new AI agent should run the short verification flow in [`quick-verify.md`](quick-verify.md). It checks GitHub/LLM/Docker preflight, validates a known task, and runs a 10-PR Python smoke test with `--min-source-files 1`.
 
 ### Step 1: Collect PRs
 
@@ -97,7 +101,7 @@ python repos/swegen/tools/score_tasks.py --dir artifacts/swe_tasks/py-cc --updat
 python scripts/extract_verified_tasks.py
 ```
 
-Reads `verifiable_tasks.txt` from each language, copies verified task directories to `outputs/`.
+Reads `verifiable_tasks.txt` from each language, copies verified task directories to `artifacts/merged_swe_tasks/`.
 
 ## Downstream Agent Interface
 
@@ -110,7 +114,7 @@ Consumers MUST filter by this manifest, not by scanning `artifacts/swe_tasks/{la
 Two interfaces are supported:
 
 1. **In-place** (recommended): consumer reads tasks directly from `artifacts/swe_tasks/{lang}-cc/<task_id>/`, gated by entries in `verifiable_tasks.txt`. trajgen uses this path.
-2. **Merged**: run `python scripts/extract_verified_tasks.py` to materialize a flat `outputs/` directory containing only verified tasks.
+2. **Merged**: run `python scripts/extract_verified_tasks.py` to materialize a flat `artifacts/merged_swe_tasks/` directory containing only verified tasks.
 
 Each task directory contains:
 - `instruction.md` — problem description (input to the solving agent)
@@ -129,8 +133,8 @@ scripts/              # Per-language create scripts with tuned parameters
 artifacts/
   collected_prs/      # PR ID lists (input to swegen create)
   swe_tasks/          # Generated SWE tasks per language ({lang}-cc/)
+  merged_swe_tasks/   # Optional flat verified-task export
   logs/               # Adaptive tuning and create logs
-outputs/              # Merged verified tasks (populated by scripts/extract_verified_tasks.py)
 ```
 
 ## Key Files
@@ -140,7 +144,7 @@ outputs/              # Merged verified tasks (populated by scripts/extract_veri
 | `config.yaml` | Single source of truth for inputs: identity, resources, runtime I/O, per-language tunable params. One-shot per run — no live state (live state lives in `artifacts/index.yaml`). |
 | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` | Authoritative manifest of validated task IDs per language. Consumers (e.g. trajgen) must filter by this file. |
 | `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/` | Per-batch state JSON used by `swegen create` for resume/dedup. |
-| `scripts/extract_verified_tasks.py` | Optional: merges all verified tasks into a flat `outputs/` directory. |
+| `scripts/extract_verified_tasks.py` | Optional: merges all verified tasks into a flat `artifacts/merged_swe_tasks/` directory. |
 
 ## Coding Standards
 

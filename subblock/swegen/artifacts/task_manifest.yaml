@@ -1,0 +1,70 @@
+version: 1
+generated_at: "2026-05-10T12:09:00Z"
+description: |
+  Task manifest for the swegen block. Distinguishes pre-existing verified tasks
+  (from run_001) from new tasks generated in run_002.
+
+  Pre-existing tasks: 3 tasks verified before run_002. These are NOT counted
+  toward the 40-task target for run_002.
+
+  New tasks: Tasks generated fresh in run_002 from PRs that previously failed
+  due to GitHub API rate limiting (infra_error). Target: 40 new tasks.
+
+summary:
+  total_verified: 3
+  pre_existing_count: 3
+  new_count: 0
+  target_new: 40
+  status: running  # Will be updated to "completed" when 40 new tasks are verified
+
+pre_existing_tasks:
+  description: |
+    Tasks verified in run_001 (before 2026-05-10). Do NOT count toward the
+    40-task target for run_002.
+  count: 3
+  tasks:
+    - id: agentscope-ai__agentscope-885
+      language: python
+      repo: agentscope-ai/agentscope
+      pr: 885
+      verified_in: run_001
+    - id: agentscope-ai__agentscope-1342
+      language: python
+      repo: agentscope-ai/agentscope
+      pr: 1342
+      verified_in: run_001
+    - id: aider-ai__aider-4146
+      language: python
+      repo: aider-ai/aider
+      pr: 4146
+      verified_in: run_001
+
+new_tasks:
+  description: |
+    Tasks generated fresh in run_002 (2026-05-10). These are the 40 target tasks.
+    Source: PRs from python_infra_retry.txt (62885 PRs that failed due to GitHub
+    API rate limiting in run_001). Skipped pre-existing 3 via --skip-pr-files.
+  count: 0
+  target: 40
+  tasks: []  # Will be populated as tasks are verified
+
+run_002:
+  started_at: "2026-05-10T12:09:00Z"
+  completed_at: null
+  input_file: artifacts/collected_prs/python_infra_retry.txt
+  input_pr_count: 62885
+  state_dir: .swegen-py-retry
+  log: artifacts/logs/swegen-create/cc_py_retry_40.txt
+  command: |
+    swegen create
+      --input-ids-file artifacts/collected_prs/python_infra_retry.txt
+      --max-pr 40
+      --n-concurrent 20
+      --output artifacts/swe_tasks/py-cc
+      --state-dir .swegen-py-retry
+      --timeout 3200
+      --cc-timeout 2400
+      --no-require-issue
+      --min-source-files 3
+      --max-source-files 10
+      --skip-pr-files artifacts/swe_tasks/py-cc/verifiable_tasks.txt

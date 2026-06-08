@@ -49,7 +49,7 @@ python tools/score_tasks.py --dir artifacts/swe_tasks/py-cc --update-toml
 python extract_verified_tasks.py
 ```
 
-提取 9 个已验证任务（8 个原始样本 + 1 个新创建），输出到 `outputs/`。
+提取 9 个已验证任务（8 个原始样本 + 1 个新创建），输出到 `artifacts/merged_swe_tasks/`。
 
 ## 验证总结
 

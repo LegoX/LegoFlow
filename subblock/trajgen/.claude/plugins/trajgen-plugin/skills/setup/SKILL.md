@@ -1,87 +1,136 @@
 ---
 name: setup
 description: >
-  Prepare the trajgen block before a Harbor run: clone or update the managed
-  read-only repos (harbor, swe_data_process) to their pinned commits, build the
-  uv environments, and copy verified SWE tasks into artifacts/tasks/<dataset>/
-  filtered by swegen's verifiable_tasks.txt. Idempotent — reuses valid existing
-  checkouts, envs, and task dirs. Run this on a fresh clone, after bumping a repo
-  commit in config.yaml, or when /block:check / scripts/dryrun.sh reports a
-  missing repo, env, or task directory. Triggers on "set up trajgen", "prepare
-  trajgen tasks", "update harbor", "install the trajgen environments",
-  "/trajgen:setup".
+  Bootstrap the trajgen block: install `uv` (in a writable location when
+  `~/.local/bin` is root-owned), clone+pin Harbor and swe_data_process,
+  build the three uv/venv environments (harbor uv, LiteLLM venv on Python
+  3.13, swe_data_process uv), fill in `runtime_info.input` only for unset
+  fields, initialise `artifacts/consumption_ledger.yaml`, and (when
+  `task_source.provider: huggingface`) prompt for a HF token if the
+  dataset is gated. Idempotent. Ends by running `scripts/dryrun.sh` so the
+  user sees whether the block is now check-passing. Triggers on phrases
+  like "set up trajgen", "bootstrap trajgen", "install harbor for
+  trajgen", "prepare trajgen before running", "/trajgen:setup".
 ---
 
 # /trajgen:setup
 
-Bring the trajgen block to a runnable state. All commands run from the block
-root `subblock/trajgen/`. This skill wraps three scripts; it does not launch a
-job (see `/trajgen:run-job`) and writes nothing into `repos/` sources.
+Brings the trajgen block from a fresh clone to "`/trajgen:check` passes."
+The skill is idempotent: any step that is already satisfied is skipped.
+The skill never launches Harbor — that's `/trajgen:run-job` or `/trajgen:run`.
+All commands run from the block root `subblock/trajgen/`.
 
-## Step 0 — Orient
+## Procedure
 
-Read `config.yaml`:
-- `meta_info.repositories.{harbor,swe_data_process}` — url, branch, pinned `commit`, `path`, `readonly`.
-- `meta_info.environment` — `harbor_uv`, `litellm_uv`, `swe_data_process_uv`, `swe_data_process_extras`.
-- `runtime_info.input.task_source` — `provider`, `dataset_name` (for `provider: local` this points at swegen's `swe_tasks/<lang>-cc`).
+### 1. Tooling preflight
+
+- **`uv`**: required by every env step and by `scripts/start.sh` (`uv run
+  harbor …`). If missing on PATH:
+  - Check whether `~/.local/bin` is writable by the current user. On
+    shared hosts this directory is often owned by `root`.
+  - If `~/.local/bin` is writable: install via
+    `curl -LsSf https://astral.sh/uv/install.sh | sh`.
+  - Otherwise: install with
+    `UV_INSTALL_DIR="$HOME/.uv/bin" UV_UNMANAGED_INSTALL=1 sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'`
+    and persist `PATH="$HOME/.uv/bin:$PATH"`, `UV_PYTHON_INSTALL_DIR=$HOME/.uv/python`,
+    `UV_CACHE_DIR=$HOME/.uv/cache` in `~/.bashrc`. The cache/python redirects
+    matter on the same shared hosts where `~/.local/share/uv/` is root-owned.
+
+- **Python 3.13**: required by the LiteLLM venv. If absent from the system,
+  run `uv python install 3.13` (uses `UV_PYTHON_INSTALL_DIR`).
+
+- **PyYAML in system `python3`**: `scripts/*.sh` use inline `python3 -`
+  config readers. `python3 -c 'import yaml'` must succeed; install with
+  `pip install --user pyyaml` if missing.
+
+### 2. Repos
+
+For each entry under `meta_info.repositories`:
+
+- If `repos/<name>/` is missing OR present but empty, run
+  `bash scripts/update_repos.sh --repo <name>` (clones, checks out the
+  pinned commit, chmods read-only when `readonly: true`).
+- `repos/harbor` is registered as a tracked git submodule (`.gitmodules`
+  in the repo root); a fresh clone of SWE-Lego-Live therefore needs
+  `git submodule update --init subblock/trajgen/repos/harbor` before
+  `update_repos.sh` is useful.
+- The script refuses to update a worktree with local modifications. Stop
+  and ask the user when that happens.
 
 Both repos are **managed local-only dependencies** and are gitignored. Never edit
 their sources here; they are set read-only after checkout when `readonly: true`,
 so any uv environment for them must live outside the checkout (under `artifacts/env/`).
 
-## Step 1 — Update repos
+### 3. Environments
 
-```bash
-scripts/update_repos.sh                       # all repos under meta_info.repositories
-scripts/update_repos.sh --repo harbor         # just one
-scripts/update_repos.sh --repo swe_data_process --ref <branch-or-sha>   # override the configured ref for one repo
+Build only the envs that don't already pass the editable-install check
+(use `<env>/bin/python -c "import <pkg>"` to gate):
+
+| Env path | Builder | Verifies |
+|---|---|---|
+| `artifacts/env/harbor-uv/` | `bash scripts/setup_harbor_env.sh` | `python -c "import harbor"` |
+| `artifacts/env/litellm-venv/` | `uv venv ... --python 3.13 && uv pip install 'litellm[proxy]==1.83.14'` then `litellm --version` | DO NOT use `import litellm; litellm.__version__` — litellm raises `AttributeError` on `__version__` by design. |
+| `artifacts/env/swe-data-process-uv/` | `bash scripts/setup_swe_data_process_env.sh` | `python -c "import swe_data_process, jinja2"` |
+
+Both `setup_harbor_env.sh` and `setup_swe_data_process_env.sh` handle
+the non-root chmod dance: they temporarily restore write perms on the
+read-only worktree, run `uv sync`, and re-lock on EXIT.
+
+### 4. Config
+
+Walk `runtime_info.input` and prompt only for unset fields:
+
+- `llm_api.{api_key, api_base_url, model}` — pick the configured upstream
+  (e.g. `https://az.gptplus5.com/v1` with `openai/deepseek-v4-flash`).
+- `litellm_proxy.{port, master_key}` — defaults are usually fine.
+- `task_source` — either:
+  - `{provider: huggingface, dataset_name, split}` — production default
+    for swerebench-style runs.
+  - `{provider: local, dataset_name: ../swegen/artifacts/swe_tasks/<lang>-cc}`
+    — only valid if swegen has actually exposed verified tasks at that
+    contract path. swegen historically keeps outputs inside
+    `repos/swegen/artifacts/...`; before picking `local`, verify the
+    path exists or have swegen symlink it.
+- `harbor_job.{n_concurrent, n_tasks, max_retries, timeout_multiplier}`,
+  `agent.{name, version, runtime_image, max_turns, temperature}`,
+  `sft_conversion.*` — config defaults are sensible for first-time runs.
+
+### 5. Credentials
+
+- **HuggingFace** (when `task_source.provider: huggingface`): probe
+  `https://huggingface.co/api/datasets/<dataset_name>` with `Authorization:
+  Bearer <token>` from `~/.cache/huggingface/token` (or `$HF_TOKEN`). If
+  the response is 401/403, prompt the user for a token and write it to
+  `~/.cache/huggingface/token` (mode 600). `SWE-Lego/*` datasets are
+  gated, so this almost always applies.
+- **LLM endpoint**: a live probe (`GET <api_base_url>/models`) is now part
+  of `scripts/dryrun.sh`, so setup does not need to repeat it. Note: when
+  running inside Claude Code's sandboxed shell, some endpoints (e.g.
+  `llm10.jierungogogo.com`) return 401 due to CF gating — see memory
+  `project-swegen-llm-endpoint`. That is not a credential failure.
+
+### 6. Ledger
+
+If `artifacts/consumption_ledger.yaml` is missing, create it:
+
+```yaml
+description: "Trajgen task consumption ledger — statuses: pending | running | done | failed | skipped."
+runs: []
 ```
 
-The script clones if missing, otherwise fetches and checks out the pinned
-`commit`. It **refuses to update a repo whose worktree has local modifications** —
-resolve those first rather than forcing. After checkout it re-applies the
-read-only bit when `readonly: true`.
+### 7. Final check
 
-## Step 2 — Build the swe_data_process uv env
-
-```bash
-scripts/setup_swe_data_process_env.sh
-```
-
-Creates/refreshes the uv project environment at
-`artifacts/env/swe-data-process-uv` (outside the read-only repo). It reads
-`meta_info.environment.swe_data_process_extras` and runs
-`UV_PROJECT_ENVIRONMENT=… uv sync --extra <each>` from inside the repo. The
-Harbor uv env (`harbor_uv`) and the LiteLLM venv (`litellm_uv`) are provisioned
-by their own tooling / `uv run`; `scripts/dryrun.sh` validates all three.
-
-## Step 3 — Prepare tasks
-
-```bash
-scripts/prepare_tasks.sh                       # uses config.yaml task_source
-scripts/prepare_tasks.sh --config config.some-variant.yaml
-scripts/prepare_tasks.sh --overwrite           # rebuild existing (invalid) task dirs
-```
-
-Copies task directories into `artifacts/tasks/<dataset>/`. When
-`<source>/verifiable_tasks.txt` exists it copies **only** the listed task IDs
-(manifest-filtered copy). If the manifest is missing it falls back to copying
-every task dir — keep a manifest in the source. Idempotent: it skips when the
-target already holds valid Harbor task dirs; use `--overwrite` to replace invalid ones.
-
-## Step 4 — Validate
-
-```bash
-scripts/dryrun.sh
-```
-
-Confirms config, both repos' pinned state, all three environments
-(`harbor_uv`, `swe_data_process_uv`, LiteLLM), task directories, and the
-`sft_conversion` block. Resolve every failure before `/trajgen:run-job`.
+Run `bash scripts/dryrun.sh` and report PASS/WARN/FAIL counts. If FAIL is
+zero, point the user at `/trajgen:run-job` or `/trajgen:run`. Setup is done.
 
 ## Notes
 
-- Trajgen scripts need PyYAML in the runtime Python (inline `python3 -` config
-  readers). On `ERROR: PyYAML is required`, `pip install pyyaml` into the active interpreter.
+- This skill does not run `prepare_tasks.sh` by default. Task staging is part of
+  `start.sh`'s preflight (and `dryrun.sh` now probes HF auth so failures
+  surface early). If the user explicitly asks to stage now, run
+  `bash scripts/prepare_tasks.sh` and continue.
+- Setup must run on the host declared in `meta_info.resources.ip`. If the
+  current shell is on a different host, SSH there first (the trajgen
+  block currently uses `local` / the named cpu node).
 - Run inside a named tmux session on the host named by `meta_info.resources.ip`
-  (currently `local` → this host) so long clones/syncs survive disconnects.
+  so long clones/syncs survive disconnects.

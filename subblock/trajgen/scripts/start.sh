@@ -436,6 +436,11 @@ if [[ "$PRINT_COMMAND_ONLY" == "1" ]]; then
 fi
 
 echo "=== starting LiteLLM proxy ===" | tee "$LOG_FILE"
+# Harbor's serve_litellm.sh runs under `set -u` and only auto-defines
+# LITELLM_STICKY_ROUTING_ALIASES when CONFIG_NAME == "litellm_config". Our
+# generated CONFIG_NAME is "litellm_config_trajgen", so the var is left
+# unset and a later `[[ -n "$LITELLM_STICKY_ROUTING_ALIASES" ]]` reference
+# trips the unbound-variable trap. Define an empty default here.
 setsid bash -c '
   cd "$1"
   PATH="$(dirname "$TRAJGEN_LITELLM_BIN"):$PATH" \
@@ -443,6 +448,7 @@ setsid bash -c '
     LITELLM_LOG_FOLDER="$3/logs" \
     LITELLM_PORT="$4" \
     API_KEY="$5" \
+    LITELLM_STICKY_ROUTING_ALIASES="${LITELLM_STICKY_ROUTING_ALIASES:-}" \
     bash scripts/serve_llm/serve_litellm.sh
 ' bash "$HARBOR_DIR" "$LITELLM_CONFIG_PATH" "$LITELLM_ARTIFACT_DIR" "${LITELLM_PORT:-$(cfg runtime_info.input.litellm_proxy.port)}" "$TRAJGEN_LITELLM_MASTER_KEY" >>"$LOG_FILE" 2>&1 &
 LITELLM_PID="$!"

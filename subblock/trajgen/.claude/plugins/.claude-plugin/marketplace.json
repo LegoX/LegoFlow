@@ -1,11 +1,11 @@
 {
-  "name": "trajgen-blocks",
+  "name": "trajgen-block",
   "owner": { "name": "trajgen" },
   "plugins": [
     {
       "name": "trajgen",
       "source": "./trajgen-plugin",
-      "description": "trajgen-specific operating skills: setup, run-job, convert-sft, dashboard"
+      "description": "trajgen block skills — setup, check, run-job, convert-sft, dashboard."
     }
   ]
 }

@@ -1,0 +1,26 @@
+description: Run index for trajgen Harbor rollouts
+runs:
+- id: run_001
+  started_at: '2026-06-05T02:09:18Z'
+  completed_at: '2026-06-05T02:10:08Z'
+  status: failed
+  archive: artifacts/archives/run_001/
+  notes: ''
+- id: run_002
+  started_at: '2026-06-05T02:13:36Z'
+  completed_at: '2026-06-05T02:52:55Z'
+  status: completed
+  archive: artifacts/archives/run_002/
+  notes: ''
+- id: run_003
+  started_at: '2026-06-05T03:09:37Z'
+  completed_at: '2026-06-05T08:27:46Z'
+  status: interrupted
+  archive: artifacts/archives/run_003/
+  notes: ''
+- id: run_004
+  started_at: '2026-06-05T03:09:37Z'
+  completed_at: '2026-06-05T08:33:29Z'
+  status: completed
+  archive: artifacts/archives/run_004/
+  notes: ''

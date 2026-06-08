@@ -1,0 +1,11 @@
+{
+  "name": "rl-block",
+  "owner": { "name": "haoli" },
+  "plugins": [
+    {
+      "name": "rl",
+      "source": "./rl-plugin",
+      "description": "rl block skills — setup, check, dashboard, run."
+    }
+  ]
+}

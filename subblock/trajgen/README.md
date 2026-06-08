@@ -62,9 +62,9 @@ task source is wired from swegen via `meta_info.dependencies`.
 Run from the repo root with the `block` plugin loaded, or from this directory.
 
 ```text
-/block:check trajgen     # preflight: config, repos, envs, tasks, LLM endpoint
+/root:check trajgen     # preflight: config, repos, envs, tasks, LLM endpoint
 /trajgen:setup           # clone/update repos, build uv envs, copy verified tasks
-/block:run trajgen       # execute scripts/start.sh (proxy + Harbor) and archive
+/root:run trajgen       # execute scripts/start.sh (proxy + Harbor) and archive
 /trajgen:dashboard       # view progress locally or sync online
 ```
 
@@ -76,7 +76,7 @@ to produce SFT data.
 
 This block ships a local plugin under [`.claude/`](.claude/) with the detailed
 procedures, so `CLAUDE.md` stays short. The repo-wide `block` plugin handles the
-generic lifecycle (`/block:check`, `/block:run`); these are trajgen-specific:
+generic lifecycle (`/root:check`, `/root:run`); these are trajgen-specific:
 
 | Command | What it does |
 |---|---|

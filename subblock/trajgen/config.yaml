@@ -43,21 +43,21 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      api_key: dummy-key
+      api_key: dummy-cf
       api_base_url: "http://llm10.jierungogogo.com/v1"
-      model: "openai/MiniMax-M2.7"
+      model: "openai/GLM-5-FP8"
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
-      # input_cost_per_token: 0.0000021
-      # output_cost_per_token: 0.0000084
+      input_cost_per_token: 0.0000021
+      output_cost_per_token: 0.0000084
 
     # llm_api:
-    #   api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY             # LLM API key for PR evaluation and instruction generation
-    #   api_base_url: https://az.gptplus5.com/v1        # OpenAI-compatible API endpoint
-    #   model: openai/deepseek-v4-flash
-    #   description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
-    #   protocols: [openai_compatible, anthropic_compatible]
+      # api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY             # LLM API key for PR evaluation and instruction generation
+      # api_base_url: https://az.gptplus5.com/v1        # OpenAI-compatible API endpoint
+      # model: openai/deepseek-v4-flash
+      # description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
+      # protocols: [openai_compatible, anthropic_compatible]
 
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
@@ -65,9 +65,9 @@ runtime_info:
       master_key: dummy-key-cf
 
     # task_source: wired from swegen.output.swe_tasks_dir (dependency declared in meta_info.dependencies)
-    task_source:
-      provider: local
-      dataset_name: ../swegen/artifacts/swe_tasks/py-cc
+    # task_source:
+    #   provider: local
+    #   dataset_name: ../swegen/artifacts/swe_tasks/py-cc
       # prepare_tasks.sh filters by py-cc/verifiable_tasks.txt before copying into artifacts/tasks/.
 
     # harbor_job:
@@ -80,10 +80,10 @@ runtime_info:
 
 
     # TESTRUN (disabled): HuggingFace dataset path, do not delete — used for smoke tests.
-    # task_source:
-    #   provider: huggingface
-    #   dataset_name: SWE-Lego/swerebenchv2-200-260429
-    #   split: train
+    task_source:
+      provider: huggingface
+      dataset_name: SWE-Lego/swerebenchv2-200-260429
+      split: train
 
     harbor_job:
       # This is the trajgen block output root for Harbor job results.
@@ -91,7 +91,7 @@ runtime_info:
       # scripts/start.sh exports this as TRAJGEN_HARBOR_JOBS_DIR.
       jobs_dir: artifacts/jobs
       n_concurrent: 8
-      n_tasks: 16                     # cap per swegen→trajgen run target (set to 1 for smoke tests, null for all manifest tasks)
+      n_tasks: 40                     # cap per swegen→trajgen run target (set to 1 for smoke tests, null for all manifest tasks)
       max_retries: 2
       timeout_multiplier: 2
 
@@ -99,7 +99,7 @@ runtime_info:
       name: custom-claude-code
       version: 2.1.118
       runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
-      runtime_host_path: artifacts/runtime/claude-code  # pre-extracted; use bind mount to avoid overlay filename-too-long bug
+      runtime_host_path: artifacts/agent-runtime/claude-code  # pre-extracted from runtime_image via docker cp; user-owned (gpufs root_squash blocks docker daemon writes to root-owned dirs)
       max_turns: 80
       temperature: 0.7
 
@@ -128,6 +128,15 @@ environment:
     # Tasks excluded from trajgen runs: prior failures (timeout/OOM) + tasks already
     # consumed per artifacts/consumption_ledger.yaml (status: done | skipped).
     HARBOR_EXCLUDE_TASKS: elastic__elasticsearch-py-3329 elastic__elasticsearch-py-3332 cartography-cncf__cartography-1673 agentscope-ai__agentscope-885 agentscope-ai__agentscope-1342 aider-ai__aider-4146 agentscope-ai__agentscope-964 django-guardian__django-guardian-677 567-labs__instructor-1897 cartography-cncf__cartography-1751 cartography-cncf__cartography-2031
+
+status:
+  phase: idle
+  progress: "Ready for the next trajectory generation run."
+  next_steps: |
+    1. Run scripts/dryrun.sh before starting a new Harbor job.
+    2. Confirm swegen has verified tasks before preparing trajgen inputs.
+  blockers: null
+  last_updated: null
 
 evolving:
   description: Generates agent trajectories using Harbor. Tunable parameters include agent sampling settings, Harbor concurrency, and timeout multipliers.

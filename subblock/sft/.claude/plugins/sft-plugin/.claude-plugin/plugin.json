@@ -1,0 +1,6 @@
+{
+  "name": "sft",
+  "description": "sft block skills — LLaMA-Factory + swe_data_process env bootstrap, preflight (GPU/deepspeed/dataset registration), training-run launch with WandB tracking, and dashboard. Provides /sft:setup, /sft:check, /sft:dashboard, /sft:run.",
+  "version": "0.1.0",
+  "author": { "name": "haoli" }
+}
