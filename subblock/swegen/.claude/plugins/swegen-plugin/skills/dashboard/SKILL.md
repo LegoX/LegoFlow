@@ -49,8 +49,16 @@ Read, without modifying:
 - Latest run entry from `artifacts/index.yaml`.
 - Block status from `config.yaml -> status`.
 
-Also check for live processes with `pgrep -af 'swegen create|scripts/create_'`
-and include their PIDs if present.
+Also check for live processes scoped to this block, not every SWEgen job on
+the host:
+
+```bash
+BLOCK_DIR="$(pwd -P)"
+pgrep -af 'swegen create|scripts/create_' | grep -F "$BLOCK_DIR" || true
+```
+
+Include matching PIDs if present. Ignore unrelated jobs from other checkouts
+such as `$HOME/SWE-gen`.
 
 ## Step 2 - Optional HTML dashboard refresh
 

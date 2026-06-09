@@ -36,10 +36,14 @@ mode.
 
 ## Step 1 - Refuse duplicate live runs
 
-Before launching, check for existing SWEgen work owned by this block:
+Before launching, check for existing SWEgen work owned by this block. Scope
+the match to the current block path or this block's artifact paths so older
+jobs in a separate checkout such as `$HOME/SWE-gen` do not block this run:
 
 ```bash
-pgrep -af 'swegen create|scripts/create_.*\\.sh|scripts/create_all_bg\\.sh'
+BLOCK_DIR="$(pwd -P)"
+pgrep -af 'swegen create|scripts/create_.*\\.sh|scripts/create_all_bg\\.sh' \
+  | grep -F "$BLOCK_DIR" || true
 ```
 
 If a run is alive, refuse to start another. Report the PID, elapsed time,
@@ -73,7 +77,11 @@ failure:
 - `scripts/dryrun.sh` failed
 - requested smoke validation failed
 
-Do not edit inputs to make preflight pass.
+The LLM completion ping is mandatory; never proceed to `swegen create`
+after only `scripts/dryrun.sh`. If the LLM ping returns `401 Invalid token`,
+ask for a replacement API key, mirror it to `OPENAI_API_KEY` and
+`ANTHROPIC_API_KEY` only in the current shell, and rerun preflight before
+launch. Do not edit inputs to make preflight pass.
 
 ## Step 4 - Show run configuration and confirm
 
@@ -124,6 +132,13 @@ swegen create \
 Success means
 `artifacts/experiments/quick-verify/swe_tasks/py-cc/verifiable_tasks.txt`
 exists and contains at least one task id.
+
+Smoke is small but not instant: Claude Code task generation plus Harbor
+validation can take several minutes. Use a long foreground timeout or launch
+it in the background with a log if the user does not want the session held.
+If interrupted, inspect `artifacts/experiments/quick-verify/state/` and
+`artifacts/experiments/quick-verify/swe_tasks/py-cc/.swegen-create-batch/`
+before deciding whether to resume or clean up.
 
 ### Single language
 

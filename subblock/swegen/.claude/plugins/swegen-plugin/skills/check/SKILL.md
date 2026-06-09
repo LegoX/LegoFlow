@@ -78,7 +78,9 @@ failure for real runs and a warning for pure dashboard inspection.
 
 ## Step 3 - LLM endpoint
 
-Use the installed SWEgen package, not an ad hoc request:
+This check is mandatory before `/swegen:run`; do not skip it just because
+`scripts/dryrun.sh` passes. Use the installed SWEgen package, not an ad hoc
+request:
 
 ```python
 from openai import OpenAI
@@ -95,6 +97,12 @@ OpenAI(api_key=key, base_url=base, timeout=60).chat.completions.create(
 
 A `/models` probe is not enough; real completion catches wrong keys,
 wrong-region routing, and stale Anthropic/OpenAI shim variables.
+
+If the provider returns `401 Invalid token`, stop and ask for a replacement
+API key. Keep the base URLs from the environment unless the error points at
+routing. When testing a replacement key, export it only for the current
+shell process and mirror it to both `OPENAI_API_KEY` and
+`ANTHROPIC_API_KEY`; never write it to `.env`, `config.yaml`, or logs.
 
 ## Step 4 - Docker and Harbor readiness
 
