@@ -7,7 +7,15 @@ artifacts/
 
 # Dashboard generator outputs and cache (progress_monitor.py).
 dashboard/site/
-dashboard/memory/.progress_monitor_cache.json
+dashboard/.cache/
+
+# Docs site (fumadocs/Next.js) build artifacts and deps.
+docs/node_modules/
+docs/.next/
+docs/.source/
+docs/out/
+docs/next-env.d.ts
+docs/tsconfig.tsbuildinfo
 
 # Local environment and caches.
 .env

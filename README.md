@@ -75,29 +75,29 @@ Run the pipeline block by block in order: **swegen → trajgen → sft → rl**.
 - **sft**: Multi-GPU node (typically 8× GPU); conda env and model paths per `subblock/sft/CLAUDE.md`; trajectory source (from trajgen or an existing job dir)
 - **rl**: Multi-GPU node; Kubernetes access for Harbor task execution; vLLM + Ray; paths to SWE-bench parquet/task data per `subblock/rl/CLAUDE.md`; optional WandB key
 
-Root `scripts/start.sh` only automates the **data** stage (swegen + trajgen on the configured remote node). **sft** and **rl** are started from their own directories via `/block:run` or `scripts/start.sh`.
+Root `scripts/start.sh` only automates the **data** stage (swegen + trajgen on the configured remote node). **sft** and **rl** are started from their own directories via `/root:run` or `scripts/start.sh`.
 
 ### The `Block` Plugin
 
-You don't operate blocks by hand. A Claude Code plugin at `.claude/plugins/block-plugin/` helps you set up and run the whole tree:
+You don't operate blocks by hand. A Claude Code plugin at `.claude/plugins/root-plugin/` helps you set up and run the whole tree:
 
-- **`/block:create`** — scaffold a new block with the correct structure (config.yaml, scripts, dashboard, artifacts index, optional submodules).
-- **`/block:check`** — recursively sanity-check every block under the current directory: schema, filled inputs, dependency wiring, remote-resource reachability, and live availability of any LLM endpoint declared in `runtime_info.input`. Read-only.
-- **`/block:run`** — preflight every input and dependency for the target block, then execute its `scripts/start.sh` (locally, or in a tmux session over SSH if it's a remote-resource block) and archive the result under `artifacts/archives/run_NNN/`.
+- **`/root:create`** — scaffold a new block with the correct structure (config.yaml, scripts, dashboard, artifacts index, optional submodules).
+- **`/root:check`** — recursively sanity-check every block under the current directory: schema, filled inputs, dependency wiring, remote-resource reachability, and live availability of any LLM endpoint declared in `runtime_info.input`. Read-only.
+- **`/root:run`** — preflight every input and dependency for the target block, then execute its `scripts/start.sh` (locally, or in a tmux session over SSH if it's a remote-resource block) and archive the result under `artifacts/archives/run_NNN/`.
 
-Both `/block:check` and `/block:run` take a free-form natural-language argument. The agent reads the whole string and infers the target block (by literal name or unambiguous paraphrase, using each block's `CLAUDE.md` for context); if no block is mentioned it targets the root, and ambiguity (multiple blocks named) triggers a clarification question rather than a guess.
+Both `/root:check` and `/root:run` take a free-form natural-language argument. The agent reads the whole string and infers the target block (by literal name or unambiguous paraphrase, using each block's `CLAUDE.md` for context); if no block is mentioned it targets the root, and ambiguity (multiple blocks named) triggers a clarification question rather than a guess.
 
 ```text
-/block:run                                       # root orchestrator
-/block:run swegen                                # subblock/swegen
-/block:run swegen only 32 verified tasks         # swegen + propose config/flag change, confirm, run
-/block:run run swegen with 32 verified tasks     # same — block name embedded in sentence
-/block:run run the trajectory generator          # trajgen — resolved by paraphrase
-/block:run start the data pipeline               # root — no block mentioned
-/block:run run swegen and trajgen                # ambiguous — agent asks which one
+/root:run                                       # root orchestrator
+/root:run swegen                                # subblock/swegen
+/root:run swegen only 32 verified tasks         # swegen + propose config/flag change, confirm, run
+/root:run run swegen with 32 verified tasks     # same — block name embedded in sentence
+/root:run run the trajectory generator          # trajgen — resolved by paraphrase
+/root:run start the data pipeline               # root — no block mentioned
+/root:run run swegen and trajgen                # ambiguous — agent asks which one
 ```
 
-For `/block:run`, if the instruction implies a config edit or flag injection, the agent proposes the concrete change (file path, old → new value) and confirms before applying. For `/block:check`, the instruction only shapes the report's focus — every check still runs, and no files are ever modified.
+For `/root:run`, if the instruction implies a config edit or flag injection, the agent proposes the concrete change (file path, old → new value) and confirms before applying. For `/root:check`, the instruction only shapes the report's focus — every check still runs, and no files are ever modified.
 
 
 ### 1. Clone
@@ -114,13 +114,13 @@ If you already cloned without `--recurse-submodules`, run `git submodule update 
 Open Claude Code in the repo root, then ask:
 
 ```text
-/block:check              # check root + every subblock
-/block:check swegen       # only check the swegen subblock
+/root:check              # check root + every subblock
+/root:check swegen       # only check the swegen subblock
 ```
 
-On a fresh clone, the report tells you exactly which `runtime_info.input` keys are unfilled, which submodules are missing, whether the remote node is reachable, and whether your LLM endpoint answers a `GET /models` probe (no chat-completion calls — `/block:check` never costs anything to run). You don't need to read each `config.yaml` cold; let the skill point at the gaps.
+On a fresh clone, the report tells you exactly which `runtime_info.input` keys are unfilled, which submodules are missing, whether the remote node is reachable, and whether your LLM endpoint answers a `GET /models` probe (no chat-completion calls — `/root:check` never costs anything to run). You don't need to read each `config.yaml` cold; let the skill point at the gaps.
 
-Pass a subblock name (e.g. `/block:check trajgen`) when you're iterating on one block and don't want noise from the others.
+Pass a subblock name (e.g. `/root:check trajgen`) when you're iterating on one block and don't want noise from the others.
 
 ### 3. Fill the gaps
 
@@ -133,42 +133,42 @@ Edit each `config.yaml` flagged in step 2, setting only keys under `runtime_info
 | **sft** | `source` (provider, scaffold, job_dir / trajs_dir); `conversion`; `model`; `training`; `infrastructure`; `credentials` (WandB if online) |
 | **rl** | `model`; `infrastructure` (nodes, GPUs, K8s); `training`; `data` (parquet + Harbor task dirs); `experiment`; `credentials` |
 
-Re-run `/block:check` until it prints `All blocks healthy — safe to /block:run.`
+Re-run `/root:check` until it prints `All blocks healthy — safe to /root:run.`
 
 ### 4. Run the pipeline
 
-Invoke `/block:run <block_name>` from the repo root, or `cd` into the subblock and invoke `/block:run` with no args. Both forms are equivalent. Preflight matches `/block:check`; execution runs locally or over SSH + tmux when `meta_info.resources.ip` is set. Each run archives under `artifacts/archives/run_NNN/` automatically — `start.sh`'s EXIT trap fires `scripts/archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM).
+Invoke `/root:run <block_name>` from the repo root, or `cd` into the subblock and invoke `/root:run` with no args. Both forms are equivalent. Preflight matches `/root:check`; execution runs locally or over SSH + tmux when `meta_info.resources.ip` is set. Each run archives under `artifacts/archives/run_NNN/` automatically — `start.sh`'s EXIT trap fires `scripts/archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM).
 
 **1. swegen** — generate and validate SWE tasks:
 
 ```text
-/block:run swegen        # from repo root
+/root:run swegen        # from repo root
 # or, equivalently:
-cd subblock/swegen && /block:run
+cd subblock/swegen && /root:run
 ```
 
 **2. trajgen** — run the agent on verified tasks (after swegen has entries in `verifiable_tasks.txt`):
 
 ```text
-/block:run trajgen
+/root:run trajgen
 ```
 
 **3. sft** — convert trajectories and fine-tune (after trajgen job dirs exist; `trajectories_dir` dependency points at trajgen output):
 
 ```text
-/block:run sft
+/root:run sft
 ```
 
 **4. rl** — online RL from the SFT checkpoint (after sft writes `runtime_info.output.checkpoint_path`):
 
 ```text
-/block:run rl
+/root:run rl
 ```
 
 You can also run the **root orchestrator** to launch the data stage (swegen + trajgen on the configured remote node) as one step:
 
 ```text
-/block:run              # equivalent to: bash scripts/start.sh
+/root:run              # equivalent to: bash scripts/start.sh
 ```
 
 `bash scripts/start.sh` directly also works and accepts `--swegen-only` / `--trajgen-only` for selective launching.
@@ -185,7 +185,7 @@ The block's own artifacts are the source of truth — no need to attach to remot
 
 #### Archive format reference
 
-Both files follow a fixed schema. `archive_run.sh` writes them on every run; the contract is documented in `.claude/plugins/block-plugin/references/BLOCK_DEFINITION.md` (§ "Artifacts — Archiving Each Run"), with a worked example at `.claude/plugins/block-plugin/references/example_block/artifacts/`.
+Both files follow a fixed schema. `archive_run.sh` writes them on every run; the contract is documented in `.claude/plugins/root-plugin/references/BLOCK_DEFINITION.md` (§ "Artifacts — Archiving Each Run"), with a worked example at `.claude/plugins/root-plugin/references/example_block/artifacts/`.
 
 **`artifacts/index.yaml`** — one entry appended per run:
 
@@ -218,11 +218,11 @@ The `status` vocabulary is identical in both files and is derived from `start.sh
 
 ## Adding a New Block
 
-Use `/block:create` to scaffold a new block — it produces the full directory tree (`config.yaml`, `CLAUDE.md`, `dashboard/`, `scripts/{start,dryrun,clean,archive_run}.sh`, `artifacts/index.yaml`, `memory/notes.md`, `subblock/`) wired up to the [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md) contract. `archive_run.sh` is copied unmodified from the plugin's canonical template, and the scaffolded `start.sh` includes the EXIT-trap snippet that invokes it — so a newly created block archives every run automatically without any extra wiring.
+Use `/root:create` to scaffold a new block — it produces the full directory tree (`config.yaml`, `CLAUDE.md`, `dashboard/`, `scripts/{start,dryrun,clean,archive_run}.sh`, `artifacts/index.yaml`, `memory/notes.md`, `subblock/`) wired up to the [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md) contract. `archive_run.sh` is copied unmodified from the plugin's canonical template, and the scaffolded `start.sh` includes the EXIT-trap snippet that invokes it — so a newly created block archives every run automatically without any extra wiring.
 
 Two ways to drive it:
 
-- **Intake form** — copy `.claude/plugins/block-plugin/references/BLOCK_INTAKE.md` into your project, fill it in, and paste it back. The agent scaffolds everything from your answers.
+- **Intake form** — copy `.claude/plugins/root-plugin/references/BLOCK_INTAKE.md` into your project, fill it in, and paste it back. The agent scaffolds everything from your answers.
 - **Interactive** — describe the block (name, role, parent, inputs/outputs, optional remote node and repos); the agent asks any follow-ups and scaffolds in one pass.
 
-A complete reference scaffold lives at `.claude/plugins/block-plugin/references/example_block/`. After creation, fill in the new block's `runtime_info.input`, then validate the whole tree with `/block:check` before running.
+A complete reference scaffold lives at `.claude/plugins/root-plugin/references/example_block/`. After creation, fill in the new block's `runtime_info.input`, then validate the whole tree with `/root:check` before running.

@@ -8,9 +8,7 @@ Root orchestration block for the self-evolving LLM development pipeline. Coordin
 
 ## Block System
 
-This repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md` and `config.yaml`.
-
-**Full specification**: `BLOCK_DEFINITION.md` — every agent with this repo SHOULD READ it before any actions.
+This repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md`, and follows the principles in `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`. Every agent with this repo SHOULD READ that file before any actions.
 
 ### config.yaml schema
 
@@ -55,9 +53,8 @@ If — and only if — `meta_info.resources.ip` is set to a real remote IP, the 
 
 ## What To Read First
 
-1. `dashboard/overview.mdx` — current state narrative and new-user quickstart
-2. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, and runtime values of the two active subblocks. Live state is in each subblock's `artifacts/index.yaml`, not `config.yaml`.
-3. `BLOCK_DEFINITION.md` — full block system specification
+1. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, and runtime values of the two active subblocks. Live state is in each subblock's `artifacts/index.yaml`, not `config.yaml`.
+2. `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md` — full block system specification
 
 The root block has no `config.yaml` of its own; inputs and outputs are owned by the subblock configs listed below. Each subblock has its own `CLAUDE.md` agent contract.
 
@@ -84,9 +81,9 @@ The root block does not consume external inputs directly. Required external valu
 
 **Mandatory workflow: check → confirm → run.** Agents must never skip the confirmation step.
 
-1. **Check**: Run `/block:check` (or `bash scripts/dryrun.sh` for a single block). This validates config, inputs, paths, GPUs, Docker/K8s connectivity, credentials, and model compatibility — all in one pass, with no side effects.
+1. **Check**: Run `/root:check` (or `bash scripts/dryrun.sh` for a single block). This validates config, inputs, paths, GPUs, Docker/K8s connectivity, credentials, and model compatibility — all in one pass, with no side effects.
 2. **Confirm**: Present the check results and run configuration summary to the user. **Wait for explicit user confirmation** ("yes", "go ahead", etc.) before proceeding. Never auto-launch — heavy operations (multi-hour GPU training, multi-container rollouts) are expensive and hard to reverse.
-3. **Run**: Only after user confirmation, execute `/block:run` (or `bash scripts/start.sh`).
+3. **Run**: Only after user confirmation, execute `/root:run` (or `bash scripts/start.sh`).
 
 ```bash
 scripts/dryrun.sh   # validate config, inputs, and required paths (no side effects)
@@ -130,7 +127,6 @@ Append one entry to `artifacts/index.yaml`:
   notes: "one-line summary"
 ```
 
-## Memory and Live State
+## Live State
 
-- Long-form notes and decisions: `dashboard/memory.mdx`
-- Live state (what's running, what just finished): the newest entry in each subblock's `artifacts/index.yaml`, written automatically by `scripts/archive_run.sh` (invoked from `start.sh`'s EXIT trap). `config.yaml` is one-shot per run and is not edited during execution.
+Live state (what's running, what just finished) lives in the newest entry of each subblock's `artifacts/index.yaml`, written automatically by `scripts/archive_run.sh` (invoked from `start.sh`'s EXIT trap). `config.yaml` is one-shot per run and is not edited during execution.

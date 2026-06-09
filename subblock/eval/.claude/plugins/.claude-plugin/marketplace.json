@@ -1,0 +1,11 @@
+{
+  "name": "eval-block",
+  "owner": { "name": "haoli" },
+  "plugins": [
+    {
+      "name": "eval",
+      "source": "./eval-plugin",
+      "description": "eval block skills — setup, check, dashboard, run."
+    }
+  ]
+}

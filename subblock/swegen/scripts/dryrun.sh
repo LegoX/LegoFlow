@@ -2,6 +2,16 @@
 # Validate environment, package, and inputs before running.
 cd "$(dirname "$0")/.."
 set -euo pipefail
+
+# Activate the swegen venv so `python` and `swegen` resolve to the editable install.
+if [[ -f artifacts/envs/swegen-env/bin/activate ]]; then
+    # shellcheck disable=SC1091
+    source artifacts/envs/swegen-env/bin/activate
+else
+    echo "ERROR: venv at artifacts/envs/swegen-env not found — run /swegen:setup first" >&2
+    exit 1
+fi
+
 source scripts/load_runtime_env.sh
 load_runtime_env
 

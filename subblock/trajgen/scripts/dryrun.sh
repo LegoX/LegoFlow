@@ -135,7 +135,7 @@ echo ""
 echo "--- 1. Block files ---"
 # Note: meta_info and status are merged into config.yaml in this block, so
 # standalone metainfo.yaml / status.yaml are not expected.
-for file in CLAUDE.md config.yaml dashboard/overview.mdx artifacts/index.yaml; do
+for file in CLAUDE.md config.yaml docs/content/docs/index.mdx artifacts/index.yaml; do
   if [[ -f "$BLOCK_DIR/$file" ]]; then
     ok "$file exists"
   else
@@ -244,8 +244,10 @@ check_managed_repo() {
   if [[ -n "$R_PATH_RAW" ]]; then
     if git -C "$BLOCK_DIR" check-ignore -q "$R_PATH_RAW" 2>/dev/null; then
       ok "$R_PATH_RAW is gitignored"
+    elif [[ "$(git -C "$BLOCK_DIR" ls-tree HEAD -- "$R_PATH_RAW" 2>/dev/null | awk '{print $2}')" == "commit" ]]; then
+      ok "$R_PATH_RAW is a tracked git submodule (managed checkout)"
     else
-      warn "$R_PATH_RAW is not reported as gitignored"
+      warn "$R_PATH_RAW is not reported as gitignored and not a tracked submodule"
     fi
   fi
 
@@ -541,7 +543,67 @@ else
 fi
 [[ -n "$MODEL_API_INPUT_COST" ]] && ok "runtime_info.input.llm_api.input_cost_per_token = $MODEL_API_INPUT_COST" || warn "runtime_info.input.llm_api.input_cost_per_token is empty"
 [[ -n "$MODEL_API_OUTPUT_COST" ]] && ok "runtime_info.input.llm_api.output_cost_per_token = $MODEL_API_OUTPUT_COST" || warn "runtime_info.input.llm_api.output_cost_per_token is empty"
-info "llm_api is raw upstream config; LiteLLM reachability is checked by each job after proxy startup"
+
+# Live probe: GET <api_base_url>/models, assert configured model (stripped of any
+# litellm provider prefix like "openai/") appears in data[].id. A non-2xx response
+# is sometimes a CF-gating artifact when running inside Claude Code's sandboxed
+# shell (see memory: project-swegen-llm-endpoint) — we downgrade to WARN in that
+# case so the rest of the report stays useful.
+if [[ -n "$MODEL_API_BASE_URL" && -n "$MODEL_API_MODEL" ]]; then
+  LLM_PROBE_RESULT="$(MODEL_API_BASE_URL="$MODEL_API_BASE_URL" MODEL_API_KEY="$MODEL_API_KEY" MODEL_API_MODEL="$MODEL_API_MODEL" python3 - <<'PY' 2>&1
+import json, os, sys, urllib.request, urllib.error
+base = os.environ["MODEL_API_BASE_URL"].rstrip("/")
+key  = os.environ.get("MODEL_API_KEY", "")
+want = os.environ["MODEL_API_MODEL"].split("/", 1)[-1]
+req  = urllib.request.Request(
+    f"{base}/models",
+    headers={
+        "Authorization": f"Bearer {key}",
+        # Some upstream Cloudflare rules 403 the default 'Python-urllib/*' UA
+        # even when curl / litellm SDK pass — use a curl-like UA so the probe
+        # measures real reachability instead of a UA-filter artifact.
+        "User-Agent": "curl/8.5.0",
+    },
+)
+try:
+    with urllib.request.urlopen(req, timeout=12) as resp:
+        body = json.loads(resp.read().decode("utf-8", "replace"))
+except urllib.error.HTTPError as e:
+    print(f"HTTP:{e.code}")
+    sys.exit(0)
+except Exception as e:
+    print(f"NET:{type(e).__name__}:{e}")
+    sys.exit(0)
+ids = [m.get("id") for m in (body.get("data") or [])]
+print(f"OK:{len(ids)}:{int(want in ids)}")
+PY
+)"
+  case "$LLM_PROBE_RESULT" in
+    OK:*)
+      IFS=':' read -r _ n_models has_model <<<"$LLM_PROBE_RESULT"
+      ok "LLM endpoint reachable: $MODEL_API_BASE_URL/models ($n_models models)"
+      if [[ "$has_model" == "1" ]]; then
+        ok "configured model present in upstream catalog: $MODEL_API_MODEL"
+      else
+        fail "configured model NOT in upstream /models response (id stripped of prefix: ${MODEL_API_MODEL##*/})"
+      fi
+      ;;
+    HTTP:401|HTTP:403)
+      warn "LLM endpoint returned ${LLM_PROBE_RESULT#HTTP:} from this shell — may be a CF/sandbox artifact (see memory: project-swegen-llm-endpoint). Re-probe from a non-sandboxed shell to confirm."
+      ;;
+    HTTP:*)
+      fail "LLM endpoint returned ${LLM_PROBE_RESULT#HTTP:} for $MODEL_API_BASE_URL/models"
+      ;;
+    NET:*)
+      fail "LLM endpoint unreachable: ${LLM_PROBE_RESULT#NET:}"
+      ;;
+    *)
+      warn "LLM endpoint probe inconclusive: $LLM_PROBE_RESULT"
+      ;;
+  esac
+else
+  info "skipping LLM endpoint probe (api_base_url or model missing)"
+fi
 
 echo ""
 echo "--- 8. Harbor run config ---"
@@ -617,6 +679,35 @@ if TASK_COUNT="$(validate_task_root "$HARBOR_DATASET_PATH_ABS" 2>/dev/null)"; th
   ok "Harbor task directory is ready ($TASK_COUNT task dirs)"
 else
   fail "Harbor tasks are not prepared at $HARBOR_DATASET_PATH; run bash scripts/prepare_tasks.sh"
+  # When the source is huggingface, do a cheap auth/reachability probe so users
+  # don't discover gated-repo failures inside prepare_tasks.sh's snapshot_download.
+  TASK_PROVIDER="$(cfg runtime_info.input.task_source.provider)"
+  if [[ "$TASK_PROVIDER" == "huggingface" ]]; then
+    HF_TOKEN_PATH="${HF_HOME:-$HOME/.cache/huggingface}/token"
+    HF_PROBE="$(HF_DATASET_ID="$TASK_SOURCE_DATASET_NAME" HF_TOKEN_FILE="$HF_TOKEN_PATH" python3 - <<'PY' 2>&1
+import os, urllib.request, urllib.error
+ds = os.environ["HF_DATASET_ID"]
+tok_path = os.environ["HF_TOKEN_FILE"]
+token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or ""
+if not token and os.path.exists(tok_path):
+    with open(tok_path) as fh: token = fh.read().strip()
+hdrs = {"Authorization": f"Bearer {token}"} if token else {}
+hdrs["User-Agent"] = "curl/8.5.0"  # avoid Python-urllib UA filters
+req = urllib.request.Request(f"https://huggingface.co/api/datasets/{ds}", headers=hdrs)
+try:
+    with urllib.request.urlopen(req, timeout=10) as r: print(f"OK:{r.status}:tok={int(bool(token))}")
+except urllib.error.HTTPError as e: print(f"HTTP:{e.code}:tok={int(bool(token))}")
+except Exception as e: print(f"NET:{type(e).__name__}:tok={int(bool(token))}")
+PY
+)"
+    case "$HF_PROBE" in
+      OK:*) info "HF dataset reachable ($HF_PROBE) — prepare_tasks.sh should succeed" ;;
+      HTTP:401:*|HTTP:403:*) fail "HF dataset auth failed ($HF_PROBE) — set a valid token: echo 'hf_…' > $HF_TOKEN_PATH && chmod 600 $HF_TOKEN_PATH" ;;
+      HTTP:404:*) fail "HF dataset not found: $TASK_SOURCE_DATASET_NAME (typo, or repo deleted/renamed)" ;;
+      HTTP:*) fail "HF dataset probe failed: $HF_PROBE" ;;
+      NET:*) warn "HF dataset network error: $HF_PROBE (may be transient)" ;;
+    esac
+  fi
 fi
 case "$RUN_JOB_DIR" in
   artifacts/jobs|artifacts/jobs/*|/*/artifacts/jobs|/*/artifacts/jobs/*)
@@ -628,6 +719,36 @@ case "$RUN_JOB_DIR" in
 esac
 value="$(cfg runtime_info.input.agent.runtime_image)"
 [[ -n "$value" ]] && ok "runtime_info.input.agent.runtime_image = $value" || fail "runtime_info.input.agent.runtime_image is required"
+
+# Docker image presence — if missing, `docker pull` runs at first Harbor task
+# (paying the pull cost and risking registry-auth surprises mid-launch).
+if [[ -n "$value" ]]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    fail "docker CLI not on PATH (required to run agent runtime_image)"
+  elif ! docker info >/dev/null 2>&1; then
+    fail "docker daemon not reachable (DOCKER_HOST=${DOCKER_HOST:-default}); check that the daemon is running"
+  elif docker image inspect "$value" >/dev/null 2>&1; then
+    ok "agent runtime_image is present locally: $value"
+  else
+    warn "agent runtime_image not pulled locally (will be pulled at first task): $value"
+  fi
+fi
+
+# LiteLLM proxy port — must be free, or already held by our own previous run.
+LITELLM_PORT="$(cfg runtime_info.input.litellm_proxy.port)"
+if [[ -n "$LITELLM_PORT" ]]; then
+  PORT_HOLDER="$(ss -ltnp 2>/dev/null | awk -v p=":$LITELLM_PORT" '$4 ~ p"$" {print $0; exit}')"
+  if [[ -z "$PORT_HOLDER" ]]; then
+    ok "LiteLLM proxy port $LITELLM_PORT is free"
+  else
+    # ss -p only shows holder PID for processes we own; otherwise users= is empty.
+    if [[ "$PORT_HOLDER" == *"users:"* ]]; then
+      warn "LiteLLM port $LITELLM_PORT is held by a process owned by current user: $PORT_HOLDER"
+    else
+      fail "LiteLLM port $LITELLM_PORT is occupied by another user — start.sh will fail to bind"
+    fi
+  fi
+fi
 
 echo ""
 echo "--- 8b. SFT conversion config ---"
@@ -653,6 +774,82 @@ SFT_OUT_DIR="$(cfg runtime_info.input.sft_conversion.out_dir)"
 [[ -n "$SFT_OUT_DIR" ]] && ok "runtime_info.input.sft_conversion.out_dir = $SFT_OUT_DIR" || fail "runtime_info.input.sft_conversion.out_dir is required"
 SFT_DATA_DIR_OUT="$(cfg runtime_info.output.sft_data_dir.path)"
 [[ -n "$SFT_DATA_DIR_OUT" ]] && ok "runtime_info.output.sft_data_dir.path = $SFT_DATA_DIR_OUT" || fail "runtime_info.output.sft_data_dir.path is required"
+
+echo ""
+echo "--- 8c. Consumption ledger ---"
+LEDGER_PATH="$BLOCK_DIR/artifacts/consumption_ledger.yaml"
+EXCLUDE_TASKS_RAW="$(cfg environment.extra.HARBOR_EXCLUDE_TASKS)"
+if [[ ! -f "$LEDGER_PATH" ]]; then
+  fail "artifacts/consumption_ledger.yaml is missing — initialise with: printf 'description: %s\nruns: []\n' \"Trajgen task consumption ledger\" > '$LEDGER_PATH'"
+else
+  LEDGER_REPORT="$(LEDGER_PATH="$LEDGER_PATH" EXCLUDE_TASKS="$EXCLUDE_TASKS_RAW" python3 - <<'PY' 2>&1
+import os, sys
+try:
+    import yaml
+except ImportError:
+    print("ERROR: PyYAML is required", file=sys.stderr); sys.exit(2)
+path = os.environ["LEDGER_PATH"]
+exclude = set(os.environ.get("EXCLUDE_TASKS", "").split())
+try:
+    with open(path, encoding="utf-8") as fh:
+        doc = yaml.safe_load(fh)
+except Exception as e:
+    print(f"PARSE:{type(e).__name__}:{e}"); sys.exit(0)
+if not isinstance(doc, dict):
+    print("SHAPE:not_a_mapping"); sys.exit(0)
+runs = doc.get("runs")
+if not isinstance(runs, list):
+    print("SHAPE:runs_not_a_list"); sys.exit(0)
+valid_status = {"pending", "running", "done", "failed", "skipped"}
+bad_status, missing_in_exclude = [], []
+for i, entry in enumerate(runs):
+    if not isinstance(entry, dict):
+        bad_status.append((i, "<not_a_mapping>")); continue
+    st = entry.get("status")
+    if st not in valid_status:
+        bad_status.append((entry.get("task_id", f"#{i}"), st))
+        continue
+    if st in {"done", "failed", "skipped"}:
+        tid = entry.get("task_id")
+        if tid and tid not in exclude:
+            missing_in_exclude.append((tid, st))
+print(f"OK:n_runs={len(runs)}:bad={len(bad_status)}:leak={len(missing_in_exclude)}")
+for tid, st in bad_status[:5]:
+    print(f"BAD_STATUS:{tid}:{st}")
+for tid, st in missing_in_exclude[:5]:
+    print(f"LEAK:{tid}:{st}")
+PY
+)"
+  case "$LEDGER_REPORT" in
+    OK:*)
+      n_runs="$(grep -oE 'n_runs=[0-9]+' <<<"$LEDGER_REPORT" | head -1 | cut -d= -f2)"
+      bad="$(grep -oE 'bad=[0-9]+' <<<"$LEDGER_REPORT" | head -1 | cut -d= -f2)"
+      leak="$(grep -oE 'leak=[0-9]+' <<<"$LEDGER_REPORT" | head -1 | cut -d= -f2)"
+      ok "ledger parses (runs=$n_runs)"
+      if [[ "$bad" == "0" ]]; then
+        ok "all ledger entries have valid status (pending|running|done|failed|skipped)"
+      else
+        fail "ledger has $bad entries with invalid status"
+        grep '^BAD_STATUS:' <<<"$LEDGER_REPORT" | sed 's/^/         /'
+      fi
+      if [[ "$leak" == "0" ]]; then
+        ok "every done/failed/skipped ledger entry is in HARBOR_EXCLUDE_TASKS"
+      else
+        fail "$leak ledger task(s) marked done/failed/skipped are NOT in HARBOR_EXCLUDE_TASKS — Harbor will re-run them"
+        grep '^LEAK:' <<<"$LEDGER_REPORT" | sed 's/^/         /'
+      fi
+      ;;
+    PARSE:*)
+      fail "ledger does not parse: ${LEDGER_REPORT#PARSE:}"
+      ;;
+    SHAPE:*)
+      fail "ledger has wrong shape: ${LEDGER_REPORT#SHAPE:}"
+      ;;
+    *)
+      fail "ledger check failed: $LEDGER_REPORT"
+      ;;
+  esac
+fi
 
 echo ""
 echo "--- 9. Run command ---"

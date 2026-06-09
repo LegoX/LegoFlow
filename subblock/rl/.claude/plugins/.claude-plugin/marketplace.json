@@ -1,15 +1,11 @@
 {
-  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "block-local",
-  "description": "Local marketplace for the rl block's preflight/launch skills.",
-  "owner": {
-    "name": "ydu"
-  },
+  "name": "rl-block",
+  "owner": { "name": "haoli" },
   "plugins": [
     {
-      "name": "block",
-      "source": "./block-plugin",
-      "description": "RL block skills — scaffold experiments, preflight (dryrun + live checks), and launch training. Provides /block:create, /block:check, /block:run."
+      "name": "rl",
+      "source": "./rl-plugin",
+      "description": "rl block skills — setup, check, dashboard, run."
     }
   ]
 }

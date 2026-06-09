@@ -1,0 +1,23 @@
+---
+title: Run Jobs
+description: Prepare tasks, start the proxy, and roll the agent out
+---
+
+A trajgen **job** rolls a coding agent out across your prepared task set inside Harbor containers, capturing one trajectory per task. This section covers the full run path: selecting tasks, fronting your model with a LiteLLM proxy, and inspecting the outputs.
+
+The whole flow is driven from a single [`config.yaml`](/docs/reference/io) and executed by `scripts/start.sh`:
+
+```bash
+bash scripts/dryrun.sh   # validate first
+bash scripts/start.sh    # generate proxy config, start proxy, run Harbor job
+```
+
+`start.sh` runs the dry-run preflight, generates a per-job LiteLLM config, starts the proxy on the configured port, builds the Harbor command (including `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS`), and writes results under `artifacts/jobs/`. If `sft_conversion.enabled` is `true`, it runs the conversion step after Harbor exits.
+
+- [Prepare Tasks](/docs/run-jobs/prepare-tasks) — manifest-filtered task copy, the consumption ledger, and the exclude list
+- [LiteLLM Proxy](/docs/run-jobs/litellm-proxy) — the per-job proxy in front of your model API
+- [Results & Artifacts](/docs/run-jobs/results-and-artifacts) — where trajectories, results, and archives land
+
+<Callout title="Stop the proxy when done" type="warn">
+If trajectory inference finishes but the LiteLLM proxy is still running, stop the proxy process started for this job. Do not kill unrelated LiteLLM processes on the host.
+</Callout>

@@ -17,7 +17,7 @@ load_runtime_env
 if [ -z "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_TOKENS:-}" ]; then
     export GITHUB_TOKEN="${GITHUB_TOKENS%%,*}"
 fi
-VENV_DIR="${SWEGEN_VENV_DIR:-artifacts/envs/swegen-env2}"
+VENV_DIR="${SWEGEN_VENV_DIR:-artifacts/envs/swegen-env}"
 source "$VENV_DIR/bin/activate"
 
 mkdir -p artifacts/logs/swegen-create artifacts/swe_tasks/py-cc

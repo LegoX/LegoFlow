@@ -23,6 +23,49 @@ load_runtime_env() {
         source "${block_root}/.env"
     fi
 
+    # Last-resort hydration from config.yaml.runtime_info.input.llm_api:
+    # only fills vars still unset after env + .env, so priority stays env > .env > config.yaml.
+    local hydrate_py=""
+    if [[ -x "${block_root}/artifacts/envs/swegen-env/bin/python" ]]; then
+        hydrate_py="${block_root}/artifacts/envs/swegen-env/bin/python"
+    elif command -v python3 >/dev/null 2>&1; then
+        hydrate_py="python3"
+    fi
+    if [[ -n "$hydrate_py" && -f "${block_root}/config.yaml" ]]; then
+        local hydrate_exports
+        hydrate_exports="$(
+            "$hydrate_py" - "${block_root}/config.yaml" <<'PY' 2>/dev/null || true
+import os, sys, shlex
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)
+try:
+    with open(sys.argv[1]) as f:
+        cfg = yaml.safe_load(f) or {}
+except Exception:
+    sys.exit(0)
+llm = (((cfg.get("runtime_info") or {}).get("input") or {}).get("llm_api") or {})
+mapping = {
+    "OPENAI_API_KEY":       llm.get("api_key"),
+    "OPENAI_API_BASE_URL":  llm.get("api_base_url"),
+    "OPENAI_MODEL":         llm.get("pr_model"),
+    "ANTHROPIC_MODEL":      llm.get("task_model"),
+    # Also mirror to ANTHROPIC_AUTH_TOKEN so the Claude CLI sends
+    # `Authorization: Bearer <key>` in addition to its default `x-api-key`.
+    # Required by third-party endpoints like llm10 that reject x-api-key but accept Bearer.
+    "ANTHROPIC_AUTH_TOKEN": llm.get("api_key"),
+}
+for k, v in mapping.items():
+    if v and not os.environ.get(k):
+        print(f"export {k}={shlex.quote(str(v))}")
+PY
+        )"
+        if [[ -n "$hydrate_exports" ]]; then
+            eval "$hydrate_exports"
+        fi
+    fi
+
     if [ -z "${GITHUB_TOKENS:-}" ]; then
         for token_file in \
             "$PWD/gh_token.txt" \
@@ -30,7 +73,7 @@ load_runtime_env() {
             "$HOME/harbor/gh_token.txt"
         do
             if [ -f "$token_file" ]; then
-                GITHUB_TOKENS="$(grep -v '^[[:space:]]*$' "$token_file" | paste -sd, -)"
+                GITHUB_TOKENS="$(grep -vE '^[[:space:]]*(#|$)' "$token_file" | paste -sd, -)"
                 export GITHUB_TOKENS
                 break
             fi

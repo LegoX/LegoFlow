@@ -1,5 +1,5 @@
 .env
-swegen-env2/
+swegen-env/
 .swegen/
 .swegen-*/
 logs/

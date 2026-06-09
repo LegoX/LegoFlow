@@ -1,0 +1,6 @@
+{
+  "name": "root",
+  "description": "Scaffold, check, and run blocks in a block-structured project (per BLOCK_DEFINITION.md). Provides /root:create, /root:check, and /root:run.",
+  "version": "0.2.0",
+  "author": { "name": "haoli" }
+}

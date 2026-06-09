@@ -144,12 +144,11 @@ fi
 
 mkdir -p "$(dirname "$SWE_DP_UV_ABS")"
 
-# `uv sync` writes uv.lock into the repo even when readonly perms are set
-# (root bypasses chmod). Add it to the repo's git exclude file so dryrun's
-# worktree-clean check stays green after setup. .git/ is preserved writable by
-# update_repos.sh. Resolve the exclude path via `git rev-parse --git-path` so
-# this works even when .git is a gitfile (worktree/submodule), and create the
-# file if a fresh clone did not leave one behind.
+# `uv sync` writes uv.lock into the repo. update_repos.sh chmods the worktree
+# read-only (preserving .git). Root bypasses chmod; non-root users do not, so
+# we need to temporarily restore write perms, sync, then re-lock. We also add
+# uv.lock to the repo's git exclude file so dryrun's worktree-clean check
+# stays green after setup.
 LOCAL_EXCLUDE="$(git -C "$SWE_DP_DIR" rev-parse --git-path info/exclude 2>/dev/null || true)"
 if [[ -n "$LOCAL_EXCLUDE" ]]; then
   case "$LOCAL_EXCLUDE" in
@@ -170,6 +169,25 @@ if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
   echo "Extras:  ${EXTRA_ARGS[*]}"
 else
   echo "Extras:  (none)"
+fi
+
+# Temporarily make the read-only worktree writable so uv can write uv.lock and
+# any cached metadata, then restore the read-only state. Trap on EXIT so we
+# don't leave the worktree writable if uv sync crashes.
+SWE_DP_OWNED_BY_US=1
+if [[ ! -w "$SWE_DP_DIR" ]] && [[ "$(stat -c '%U' "$SWE_DP_DIR")" != "$(id -un)" ]]; then
+  SWE_DP_OWNED_BY_US=0
+fi
+relock_swe_dp() {
+  if [[ "$SWE_DP_OWNED_BY_US" == "1" ]] && [[ -d "$SWE_DP_DIR" ]]; then
+    find "$SWE_DP_DIR" -path "$SWE_DP_DIR/.git" -prune -o -print0 \
+      | xargs -0 -r chmod a-w 2>/dev/null || true
+    chmod u+w "$SWE_DP_DIR" 2>/dev/null || true
+  fi
+}
+trap relock_swe_dp EXIT
+if [[ "$SWE_DP_OWNED_BY_US" == "1" ]]; then
+  chmod -R u+w "$SWE_DP_DIR"
 fi
 
 (
