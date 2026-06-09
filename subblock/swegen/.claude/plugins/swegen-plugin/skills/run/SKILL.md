@@ -17,67 +17,171 @@ description: >
 
 # /swegen:run
 
-**STATUS: stub — fill in.**
+Preflight and launch SWE task generation. SWEgen is a leaf block: this
+skill runs commands inside `subblock/swegen/` and does not dispatch to
+child blocks.
 
-Per the block plugin guidelines, `:run` is the preflight-then-execute
-entry point. Always run `/swegen:check` first; require explicit user
-confirmation before launching. swegen is a **leaf block** — no
-subblocks, so this skill runs `scripts/start.sh` directly (per
-BLOCK_DEFINITION.md §3.2, no child dispatch applies).
+## Step 0 - Orient
 
-## Mode selection
+Validate:
 
-Args are free-form natural language. Resolve to one of three modes:
+1. Current directory is `subblock/swegen/`.
+2. `config.yaml` has `meta_info.name == "swegen"`.
+3. `scripts/start.sh` and the required `scripts/create_<lang>.sh` files
+   exist.
+4. `repos/swegen/` is initialized and installable.
 
-| Mode | When chosen | What runs | Wall time |
-|---|---|---|---|
-| `smoke`  | First run after `:setup`, or args mention "smoke", "quick verify", "10 PRs", "one task". | A single-task smoke: `swegen create --max-pr 1 --n-concurrent 1 --no-require-issue --min-source-files 1`, against `artifacts/collected_prs/python_pr_ids.txt`. Success = one ID written to `artifacts/swe_tasks/py-cc/verifiable_tasks.txt`. | ~10 min |
-| `single-language` | Args name a language (e.g. "run swegen for python", "generate go tasks"). | `bash scripts/create_<lang>.sh` for that language only. | hours |
-| `full` | Args empty or say "everything" / "all languages". | `bash scripts/start.sh`, which dispatches every language configured under `runtime_info.input.languages.*.enabled`. | many hours |
+Read `config.yaml`, `CLAUDE.md`, and `quick-verify.md` before choosing a
+mode.
 
-If args are ambiguous (e.g. "run swegen with 32 tasks"), propose a
-specific mode + parameter mutation, confirm, then execute.
+## Step 1 - Refuse duplicate live runs
 
-## Procedure
+Before launching, check for existing SWEgen work owned by this block. Scope
+the match to the current block path or this block's artifact paths so older
+jobs in a separate checkout such as `$HOME/SWE-gen` do not block this run:
 
-1. **Preflight** — invoke `/swegen:check`. For `smoke` mode, the user
-   may want the Harbor smoke (step 6 of `:check`) enabled by default.
-   Abort the run on any FAIL.
-2. **Confirm** — print the run-config summary from `:check` plus the
-   chosen mode and the per-language tuned params from
-   `scripts/create_<lang>.sh`. Wait for explicit user `yes`.
-3. **Launch** — execute the per-mode command (table above). All modes
-   should be backgrounded by default (runs are long; LLM API costs
-   accumulate on confirmed errors); ask the user once unless they
-   already said "foreground" or this is `smoke` mode (smoke is short
-   enough to foreground).
-4. **Archive** — `start.sh` (and `scripts/create_<lang>.sh`) install the
-   EXIT trap that invokes `archive_run.sh`, which appends to
-   `artifacts/index.yaml` with `status: completed | failed |
-   interrupted`. Do not write to `index.yaml` from this skill.
+```bash
+BLOCK_DIR="$(pwd -P)"
+pgrep -af 'swegen create|scripts/create_.*\\.sh|scripts/create_all_bg\\.sh' \
+  | grep -F "$BLOCK_DIR" || true
+```
 
-## Conventions to honour
+If a run is alive, refuse to start another. Report the PID, elapsed time,
+and likely log path under `artifacts/logs/swegen-create/`. Tell the user
+to let it finish or stop it before retrying.
 
-- **State directory.** Use an **absolute** `--state-dir` under
-  `artifacts/` (e.g. `--state-dir "$PWD/artifacts/.swegen-<lang>"`),
-  not a relative path under `scripts/`. Relative paths put
-  `harbor-jobs/` in the wrong place; the artifacts/ convention keeps
-  archive snapshots self-contained.
-- **`--docker-prune-batch 0`** during smoke so a tight loop doesn't
-  thrash Docker; the tuned `scripts/create_<lang>.sh` may override.
-- **`--no-require-issue`** is the default expectation for swegen
-  task generation — don't drop it unless the user explicitly wants
-  issue-only PRs.
+## Step 2 - Choose the run mode
 
-## TODO
+Resolve the user's natural-language request into one mode:
 
-- [ ] Spec per-language targeting precisely (which subset of
-      `meta_info.languages` becomes `--languages` arg).
-- [ ] Decide whether `:run` should split into substeps
-      (`/swegen:collect-prs`, `/swegen:generate-tasks`,
-      `/swegen:verify`) following the trajgen pattern. Probably
-      yes for the `full` mode (each substep is a natural
-      checkpoint); definitely no for `smoke`.
-- [ ] Spec the resume-on-interrupt behaviour. `swegen create` uses
-      `.swegen-create-batch/` for resume; `:run` should detect a
-      prior interrupted run and offer to resume vs. start fresh.
+| Mode | Use when | Command shape |
+| --- | --- | --- |
+| `smoke` | First run, "quick verify", "smoke", "one task", or "10 PRs". | `swegen create` against the submodule sample PR file, with `--max-pr 1`, `--n-concurrent 1`, `--min-source-files 1`, and output under `artifacts/experiments/quick-verify/`. |
+| `single-language` | The user names one language: `py`, `js`, `ts`, `go`, `c`, `cpp`, `java`, or `rust`. | `bash scripts/create_<lang>.sh` after confirming tuned params from `scripts/read_params.py`. |
+| `full` | The user says all languages, pipeline, or gives no narrower scope. | `bash scripts/start.sh`, which calls `scripts/create_all_bg.sh` and archives on exit. |
+
+If the request implies config changes, such as "32 tasks" or "more
+concurrency", show the exact proposed config/env override and wait for
+confirmation before changing or launching.
+
+## Step 3 - Preflight
+
+Run `/swegen:check` logic first. For `smoke`, include the Harbor sample
+validation unless the user explicitly skips it. Abort on any blocking
+failure:
+
+- config/package install failed
+- GitHub tokens unavailable
+- LLM completion ping failed
+- Docker unavailable
+- `scripts/dryrun.sh` failed
+- requested smoke validation failed
+
+The LLM completion ping is mandatory; never proceed to `swegen create`
+after only `scripts/dryrun.sh`. If the LLM ping returns `401 Invalid token`,
+ask for a replacement API key, mirror it to `OPENAI_API_KEY` and
+`ANTHROPIC_API_KEY` only in the current shell, and rerun preflight before
+launch. Do not edit inputs to make preflight pass.
+
+## Step 4 - Show run configuration and confirm
+
+Print a compact summary and ask for explicit confirmation:
+
+```text
+swegen run configuration
+  mode             : <smoke|single-language|full>
+  languages        : <list>
+  input PRs         : <path>
+  output tasks      : <path>
+  state dir         : <path>
+  timeout           : <per-language timeout>
+  cc_timeout        : <per-language cc timeout>
+  concurrency       : <per-language n_concurrent>
+  validation        : NOP + Oracle via Harbor
+  logs              : artifacts/logs/swegen-create/
+  archive           : scripts/archive_run.sh -> artifacts/index.yaml
+```
+
+Never launch a full or single-language run without an explicit "yes".
+Smoke can run in the foreground after confirmation; long runs default to
+background.
+
+## Step 5 - Launch
+
+### Smoke
+
+Use the fixed sample PR list carried by the submodule, but write outputs
+to this block's experiment directory:
+
+```bash
+swegen create \
+  --input-ids-file repos/swegen/artifacts/collected_prs/python_pr_ids.txt \
+  --max-pr 1 \
+  --n-concurrent 1 \
+  --output artifacts/experiments/quick-verify/swe_tasks/py-cc \
+  --state-dir artifacts/experiments/quick-verify/state \
+  --timeout 2400 \
+  --cc-timeout 1800 \
+  --no-require-issue \
+  --min-source-files 1 \
+  --max-source-files 10 \
+  --docker-prune-batch 0 \
+  --verbose
+```
+
+Success means
+`artifacts/experiments/quick-verify/swe_tasks/py-cc/verifiable_tasks.txt`
+exists and contains at least one task id.
+
+Smoke is small but not instant: Claude Code task generation plus Harbor
+validation can take several minutes. Use a long foreground timeout or launch
+it in the background with a log if the user does not want the session held.
+If interrupted, inspect `artifacts/experiments/quick-verify/state/` and
+`artifacts/experiments/quick-verify/swe_tasks/py-cc/.swegen-create-batch/`
+before deciding whether to resume or clean up.
+
+### Single language
+
+Use the language script so it honors `config.yaml` via `scripts/read_params.py`:
+
+```bash
+bash scripts/create_<lang>.sh
+```
+
+The script writes to `artifacts/swe_tasks/<lang>-cc/`, appends verified
+task ids to `verifiable_tasks.txt`, and logs under
+`artifacts/logs/swegen-create/`.
+
+### Full run
+
+Use:
+
+```bash
+bash scripts/start.sh
+```
+
+`start.sh` installs an EXIT trap that invokes `scripts/archive_run.sh`.
+Do not pre-write entries to `artifacts/index.yaml`; the scripts own run
+archiving.
+
+## Step 6 - Report and monitor
+
+After launch, print:
+
+- command or background PID
+- log path
+- output path
+- how to stop or attach
+- next `/swegen:dashboard` command
+
+For foreground smoke, report the resulting task id or the failing phase.
+For background runs, poll once after a short delay to ensure the process
+started, then hand off to `/swegen:dashboard`.
+
+## Guardrails
+
+- Do not run multiple SWEgen generation jobs concurrently in the same block.
+- Do not write secrets to repository files.
+- Do not modify `repos/swegen/` source while running data generation.
+- Do not delete generated tasks, state dirs, or logs unless the user asks
+  for cleanup.
