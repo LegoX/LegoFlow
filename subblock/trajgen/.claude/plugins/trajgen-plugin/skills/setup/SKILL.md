@@ -10,7 +10,7 @@ description: >
   dataset is gated. Idempotent. Ends by running `scripts/dryrun.sh` so the
   user sees whether the block is now check-passing. Triggers on phrases
   like "set up trajgen", "bootstrap trajgen", "install harbor for
-  trajgen", "prepare trajgen before running".
+  trajgen", "prepare trajgen before running", "/trajgen:setup".
 ---
 
 # /trajgen:setup
@@ -18,6 +18,7 @@ description: >
 Brings the trajgen block from a fresh clone to "`/trajgen:check` passes."
 The skill is idempotent: any step that is already satisfied is skipped.
 The skill never launches Harbor — that's `/trajgen:run`.
+All commands run from the block root `subblock/trajgen/`.
 
 ## Procedure
 
@@ -56,6 +57,10 @@ For each entry under `meta_info.repositories`:
 - The script refuses to update a worktree with local modifications. Stop
   and ask the user when that happens.
 
+Both repos are **managed local-only dependencies** and are gitignored. Never edit
+their sources here; they are set read-only after checkout when `readonly: true`,
+so any uv environment for them must live outside the checkout (under `artifacts/env/`).
+
 ### 3. Environments
 
 Build only the envs that don't already pass the editable-install check
@@ -67,7 +72,7 @@ Build only the envs that don't already pass the editable-install check
 | `artifacts/env/litellm-venv/` | `uv venv ... --python 3.13 && uv pip install 'litellm[proxy]==1.83.14'` then `litellm --version` | DO NOT use `import litellm; litellm.__version__` — litellm raises `AttributeError` on `__version__` by design. |
 | `artifacts/env/swe-data-process-uv/` | `bash scripts/setup_swe_data_process_env.sh` | `python -c "import swe_data_process, jinja2"` |
 
-Both `setup_harbor_env.sh` and `setup_swe_data_process_env.sh` now handle
+Both `setup_harbor_env.sh` and `setup_swe_data_process_env.sh` handle
 the non-root chmod dance: they temporarily restore write perms on the
 read-only worktree, run `uv sync`, and re-lock on EXIT.
 
@@ -120,10 +125,12 @@ zero, point the user at `/trajgen:run`. Setup is done.
 
 ## Notes
 
-- This skill never runs `prepare_tasks.sh`. Task staging is part of
+- This skill does not run `prepare_tasks.sh` by default. Task staging is part of
   `start.sh`'s preflight (and `dryrun.sh` now probes HF auth so failures
   surface early). If the user explicitly asks to stage now, run
   `bash scripts/prepare_tasks.sh` and continue.
 - Setup must run on the host declared in `meta_info.resources.ip`. If the
   current shell is on a different host, SSH there first (the trajgen
   block currently uses `local` / the named cpu node).
+- Run inside a named tmux session on the host named by `meta_info.resources.ip`
+  so long clones/syncs survive disconnects.
