@@ -131,13 +131,13 @@ comments).
 | `source.scaffold` | one of `openhands-sdk \| claude-code \| open-code \| terminus2` (matches the agent that produced the trajectories) |
 | `source.job_dir` | trajgen job dir with raw trajectories — `trajgen.output.raw_trajectories_dir` (`subblock/trajgen/artifacts/jobs/<job>`). Offer to list candidates; confirm it exists on this host. |
 | `conversion.data_name` | unique name for this dataset (drives the IM/LF filenames and the registered dataset) |
-| `conversion.max_instances` / `exclude_repos_file` | usually keep defaults; confirm the exclude file exists |
+| `conversion.max_instances` / `conversion.exclude_repos_file` | usually keep defaults; confirm the exclude file exists |
 | `dataset.name` | leave empty to auto-derive from `data_name` (recommended) |
 | `model.model_name_or_path` | local base-model dir (must exist; dryrun checks it) |
 | `training.output_dir` | run name → `artifacts/model/<basename>`; encode key hparams in the name as the existing value does |
 | `training.deepspeed` | ZeRO-3 config path (`artifacts/training_config/deepspeed/ds_z3_config.json`); confirm it exists |
 | `experiment.wandb_mode` | `offline` (default) \| `online` \| `disabled` |
-| `credentials.wandb_api_key` | **only when `wandb_mode: online`.** Prefer `export WANDB_API_KEY=…` over writing it into `config.yaml`. Never commit a key. |
+| `credentials.wandb_api_key` | **required when `wandb_mode: online`** — `dryrun.sh`/`train.sh` read the key from `config.yaml` (not from `WANDB_API_KEY` in the env), so write it here. Leave empty for `offline`/`disabled`. Never commit a real key. |
 
 Do **not** invent a `job_dir` or `model_name_or_path` — a missing input is
 the user's signal to provide one, never a signal to fabricate a path.
@@ -163,7 +163,8 @@ doesn't exist on this host (model dir, `job_dir`) — fix those, not the env.
   without asking.
 - Never modify files under `repos/` beyond checking out the pinned commit;
   report drift, don't paper over it.
-- Never write secrets into `config.yaml`; keep `credentials.wandb_api_key`
-  empty and use the env var.
+- Online WandB requires `credentials.wandb_api_key` in `config.yaml` (the
+  scripts read it from there, not from the env). Never **commit** a real key
+  — keep it out of version control, not out of the local config.
 - Never run training or data conversion here — that's `/sft:run`.
 - Local block: don't SSH anywhere (`meta_info.resources.ip: null`).

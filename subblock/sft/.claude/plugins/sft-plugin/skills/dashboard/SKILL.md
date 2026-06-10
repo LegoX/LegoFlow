@@ -56,8 +56,11 @@ STEP 3 after a run):
 - `training_metrics.value` — `final_loss`, `train_runtime`, `total_steps`
 - `artifacts.{train_results, train_loss_plot, training_log}` — file paths
 
-And the run history from `artifacts/index.yaml` (newest `runs[]` entry):
-id, status, started/completed, label/detail.
+And the run history from `artifacts/index.yaml` (newest `runs[]` entry).
+Entries written by `scripts/archive_run.sh` carry: `id`, `started_at`,
+`completed_at`, `status`, `archive` (the `run_NNN/` dir), and `notes` (a
+one-line summary). (Older hand-seeded rows may also have `label`/`detail`;
+read whichever fields are present.)
 
 If a live run is in progress, note it (`pgrep -af 'llamafactory.cli
 train'`) and that `status.mdx` auto-refreshes every 30s during training.
@@ -85,7 +88,7 @@ Artifacts:
   train log:   <training_log>
   wandb:       run_id=<id>  mode=<wandb_mode>
 
-Latest run (artifacts/index.yaml): <id> — <status> — <label>
+Latest run (artifacts/index.yaml): <id> — <status> — <notes>
 ```
 
 Point the user at `dashboard/status.mdx` for the rendered version (it

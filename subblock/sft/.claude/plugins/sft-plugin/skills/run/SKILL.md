@@ -105,7 +105,7 @@ Default = **background**. SFT training is long; the foreground holds the
 agent session hostage. Ask once:
 
 ```
-Launch mode? [B]ackground (default — nohup setsid + writes logs/launch_<ts>.log) / [F]oreground (blocks this session until exit).
+Launch mode? [B]ackground (default — nohup setsid + writes artifacts/logs/launch_<ts>.log) / [F]oreground (blocks this session until exit).
 ```
 
 Accept `B`, `F`, or `<enter>` (= background). Map "background"/"bg"/"detach"
@@ -114,10 +114,11 @@ and "foreground"/"fg" accordingly.
 ## Step 5 — Launch metadata
 
 1. `TS=$(date -u +%Y%m%d-%H%M%S)`.
-2. Launch-log path: `./logs/launch_${TS}.log`. Create `./logs/` if missing.
-   (Note: `train.sh` also writes its own detailed log under
-   `artifacts/logs/<run_name>_<timestamp>.log`; the launch log is just the
-   `start.sh` stdout/stderr capture.)
+2. Launch-log path: `./artifacts/logs/launch_${TS}.log`. Create
+   `./artifacts/logs/` if missing (it's already gitignored, so the launch
+   log won't dirty the working tree). (Note: `train.sh` also writes its own
+   detailed log under `artifacts/logs/<run_name>_<timestamp>.log`; the
+   launch log is just the `start.sh` stdout/stderr capture.)
 
 `start.sh` itself archives the run on exit (its EXIT trap calls
 `scripts/archive_run.sh`, which appends the `run_NNN` entry to
@@ -129,7 +130,7 @@ index.yaml row — let the script own that to avoid double entries.
 ### Background (default)
 
 ```bash
-nohup setsid bash ./scripts/start.sh > "./logs/launch_${TS}.log" 2>&1 < /dev/null &
+nohup setsid bash ./scripts/start.sh > "./artifacts/logs/launch_${TS}.log" 2>&1 < /dev/null &
 PARENT_PID=$!
 disown
 ```
@@ -151,7 +152,7 @@ re-run. Do NOT retry automatically.
 ### Foreground (only if user picked it)
 
 ```bash
-bash ./scripts/start.sh 2>&1 | tee "./logs/launch_${TS}.log"
+bash ./scripts/start.sh 2>&1 | tee "./artifacts/logs/launch_${TS}.log"
 ```
 
 Stream output. On exit, report the final exit code and the tail of the
@@ -165,14 +166,14 @@ Print a tight summary (≤ 12 lines):
 
 ```
 Launched (background)
-  launch log:   logs/launch_<TS>.log
+  launch log:   artifacts/logs/launch_<TS>.log
   train log:    artifacts/logs/<run_name>_<...>.log   (appears once STEP 2 starts)
   output dir:   artifacts/model/<basename of output_dir>
   parent pid:   <pid>
   status:       running (STEP 0 conversion → STEP 1 register → STEP 2 train)
 
 Monitor:
-  tail -F logs/launch_<TS>.log
+  tail -F artifacts/logs/launch_<TS>.log
   nvidia-smi
   cat dashboard/status.mdx              # refreshed every 30s by update_status.py
 Stop:
