@@ -1,0 +1,61 @@
+---
+title: Dashboard
+description: Monitor job and SFT progress locally or online
+---
+
+trajgen ships a self-contained progress dashboard that scans your artifacts and renders a single HTML page — open it locally, or publish it to Cloudflare Pages for remote viewing.
+
+Live board: **[swe-trajgen-databoard.pages.dev](https://swe-trajgen-databoard.pages.dev)**
+
+## What it monitors
+
+| Source | Files | Shown as |
+| --- | --- | --- |
+| Harbor jobs | `artifacts/jobs/<job>/result.json` | Harbor Jobs table + per-job eval breakdown |
+| SFT conversion | `artifacts/sft_data/<job>/lf.stats.json` | SFT Datasets table |
+
+For each Harbor job it surfaces trial counts, error counts, per-eval reward means, and `reward == 1.0 / 0.0` outcome counts. For each SFT dataset it surfaces token-length, turn-count, and score distributions plus on-disk sizes.
+
+When operating through the trajgen plugin, `/trajgen:dashboard` covers both the visual dashboard and one-off SFT data/stat refreshes via `scripts/convert_trajectories.sh`.
+
+## Run it locally
+
+The generator is `dashboard/progress_monitor.py`. It carries [PEP 723](https://peps.python.org/pep-0723/) inline metadata and a `uv run` shebang, so it needs no `pip install` — just `uv` on `PATH`. Run from `subblock/trajgen/`:
+
+```bash
+./dashboard/progress_monitor.py                              # one-shot generate
+./dashboard/progress_monitor.py --serve --open               # generate + local preview
+./dashboard/progress_monitor.py --loop 60 --serve --port 8765  # auto-refresh every 60s
+```
+
+Then open `dashboard/site/index.html` directly, or visit `http://127.0.0.1:8765/index.html`. The page self-refreshes so an open tab stays current while `--loop` keeps writing snapshots.
+
+## Publish to Cloudflare Pages
+
+`dashboard/run_cloudflare_pages_sync.sh` loops the generator and deploys `dashboard/site/` to Cloudflare Pages via `wrangler`, yielding a public `*.pages.dev` URL:
+
+```bash
+tmux new-session -d -s trajgen-cf \
+  "ENV_FILE=.env.cf bash dashboard/run_cloudflare_pages_sync.sh 2>&1 | tee /tmp/trajgen_cf_sync.log"
+```
+
+Configuration is read from `~/.config/trajgen_progress_cloudflare.env` (override with `ENV_FILE`). The required values are:
+
+| Variable | How to fill it | Default |
+| --- | --- | --- |
+| `CLOUDFLARE_API_TOKEN` | API token with account-level `Cloudflare Pages: Edit` | required |
+| `CLOUDFLARE_ACCOUNT_ID` | 32-char Account ID from the dashboard | required |
+| `PROJECT_NAME` | Cloudflare Pages project (sets the public URL) | `swe-trajgen-databoard` |
+| `LOOP_SECONDS` | Seconds between generate/deploy iterations | `3600` |
+| `CONVERT_ENABLED` | Auto-run SFT conversion in the loop (`0` disables) | `1` |
+| `CONVERT_EVERY_SECONDS` | Minimum interval between conversion attempts | `7200` |
+
+<Callout title="Token scope" type="info">
+`wrangler pages deploy` needs the account-level `Cloudflare Pages: Edit` permission. None of the built-in templates map to it exactly, so create a Custom Token with `Account` -> `Cloudflare Pages` -> `Edit`. The Account ID is separate from the token.
+</Callout>
+
+The same loop optionally re-runs `scripts/convert_trajectories.sh --skip-unchanged` at most every `CONVERT_EVERY_SECONDS`, so the SFT stats on the board also stay fresh online without coupling heavy conversion to the deploy cadence.
+
+<Callout title="Two different Cloudflare projects" type="info">
+This is the **progress dashboard** project. The documentation site you are reading is a separate Cloudflare Pages project (`swe-trajgen-docs`); see [Build & deploy the docs site](/docs/reference/config-variants#build-and-deploy-the-docs-site).
+</Callout>

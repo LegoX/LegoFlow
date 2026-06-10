@@ -1,0 +1,9 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@import "tw-animate-css";
+
+/* Remove shadow from code blocks */
+figure.shiki {
+  box-shadow: none;
+}

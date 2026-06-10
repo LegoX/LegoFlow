@@ -1,20 +1,30 @@
-# trajgen — block-local skills for the trajectory-generation block
+# trajgen — block-local operating plugin
 
-Slash commands tailored to `subblock/trajgen/`. They wrap Harbor (job
-launch + sandbox management), the per-job LiteLLM proxy, and the
-swe_data_process trajectory → SFT-data converter.
+Packages the trajgen block's detailed operating procedures into slash
+commands. These complement the repo-wide [`root-plugin`](../../../../../.claude/plugins/root-plugin/)
+plugin (`/root:create`, `/root:check`, `/root:run`): `root` handles the
+generic block contract (preflight, execute `start.sh`, archive); this plugin
+holds the trajgen-specific know-how that the generic commands cannot infer.
 
-For the generic block-system command (only `/root:create` lives there),
-see `.claude/plugins/root-plugin/`.
+The block's `CLAUDE.md` references these commands instead of inlining every
+procedure, so the contract stays short and the detail lives here.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `/trajgen:setup`     | Bootstrap: build the Harbor uv env + LiteLLM venv + swe_data_process uv env, register the task source, wire the LLM API. |
-| `/trajgen:check`     | Preflight: schema + uv envs + LLM endpoint `/models` + swegen task source (`verifiable_tasks.txt` present) + LiteLLM port free + consumption ledger sanity. Read-only. |
-| `/trajgen:dashboard` | Show per-job status: tasks consumed, in-flight, done/failed, trajectories produced, SFT conversion progress. |
-| `/trajgen:run`       | Preflight, then `scripts/start.sh` — `prepare_tasks.sh` → harbor → `convert_trajectories.sh`. Per the plugin guidelines this may later split into `/trajgen:rollout` and `/trajgen:convert-sft` substeps. |
+| `/trajgen:setup` | Bootstrap: clone or update the read-only `harbor` and `swe_data_process` repos at their pinned commits, build the uv/venv environments, initialise the ledger if needed, and run dryrun. Task staging is handled by `scripts/start.sh` or an explicit `prepare_tasks.sh` request. |
+| `/trajgen:check` | Preflight: schema + uv envs + LLM endpoint `/models` + swegen task source + LiteLLM port free + consumption ledger sanity. Read-only. |
+| `/trajgen:dashboard` | Generate or serve the local HTML progress board, run/restart the Cloudflare Pages sync loop (`trajgen-cf` tmux session), and manually refresh one job's SFT data/stats via `scripts/convert_trajectories.sh`. |
+| `/trajgen:run` | Preflight via `/trajgen:check`, then `scripts/start.sh` — `prepare_tasks.sh` → Harbor → optional conversion — plus post-run ledger / exclude-list / status bookkeeping. |
+
+## Relationship to `/root:run`
+
+`/root:run trajgen` runs the generic preflight then executes `scripts/start.sh`
+and archives the result. `/trajgen:run` documents the trajgen-specific layer
+that `start.sh` orchestrates (LiteLLM proxy lifecycle, task-exclusion wiring,
+post-run ledger bookkeeping). Use `/root:run` to execute; consult
+`/trajgen:run` for the operating detail and the manual post-run steps.
 
 Per the block plugin guidelines, **no `/trajgen:create`** — new blocks are
 only created via `/root:create`.
@@ -23,14 +33,24 @@ Run them from inside `subblock/trajgen/`.
 
 ## Layout
 
+This plugin lives inside the block-local marketplace at
+`subblock/trajgen/.claude/plugins/` (manifest at
+`.claude/plugins/.claude-plugin/marketplace.json`, registered by
+`.claude/settings.json`) — the same layout as the root block's `.claude/plugins/`:
+
 ```
-trajgen-plugin/
-├── .claude-plugin/plugin.json
-├── README.md
-├── resources/                  # block-specific reference docs (optional)
-└── skills/
-    ├── setup/SKILL.md          # /trajgen:setup
-    ├── check/SKILL.md          # /trajgen:check
-    ├── dashboard/SKILL.md      # /trajgen:dashboard
-    └── run/SKILL.md            # /trajgen:run
+.claude/plugins/
+├── .claude-plugin/marketplace.json    # marketplace catalog (name: "trajgen-block")
+└── trajgen-plugin/
+    ├── .claude-plugin/plugin.json     # manifest (name: "trajgen")
+    ├── README.md                      # this file
+    └── skills/
+        ├── setup/SKILL.md             # /trajgen:setup
+        ├── check/SKILL.md             # /trajgen:check
+        ├── dashboard/SKILL.md         # /trajgen:dashboard
+        └── run/SKILL.md               # /trajgen:run
 ```
+
+Every skill wraps scripts under `subblock/trajgen/scripts/` (and
+`dashboard/`); it documents the flags, ordering, and side effects rather than
+reimplementing them. Run `/reload-plugins` after editing any file here.

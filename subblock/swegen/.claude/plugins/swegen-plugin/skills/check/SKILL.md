@@ -19,73 +19,150 @@ description: >
 
 # /swegen:check
 
-**STATUS: stub — fill in.**
+Read-only preflight for the swegen block. It answers "is this block ready
+to collect PRs, generate tasks, and run Harbor validation?" Report every
+failure in one pass; do not stop at the first failed check.
 
-Per the block plugin guidelines, `:check` is the read-only preflight that
-answers "is it safe to run?". Reports **all** failures in one pass — do
-not stop at the first.
+## Step 0 - Orient
 
-## Intent
+Run only from `subblock/swegen/`. Validate:
 
-1. **Schema** — `config.yaml` parses; `meta_info.name == 'swegen'`.
-2. **Repo pin** — `repos/swegen/` exists and its
-   `git rev-parse HEAD` equals `meta_info.repos.swegen.commit_id`. Drift
-   is a FAIL, not a WARN.
-3. **GitHub tokens** — `GITHUB_TOKENS` resolves (env var or
-   `gh_token.txt`). For each token, `GET https://api.github.com/rate_limit`
-   returns 200; record the `resources.core.remaining` so the run-config
-   summary can show available API budget.
-4. **LLM endpoint (cross-provider ping, not just `/models`)** — load
-   `swegen.llm_env`, call `hydrate_cross_provider_env()` and
-   `get_openai_compatible_config()`, then issue a single
-   `chat.completions.create` with `max_tokens=16` and a one-token prompt.
-   A `GET /models` probe is not sufficient — it does not catch real
-   failures like `401 Invalid token` or
-   `403 unsupported_country_region_territory` (wrong-region routing)
-   that surface only on actual completion calls. Surface the provider's
-   error verbatim on failure.
-5. **Docker** — `docker info --format '{{.ServerVersion}}'` succeeds.
-   **Also** verify `DOCKER_HOST` is set: an unset `DOCKER_HOST` lets
-   Harbor probe `/tmp/podman-fresh.sock` by default and report
-   "Docker daemon is not running" even when `docker info` passes.
-   Recommend `export DOCKER_HOST=unix:///var/run/docker.sock` on
-   failure.
-6. **Harbor smoke (optional, off by default)** — only when the user
-   passes `--smoke` (or the agent decides on first-time validation): run
-   `swegen validate artifacts/swe_tasks/py-cc --task tox-dev__tox-3813 \
-   --jobs-dir artifacts/swe_tasks/.swegen/harbor-jobs-quick --env docker`.
-   Expected output: `NOP reward=0` and `Oracle reward=1`. Any deviation
-   is a FAIL with the verbatim Harbor stderr included. Skip silently if
-   the task source directory is missing — that's a `:setup` problem, not
-   a `:check` problem.
-7. **`scripts/dryrun.sh`** — run if present; surface its OK / WARN /
-   FAIL lines.
-8. **`scripts/stop.sh`** — file exists and is executable (per
-   BLOCK_DEFINITION.md §2.1). WARN if missing — the block can still
-   `:run`, but the user can't cleanly stop it.
+1. `./config.yaml` exists and parses.
+2. `meta_info.name == "swegen"`.
+3. `./repos/swegen/pyproject.toml` exists.
+4. `./scripts/dryrun.sh` exists.
 
-## Run-configuration summary
+If any of these fail, continue with checks that can still run and include
+all failures in the final report.
 
-After all checks, print one summary block before exiting:
+## Step 1 - Deterministic file and config checks
 
-```
-swegen run config
-  repos/swegen HEAD          : <sha>
-  github tokens              : <N> ok, total budget <K> req/h
-  llm provider               : <openai_base_url> / <openai_model>
-                              <anthropic_base_url> / <anthropic_model>
-  docker                     : <server_version> at <DOCKER_HOST>
-  languages enabled          : <list>
-  per-language pr_limit      : <map>
-  per-language target_count  : <map>
+Check these without changing the workspace:
+
+- `config.yaml` has `meta_info`, `runtime_info.input`, `runtime_info.output`,
+  and `status`.
+- `runtime_info.input.languages` contains the supported language keys:
+  `py`, `js`, `ts`, `go`, `c`, `cpp`, `java`, `rust`.
+- Each enabled language has `params.timeout`, `params.cc_timeout`, and
+  `params.n_concurrent`; these are consumed by `scripts/read_params.py`
+  and `scripts/create_<lang>.sh`.
+- `runtime_info.output.swe_tasks_dir.path` points to `artifacts/swe_tasks`.
+- `scripts/create_<lang>.sh` exists for every enabled language.
+- `scripts/start.sh`, `scripts/create_all_bg.sh`, `scripts/load_runtime_env.sh`,
+  and `scripts/archive_run.sh` exist.
+
+For the submodule, run:
+
+```bash
+git -C repos/swegen rev-parse HEAD
 ```
 
-This is the surface the user inspects before approving `:run`.
+If `meta_info.repos.swegen.commit_id` is non-null, the HEAD must match it.
+If the config says `null`, report the HEAD as informational, not a failure.
 
-## TODO
+## Step 2 - GitHub credentials
 
-- [ ] Wire to `scripts/dryrun.sh` once written.
-- [ ] Decide whether to probe per-language Docker base images at
-      `:check` time or defer to first-task failure.
-- [ ] Decide the default for the Harbor smoke — currently off; arguably
-      should be on for the very first `:check` after `:setup`.
+Resolve tokens from `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an explicit token
+file. Note that the collector `repos/swegen/tools/collect_prs_wo_image.py`
+defaults to `repos/swegen/gh_token.txt` unless
+`COLLECT_GITHUB_TOKEN_FILE` overrides it.
+
+For each token, call:
+
+```text
+GET https://api.github.com/rate_limit
+```
+
+Report HTTP status and `resources.core.remaining`. Missing tokens are a
+failure for real runs and a warning for pure dashboard inspection.
+
+## Step 3 - LLM endpoint
+
+This check is mandatory before `/swegen:run`; do not skip it just because
+`scripts/dryrun.sh` passes. Use the installed SWEgen package, not an ad hoc
+request:
+
+```python
+from openai import OpenAI
+from swegen.llm_env import hydrate_cross_provider_env, get_openai_compatible_config
+
+hydrate_cross_provider_env()
+model, key, base = get_openai_compatible_config()
+OpenAI(api_key=key, base_url=base, timeout=60).chat.completions.create(
+    model=model,
+    messages=[{"role": "user", "content": "ping"}],
+    max_tokens=16,
+)
+```
+
+A `/models` probe is not enough; real completion catches wrong keys,
+wrong-region routing, and stale Anthropic/OpenAI shim variables.
+
+If the provider returns `401 Invalid token`, stop and ask for a replacement
+API key. Keep the base URLs from the environment unless the error points at
+routing. When testing a replacement key, export it only for the current
+shell process and mirror it to both `OPENAI_API_KEY` and
+`ANTHROPIC_API_KEY`; never write it to `.env`, `config.yaml`, or logs.
+
+## Step 4 - Docker and Harbor readiness
+
+Run:
+
+```bash
+docker info --format '{{.ServerVersion}}'
+```
+
+Also require `DOCKER_HOST` to be set, preferably
+`unix:///var/run/docker.sock`. If Docker works but `DOCKER_HOST` is empty,
+warn that Harbor may incorrectly probe `/tmp/podman-fresh.sock`.
+
+If the user asks for a smoke check, validate the submodule sample task:
+
+```bash
+swegen validate \
+  repos/swegen/artifacts/swe_tasks/py-cc \
+  --task tox-dev__tox-3813 \
+  --jobs-dir artifacts/experiments/quick-verify/harbor-jobs-quick \
+  --env docker \
+  --docker-prune-batch 0
+```
+
+Expected result: NOP reward is `0` and Oracle reward is `1`. If the sample
+task is missing, report that `/swegen:setup` must initialize the submodule.
+
+## Step 5 - Run the block dryrun
+
+Run `bash scripts/dryrun.sh` and include its OK/WARN/FAIL lines in the
+report. This script verifies the installed package, YAML parsing, key env
+vars, and Docker availability.
+
+## Step 6 - Final report
+
+Always end with a compact summary:
+
+```text
+swegen check - <CWD>
+  config          : <ok|fail>
+  repos/swegen    : <sha or missing>
+  github          : <N tokens ok, total remaining K>
+  llm             : <base> / <model> / <ok|fail>
+  docker          : <server version> at <DOCKER_HOST or unset>
+  languages       : <enabled list with timeout/cc_timeout/n_concurrent>
+  swe tasks       : <per-language generated + verified counts>
+  dryrun          : <pass|warn|fail>
+  smoke           : <skipped|pass|fail>
+
+SAFE TO RUN: <YES|NO>
+```
+
+`SAFE TO RUN` is `NO` if config, package install, GitHub, LLM, Docker, or
+dryrun failed. A skipped smoke does not block unless the user explicitly
+requested smoke.
+
+## Guardrails
+
+- Read-only except for the optional Harbor smoke jobs directory.
+- Do not edit `config.yaml`, `.env`, token files, or `artifacts/index.yaml`.
+- Do not launch `scripts/start.sh` or `swegen create`; that is `/swegen:run`.
+- Do not hide credential or provider errors. Quote the provider error
+  message, but never print secret values.
