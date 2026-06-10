@@ -117,17 +117,30 @@ echo "=== eval dryrun: $BLOCK_DIR ==="
 echo ""
 
 echo "--- 1. Block files ---"
-for file in CLAUDE.md config.yaml dashboard/overview.mdx artifacts/index.yaml; do
+for file in CLAUDE.md config.yaml dashboard/overview.mdx; do
   if [[ -f "$BLOCK_DIR/$file" ]]; then
     ok "$file exists"
   else
     fail "$file missing"
   fi
 done
+# artifacts/index.yaml is a runtime artifact written by scripts/archive_run.sh
+# (start.sh EXIT trap) after the first run, not a precondition. Absence is
+# expected on a fresh block, so report it as INFO instead of failing — failing
+# here would also blank every config read below via the `FAIL -eq 0` gate.
+if [[ -f "$BLOCK_DIR/artifacts/index.yaml" ]]; then
+  ok "artifacts/index.yaml exists"
+else
+  info "artifacts/index.yaml absent (auto-created by archive_run.sh after first run)"
+fi
 
 echo ""
 echo "--- 2. YAML syntax ---"
-for file in "$CONFIG" "$BLOCK_DIR/artifacts/index.yaml"; do
+# config.yaml must always parse; index.yaml is validated only if it exists yet
+# (a corrupt one would break archive_run.sh's next-run-id / append logic).
+yaml_files=("$CONFIG")
+[[ -f "$BLOCK_DIR/artifacts/index.yaml" ]] && yaml_files+=("$BLOCK_DIR/artifacts/index.yaml")
+for file in "${yaml_files[@]}"; do
   if python3 - "$file" <<'PY' >/dev/null 2>&1
 import sys
 import yaml
