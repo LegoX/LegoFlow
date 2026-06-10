@@ -1,38 +1,224 @@
 ---
 name: check
 description: >
-  Preflight the sft block: validate config.yaml schema; verify
-  `nvidia-smi` reports the expected GPU count (typically 8); confirm the
-  deepspeed ZeRO-3 config file exists and parses; confirm the SFT dataset
-  is registered in LLaMA-Factory and the source rows exist; verify
-  WANDB_API_KEY is set (or `wandb_mode: disabled`); confirm the base model
-  path exists; run `scripts/dryrun.sh`. Read-only. Triggers on phrases like
-  "check sft", "preflight sft", "is sft ready", "diagnose sft",
-  "validate sft config".
+  Preflight the sft block: answer "is it safe to launch training right
+  now?" Runs every deterministic check through scripts/dryrun.sh (config
+  schema, uv env, repos, converter module, source job_dir, dataset
+  registration, base-model path, WandB mode, GPU count), adds the few live
+  checks a script can't judge (is a training job already running? are the
+  GPUs held by a foreign process? will an existing checkpoint be
+  overwritten?), and always ends with one structured report: a
+  SAFE-TO-RUN verdict, a status table, the run configuration, and numbered
+  next steps. Read-only — never edits config.yaml, never launches. Triggers
+  on "check sft", "preflight sft", "is sft ready", "diagnose sft",
+  "validate sft config", "sanity check sft before launch".
 ---
 
-# /sft:check
+# /sft:check — preflight the sft block
 
-**STATUS: stub — fill in.**
+Answers one question: **is it safe to launch training right now?**
 
-Per the block plugin guidelines, `:check` is the read-only preflight.
-Reports all failures in one pass.
+It runs the deterministic checks via `scripts/dryrun.sh`, adds the handful
+of live checks a script can't judge, and prints **one structured report**
+ending in a clear YES / NO. Read-only — it never edits config or launches
+anything.
 
-## Intent
+## How it works
 
-1. **Schema** — `config.yaml` parses; `meta_info.name == 'sft'`.
-2. **GPUs** — `nvidia-smi` reports `>= infrastructure.gpus_per_node`
-   visible devices; none above a sane memory-busy threshold.
-3. **Deepspeed** — `training.deepspeed` config file exists and parses.
-4. **Dataset** — `dataset.name` is registered in
-   `repos/LLaMA-Factory/data/dataset_info.json`; the referenced JSON exists
-   and has `> 0` rows.
-5. **WandB** — `WANDB_API_KEY` is set OR `experiment.wandb_mode: disabled`.
-6. **Base model** — `model.model_path` directory exists and contains a
-   `config.json` (or HF model dir contract).
-7. **dryrun.sh** — run if present.
+```
+/sft:check
+   │
+   ├─ 1. dryrun.sh ...... deterministic checks  → [OK] / [FAIL] / [WARN] lines
+   │
+   ├─ 2. live probes .... only what needs judgment (training already
+   │                       running? GPUs ours or foreign? checkpoint clobber?)
+   │
+   └─ 3. report ......... verdict + status table + run config + next steps
+```
 
-## TODO
+Every check lives in **exactly one** layer:
 
-- [ ] Decide whether to verify training-data row schema (LF format) or
-      defer to first-step failure.
+| Layer | Run by | Covers |
+|---|---|---|
+| **Deterministic** | `scripts/dryrun.sh` | config schema · uv env + python · repos (LLaMA-Factory, swe_data_process) · `swe_data_process` import · scaffold + `job_dir` · converter module · conversion IM/LF paths + exclude-repos file · dataset registration · base-model dir · `output_dir` + train-YAML target · WandB mode/key · GPU count |
+| **Live (judgment)** | this skill | is a training process already alive? · are the GPUs idle / ours / foreign? · will training overwrite an existing checkpoint? |
+
+---
+
+## Step 0 — Orient
+
+Run only from inside the sft block. If `./config.yaml` is missing or
+`meta_info.name != 'sft'`, or `./scripts/dryrun.sh` is missing → **abort**,
+but still print the Step 3 report (heading + a `NO` verdict stating why).
+
+Read these from `config.yaml` (don't echo the whole file):
+
+| Variable | Source | Default |
+|---|---|---|
+| `N_GPUS` | `runtime_info.input.infrastructure.n_gpus_per_node` | 8 |
+| `OUTPUT_DIR` | `runtime_info.input.training.output_dir` | — |
+| `DATA_NAME` | `runtime_info.input.conversion.data_name` | — |
+| `WANDB_MODE` | `runtime_info.input.experiment.wandb_mode` | offline |
+
+The resolved checkpoint dir is `OUTPUT_DIR` if absolute, else
+`artifacts/model/$(basename OUTPUT_DIR)`.
+
+## Step 1 — Deterministic checks
+
+```bash
+bash ./scripts/dryrun.sh 2>&1; echo "EXIT=$?"
+```
+
+`dryrun.sh` prints one line per check. Read them as-is — never re-run a
+probe or overrule an `[OK]`. The bracketed prefix is the status:
+
+| Prefix | Status | Blocks launch? |
+|---|:---:|:---:|
+| `[OK]` | pass | — |
+| `[FAIL]` | fail | **yes** |
+| `[WARN]` | warning | no |
+| `[INFO]` | note | — |
+
+The final summary line is `PASS: <n>   WARN: <n>   FAIL: <n>`; `dryrun.sh`
+exits non-zero iff `FAIL > 0`. Two lines need follow-up:
+
+- any `[WARN] source.job_dir not found ...` → note it for Step 2 (the data
+  source may live on another node; conversion fails later if it's truly
+  absent and no IM/LF output is cached).
+- any `[WARN] nvidia-smi found <N> GPU(s), config expects <N_GPUS>` → hand
+  to **Step 2b**.
+
+`dryrun.sh` has no single "Run Configuration Summary" block; build the
+run-config table in Step 3 from the `[INFO]`/`[OK]` lines it printed
+(scaffold, data_name, dataset, model path, template/epochs/lr, output_dir,
+WandB mode, GPU count).
+
+## Step 2 — Live checks
+
+Things `dryrun.sh` can't decide from a static snapshot. Judge them here.
+Only two outcomes block launch — a foreign job holding the GPUs
+(`gpu:foreign`) and an already-running sft training process
+(`job:running`); the checkpoint-clobber check is advisory.
+
+### 2a — Is an sft training run already in flight?
+
+A second concurrent run on the same GPUs will OOM or corrupt both. Probe:
+
+```bash
+pgrep -af 'llamafactory.cli train'   # the training launcher
+pgrep -af 'scripts/train.sh'         # the wrapping pipeline
+pgrep -af 'update_status.py --loop'  # the background status updater
+```
+
+| Observation | Name | Status |
+|---|---|:---:|
+| a `llamafactory.cli train` / `train.sh` process is alive | `job:running` | ✗ blocks |
+| only an orphaned `update_status.py --loop` is alive | `job:stale-updater` | ⚠ |
+| nothing matches | `job:none` | ✓ |
+
+On `job:running`, report the PID + `etime` (`ps -p <pid> -o pid=,etime=`)
+and tell the user to let it finish or stop it (`kill <pid>`), not to launch
+a second run. On `job:stale-updater`, note it's harmless and will be
+replaced by the next `train.sh`.
+
+### 2b — Are the GPUs free, ours, or foreign?
+
+```bash
+nvidia-smi --query-compute-apps=pid,used_memory,process_name --format=csv,noheader 2>/dev/null
+```
+
+| Owner | Name | Status |
+|---|---|:---:|
+| no compute apps listed | `gpu:idle` | ✓ |
+| PIDs trace to *our* training run (2a `job:running`) | `gpu:mine` | ⚠ |
+| a foreign PID holds GPU memory | `gpu:foreign` | ✗ blocks |
+
+`gpu:foreign` means the run won't get the GPUs it needs — block, report
+PID + memory, and let the user decide whether to wait or stop it. If
+`dryrun.sh` already `[FAIL]`ed on `nvidia-smi not found`, emit `gpu:no-smi`
+(✗) and skip this probe.
+
+### 2c — Will training overwrite an existing checkpoint?
+
+`training.overwrite_output_dir: true` means a re-run silently clobbers the
+resolved checkpoint dir. Check it:
+
+```bash
+ls -d <resolved_output_dir>/checkpoint-* 2>/dev/null
+```
+
+| Observation | Name | Status |
+|---|---|:---:|
+| dir absent or empty | `ckpt:clean` | ✓ |
+| checkpoints present (will be overwritten) | `ckpt:clobber` | ⚠ |
+
+Advisory only — surface it so the user can rename `output_dir` or set
+`resume_from_checkpoint` if the existing run matters. Note that STEP 0/1 of
+`train.sh` are idempotent: if the IM **and** LF conversion outputs already
+exist, conversion is skipped and the registered dataset is reused.
+
+---
+
+## Step 3 — The report  (always the last thing you print)
+
+The report **is** the deliverable. Print it every single time — even on an
+abort (then: heading + a `NO` verdict whose reason is the abort message,
+nothing else). Fill this template exactly; drop only truly inapplicable
+rows.
+
+````
+## sft block check — CWD=<relative path>
+
+**SAFE TO RUN: <✅ YES | ❌ NO>** — <R> required · <A> advisory · <W> warnings
+
+| Layer | Check | Status | Detail |
+|-------|-------|:------:|--------|
+| det  | config · uv-env · repos · imports · converter · paths · dataset · model · output_dir | ✓ | ok=<N> |
+| det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim dryrun line> |
+| det  | wandb         | <✓/✗>   | <mode=offline/online/disabled · key set?> |
+| det  | gpu-count     | <✓/⚠>   | <nvidia-smi N vs config N_GPUS> |
+| live | job           | <✓/⚠/✗> | <job:none / job:stale-updater / job:running pid=<P>> |
+| live | gpu           | <✓/⚠/✗> | <gpu:idle / gpu:mine / gpu:foreign pid=<P> mem=<M>> |
+| live | checkpoint    | <✓/⚠>   | <ckpt:clean / ckpt:clobber: <dir>> |
+
+**Run configuration**
+```
+scaffold:   <source.scaffold>
+job_dir:    <source.job_dir>
+data_name:  <conversion.data_name>   dataset: <dataset.name or auto>
+model:      <model.model_name_or_path>
+training:   template=<t> epochs=<e> lr=<lr> gbs=<pbs×accum×gpus> cutoff=<cutoff_len>
+output_dir: <training.output_dir>
+wandb:      mode=<wandb_mode> run_id=<wandb_run_id or auto>
+gpus:       <n_gpus_per_node>
+```
+
+**Next steps**
+1. <one per failure, required first; quote the dryrun [FAIL] line verbatim>
+2. ...
+Re-run `/sft:check`.
+````
+
+**The three invariants:**
+
+1. **Verdict** — `✅ YES` iff `R == 0`, where `R` = dryrun `[FAIL]` count
+   **+** any `job:running` **+** any `gpu:foreign`/`gpu:no-smi`. Advisory
+   failures (`ckpt:clobber`) and warnings *never* change it.
+2. **Glyphs** — `✓` pass · `✗` blocks · `⚠` advisory/warning · `·` skipped.
+3. **Collapse** — fold all passing `det` checks into the first row; add a
+   row only for each `det` check that is `✗` or `⚠`.
+
+---
+
+## Guardrails — never do these
+
+- edit `config.yaml`, fill in `runtime_info.input.*`, or write to
+  `artifacts/` / `dashboard/`
+- run `start.sh`, `train.sh`, `dataprep.sh`, `install_env.sh`, or
+  `clean.sh`
+- re-implement or override a `dryrun.sh` check (add only the live layer)
+- modify anything under `repos/` — it is pinned, read-only code (the Repos
+  rule in `BLOCK_DEFINITION.md`)
+- `kill` a process — surface the conflict, let the user decide
+- SSH to other nodes — this block runs locally (`meta_info.resources.ip:
+  null`); `/sft:check` is head-node only
