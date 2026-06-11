@@ -1,6 +1,6 @@
 {
   "name": "rl",
-  "description": "RL block skills — environment/repo/config setup, preflight (GPU/k8s/Docker/vLLM/wandb/venv editable installs), training-run launch, and dashboard. Provides /rl:setup, /rl:check, /rl:dashboard, /rl:run.",
+  "description": "rl block skills — venv + submodule bootstrap, preflight (GPU/k8s/Docker/vLLM/wandb/venv editable installs), launch sync_1node_cc training, training dashboard, and experiment-slot scaffolding. Provides /rl:setup, /rl:check, /rl:run, /rl:dashboard, /rl:experiment.",
   "version": "0.1.0",
   "author": { "name": "ydu" }
 }
