@@ -16,11 +16,9 @@ see the root plugin under `<repo_root>/.claude/plugins/`.
 | `/rl:check`     | RL-specific preflight: schema + dryrun.sh + backend reachability + port conflicts + venv editable-install verification + live job/GPU probes. Read-only. |
 | `/rl:run`       | Preflight, then launch `scripts/start.sh` (background by default with `nohup setsid`, since training runs for hours). Run archiving (`artifacts/index.yaml`) is owned by `start.sh`'s EXIT trap → `archive_run.sh`, not by this skill. |
 | `/rl:dashboard` | Surface training state — textual summary by default (live job, latest run, log tails, wandb); optionally start/stop the vendored webui (`dashboard/serve.sh`) or publish to Cloudflare Pages. Read-only monitoring. |
-| `/rl:experiment` | Scaffold a new RL experiment slot under `artifacts/runs/<exp_name>/` (config snapshot, hypothesis, notes). Does not launch. rl-specific extra beyond the uniform skill set. |
 
 Per the block plugin guidelines, **no `/rl:create`** — new blocks are only
-created via `/root:create`. (`/rl:experiment` scaffolds *experiment slots*,
-not blocks.)
+created via `/root:create`.
 
 Run them from inside `subblock/rl/`.
 
@@ -34,6 +32,5 @@ rl-plugin/
     ├── setup/SKILL.md       # /rl:setup
     ├── check/SKILL.md       # /rl:check
     ├── run/SKILL.md         # /rl:run
-    ├── dashboard/SKILL.md   # /rl:dashboard
-    └── experiment/SKILL.md  # /rl:experiment
+    └── dashboard/SKILL.md   # /rl:dashboard
 ```

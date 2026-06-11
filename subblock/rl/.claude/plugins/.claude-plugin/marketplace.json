@@ -9,7 +9,7 @@
     {
       "name": "rl",
       "source": "./rl-plugin",
-      "description": "rl block skills — env bootstrap, preflight (dryrun + live checks), launch training, training dashboard, and experiment-slot scaffolding. Provides /rl:setup, /rl:check, /rl:run, /rl:dashboard, /rl:experiment."
+      "description": "rl block skills — env bootstrap, preflight (dryrun + live checks), launch training, and the training dashboard. Provides /rl:setup, /rl:check, /rl:run, /rl:dashboard."
     }
   ]
 }
