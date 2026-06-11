@@ -24,6 +24,11 @@ Brings the rl block from a fresh clone to "**`/rl:check` passes**". The
 skill is idempotent: any step already satisfied is skipped. It never runs
 training — that's `/rl:run`.
 
+`/root:setup` delegates here when the user opts into recursive bootstrap
+from the repo root (it hands off to `/<block>:setup` per subblock). The
+behaviour is identical either way — the Step 0 CWD check still applies, so
+the caller is expected to invoke this skill from inside `subblock/rl/`.
+
 ## Step 0 — Orient
 
 Run only from inside the rl block. Validate `./config.yaml` exists and

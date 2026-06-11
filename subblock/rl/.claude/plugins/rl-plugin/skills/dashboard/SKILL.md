@@ -94,7 +94,11 @@ PORT=8090 bash dashboard/serve.sh <start|status|stop|restart>
 
 Notes and guardrails:
 
-- **Port**: default `8090`. If the user wants another port, pass `PORT=<n>`.
+- **Port**: resolution order — `runtime_info.input.dashboard.port` in
+  `config.yaml` (if that key exists), else the `PORT` env var, else `8090`.
+  Pass the resolved value to the wrapper as `PORT=<n>`.
+- **Opt-in by design**: `/rl:run` never auto-launches the dashboard —
+  training is fully independent of it; users start it here when they want it.
 - **Public access (optional)**: for a quick public URL, set `TUNNEL=true`
   (uses `cloudflared` if installed). Only do this when the user asks — it
   exposes the dashboard publicly.
