@@ -84,14 +84,16 @@ jobs:
           set -euo pipefail
           CANON="${CANONICAL_REPO}/subblock/swegen"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run /swegen:setup on the runner once."; exit 1; }
-          ln -sfn "$CANON/repos/swegen"        repos/swegen
-          mkdir -p artifacts
-          ln -sfn "$CANON/artifacts/envs"      artifacts/envs
-          [ -f "$CANON/gh_token.txt" ] && ln -sfn "$CANON/gh_token.txt" gh_token.txt || true
+          # actions/checkout creates empty placeholder dirs for declared
+          # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
+          mkdir -p repos artifacts artifacts/swe_tasks
+          rm -rf repos/swegen artifacts/envs artifacts/swe_tasks/py-cc gh_token.txt
+          ln -s "$CANON/repos/swegen"        repos/swegen
+          ln -s "$CANON/artifacts/envs"      artifacts/envs
+          [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
           # Optional Harbor smoke fixture (case 06 SKIPs if absent)
-          mkdir -p artifacts/swe_tasks
           [ -d "$CANON/artifacts/swe_tasks/py-cc" ] && \
-            ln -sfn "$CANON/artifacts/swe_tasks/py-cc" artifacts/swe_tasks/py-cc || true
+            ln -s "$CANON/artifacts/swe_tasks/py-cc" artifacts/swe_tasks/py-cc || true
           ls -la repos artifacts artifacts/swe_tasks
       - name: Run swegen test cases
         working-directory: subblock/swegen
@@ -130,10 +132,11 @@ jobs:
         run: |
           set -euo pipefail
           CANON="${CANONICAL_REPO}/subblock/swegen"
-          ln -sfn "$CANON/repos/swegen"        repos/swegen
-          mkdir -p artifacts
-          ln -sfn "$CANON/artifacts/envs"      artifacts/envs
-          [ -f "$CANON/gh_token.txt" ] && ln -sfn "$CANON/gh_token.txt" gh_token.txt || true
+          mkdir -p repos artifacts
+          rm -rf repos/swegen artifacts/envs gh_token.txt
+          ln -s "$CANON/repos/swegen"        repos/swegen
+          ln -s "$CANON/artifacts/envs"      artifacts/envs
+          [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
       - name: Run swegen smoke (--with-smoke)
         working-directory: subblock/swegen
         env:
@@ -169,11 +172,12 @@ jobs:
           CANON="${CANONICAL_REPO}/subblock/trajgen"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run /trajgen:setup on the runner once."; exit 1; }
           mkdir -p repos artifacts
-          ln -sfn "$CANON/repos/harbor"                       repos/harbor
-          ln -sfn "$CANON/repos/swe_data_process"             repos/swe_data_process
-          ln -sfn "$CANON/artifacts/env"                      artifacts/env
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/consumption_ledger.yaml
+          ln -s "$CANON/repos/harbor"                       repos/harbor
+          ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
+          ln -s "$CANON/artifacts/env"                      artifacts/env
           [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
-            ln -sfn "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+            ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
           ls -la repos artifacts
       - name: Run trajgen test cases
         working-directory: subblock/trajgen
@@ -211,11 +215,12 @@ jobs:
           set -euo pipefail
           CANON="${CANONICAL_REPO}/subblock/trajgen"
           mkdir -p repos artifacts
-          ln -sfn "$CANON/repos/harbor"                       repos/harbor
-          ln -sfn "$CANON/repos/swe_data_process"             repos/swe_data_process
-          ln -sfn "$CANON/artifacts/env"                      artifacts/env
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/consumption_ledger.yaml
+          ln -s "$CANON/repos/harbor"                       repos/harbor
+          ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
+          ln -s "$CANON/artifacts/env"                      artifacts/env
           [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
-            ln -sfn "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+            ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
       - name: Run trajgen smoke (--with-smoke)
         working-directory: subblock/trajgen
         env:
