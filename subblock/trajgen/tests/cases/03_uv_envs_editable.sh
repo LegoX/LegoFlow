@@ -35,6 +35,7 @@ check_env() {
     harbor_dir="$BLOCK_DIR/$(cfg meta_info.repositories.harbor.path)"
     (
       cd "$harbor_dir"
+      HARBOR_EDITABLE_ROOT="$harbor_dir" \
       UV_PROJECT_ENVIRONMENT="$env_dir" \
         "$py" "$BLOCK_DIR/scripts/check_harbor_editable.py" 2>/dev/null
     ) >/tmp/trajgen_test_harbor_editable.$$ 2>&1 || true

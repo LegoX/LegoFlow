@@ -26,7 +26,7 @@ COMMIT_PIN="$(cfg meta_info.repos.swegen.commit_id)"
 VENV_PATH_RAW="$(cfg meta_info.environment.venv_path)"
 VENV_PATH="$BLOCK_DIR/$VENV_PATH_RAW"
 
-[[ -d "$REPO_PATH/.git" ]] || { echo "FAIL: $REPO_PATH/.git missing — run /swegen:setup"; exit 1; }
+[[ -e "$REPO_PATH/.git" ]] || { echo "FAIL: $REPO_PATH/.git missing — run /swegen:setup"; exit 1; }
 
 if [[ -n "$COMMIT_PIN" && "$COMMIT_PIN" != "null" ]]; then
   HEAD="$(git -C "$REPO_PATH" rev-parse HEAD 2>/dev/null || true)"

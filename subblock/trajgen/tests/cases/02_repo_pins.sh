@@ -23,7 +23,7 @@ check_repo() {
   path="$(cfg "meta_info.repositories.$name.path")"
   abs="$BLOCK_DIR/$path"
 
-  [[ -d "$abs/.git" ]] || { echo "FAIL: $path/.git missing — run scripts/update_repos.sh --repo $name"; return 1; }
+  [[ -e "$abs/.git" ]] || { echo "FAIL: $path/.git missing — run scripts/update_repos.sh --repo $name"; return 1; }
 
   local origin head
   origin="$(git -C "$abs" remote get-url origin 2>/dev/null || true)"
