@@ -19,6 +19,14 @@ permissions:
   contents: read
   pull-requests: read
 
+# The CANONICAL_REPO env var is read by the per-block "Link runtime state" steps.
+# It points to the long-lived block tree on the self-hosted runner — where the
+# venvs, uv envs, pinned submodules, gh_token.txt, and consumption ledger live
+# (populated once via /swegen:setup / /trajgen:setup). The PR's source code lands
+# in the fresh actions/checkout workspace; the runtime state is symlinked in.
+env:
+  CANONICAL_REPO: /gpufs/haoli/code/SWE-Lego-Live
+
 jobs:
   # --- Cheap cloud job: structural sanity of the block tree -------------------
   root-block:
@@ -62,21 +70,35 @@ jobs:
     name: swegen tests (cases)
     needs: detect-changes
     if: needs.detect-changes.outputs.swegen == 'true'
-    # NOTE: these tests are calibrated to this repo's CI runner and assume
-    # fixed venv paths (artifacts/envs/swegen-env), Docker socket, and
-    # gh_token.txt on disk. They cannot pass on a generic cloud runner.
-    # The label `self-hosted` is the GitHub default; replace with your own
-    # specific label (e.g. `swe-lego-ci`) if the runner is so labeled.
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 15
     steps:
+      # Source-only checkout — submodules are private and provided by the
+      # canonical checkout below via symlink.
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+      - name: Link runtime state from canonical checkout
+        working-directory: subblock/swegen
+        run: |
+          set -euo pipefail
+          CANON="${CANONICAL_REPO}/subblock/swegen"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run /swegen:setup on the runner once."; exit 1; }
+          ln -sfn "$CANON/repos/swegen"        repos/swegen
+          mkdir -p artifacts
+          ln -sfn "$CANON/artifacts/envs"      artifacts/envs
+          [ -f "$CANON/gh_token.txt" ] && ln -sfn "$CANON/gh_token.txt" gh_token.txt || true
+          # Optional Harbor smoke fixture (case 06 SKIPs if absent)
+          mkdir -p artifacts/swe_tasks
+          [ -d "$CANON/artifacts/swe_tasks/py-cc" ] && \
+            ln -sfn "$CANON/artifacts/swe_tasks/py-cc" artifacts/swe_tasks/py-cc || true
+          ls -la repos artifacts artifacts/swe_tasks
       - name: Run swegen test cases
         working-directory: subblock/swegen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
-      - name: Upload swegen smoke log on failure
+      - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -91,8 +113,6 @@ jobs:
   swegen-smoke:
     name: swegen tests (smoke)
     needs: [detect-changes, swegen-cases]
-    # Smoke runs only on manual dispatch (with run_smoke=true) or push to
-    # dev/main when swegen changed. Never on PR — burns LLM tokens.
     if: |
       needs.detect-changes.outputs.swegen == 'true' &&
       (
@@ -104,11 +124,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+      - name: Link runtime state from canonical checkout
+        working-directory: subblock/swegen
+        run: |
+          set -euo pipefail
+          CANON="${CANONICAL_REPO}/subblock/swegen"
+          ln -sfn "$CANON/repos/swegen"        repos/swegen
+          mkdir -p artifacts
+          ln -sfn "$CANON/artifacts/envs"      artifacts/envs
+          [ -f "$CANON/gh_token.txt" ] && ln -sfn "$CANON/gh_token.txt" gh_token.txt || true
       - name: Run swegen smoke (--with-smoke)
         working-directory: subblock/swegen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh --with-smoke
-      - name: Upload swegen smoke logs
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -130,11 +161,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+      - name: Link runtime state from canonical checkout
+        working-directory: subblock/trajgen
+        run: |
+          set -euo pipefail
+          CANON="${CANONICAL_REPO}/subblock/trajgen"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run /trajgen:setup on the runner once."; exit 1; }
+          mkdir -p repos artifacts
+          ln -sfn "$CANON/repos/harbor"                       repos/harbor
+          ln -sfn "$CANON/repos/swe_data_process"             repos/swe_data_process
+          ln -sfn "$CANON/artifacts/env"                      artifacts/env
+          [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
+            ln -sfn "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+          ls -la repos artifacts
       - name: Run trajgen test cases
         working-directory: subblock/trajgen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
-      - name: Upload trajgen logs on failure
+      - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -158,11 +204,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+      - name: Link runtime state from canonical checkout
+        working-directory: subblock/trajgen
+        run: |
+          set -euo pipefail
+          CANON="${CANONICAL_REPO}/subblock/trajgen"
+          mkdir -p repos artifacts
+          ln -sfn "$CANON/repos/harbor"                       repos/harbor
+          ln -sfn "$CANON/repos/swe_data_process"             repos/swe_data_process
+          ln -sfn "$CANON/artifacts/env"                      artifacts/env
+          [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
+            ln -sfn "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
       - name: Run trajgen smoke (--with-smoke)
         working-directory: subblock/trajgen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh --with-smoke
-      - name: Upload trajgen smoke logs
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
