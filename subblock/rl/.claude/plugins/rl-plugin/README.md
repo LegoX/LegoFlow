@@ -5,22 +5,20 @@ Slash commands tailored to `subblock/rl/`. They wrap `scripts/dryrun.sh`,
 KV-head divisibility, Harbor k8s reachability, venv editable-install
 verification, LiteLLM/Ray port conflicts, long-running background launch).
 
-For the generic block-system skills (only `/root:create` lives there, since
-new blocks are only ever created at the root level), see the root-level
-`root` plugin under `.claude/plugins/root-plugin/`.
+For the generic block-system commands (only `/root:create` lives there),
+see the root plugin under `<repo_root>/.claude/plugins/`.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `/rl:setup`     | One-shot environment bootstrap: bring up the venv, sync `repos/`, and fill in `config.yaml` (API keys, paths, dashboard wiring). |
-| `/rl:check`     | RL-specific preflight: schema + dryrun.sh + kubectl reachability + port conflicts + venv editable-install verification + running-job sanity. Read-only. |
-| `/rl:dashboard` | Launch the RL training dashboard (webui) and open it in the browser. |
-| `/rl:run`       | Preflight, then launch `scripts/start.sh` (background by default with `nohup setsid`, since training runs for hours). Stamps `status.phase: running` and writes the launch metadata into `config.yaml`. |
+| `/rl:setup`     | Bootstrap a fresh clone to "`/rl:check` passes": tooling preflight, submodules at pinned commits (harbor-verl-train / harbor / verl + patch), build or verify the venv via `setup_env.sh`, fill `runtime_info.input` gaps. Idempotent; never trains. |
+| `/rl:check`     | RL-specific preflight: schema + dryrun.sh + backend reachability + port conflicts + venv editable-install verification + live job/GPU probes. Read-only. |
+| `/rl:run`       | Preflight, then launch `scripts/start.sh` (background by default with `nohup setsid`, since training runs for hours). Run archiving (`artifacts/index.yaml`) is owned by `start.sh`'s EXIT trap → `archive_run.sh`, not by this skill. |
+| `/rl:dashboard` | Surface training state — textual summary by default (live job, latest run, log tails, wandb); optionally start/stop the vendored webui (`dashboard/serve.sh`) or publish to Cloudflare Pages. Read-only monitoring. |
 
 Per the block plugin guidelines, **no `/rl:create`** — new blocks are only
-created via `/root:create`. Per-run experiment slots (the legacy meaning of
-`/rl:create`) are handled inside `/rl:setup` or by hand.
+created via `/root:create`.
 
 Run them from inside `subblock/rl/`.
 
@@ -30,10 +28,9 @@ Run them from inside `subblock/rl/`.
 rl-plugin/
 ├── .claude-plugin/plugin.json
 ├── README.md
-├── resources/                # block-specific reference docs (optional)
 └── skills/
-    ├── setup/SKILL.md        # /rl:setup
-    ├── check/SKILL.md        # /rl:check
-    ├── dashboard/SKILL.md    # /rl:dashboard
-    └── run/SKILL.md          # /rl:run
+    ├── setup/SKILL.md       # /rl:setup
+    ├── check/SKILL.md       # /rl:check
+    ├── run/SKILL.md         # /rl:run
+    └── dashboard/SKILL.md   # /rl:dashboard
 ```

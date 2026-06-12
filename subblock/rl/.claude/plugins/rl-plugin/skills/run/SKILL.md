@@ -2,14 +2,14 @@
 name: run
 description: >
   Preflight and launch the rl block in the current working directory.
-  Runs /rl:check internally (rejects on any failure), then launches
+  Runs /rl:check internally (rejects on any failure), shows the run
+  configuration and waits for explicit confirmation, then launches
   scripts/start.sh in the background by default — training takes hours,
-  so the foreground default of /rl:run is wrong here. After launch,
-  stamps status.phase: running with the auto-generated exp_name, parent
-  PID, and launch log path in config.yaml; appends a row to
-  artifacts/index.yaml; and prints monitoring commands. Does not block
-  on completion — archive on exit is left to /rl:check / a future
-  /rl:finish skill. Triggers on phrases like "run rl", "launch rl
+  so a foreground default would be wrong here. Run archiving is owned by
+  start.sh's EXIT trap → scripts/archive_run.sh, which appends the run_NNN
+  entry to artifacts/index.yaml; this skill never pre-writes run state.
+  After launch it surfaces the auto-generated exp_name, the PIDs, and
+  monitoring commands. Triggers on phrases like "run rl", "launch rl
   training", "kick off the rl block", "start the rl run",
   "fire off rl training", "launch sync_1node_cc".
 ---
@@ -17,8 +17,7 @@ description: >
 # /rl:run
 
 Preflight, then launch RL training in the background. Refuses if any check
-fails, or if there's already a live training process whose PID is recorded
-in `status.current_job`.
+fails, or if there's already a live training process on the box.
 
 ## Step 0 — Orient
 
@@ -32,44 +31,46 @@ Read `./config.yaml` and `./CLAUDE.md` for context.
 
 ## Step 1 — Refuse if a live run is in flight
 
-If `status.phase == 'running'` in `config.yaml`:
+A second concurrent run on the same GPUs will OOM or corrupt both. Live
+state is the process table — never `config.yaml` (it is one-shot
+configuration; per `BLOCK_DEFINITION.md`, run state lives in
+`artifacts/index.yaml`, written on exit by `archive_run.sh`). Probe:
 
-1. Parse PIDs from `status.current_job.detail` (free-text; look for
-   `pid <digits>` patterns).
-2. For each PID, `ps -p <pid> -o pid=,comm=,etime=`.
-3. If any PID matches `sync_1node_cc|train_1node_cc|main_ppo|bash` AND is
-   alive → abort with:
-   ```
-   A training run is already in flight:
-     job:   <status.current_job.name>
-     pids:  <alive pid list with etime>
-     log:   <log_path from status.current_job.detail>
-   Refusing to start another. Stop the current run first
-   (`kill <pid>` then `bash scripts/clean.sh`) or wait for it to finish.
-   ```
-4. If no PIDs are alive but `status.phase == 'running'`, do not abort —
-   warn that the status is stale, and tell the user `/rl:run` will overwrite
-   it. (This is the common case after a crash.)
+```bash
+pgrep -af 'sync_1node_cc|train_1node_cc'
+pgrep -af 'main_ppo'
+```
+
+If any is alive, abort with:
+
+```
+A training run is already in flight:
+  pids:  <alive pid list with etime — ps -p <pid> -o pid=,comm=,etime=>
+  log:   <newest logs/launch_*.log, and repos/harbor-verl-train/logs/<exp>.log>
+Refusing to start another. Let it finish, or stop it first
+(`kill -INT <pid>` then `bash scripts/clean.sh`), then re-run /rl:run.
+```
 
 ## Step 2 — Preflight via /rl:check
 
-Invoke the `check` skill's logic on the current block (you can call into
-that skill, or inline its Step 1–5 directly: `bash scripts/dryrun.sh` plus
-the k8s / port / venv / submodule checks).
+Invoke the `check` skill's logic on the current block (call into that
+skill, or inline its Step 1–3: `bash scripts/dryrun.sh` plus the live
+job / port / GPU checks).
 
-If any **failure** is reported (warnings are fine), abort with the same
-consolidated report `/rl:check` would have printed, prefixed:
+If `check` returns **SAFE TO RUN: ❌ NO** (any dryrun failure, any
+`job:running`, `port:conflict`, or `gpu:foreign`), abort with the same
+consolidated report `/rl:check` prints, prefixed:
 "Preflight failed — fix the items below before `/rl:run`."
 
 Do **not** invent values, skip checks, or pass `--force` flags. If the
 user says "just run it", explain which check failed and ask them to
-fix it.
+fix it. Inputs are user-owned; this skill is a launcher.
 
-## Step 2.5 — Show run configuration and confirm
+## Step 3 — Show run configuration and confirm  (mandatory)
 
 After preflight passes, present a compact configuration summary to the
-user and ask for explicit confirmation before proceeding. This is
-**mandatory** — never skip it. The summary must include:
+user and ask for explicit confirmation before proceeding. **Never skip
+this** — a full RL run occupies 8 GPUs for hours.
 
 ```
 ┌─ Run Configuration ─────────────────────────────────
@@ -99,7 +100,7 @@ then re-run `/rl:run`.
 If `dryrun.sh` already printed the summary (it does at the end), you may
 reference it instead of reprinting, but you MUST still ask for confirmation.
 
-## Step 3 — Decide launch mode
+## Step 4 — Decide launch mode
 
 Default = **background**. RL training is hours-long; running it in the
 foreground holds the agent session hostage.
@@ -109,59 +110,26 @@ Ask the user once, in a single short line:
 Launch mode? [B]ackground (default — nohup setsid + writes logs/launch_<ts>.log) / [F]oreground (blocks this session until exit).
 ```
 
-Accept `B`, `F`, or `<enter>`. If the user replies "background" / "fg" /
-"detach" / etc., map accordingly.
+Accept `B`, `F`, or `<enter>` (= background). Map "background" / "fg" /
+"detach" / etc. accordingly.
 
-## Step 4 — Generate launch metadata
+## Step 5 — Launch metadata
 
 1. **Timestamp**: `TS=$(date -u +%Y%m%d-%H%M%S)`.
 2. **Launch log path**: `./logs/launch_${TS}.log`. Create `./logs/` if
-   missing.
-3. **Run id**: scan `./artifacts/index.yaml` for the highest `run_NNN`,
-   pick the next zero-padded id. Initialise `artifacts/index.yaml` with
-   `runs: []` if it's missing or empty.
-4. **exp_name**: read `runtime_info.input.experiment.exp_name` from
-   `config.yaml`. If empty, leave it empty — `sync_1node_cc.sh` will
-   auto-generate `harbor-cc-sync-1n-<UTC timestamp>` and that name will
-   appear in the first few seconds of the launch log; Step 6 parses it back.
+   missing. (Deliberately `logs/`, not `artifacts/logs/` — the dashboard
+   webui's `serve.sh` reads `logs/launch_*.log` as a data source.)
+3. **exp_name**: read `runtime_info.input.experiment.exp_name` from
+   `config.yaml`. If empty, leave it empty — `sync_1node_cc.sh`
+   auto-generates `harbor-cc-sync-1n-<UTC timestamp>` and that name appears
+   in the first few seconds of the launch log; Step 6 parses it back for
+   the report.
 
-## Step 5 — Stamp running state (before launch)
-
-Update `./config.yaml` (preserve all other fields and YAML formatting as
-best you can — read–parse–write with `ruamel.yaml` or a careful
-text-edit; never blow away comments):
-
-```yaml
-status:
-  phase: running
-  progress: "Launched <TS> — vllm boot + cuda-graph capture (10–20 min before LiteLLM registers)"
-  next_steps: |
-    Monitor:
-      tail -F <launch_log>
-      curl -sS http://127.0.0.1:<litellm_port>/health/liveliness   # once vLLM registers
-      nvidia-smi
-  blockers: null
-  last_updated: "<UTC now ISO>"
-  current_job:
-    name: <exp_name or "auto — see launch log">
-    started_at: "<UTC now ISO>"
-    detail: |
-      run id: <run_NNN>
-      launch mode: <background|foreground>
-      launch log: <launch_log>
-      parent pid: <to be filled in Step 6>
-      upstream log: repos/harbor-verl-train/logs/<exp_name>.log
-```
-
-Append to `./artifacts/index.yaml`:
-
-```yaml
-- id: <run_NNN>
-  started_at: "<UTC now ISO>"
-  status: running
-  archive: artifacts/runs/<exp_name>/    # if /rl:create scaffolded a slot for this exp_name; else null
-  notes: "<short summary — derive from experiment.yaml if the slot exists; else ask the user briefly>"
-```
+`start.sh` itself archives the run on exit (its EXIT trap calls
+`scripts/archive_run.sh`, which appends the `run_NNN` entry to
+`artifacts/index.yaml`). So this skill does **not** write run state into
+`config.yaml` and does **not** pre-write an index.yaml row — let the
+script own that to avoid double entries.
 
 ## Step 6 — Launch
 
@@ -177,17 +145,16 @@ After launching:
 
 1. Wait up to 30s (1s polls) for the launch log to grow past 0 bytes.
 2. Read its first 80 lines; locate the auto-generated exp_name (the
-   upstream script prints something like `[sync_1node_cc] exp=<name>`
-   or sets it as an env var echo). If found, update
-   `status.current_job.name` and the matching `artifacts/index.yaml` row.
+   upstream script prints something like `[sync_1node_cc] exp=<name>`).
+   Surface it in the Step 7 report.
 3. Locate the actual `sync_1node_cc.sh` PID and `main_ppo` PID once they
-   appear (`pgrep -f sync_1node_cc.sh`, `pgrep -f main_ppo`). Add both
-   to `status.current_job.detail`.
+   appear (`pgrep -f sync_1node_cc.sh`, `pgrep -f main_ppo`). Surface them
+   too.
 
-If the launch log stays empty for 30s OR exits within 30s with non-zero,
-abort: revert `status.phase` to `failed` with the tail of the launch log
-in `status.blockers`, mark the `artifacts/index.yaml` row `failed`, and
-print the tail. Do NOT retry — the user fixes and re-runs.
+If the launch log stays empty for 30s OR `start.sh` exits non-zero within
+30s, print the tail of the launch log and tell the user to fix and re-run.
+Do NOT retry automatically. (`archive_run.sh` has already recorded the
+failed run in `artifacts/index.yaml` via the EXIT trap.)
 
 ### Foreground (only if user picked it)
 
@@ -195,9 +162,9 @@ print the tail. Do NOT retry — the user fixes and re-runs.
 bash ./scripts/start.sh 2>&1 | tee "<launch_log>"
 ```
 
-Stream output. On exit, update `status.phase` to `done` (rc 0) or `failed`
-(rc != 0), set `current_job.completed_at` and `current_job.exit_code`,
-and update the matching `artifacts/index.yaml` row.
+Stream output. On exit, report the final exit code and the tail of the
+upstream log. The EXIT trap has already archived the run and appended the
+index entry — do not duplicate it.
 
 ## Step 7 — Report
 
@@ -205,12 +172,12 @@ Print a tight summary (≤ 12 lines):
 
 ```
 Launched (background)
-  run id:       run_NNN
   exp_name:     <name or "auto — see launch log in 30s">
   launch log:   logs/launch_<TS>.log
   upstream log: repos/harbor-verl-train/logs/<exp_name>.log
   parent pid:   <pid>
-  status:       running (vllm boot + cuda-graph capture)
+  status:       running (vllm boot + cuda-graph capture, 10–20 min before LiteLLM registers)
+  archive:      artifacts/index.yaml entry will be appended by archive_run.sh on exit
 
 Monitor:
   tail -F logs/launch_<TS>.log
@@ -228,6 +195,9 @@ and the upstream log tail.
 - Never `--force` past a failed preflight. Tell the user what to fix.
 - Never `kill` an existing live training process to make room for a new one. Ask the user to stop it themselves.
 - Never edit `runtime_info.input.*` values to make preflight pass. Inputs are user-owned; the skill is just a launcher.
+- Never write run state into `config.yaml` or pre-write `artifacts/index.yaml` — `archive_run.sh` (via `start.sh`'s EXIT trap) owns run archiving.
+- Never modify anything under `repos/` — pinned, read-only code.
 - Never run training in the foreground without asking — it locks the user's session for hours.
 - Never archive checkpoints or trial directories. Archival is a separate concern; checkpoints stay where verl wrote them.
 - Never run on a remote host. `meta_info.resources.ip` is null for this block today; if it ever changes, refuse and ask the user to migrate the run path.
+- There is no `scripts/stop.sh` in this block today; stopping is manual (`kill -INT <pid>` then `bash scripts/clean.sh`). Don't invent one.
