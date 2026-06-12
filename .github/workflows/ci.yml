@@ -4,12 +4,19 @@ on:
   pull_request:
   push:
     branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      run_smoke:
+        description: "Run subblock smoke tests (real LLM tokens + Docker, ~30 min each)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # --- Cheap cloud job: structural sanity of the block tree -------------------
   root-block:
     name: Root block sanity
     runs-on: ubuntu-latest
@@ -25,3 +32,139 @@ jobs:
 
       - name: Run root block tests
         run: pytest tests/test_root_block.py -v
+
+  # --- Decide which subblocks need their CI run -------------------------------
+  detect-changes:
+    name: Detect changed subblocks
+    runs-on: ubuntu-latest
+    outputs:
+      swegen: ${{ steps.filter.outputs.swegen }}
+      trajgen: ${{ steps.filter.outputs.trajgen }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            swegen:
+              - 'subblock/swegen/**'
+              - '.github/workflows/ci.yml'
+            trajgen:
+              - 'subblock/trajgen/**'
+              - '.github/workflows/ci.yml'
+
+  # --- swegen: cheap test cases (self-hosted, fixed-paths CI runner) ---------
+  swegen-cases:
+    name: swegen tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.swegen == 'true'
+    # NOTE: these tests are calibrated to this repo's CI runner and assume
+    # fixed venv paths (artifacts/envs/swegen-env), Docker socket, and
+    # gh_token.txt on disk. They cannot pass on a generic cloud runner.
+    # The label `self-hosted` is the GitHub default; replace with your own
+    # specific label (e.g. `swe-lego-ci`) if the runner is so labeled.
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Run swegen test cases
+        working-directory: subblock/swegen
+        run: bash tests/run.sh
+      - name: Upload swegen smoke log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swegen-cases-logs-${{ github.run_id }}
+          path: |
+            subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py.log
+            subblock/swegen/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # --- swegen: end-to-end 10-PR smoke (~30 min) ------------------------------
+  swegen-smoke:
+    name: swegen tests (smoke)
+    needs: [detect-changes, swegen-cases]
+    # Smoke runs only on manual dispatch (with run_smoke=true) or push to
+    # dev/main when swegen changed. Never on PR — burns LLM tokens.
+    if: |
+      needs.detect-changes.outputs.swegen == 'true' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+      )
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Run swegen smoke (--with-smoke)
+        working-directory: subblock/swegen
+        run: bash tests/run.sh --with-smoke
+      - name: Upload swegen smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swegen-smoke-logs-${{ github.run_id }}
+          path: |
+            subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py.log
+            subblock/swegen/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
+            subblock/swegen/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --- trajgen: cheap test cases ---------------------------------------------
+  trajgen-cases:
+    name: trajgen tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.trajgen == 'true'
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Run trajgen test cases
+        working-directory: subblock/trajgen
+        run: bash tests/run.sh
+      - name: Upload trajgen logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trajgen-cases-logs-${{ github.run_id }}
+          path: subblock/trajgen/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # --- trajgen: end-to-end 10-HF-task smoke (~30 min) -----------------------
+  trajgen-smoke:
+    name: trajgen tests (smoke)
+    needs: [detect-changes, trajgen-cases]
+    if: |
+      needs.detect-changes.outputs.trajgen == 'true' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+      )
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Run trajgen smoke (--with-smoke)
+        working-directory: subblock/trajgen
+        run: bash tests/run.sh --with-smoke
+      - name: Upload trajgen smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trajgen-smoke-logs-${{ github.run_id }}
+          path: |
+            subblock/trajgen/artifacts/logs/
+            subblock/trajgen/artifacts/jobs-smoke/
+          if-no-files-found: ignore
+          retention-days: 14
