@@ -73,8 +73,13 @@ jobs:
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 15
     steps:
-      # Source-only checkout — submodules are private and provided by the
-      # canonical checkout below via symlink.
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "find /x \\! -uid 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+          fi
+      # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
         with:
           submodules: false
@@ -140,6 +145,12 @@ jobs:
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 70
     steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "find /x \\! -uid 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: false
@@ -194,20 +205,17 @@ jobs:
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 15
     steps:
-      - name: Clean root-owned residue from prior smoke
-        # docker cp from the agent runtime image leaves agent-runtime
-        # owned by root, which makes actions/checkout's workspace-clean
-        # fail with EACCES rmdir. Self-heal via docker (which runs as
-        # root, so it can fix permissions and delete).
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        # Prior trajgen smokes drop root-owned files in the workspace —
+        # Harbor's bind-mounted agent-runtime AND Docker trial containers
+        # running as root drop sessions/state under jobs/smoke/. Any of
+        # these makes actions/checkout's workspace-clean fail with EACCES.
+        # Run docker (which IS root on the daemon) to chown anything in the
+        # workspace not owned by uid 1000 back to us. Idempotent.
         run: |
-          RESIDUE="$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime"
-          if [ -L "$RESIDUE" ]; then
-            # Safe: removing a symlink doesn't traverse into canonical.
-            rm -f "$RESIDUE"
-          elif [ -d "$RESIDUE" ]; then
-            # Real dir (Harbor created/populated it as root) — needs docker.
-            docker run --rm -v "$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts:/x:rw" \
-              alpine:3 sh -c "chown -R 1000:1000 /x/agent-runtime 2>/dev/null || true; rm -rf /x/agent-runtime" || true
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "find /x \\! -uid 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -275,16 +283,11 @@ jobs:
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 55
     steps:
-      - name: Clean root-owned residue from prior smoke
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
         run: |
-          RESIDUE="$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime"
-          if [ -L "$RESIDUE" ]; then
-            # Safe: removing a symlink doesn't traverse into canonical.
-            rm -f "$RESIDUE"
-          elif [ -d "$RESIDUE" ]; then
-            # Real dir (Harbor created/populated it as root) — needs docker.
-            docker run --rm -v "$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts:/x:rw" \
-              alpine:3 sh -c "chown -R 1000:1000 /x/agent-runtime 2>/dev/null || true; rm -rf /x/agent-runtime" || true
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "find /x \\! -uid 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
