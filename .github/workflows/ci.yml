@@ -19,13 +19,13 @@ permissions:
   contents: read
   pull-requests: read
 
-# The CANONICAL_REPO env var is read by the per-block "Link runtime state" steps.
-# It points to the long-lived block tree on the self-hosted runner — where the
-# venvs, uv envs, pinned submodules, gh_token.txt, and consumption ledger live
-# (populated once via /swegen:setup / /trajgen:setup). The PR's source code lands
-# in the fresh actions/checkout workspace; the runtime state is symlinked in.
+# SHARED_RUNTIME is read by the per-block "Link runtime state" steps. It points
+# at a self-contained mirror of the runtime state CI needs — venvs / uv envs /
+# pinned submodule checkouts / agent-runtime / consumption ledger / gh_token —
+# living entirely under /gpufs (NOT under /, NOT under the canonical block
+# tree). Rebuild it from the canonical tree with /gpufs/haoli/cicd/sync_runtime.sh.
 env:
-  CANONICAL_REPO: /gpufs/haoli/code/SWE-Lego-Live
+  SHARED_RUNTIME: /gpufs/haoli/cicd/shared/runtime
 
 jobs:
   # --- Cheap cloud job: structural sanity of the block tree -------------------
@@ -92,14 +92,14 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/home/haoli/.uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
-      - name: Link runtime state from canonical checkout
+      - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/swegen
         run: |
           set -euo pipefail
-          CANON="${CANONICAL_REPO}/subblock/swegen"
-          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run /swegen:setup on the runner once."; exit 1; }
+          CANON="${SHARED_RUNTIME}/swegen"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh swegen"; exit 1; }
           # actions/checkout creates empty placeholder dirs for declared
           # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
           mkdir -p repos artifacts artifacts/swe_tasks
@@ -157,13 +157,13 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/home/haoli/.uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
-      - name: Link runtime state from canonical checkout
+      - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/swegen
         run: |
           set -euo pipefail
-          CANON="${CANONICAL_REPO}/subblock/swegen"
+          CANON="${SHARED_RUNTIME}/swegen"
           mkdir -p repos artifacts
           rm -rf repos/swegen artifacts/envs gh_token.txt
           ln -s "$CANON/repos/swegen"        repos/swegen
@@ -226,14 +226,14 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/home/haoli/.uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
-      - name: Link runtime state from canonical checkout
+      - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/trajgen
         run: |
           set -euo pipefail
-          CANON="${CANONICAL_REPO}/subblock/trajgen"
-          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run /trajgen:setup on the runner once."; exit 1; }
+          CANON="${SHARED_RUNTIME}/trajgen"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh trajgen"; exit 1; }
           mkdir -p repos artifacts
           rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
@@ -303,13 +303,13 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/home/haoli/.uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
-      - name: Link runtime state from canonical checkout
+      - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/trajgen
         run: |
           set -euo pipefail
-          CANON="${CANONICAL_REPO}/subblock/trajgen"
+          CANON="${SHARED_RUNTIME}/trajgen"
           mkdir -p repos artifacts
           rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
