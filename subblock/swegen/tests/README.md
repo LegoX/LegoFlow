@@ -1,7 +1,7 @@
 # swegen CI tests
 
 Drift detection (cheap, ~30 s) plus an optional end-to-end smoke run
-(~30 min) for the swegen block. Calibrated to this repo's fixed CI runner.
+(~60 min) for the swegen block. Calibrated to this repo's fixed CI runner.
 For portable user-environment diagnostics, use the `/swegen:check` skill instead.
 
 ---
@@ -12,7 +12,7 @@ For portable user-environment diagnostics, use the `/swegen:check` skill instead
 # cheap path — every test except the smoke. Safe to run anywhere:
 bash subblock/swegen/tests/run.sh
 
-# full path — adds the 45-min, real-LLM, real-Docker smoke. Self-hosted only:
+# full path — adds the 60-min, real-LLM, real-Docker smoke. Self-hosted only:
 bash subblock/swegen/tests/run.sh --with-smoke
 # equivalent:  TESTS_WITH_SMOKE=1 bash subblock/swegen/tests/run.sh
 ```
@@ -32,7 +32,7 @@ Per-test exit codes: `0` pass · `77` skip · anything else fail.
 | 04 | LLM endpoint | cross-provider hydration succeeds and a real `chat.completions.create` returns content | ~20 s |
 | 05 | Docker | daemon reachable via configured `DOCKER_HOST` | <1 s |
 | 06 | Harbor smoke | known verified task `tox-dev__tox-3813` still produces NOP=0, Oracle=1 (SKIPs if fixture absent) | ~2–5 min |
-| 10 | **10-PR demo** *(smoke)* | `swegen create --max-pr 1` over the 10-PR quick-verify fixture produces ≥1 verified task within 45 min | up to 45 min |
+| 10 | **10-PR demo** *(smoke)* | `swegen create --max-pr 1` over the 10-PR quick-verify fixture produces ≥1 verified task within 60 min | up to 60 min |
 
 The 10-PR demo runs only with `--with-smoke` and is gated to `push` events on
 `dev`/`main` and manual `workflow_dispatch` runs (`run_smoke=true`) in CI —
@@ -139,8 +139,8 @@ output contains both `NOP reward=0` and `Oracle reward=1`. Otherwise SKIPs.
 
 Runs `swegen create --max-pr 1 --no-require-issue --min-source-files 1`
 against the 10 Python PRs in `fixtures/python_pr_ids.txt` (the quick-verify
-set with `tox-dev/tox:pr-3813` first). Wrapped in `timeout --foreground 2700`
-for a 45-minute hard budget. Passes when
+set with `tox-dev/tox:pr-3813` first). Wrapped in `timeout --foreground 3600`
+for a 60-minute hard budget. Passes when
 `artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt` has ≥1 task ID. On
 failure, tails the last 40 lines of `artifacts/swe_tasks/.swegen-smoke-py.log`.
 </details>

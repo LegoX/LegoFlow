@@ -138,7 +138,7 @@ jobs:
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 55
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
         with:

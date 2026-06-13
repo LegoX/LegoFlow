@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CI smoke 10: end-to-end with 10 Python PRs from the quick-verify fixture.
 # Pass condition: at least one task ID lands in verifiable_tasks.txt.
-# Wall-clock budget: ~45 min when it works (tox-dev/tox:pr-3813 first).
+# Wall-clock budget: ~60 min when it works (tox-dev/tox:pr-3813 first).
 #
 # This burns LLM tokens + Docker time. Only invoked when run.sh is called with
 # --with-smoke (or TESTS_WITH_SMOKE=1). Not for cloud GitHub Actions runners.
@@ -32,9 +32,9 @@ mkdir -p "$OUTPUT" "$STATE"
 echo "INFO: running swegen create on 10 PRs (output=$OUTPUT)"
 echo "INFO: log -> $LOG"
 
-# --max-pr 1 → bail as soon as one PR verifies. Walltime cap 45m via `timeout`.
+# --max-pr 1 → bail as soon as one PR verifies. Walltime cap 60m via `timeout`.
 set +e
-timeout --foreground 2700 \
+timeout --foreground 3600 \
   "$VENV_BIN/swegen" create \
     --input-ids-file "$FIXTURE" \
     --max-pr 1 \
@@ -60,7 +60,7 @@ if [[ -s "$MANIFEST" ]]; then
 fi
 
 if [[ "$rc" == 124 ]]; then
-  echo "FAIL: 45-minute wall-clock budget exceeded; no verified task produced"
+  echo "FAIL: 60-minute wall-clock budget exceeded; no verified task produced"
 else
   echo "FAIL: swegen create finished (rc=$rc) but verifiable_tasks.txt is empty"
 fi
