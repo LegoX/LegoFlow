@@ -1,0 +1,221 @@
+name: CI (from-scratch rebuild)
+
+# Manual-only opt-in workflow. The default CI in `ci.yml` uses the hybrid
+# symlink-from-canonical pattern for speed. This workflow exists for the
+# rare cases where you suspect the canonical machine's runtime state has
+# drifted from what the PR's source code expects (e.g. a dep change in
+# pyproject.toml, a submodule commit bump, or a pulled Docker image), and
+# you want CI to validate the PR against a freshly built environment.
+#
+# Triggers: workflow_dispatch only.
+#   Run from: https://github.com/SWE-Lego/SWE-Lego-Live/actions/workflows/ci-from-scratch.yml
+#
+# What it does, per block:
+#   - Source-only checkout of the PR's branch (no canonical symlinks).
+#   - Clones the private submodule(s) using a PAT from
+#     /gpufs/haoli/cicd/shared/gh_token.txt (HOME isolated to per-job temp
+#     so ~/.gitconfig is never mutated).
+#   - Builds the venv / uv envs from scratch using shared pip + uv caches.
+#   - Pulls the agent runtime image.
+#   - Initializes the consumption ledger if missing.
+#   - Runs `tests/run.sh` (+ `--with-smoke` if requested).
+
+on:
+  workflow_dispatch:
+    inputs:
+      block:
+        description: "Which subblock to rebuild + test"
+        type: choice
+        options: [swegen, trajgen, both]
+        default: both
+      run_smoke:
+        description: "Also run the smoke tests (~30 min each, real LLM + Docker)"
+        type: boolean
+        default: false
+      ref:
+        description: "Branch / tag / commit to test (defaults to the workflow source ref)"
+        type: string
+        default: ""
+
+concurrency:
+  group: ci-from-scratch-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CICD_SHARED: /gpufs/haoli/cicd/shared
+
+jobs:
+  # ===========================================================================
+  # swegen — fresh venv + repos/swegen submodule
+  # ===========================================================================
+  swegen:
+    name: swegen (from-scratch)
+    if: ${{ inputs.block == 'swegen' || inputs.block == 'both' }}
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: false
+      - name: Stage shared CI env + isolated HOME + PAT
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source "$CICD_SHARED/.env"
+          PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
+          [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
+          # Per-job HOME so `git config --global` never touches the runner
+          # user's real ~/.gitconfig (which is shared with their interactive
+          # shell). Without this, every CI run pollutes the host gitconfig.
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          HOME="$CI_HOME" git config --global user.email "ci@swe-lego.local"
+          HOME="$CI_HOME" git config --global user.name "swe-lego-ci"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          # actions/checkout sets a per-repo extraheader with the workflow's
+          # GITHUB_TOKEN; that token can't see private SWE-Lego submodules, so
+          # it must not override our PAT-embedded URL rewrites.
+          git -C "$GITHUB_WORKSPACE" config --local --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/home/haoli/.uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Init swegen submodule
+        run: git submodule update --init --depth 1 subblock/swegen/repos/swegen
+      - name: Build swegen venv from scratch
+        working-directory: subblock/swegen
+        run: |
+          set -euo pipefail
+          rm -rf artifacts/envs/swegen-env
+          python3 -m venv artifacts/envs/swegen-env
+          artifacts/envs/swegen-env/bin/pip install --upgrade pip
+          artifacts/envs/swegen-env/bin/pip install -e repos/swegen/
+      - name: Stage gh_token.txt
+        run: cp "$CICD_SHARED/gh_token.txt" subblock/swegen/gh_token.txt
+      - name: Run swegen test cases
+        working-directory: subblock/swegen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh
+      - name: Run swegen smoke (if requested)
+        if: ${{ inputs.run_smoke == true }}
+        working-directory: subblock/swegen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh --with-smoke
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swegen-from-scratch-logs-${{ github.run_id }}
+          path: |
+            subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py.log
+            subblock/swegen/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
+            subblock/swegen/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ===========================================================================
+  # trajgen — fresh harbor + swe_data_process + litellm envs, pulled image
+  # ===========================================================================
+  trajgen:
+    name: trajgen (from-scratch)
+    if: ${{ inputs.block == 'trajgen' || inputs.block == 'both' }}
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 90
+    env:
+      RUNTIME_IMAGE: docker.io/jierun/c-cc-2.1.118:v0.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: false
+      - name: Stage shared CI env + isolated HOME + PAT
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source "$CICD_SHARED/.env"
+          PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
+          [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          HOME="$CI_HOME" git config --global user.email "ci@swe-lego.local"
+          HOME="$CI_HOME" git config --global user.name "swe-lego-ci"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          git -C "$GITHUB_WORKSPACE" config --local --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/home/haoli/.uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Init harbor submodule + clone swe_data_process
+        working-directory: subblock/trajgen
+        run: |
+          set -euo pipefail
+          git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 subblock/trajgen/repos/harbor
+          bash scripts/update_repos.sh --repo swe_data_process
+      - name: Build harbor uv env from scratch
+        working-directory: subblock/trajgen
+        run: |
+          rm -rf artifacts/env/harbor-uv
+          bash scripts/setup_harbor_env.sh
+      - name: Build swe_data_process uv env from scratch
+        working-directory: subblock/trajgen
+        run: |
+          rm -rf artifacts/env/swe-data-process-uv
+          bash scripts/setup_swe_data_process_env.sh
+      - name: Build litellm venv from scratch
+        working-directory: subblock/trajgen
+        run: |
+          set -euo pipefail
+          rm -rf artifacts/env/litellm-venv
+          uv venv artifacts/env/litellm-venv --python 3.13
+          uv pip install --python artifacts/env/litellm-venv/bin/python 'litellm[proxy]==1.83.14'
+      - name: Pull agent runtime image
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: docker pull "$RUNTIME_IMAGE"
+      - name: Initialize consumption ledger if missing
+        working-directory: subblock/trajgen
+        run: |
+          mkdir -p artifacts
+          if [ ! -f artifacts/consumption_ledger.yaml ]; then
+            printf 'description: %s\nruns: []\n' "trajgen task consumption ledger" \
+              > artifacts/consumption_ledger.yaml
+          fi
+      - name: Run trajgen test cases
+        working-directory: subblock/trajgen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh
+      - name: Run trajgen smoke (if requested)
+        if: ${{ inputs.run_smoke == true }}
+        working-directory: subblock/trajgen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh --with-smoke
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trajgen-from-scratch-logs-${{ github.run_id }}
+          path: |
+            subblock/trajgen/artifacts/logs/
+            subblock/trajgen/artifacts/jobs-smoke/
+          if-no-files-found: ignore
+          retention-days: 14
