@@ -27,6 +27,13 @@ SMOKE_JOBS_DIR="$BLOCK_DIR/$SMOKE_JOBS_DIR_REL"
 
 cleanup() {
   local rc=$?
+  # Kill any Harbor smoke containers that survived the internal timeout —
+  # GNU timeout's SIGTERM doesn't propagate cleanly into Docker children,
+  # so they sometimes outlive start.sh and burn the job-level timeout.
+  if command -v docker >/dev/null 2>&1; then
+    docker ps --filter "name=harbor-trial-" --format '{{.ID}}' 2>/dev/null \
+      | head -50 | xargs -r docker kill >/dev/null 2>&1 || true
+  fi
   if [[ -f "$BACKUP" ]]; then
     mv -f "$BACKUP" "$CONFIG"
     echo "INFO: restored config.yaml from backup"
@@ -86,7 +93,10 @@ if ! bash "$BLOCK_DIR/scripts/prepare_tasks.sh" >>"$LOG" 2>&1; then
 fi
 
 set +e
-timeout --foreground 1800 bash "$BLOCK_DIR/scripts/start.sh" >>"$LOG" 2>&1
+# --kill-after 60s ensures SIGKILL fires if start.sh ignores SIGTERM (Harbor
+# pipes the signal up the bash chain unreliably; without this the job-level
+# timeout-minutes lops everything off before the result scan + PASS report).
+timeout --foreground --kill-after=60s 1500 bash "$BLOCK_DIR/scripts/start.sh" >>"$LOG" 2>&1
 rc=$?
 set -e
 

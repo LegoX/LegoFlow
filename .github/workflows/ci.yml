@@ -273,7 +273,7 @@ jobs:
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 40
+    timeout-minutes: 55
     steps:
       - name: Clean root-owned residue from prior smoke
         run: |
