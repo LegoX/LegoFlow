@@ -70,6 +70,12 @@ LOG="$BLOCK_DIR/artifacts/logs/smoke-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p "$(dirname "$LOG")"
 echo "INFO: smoke log -> $LOG"
 
+# Warm cpfs/networked-FS cache: the first `harbor --help` import takes ~20 s
+# on a cold gpufs mount (lots of pydantic/asyncio modules to page in), which
+# trips dryrun.sh's hardcoded `timeout 15`. Second run is ~9 s. Cheap to do.
+echo "INFO: warming harbor CLI cache"
+"$BLOCK_DIR/artifacts/env/harbor-uv/bin/harbor" --help >/dev/null 2>&1 || true
+
 # prepare_tasks.sh must run before start.sh — start.sh's dryrun gate checks
 # that artifacts/tasks/<dataset>/ is populated and refuses to launch otherwise.
 echo "INFO: preparing tasks from HF dataset (see log)"
