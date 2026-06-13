@@ -77,7 +77,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -149,7 +149,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -215,7 +215,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -287,7 +287,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
