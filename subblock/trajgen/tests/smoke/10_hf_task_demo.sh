@@ -54,12 +54,12 @@ hj["n_concurrent"] = 2
 hj["n_tasks"] = 10
 hj["max_retries"] = 0
 ag = cfg["runtime_info"]["input"].setdefault("agent", {})
-ag["max_turns"] = 40
+ag["max_turns"] = 80
 sft = cfg["runtime_info"]["input"].setdefault("sft_conversion", {})
 sft["enabled"] = False
 with open(path, "w", encoding="utf-8") as fh:
     yaml.safe_dump(cfg, fh, sort_keys=False)
-print("INFO: smoke config written (n_tasks=10, n_concurrent=2, max_turns=40, jobs_dir="+hj["jobs_dir"]+")")
+print("INFO: smoke config written (n_tasks=10, n_concurrent=2, max_turns=80, jobs_dir="+hj["jobs_dir"]+")")
 PY
 
 # Fresh jobs dir for the smoke

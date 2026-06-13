@@ -54,5 +54,32 @@ if name != "swegen":
     print(f"FAIL: meta_info.name == {name!r}, expected 'swegen'", file=sys.stderr)
     sys.exit(1)
 
+# Per-language config (mirrors /swegen:check Step 1).
+EXPECTED_LANGS = ["py", "js", "ts", "go", "c", "cpp", "java", "rust"]
+langs = get(cfg, "runtime_info.input.languages") or {}
+missing_langs = [l for l in EXPECTED_LANGS if l not in langs]
+if missing_langs:
+    print(f"FAIL: runtime_info.input.languages missing keys: {missing_langs}", file=sys.stderr)
+    sys.exit(1)
+
+import os
+block_dir = os.path.dirname(os.path.abspath(cfg_path))
+bad = []
+for lang in EXPECTED_LANGS:
+    lc = langs.get(lang) or {}
+    if not lc.get("enabled"):
+        continue
+    params = lc.get("params") or {}
+    for p in ("timeout", "cc_timeout", "n_concurrent"):
+        if params.get(p) is None:
+            bad.append(f"{lang}.params.{p} missing")
+    script_path = os.path.join(block_dir, "scripts", f"create_{lang}.sh")
+    if not os.path.isfile(script_path):
+        bad.append(f"scripts/create_{lang}.sh missing")
+if bad:
+    for line in bad:
+        print(f"FAIL: {line}", file=sys.stderr)
+    sys.exit(1)
+
 print("PASS: config.yaml schema")
 PY

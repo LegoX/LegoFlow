@@ -172,7 +172,7 @@ entry whose status is `done`/`failed`/`skipped` has its `task_id` listed in
 
 Swaps `config.yaml` for a smoke variant
 (`harbor_job.jobs_dir=artifacts/jobs/smoke`, `n_tasks=10`, `n_concurrent=2`,
-`max_retries=0`, `agent.max_turns=40`, `sft_conversion.enabled=false`), runs
+`max_retries=0`, `agent.max_turns=80`, `sft_conversion.enabled=false`), runs
 `scripts/start.sh` against the configured HF dataset, restores `config.yaml`
 on any exit path via an `EXIT` trap. Wrapped in `timeout --foreground 1800`.
 Passes when at least one trial under

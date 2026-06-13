@@ -64,5 +64,22 @@ prov = get(cfg, "runtime_info.input.task_source.provider")
 if prov not in ("local", "huggingface"):
     print(f"FAIL: task_source.provider must be 'local' or 'huggingface' (got {prov!r})", file=sys.stderr)
     sys.exit(1)
+
+# Harbor jobs_dir / dataset_path prefix check (mirrors dryrun.sh section 8).
+# Catches the class of bug where a smoke variant sets jobs_dir to a sibling
+# path like "artifacts/jobs-smoke" — that fails start.sh's internal dryrun.
+def under(p, prefix):
+    if p is None:
+        return True
+    return p == prefix or p.startswith(prefix + "/") or p.startswith("/") and ("/" + prefix in p)
+jobs_dir = get(cfg, "runtime_info.input.harbor_job.jobs_dir")
+if jobs_dir and not under(jobs_dir, "artifacts/jobs"):
+    print(f"FAIL: harbor_job.jobs_dir must be artifacts/jobs or under it (got {jobs_dir!r})", file=sys.stderr)
+    sys.exit(1)
+dataset_path = get(cfg, "runtime_info.input.harbor_job.dataset_path")
+if dataset_path and not under(dataset_path, "artifacts/tasks"):
+    print(f"FAIL: harbor_job.dataset_path must be under artifacts/tasks (got {dataset_path!r})", file=sys.stderr)
+    sys.exit(1)
+
 print("PASS: config.yaml schema")
 PY
