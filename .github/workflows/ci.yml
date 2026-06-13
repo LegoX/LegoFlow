@@ -81,7 +81,15 @@ jobs:
           source "$CICD_SHARED/.env"
           PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
           [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
-          git config --global url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          # Self-hosted runner persists ~/.gitconfig between jobs. Strip any
+          # url.*.insteadOf and the http.https://github.com/.extraheader that
+          # actions/checkout sets globally (otherwise its GITHUB_TOKEN overrides
+          # our PAT and private submodules fail to clone).
+          git config --global --list 2>/dev/null \
+            | grep -oE '^url\.[^=]+\.insteadof' | sort -u \
+            | while read -r key; do git config --global --unset-all "$key" 2>/dev/null || true; done
+          git config --global --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
+          git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
           git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
           {
             echo "HF_TOKEN=$HF_TOKEN"
