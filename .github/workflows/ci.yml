@@ -201,7 +201,11 @@ jobs:
         # root, so it can fix permissions and delete).
         run: |
           RESIDUE="$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime"
-          if [ -e "$RESIDUE" ]; then
+          if [ -L "$RESIDUE" ]; then
+            # Safe: removing a symlink doesn't traverse into canonical.
+            rm -f "$RESIDUE"
+          elif [ -d "$RESIDUE" ]; then
+            # Real dir (Harbor created/populated it as root) — needs docker.
             docker run --rm -v "$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts:/x:rw" \
               alpine:3 sh -c "chown -R 1000:1000 /x/agent-runtime 2>/dev/null || true; rm -rf /x/agent-runtime" || true
           fi
@@ -231,10 +235,16 @@ jobs:
           CANON="${CANONICAL_REPO}/subblock/trajgen"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run /trajgen:setup on the runner once."; exit 1; }
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/consumption_ledger.yaml
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
           ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
           ln -s "$CANON/artifacts/env"                      artifacts/env
+          # agent.runtime_host_path: harbor bind-mounts this into every trial
+          # container at /opt/custom-agent-runtime/claude-code. Without the
+          # symlink the workspace dir is empty → "Mounted runtime detection
+          # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
+          [ -d "$CANON/artifacts/agent-runtime" ] && \
+            ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
           [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
             ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
           ls -la repos artifacts
@@ -268,7 +278,11 @@ jobs:
       - name: Clean root-owned residue from prior smoke
         run: |
           RESIDUE="$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime"
-          if [ -e "$RESIDUE" ]; then
+          if [ -L "$RESIDUE" ]; then
+            # Safe: removing a symlink doesn't traverse into canonical.
+            rm -f "$RESIDUE"
+          elif [ -d "$RESIDUE" ]; then
+            # Real dir (Harbor created/populated it as root) — needs docker.
             docker run --rm -v "$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts:/x:rw" \
               alpine:3 sh -c "chown -R 1000:1000 /x/agent-runtime 2>/dev/null || true; rm -rf /x/agent-runtime" || true
           fi
@@ -297,10 +311,16 @@ jobs:
           set -euo pipefail
           CANON="${CANONICAL_REPO}/subblock/trajgen"
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/consumption_ledger.yaml
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
           ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
           ln -s "$CANON/artifacts/env"                      artifacts/env
+          # agent.runtime_host_path: harbor bind-mounts this into every trial
+          # container at /opt/custom-agent-runtime/claude-code. Without the
+          # symlink the workspace dir is empty → "Mounted runtime detection
+          # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
+          [ -d "$CANON/artifacts/agent-runtime" ] && \
+            ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
           [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
             ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
       - name: Run trajgen smoke (--with-smoke)
