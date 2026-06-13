@@ -194,6 +194,17 @@ jobs:
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 15
     steps:
+      - name: Clean root-owned residue from prior smoke
+        # docker cp from the agent runtime image leaves agent-runtime
+        # owned by root, which makes actions/checkout's workspace-clean
+        # fail with EACCES rmdir. Self-heal via docker (which runs as
+        # root, so it can fix permissions and delete).
+        run: |
+          RESIDUE="$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime"
+          if [ -e "$RESIDUE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts:/x:rw" \
+              alpine:3 sh -c "chown -R 1000:1000 /x/agent-runtime 2>/dev/null || true; rm -rf /x/agent-runtime" || true
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: false
@@ -254,6 +265,13 @@ jobs:
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 40
     steps:
+      - name: Clean root-owned residue from prior smoke
+        run: |
+          RESIDUE="$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime"
+          if [ -e "$RESIDUE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE/SWE-Lego-Live/subblock/trajgen/artifacts:/x:rw" \
+              alpine:3 sh -c "chown -R 1000:1000 /x/agent-runtime 2>/dev/null || true; rm -rf /x/agent-runtime" || true
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: false
