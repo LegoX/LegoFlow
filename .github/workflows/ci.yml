@@ -92,6 +92,7 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/home/haoli/.uv/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from canonical checkout
         working-directory: subblock/swegen
@@ -156,6 +157,7 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/home/haoli/.uv/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from canonical checkout
         working-directory: subblock/swegen
@@ -209,6 +211,7 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/home/haoli/.uv/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from canonical checkout
         working-directory: subblock/trajgen
@@ -268,6 +271,7 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/home/haoli/.uv/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from canonical checkout
         working-directory: subblock/trajgen
@@ -293,6 +297,6 @@ jobs:
           name: trajgen-smoke-logs-${{ github.run_id }}
           path: |
             subblock/trajgen/artifacts/logs/
-            subblock/trajgen/artifacts/jobs-smoke/
+            subblock/trajgen/artifacts/jobs/smoke/
           if-no-files-found: ignore
           retention-days: 14

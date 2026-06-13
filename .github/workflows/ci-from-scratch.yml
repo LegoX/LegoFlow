@@ -216,6 +216,6 @@ jobs:
           name: trajgen-from-scratch-logs-${{ github.run_id }}
           path: |
             subblock/trajgen/artifacts/logs/
-            subblock/trajgen/artifacts/jobs-smoke/
+            subblock/trajgen/artifacts/jobs/smoke/
           if-no-files-found: ignore
           retention-days: 14

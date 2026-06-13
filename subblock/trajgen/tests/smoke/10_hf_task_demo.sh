@@ -2,12 +2,13 @@
 # CI smoke 10: trajgen end-to-end on 10 tasks selected from the HuggingFace
 # dataset configured in runtime_info.input.task_source (SWE-Lego/swerebenchv2-…).
 #
-# Strategy: swap config.yaml for a smoke variant (jobs_dir=jobs-smoke,
-# n_tasks=10, low concurrency, sft_conversion disabled) and run scripts/start.sh.
-# Harbor selects the first 10 tasks from the HF snapshot (deterministic by
-# dataset version + alphabetical task ID).
+# Strategy: swap config.yaml for a smoke variant (jobs_dir=artifacts/jobs/smoke,
+# n_tasks=10, low concurrency, sft_conversion disabled), run prepare_tasks.sh
+# to snapshot the HF dataset, then scripts/start.sh. Harbor selects the first
+# 10 tasks from the HF snapshot (deterministic by dataset version +
+# alphabetical task ID).
 #
-# Pass condition: at least one trial under artifacts/jobs-smoke/<job>/ produces
+# Pass condition: at least one trial under artifacts/jobs/smoke/<job>/ produces
 # a result.json whose verifier_result.rewards contains a positive value
 # (i.e. ≥1 resolved trajectory). 30-minute wall-clock budget.
 #
@@ -19,7 +20,7 @@ set -uo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONFIG="$BLOCK_DIR/config.yaml"
 BACKUP="$BLOCK_DIR/tests/smoke/.config.yaml.backup.$$"
-SMOKE_JOBS_DIR_REL="artifacts/jobs-smoke"
+SMOKE_JOBS_DIR_REL="artifacts/jobs/smoke"
 SMOKE_JOBS_DIR="$BLOCK_DIR/$SMOKE_JOBS_DIR_REL"
 
 [[ -f "$CONFIG" ]] || { echo "FAIL: $CONFIG missing"; exit 1; }
@@ -69,8 +70,17 @@ LOG="$BLOCK_DIR/artifacts/logs/smoke-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p "$(dirname "$LOG")"
 echo "INFO: smoke log -> $LOG"
 
+# prepare_tasks.sh must run before start.sh — start.sh's dryrun gate checks
+# that artifacts/tasks/<dataset>/ is populated and refuses to launch otherwise.
+echo "INFO: preparing tasks from HF dataset (see log)"
+if ! bash "$BLOCK_DIR/scripts/prepare_tasks.sh" >>"$LOG" 2>&1; then
+  echo "FAIL: prepare_tasks.sh exited non-zero — see $LOG"
+  tail -30 "$LOG" 2>/dev/null || true
+  exit 1
+fi
+
 set +e
-timeout --foreground 1800 bash "$BLOCK_DIR/scripts/start.sh" >"$LOG" 2>&1
+timeout --foreground 1800 bash "$BLOCK_DIR/scripts/start.sh" >>"$LOG" 2>&1
 rc=$?
 set -e
 

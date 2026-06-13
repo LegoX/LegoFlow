@@ -59,7 +59,7 @@ events on `dev`/`main` and manual `workflow_dispatch` runs
 | 06: port held by another uid | someone else is on `litellm_proxy.port` | change the port, or kill the foreign process |
 | 07: image not pulled | runner's daemon lost the image | `docker pull docker.io/jierun/c-cc-2.1.118:v0.1` |
 | 08: ledger task not in `HARBOR_EXCLUDE_TASKS` | done/failed/skipped tasks would re-execute next run | add them to `environment.extra.HARBOR_EXCLUDE_TASKS` in `config.yaml` |
-| 10: budget hit, no resolved trial | model regression, network slowness, or 10 unusually hard tasks | inspect `artifacts/jobs-smoke/<job>/*/result.json` for verifier output |
+| 10: budget hit, no resolved trial | model regression, network slowness, or 10 unusually hard tasks | inspect `artifacts/jobs/smoke/<job>/*/result.json` for verifier output |
 
 ---
 
@@ -171,11 +171,11 @@ entry whose status is `done`/`failed`/`skipped` has its `task_id` listed in
 <summary><code>smoke/10_hf_task_demo.sh</code> — end-to-end 10-HF-task demo</summary>
 
 Swaps `config.yaml` for a smoke variant
-(`harbor_job.jobs_dir=artifacts/jobs-smoke`, `n_tasks=10`, `n_concurrent=2`,
+(`harbor_job.jobs_dir=artifacts/jobs/smoke`, `n_tasks=10`, `n_concurrent=2`,
 `max_retries=0`, `agent.max_turns=40`, `sft_conversion.enabled=false`), runs
 `scripts/start.sh` against the configured HF dataset, restores `config.yaml`
 on any exit path via an `EXIT` trap. Wrapped in `timeout --foreground 1800`.
 Passes when at least one trial under
-`artifacts/jobs-smoke/<job>/<trial>/result.json` has a positive value in
+`artifacts/jobs/smoke/<job>/<trial>/result.json` has a positive value in
 `verifier_result.rewards`.
 </details>
