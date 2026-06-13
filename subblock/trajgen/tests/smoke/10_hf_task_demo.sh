@@ -33,6 +33,13 @@ cleanup() {
   if command -v docker >/dev/null 2>&1; then
     docker ps --filter "name=harbor-trial-" --format '{{.ID}}' 2>/dev/null \
       | head -50 | xargs -r docker kill >/dev/null 2>&1 || true
+    # Trial containers run as root and drop files under <trial>/agent/sessions
+    # with mode 700. Reclaim ownership + open up so the runner user (and
+    # actions/upload-artifact) can walk the tree.
+    if [ -d "$SMOKE_JOBS_DIR" ]; then
+      docker run --rm -v "$SMOKE_JOBS_DIR:/x:rw" alpine:3 \
+        sh -c "chown -R 1000:1000 /x 2>/dev/null; chmod -R u+rwX /x 2>/dev/null" || true
+    fi
   fi
   if [[ -f "$BACKUP" ]]; then
     mv -f "$BACKUP" "$CONFIG"
