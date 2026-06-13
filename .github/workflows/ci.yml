@@ -19,13 +19,12 @@ permissions:
   contents: read
   pull-requests: read
 
-# The CANONICAL_REPO env var is read by the per-block "Link runtime state" steps.
-# It points to the long-lived block tree on the self-hosted runner — where the
-# venvs, uv envs, pinned submodules, gh_token.txt, and consumption ledger live
-# (populated once via /swegen:setup / /trajgen:setup). The PR's source code lands
-# in the fresh actions/checkout workspace; the runtime state is symlinked in.
+# Option B: every per-block job builds the runtime from scratch using the PR's
+# source code. Secrets and caches live in /gpufs/haoli/cicd/shared on the
+# self-hosted runner (see /gpufs/haoli/cicd/shared/README.md for layout).
+# The canonical block tree at /gpufs/haoli/code/SWE-Lego-Live is NOT read by CI.
 env:
-  CANONICAL_REPO: /gpufs/haoli/code/SWE-Lego-Live
+  CICD_SHARED: /gpufs/haoli/cicd/shared
 
 jobs:
   # --- Cheap cloud job: structural sanity of the block tree -------------------
@@ -34,14 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install test deps
         run: pip install --no-cache-dir pytest pyyaml
-
       - name: Run root block tests
         run: pytest tests/test_root_block.py -v
 
@@ -65,36 +61,46 @@ jobs:
               - 'subblock/trajgen/**'
               - '.github/workflows/ci.yml'
 
-  # --- swegen: cheap test cases (self-hosted, fixed-paths CI runner) ---------
+  # ===========================================================================
+  # swegen
+  # ===========================================================================
   swegen-cases:
     name: swegen tests (cases)
     needs: detect-changes
     if: needs.detect-changes.outputs.swegen == 'true'
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      # Source-only checkout — submodules are private and provided by the
-      # canonical checkout below via symlink.
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - name: Link runtime state from canonical checkout
+      - name: Stage shared CI env + private submodule auth
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source "$CICD_SHARED/.env"
+          PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
+          [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
+          git config --global url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          {
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+          } >> "$GITHUB_ENV"
+      - name: Init swegen submodule
+        run: git submodule update --init --depth 1 subblock/swegen/repos/swegen
+      - name: Build swegen venv (clean)
         working-directory: subblock/swegen
         run: |
           set -euo pipefail
-          CANON="${CANONICAL_REPO}/subblock/swegen"
-          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run /swegen:setup on the runner once."; exit 1; }
-          # actions/checkout creates empty placeholder dirs for declared
-          # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
-          mkdir -p repos artifacts artifacts/swe_tasks
-          rm -rf repos/swegen artifacts/envs artifacts/swe_tasks/py-cc gh_token.txt
-          ln -s "$CANON/repos/swegen"        repos/swegen
-          ln -s "$CANON/artifacts/envs"      artifacts/envs
-          [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
-          # Optional Harbor smoke fixture (case 06 SKIPs if absent)
-          [ -d "$CANON/artifacts/swe_tasks/py-cc" ] && \
-            ln -s "$CANON/artifacts/swe_tasks/py-cc" artifacts/swe_tasks/py-cc || true
-          ls -la repos artifacts artifacts/swe_tasks
+          python3 -m venv artifacts/envs/swegen-env
+          artifacts/envs/swegen-env/bin/pip install --upgrade pip
+          artifacts/envs/swegen-env/bin/pip install -e repos/swegen/
+      - name: Stage gh_token.txt
+        run: cp "$CICD_SHARED/gh_token.txt" subblock/swegen/gh_token.txt
       - name: Run swegen test cases
         working-directory: subblock/swegen
         env:
@@ -111,7 +117,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # --- swegen: end-to-end 10-PR smoke (~30 min) ------------------------------
   swegen-smoke:
     name: swegen tests (smoke)
     needs: [detect-changes, swegen-cases]
@@ -122,21 +127,33 @@ jobs:
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - name: Link runtime state from canonical checkout
-        working-directory: subblock/swegen
+      - name: Stage shared CI env + private submodule auth
         run: |
           set -euo pipefail
-          CANON="${CANONICAL_REPO}/subblock/swegen"
-          mkdir -p repos artifacts
-          rm -rf repos/swegen artifacts/envs gh_token.txt
-          ln -s "$CANON/repos/swegen"        repos/swegen
-          ln -s "$CANON/artifacts/envs"      artifacts/envs
-          [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
+          # shellcheck disable=SC1091
+          source "$CICD_SHARED/.env"
+          PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
+          git config --global url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          {
+            echo "HF_TOKEN=$HF_TOKEN"; echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"; echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"; echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+          } >> "$GITHUB_ENV"
+      - name: Init swegen submodule
+        run: git submodule update --init --depth 1 subblock/swegen/repos/swegen
+      - name: Build swegen venv (clean)
+        working-directory: subblock/swegen
+        run: |
+          python3 -m venv artifacts/envs/swegen-env
+          artifacts/envs/swegen-env/bin/pip install --upgrade pip
+          artifacts/envs/swegen-env/bin/pip install -e repos/swegen/
+      - name: Stage gh_token.txt
+        run: cp "$CICD_SHARED/gh_token.txt" subblock/swegen/gh_token.txt
       - name: Run swegen smoke (--with-smoke)
         working-directory: subblock/swegen
         env:
@@ -154,31 +171,66 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # --- trajgen: cheap test cases ---------------------------------------------
+  # ===========================================================================
+  # trajgen
+  # ===========================================================================
   trajgen-cases:
     name: trajgen tests (cases)
     needs: detect-changes
     if: needs.detect-changes.outputs.trajgen == 'true'
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 15
+    timeout-minutes: 25
+    env:
+      RUNTIME_IMAGE: docker.io/jierun/c-cc-2.1.118:v0.1
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - name: Link runtime state from canonical checkout
+      - name: Stage shared CI env + private submodule auth
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source "$CICD_SHARED/.env"
+          PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
+          git config --global url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          {
+            echo "HF_TOKEN=$HF_TOKEN"; echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"; echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"; echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/home/haoli/.uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Init trajgen submodules + clone swe_data_process
         working-directory: subblock/trajgen
         run: |
           set -euo pipefail
-          CANON="${CANONICAL_REPO}/subblock/trajgen"
-          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run /trajgen:setup on the runner once."; exit 1; }
-          mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/consumption_ledger.yaml
-          ln -s "$CANON/repos/harbor"                       repos/harbor
-          ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
-          ln -s "$CANON/artifacts/env"                      artifacts/env
-          [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
-            ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
-          ls -la repos artifacts
+          # harbor is a real submodule
+          git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 subblock/trajgen/repos/harbor
+          # swe_data_process is managed via scripts/update_repos.sh
+          bash scripts/update_repos.sh --repo swe_data_process
+      - name: Build harbor uv env (clean)
+        working-directory: subblock/trajgen
+        run: bash scripts/setup_harbor_env.sh
+      - name: Build swe_data_process uv env (clean)
+        working-directory: subblock/trajgen
+        run: bash scripts/setup_swe_data_process_env.sh
+      - name: Build litellm venv (clean, Python 3.13)
+        working-directory: subblock/trajgen
+        run: |
+          set -euo pipefail
+          uv venv artifacts/env/litellm-venv --python 3.13
+          uv pip install --python artifacts/env/litellm-venv/bin/python 'litellm[proxy]==1.83.14'
+      - name: Ensure agent runtime image pulled
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: docker pull "$RUNTIME_IMAGE"
+      - name: Initialize consumption ledger (idempotent)
+        working-directory: subblock/trajgen
+        run: |
+          mkdir -p artifacts
+          if [ ! -f artifacts/consumption_ledger.yaml ]; then
+            printf 'description: %s\nruns: []\n' "trajgen task consumption ledger" \
+              > artifacts/consumption_ledger.yaml
+          fi
       - name: Run trajgen test cases
         working-directory: subblock/trajgen
         env:
@@ -193,7 +245,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # --- trajgen: end-to-end 10-HF-task smoke (~30 min) -----------------------
   trajgen-smoke:
     name: trajgen tests (smoke)
     needs: [detect-changes, trajgen-cases]
@@ -204,23 +255,54 @@ jobs:
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 40
+    timeout-minutes: 60
+    env:
+      RUNTIME_IMAGE: docker.io/jierun/c-cc-2.1.118:v0.1
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - name: Link runtime state from canonical checkout
-        working-directory: subblock/trajgen
+      - name: Stage shared CI env + private submodule auth
         run: |
           set -euo pipefail
-          CANON="${CANONICAL_REPO}/subblock/trajgen"
-          mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/consumption_ledger.yaml
-          ln -s "$CANON/repos/harbor"                       repos/harbor
-          ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
-          ln -s "$CANON/artifacts/env"                      artifacts/env
-          [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
-            ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+          # shellcheck disable=SC1091
+          source "$CICD_SHARED/.env"
+          PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
+          git config --global url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          {
+            echo "HF_TOKEN=$HF_TOKEN"; echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"; echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"; echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/home/haoli/.uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Init trajgen submodules + clone swe_data_process
+        working-directory: subblock/trajgen
+        run: |
+          git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 subblock/trajgen/repos/harbor
+          bash scripts/update_repos.sh --repo swe_data_process
+      - name: Build harbor uv env
+        working-directory: subblock/trajgen
+        run: bash scripts/setup_harbor_env.sh
+      - name: Build swe_data_process uv env
+        working-directory: subblock/trajgen
+        run: bash scripts/setup_swe_data_process_env.sh
+      - name: Build litellm venv
+        working-directory: subblock/trajgen
+        run: |
+          uv venv artifacts/env/litellm-venv --python 3.13
+          uv pip install --python artifacts/env/litellm-venv/bin/python 'litellm[proxy]==1.83.14'
+      - name: Pull agent runtime image
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: docker pull "$RUNTIME_IMAGE"
+      - name: Initialize consumption ledger
+        working-directory: subblock/trajgen
+        run: |
+          mkdir -p artifacts
+          if [ ! -f artifacts/consumption_ledger.yaml ]; then
+            printf 'description: %s\nruns: []\n' "trajgen task consumption ledger" \
+              > artifacts/consumption_ledger.yaml
+          fi
       - name: Run trajgen smoke (--with-smoke)
         working-directory: subblock/trajgen
         env:
