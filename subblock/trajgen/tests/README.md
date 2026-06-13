@@ -1,172 +1,181 @@
 # trajgen CI tests
 
-CI gate for the `trajgen` block. Calibrated to **this repo's fixed CI runner**
-(specific uv env paths, configured `DOCKER_HOST`, pinned Harbor and
-swe_data_process commits, configured LiteLLM proxy port, pre-pulled agent
-runtime image). These tests are NOT a drop-in replacement for the portable
-`/trajgen:check` skill, which tolerates arbitrary user environments.
+Drift detection (cheap, ~30 s) plus an optional end-to-end smoke run
+(~30 min) for the trajgen block. Calibrated to this repo's fixed CI runner.
+For portable user-environment diagnostics, use the `/trajgen:check` skill instead.
+
+---
+
+## Quickstart
+
+```bash
+# cheap path — every test except the smoke. Safe to run anywhere:
+bash subblock/trajgen/tests/run.sh
+
+# full path — adds the 30-min, real-LLM, real-Docker smoke. Self-hosted only:
+bash subblock/trajgen/tests/run.sh --with-smoke
+# equivalent:  TESTS_WITH_SMOKE=1 bash subblock/trajgen/tests/run.sh
+```
+
+Per-test exit codes: `0` pass · `77` skip · anything else fail.
+`run.sh` returns non-zero iff at least one test failed; skips never fail the suite.
+
+---
+
+## What gets checked
+
+| # | Test | What it asserts | Time |
+|---|---|---|---|
+| 01 | config schema | every required key in `config.yaml` is set and `task_source.provider ∈ {local, huggingface}` | <1 s |
+| 02 | repo pins | `repos/harbor` and `repos/swe_data_process` at their pinned commits, origins match, worktrees clean | <2 s |
+| 03 | uv envs | three envs exist; `harbor` editable from `repos/harbor`, `litellm` importable, `swe_data_process` importable (SKIP when `sft_conversion.enabled=false`) | ~1 min |
+| 04 | LLM endpoint | `GET ${api_base_url}/models` returns 200 and the configured model is in `data[].id` | ~1 s |
+| 05 | HF dataset | `huggingface.co/api/datasets/<name>` reachable with the configured token (SKIP for `local` provider) | <1 s |
+| 06 | LiteLLM port | port from `litellm_proxy.port` is free, or held by a process the current uid owns | <1 s |
+| 07 | runtime image | `docker image inspect ${agent.runtime_image}` exits 0 (pre-pulled) | <1 s |
+| 08 | consumption ledger | ledger parses, every `done`/`failed`/`skipped` entry is also in `HARBOR_EXCLUDE_TASKS` | <1 s |
+| 10 | **10-HF-task demo** *(smoke)* | swap config + `start.sh` against 10 HF tasks; ≥1 trial resolves within 30 min | up to 30 min |
+
+The 10-HF-task demo runs only with `--with-smoke` and is gated to `push`
+events on `dev`/`main` and manual `workflow_dispatch` runs
+(`run_smoke=true`) in CI — never to PRs.
+
+---
+
+## When something fails
+
+| You see | Most likely cause | What to do |
+|---|---|---|
+| 02: `.git missing` | a repo wasn't checked out yet | `bash scripts/update_repos.sh --repo <name>` |
+| 02: `HEAD does not match commit` | someone fetched a different commit | `bash scripts/update_repos.sh --repo <name>` |
+| 02: origin URL mismatch | runner's `~/.gitconfig` has `url.X.insteadOf` rules that rewrite `git remote get-url` output | clean `~/.gitconfig`: `git config --global --remove-section 'url.…'` |
+| 02: worktree has local modifications | manual edits under `repos/` (forbidden — see memo `feedback-no-edits-under-repos`) | revert and put fixes in `scripts/` or `config.yaml` |
+| 03: `harbor: import not from repos/harbor` | uv env hosts a pip-installed `harbor` shadowing the editable install | `rm -rf artifacts/env/harbor-uv && bash scripts/setup_harbor_env.sh` |
+| 03: `missing_env:HARBOR_EDITABLE_ROOT` | test invoked the editable check without exporting `HARBOR_EDITABLE_ROOT` | bug in the test wrapper, not the env — file a fix |
+| 04: HTTP 401 | bad/expired `llm_api.api_key` | rotate the key in `config.yaml` |
+| 04: model not in catalog | `llm_api.model` doesn't match what upstream serves | update the model in `config.yaml` or with a per-job override |
+| 05: HF 401/403 | stale or missing HF token | refresh `~/.cache/huggingface/token` (or `HF_TOKEN` env) |
+| 05: HF 404 | typo in `task_source.dataset_name` | fix in `config.yaml` |
+| 06: port held by another uid | someone else is on `litellm_proxy.port` | change the port, or kill the foreign process |
+| 07: image not pulled | runner's daemon lost the image | `docker pull docker.io/jierun/c-cc-2.1.118:v0.1` |
+| 08: ledger task not in `HARBOR_EXCLUDE_TASKS` | done/failed/skipped tasks would re-execute next run | add them to `environment.extra.HARBOR_EXCLUDE_TASKS` in `config.yaml` |
+| 10: budget hit, no resolved trial | model regression, network slowness, or 10 unusually hard tasks | inspect `artifacts/jobs-smoke/<job>/*/result.json` for verifier output |
+
+---
 
 ## Layout
 
 ```
-cases/                          cheap deterministic checks (mirror /trajgen:check)
+cases/                         cheap deterministic checks
   01_config_schema.sh
   02_repo_pins.sh
   03_uv_envs_editable.sh
   04_llm_endpoint.sh
-  05_hf_dataset.sh              (SKIP when provider != huggingface)
+  05_hf_dataset.sh
   06_litellm_port.sh
   07_runtime_image.sh
   08_consumption_ledger.sh
-smoke/                          end-to-end runs that cost real LLM tokens + Docker
+smoke/                         expensive end-to-end runs (--with-smoke gates them)
   10_hf_task_demo.sh
-run.sh                          aggregator
+run.sh                         aggregator
 ```
 
-## Invocation
+---
 
-```bash
-# Cheap path (cases/ only) — safe for cloud CI, runs in ~30s:
-bash subblock/trajgen/tests/run.sh
+## Per-test reference
 
-# Full path (cases/ + smoke/) — ~30 min, real LLM + Docker; self-hosted only:
-bash subblock/trajgen/tests/run.sh --with-smoke
-# or:  TESTS_WITH_SMOKE=1 bash subblock/trajgen/tests/run.sh
-```
+Skip this section unless you're debugging a specific case or about to change one.
 
-Each test exits `0` for pass, `77` for skip, anything else for fail. `run.sh`
-returns non-zero iff any test failed. SKIP does not fail the suite.
-
-## Test cases
-
-### `cases/01_config_schema.sh` — config.yaml shape
+<details>
+<summary><code>cases/01_config_schema.sh</code> — config.yaml shape</summary>
 
 Parses `config.yaml` with PyYAML and asserts every key the trajgen runtime
 contract depends on is non-empty: `meta_info.name == "trajgen"`,
-`meta_info.repositories.{harbor,swe_data_process}.{url,commit,path,readonly}`,
-`meta_info.environment.{harbor_uv,litellm_uv,swe_data_process_uv}`,
-`runtime_info.input.llm_api.{api_key,api_base_url,model}`,
-`runtime_info.input.litellm_proxy.{port,master_key}`,
-`runtime_info.input.task_source.{provider,dataset_name}`,
-`runtime_info.input.harbor_job.{jobs_dir,n_concurrent,max_retries,timeout_multiplier}`,
-`runtime_info.input.agent.{name,version,runtime_image,max_turns}`,
+`meta_info.repositories.{harbor, swe_data_process}.{url, commit, path, readonly}`,
+`meta_info.environment.{harbor_uv, litellm_uv, swe_data_process_uv}`,
+`runtime_info.input.llm_api.{api_key, api_base_url, model}`,
+`runtime_info.input.litellm_proxy.{port, master_key}`,
+`runtime_info.input.task_source.{provider, dataset_name}`,
+`runtime_info.input.harbor_job.{jobs_dir, n_concurrent, max_retries, timeout_multiplier}`,
+`runtime_info.input.agent.{name, version, runtime_image, max_turns}`,
 `runtime_info.input.sft_conversion.enabled`. Also enforces
 `task_source.provider ∈ {local, huggingface}`.
+</details>
 
-**Fails when** any required key is missing, blank, or `task_source.provider`
-is an unsupported value. Pure-Python check — no I/O, no shell. <1 s.
+<details>
+<summary><code>cases/02_repo_pins.sh</code> — pinned commits + clean worktrees</summary>
 
-### `cases/02_repo_pins.sh` — pinned commits + clean worktrees
+For each of `repos/harbor` and `repos/swe_data_process`: `.git` exists,
+`git remote get-url origin` matches `meta_info.repositories.<name>.url`,
+`git rev-parse HEAD` matches the pin, and `git status --porcelain` is empty.
+Enforces the "vendored + read-only" contract from `BLOCK_DEFINITION.md §1.5`.
+</details>
 
-For each of `repos/harbor` and `repos/swe_data_process`:
+<details>
+<summary><code>cases/03_uv_envs_editable.sh</code> — three envs + expected installs</summary>
 
-1. `repos/<name>/.git` exists (file gitlink OR directory).
-2. `git remote get-url origin` matches `meta_info.repositories.<name>.url`.
-3. `git rev-parse HEAD` matches `meta_info.repositories.<name>.commit`.
-4. `git status --porcelain` is empty (no local modifications).
+For each env, dir exists and python is executable; then:
+**harbor uv** runs `scripts/check_harbor_editable.py` with
+`HARBOR_EDITABLE_ROOT` set, pass iff `harbor.__file__` resolves under
+`repos/harbor/src/`. **litellm venv**: `python -c "import litellm"`.
+**swe_data_process uv**: `python -c "import swe_data_process"`, downgraded
+to SKIP when `sft_conversion.enabled=false`. ~1 min, dominated by harbor's
+import time.
+</details>
 
-**Fails when** either repo is missing, on the wrong commit, or has dirty
-local edits — i.e. the runtime environment has drifted from the pin. <2 s.
-Enforces the "vendored + read-only" contract from `BLOCK_DEFINITION.md §1.5`
-(per the `feedback-no-edits-under-repos` memo).
+<details>
+<summary><code>cases/04_llm_endpoint.sh</code> — endpoint reachable + model present</summary>
 
-### `cases/03_uv_envs_editable.sh` — three uv envs + expected editable installs
+`GET ${api_base_url}/models` with `Authorization: Bearer ${api_key}` and
+`User-Agent: curl/8.5.0` (dodges the CF UA filter that 403s
+`Python-urllib/*`). Asserts 200 and that the configured model — stripped of
+any `openai/` litellm provider prefix — appears in `data[].id`.
+</details>
 
-Checks all three managed environments. For each, the env directory exists
-and its python is executable; then:
+<details>
+<summary><code>cases/05_hf_dataset.sh</code> — HF dataset reachable</summary>
 
-- **harbor uv** (`artifacts/env/harbor-uv`): runs `scripts/check_harbor_editable.py`
-  with `HARBOR_EDITABLE_ROOT=repos/harbor` and `UV_PROJECT_ENVIRONMENT` set
-  to the env. Pass if `harbor.__file__` resolves under `repos/harbor/src/`
-  (i.e. the editable install actually points at the pinned source tree).
-- **litellm venv** (`artifacts/env/litellm-venv`): `python -c "import litellm"` works.
-- **swe_data_process uv** (`artifacts/env/swe-data-process-uv`):
-  `python -c "import swe_data_process"` works. Downgraded to **SKIP** if
-  `runtime_info.input.sft_conversion.enabled` is false (the env isn't on the
-  critical path for trajectory generation in that case).
+When `task_source.provider == "huggingface"`, `GET
+huggingface.co/api/datasets/<dataset_name>` with the HF token (loaded from
+`HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or
+`${HF_HOME:-~/.cache/huggingface}/token`). Otherwise SKIPs. Catches
+gated-repo failures before `prepare_tasks.sh` hits them.
+</details>
 
-**Fails when** an env is missing entirely, the editable install for harbor
-escaped to a system-installed package (would happen after a `pip install
-harbor` mishap), or required packages aren't importable. ~1 min — dominated
-by harbor's import time.
+<details>
+<summary><code>cases/06_litellm_port.sh</code> — proxy port available</summary>
 
-### `cases/04_llm_endpoint.sh` — LLM endpoint reachable + model present
-
-Issues `GET ${api_base_url}/models` with `Authorization: Bearer ${api_key}`
-and `User-Agent: curl/8.5.0` (the latter dodges the CF UA filter that
-sometimes 403s the default `Python-urllib/*` UA). Asserts 200 status and
-that the configured model (stripped of any `openai/` litellm provider
-prefix) appears in `data[].id`.
-
-**Fails when** the endpoint is down, credentials are rejected, or the
-configured model isn't served by the upstream. Light probe (no chat
-completion — that path is exercised by the smoke test). ~1 s.
-
-### `cases/05_hf_dataset.sh` — HuggingFace dataset reachable
-
-When `task_source.provider == "huggingface"`, issues
-`GET https://huggingface.co/api/datasets/<dataset_name>` with the HF token
-(loaded from `HF_TOKEN`, `HUGGING_FACE_HUB_TOKEN`, or
-`${HF_HOME:-~/.cache/huggingface}/token`). Otherwise **SKIPs**.
-
-**Fails when** the dataset 401/403s (bad/missing token), 404s (typo or
-deleted/renamed), or the HF API is unreachable. <1 s. Catches gated-repo
-auth issues *before* `prepare_tasks.sh` tries `snapshot_download` mid-run.
-
-### `cases/06_litellm_port.sh` — proxy port available
-
-Looks up `runtime_info.input.litellm_proxy.port` and tries `ss -ltnp` first.
-If the port is free → PASS. If it's held by a process the current uid owns
-(visible in `ss`'s `users:` field) → PASS (treated as "our previous run's
-proxy that's still up — start.sh will reuse the slot"). If it's held by
+Tries `ss -ltnp` first. Free → PASS. Held by current uid (visible in
+`users:` field) → PASS (treated as "our previous proxy still up"). Held by
 another uid → FAIL. Falls back to a Python `socket.bind` check when `ss`
 isn't on PATH.
+</details>
 
-**Fails when** another user (or a foreign system service) is sitting on the
-port and `start.sh` would fail to bind. <1 s.
+<details>
+<summary><code>cases/07_runtime_image.sh</code> — agent runtime pre-pulled</summary>
 
-### `cases/07_runtime_image.sh` — agent runtime image pre-pulled
+`docker image inspect ${agent.runtime_image}` exits 0 against the
+configured `DOCKER_HOST`. CI must not pay a multi-GB pull mid-job.
+</details>
 
-Confirms `docker image inspect ${agent.runtime_image}` exits 0 against the
-configured `DOCKER_HOST`. CI must not pay a multi-GB pull mid-job; the
-runner is expected to have warmed the image once via
-`docker pull <runtime_image>`.
+<details>
+<summary><code>cases/08_consumption_ledger.sh</code> — ledger ↔ HARBOR_EXCLUDE_TASKS</summary>
 
-**Fails when** the daemon is unreachable, the CLI is missing, or the image
-hasn't been pulled. <1 s.
+Parses `artifacts/consumption_ledger.yaml` and enforces: (1) every entry's
+status is one of `{pending, running, done, failed, skipped}`; (2) every
+entry whose status is `done`/`failed`/`skipped` has its `task_id` listed in
+`environment.extra.HARBOR_EXCLUDE_TASKS`. Lists up to 10 offenders.
+</details>
 
-### `cases/08_consumption_ledger.sh` — ledger ↔ HARBOR_EXCLUDE_TASKS
+<details>
+<summary><code>smoke/10_hf_task_demo.sh</code> — end-to-end 10-HF-task demo</summary>
 
-Parses `artifacts/consumption_ledger.yaml` and enforces two invariants:
-
-1. Every entry under `runs[]` has `status ∈ {pending, running, done, failed, skipped}`.
-2. Every entry whose status is `done`, `failed`, or `skipped` has its
-   `task_id` listed in `environment.extra.HARBOR_EXCLUDE_TASKS`. If not,
-   Harbor would re-execute already-consumed tasks on the next run.
-
-**Fails when** an entry has an invalid status, or any terminal-state task is
-missing from the exclude list. Lists up to 10 offenders so you can patch
-the config before re-running. <1 s.
-
-### `smoke/10_hf_task_demo.sh` — end-to-end 10-HF-task demo
-
-Swaps `config.yaml` for a smoke variant (`harbor_job.jobs_dir=artifacts/jobs-smoke`,
-`n_tasks=10`, `n_concurrent=2`, `max_retries=0`, `agent.max_turns=40`,
-`sft_conversion.enabled=false`), then runs `scripts/start.sh` against the
-HF dataset already declared in `runtime_info.input.task_source`
-(`SWE-Lego/swerebenchv2-200-260429`). Harbor selects the first 10 tasks
-deterministically from the dataset snapshot. Wrapped in `timeout
---foreground 1800` for a 30-minute hard wall-clock budget. The original
-`config.yaml` is restored from backup via an `EXIT` trap on any exit path
-(including SIGINT/SIGTERM).
-
-**Passes when** at least one trial under `artifacts/jobs-smoke/<job>/<trial>/result.json`
-has a `verifier_result.rewards` mapping containing a positive value — i.e.
-at least one trajectory resolved correctly. **Fails when** the budget hits
-without any resolved trajectory, or `start.sh` returns non-zero with zero
-resolutions. Per-trial counts (`resolved/total`) are emitted as INFO regardless.
-
-Burns real LLM tokens + Docker time. Only fires when the test runner is
-invoked with `--with-smoke` (or `TESTS_WITH_SMOKE=1`). The GitHub Actions
-workflow gates this to `push` events on `dev`/`main` and to
-`workflow_dispatch` runs with `run_smoke=true`, never to PRs.
+Swaps `config.yaml` for a smoke variant
+(`harbor_job.jobs_dir=artifacts/jobs-smoke`, `n_tasks=10`, `n_concurrent=2`,
+`max_retries=0`, `agent.max_turns=40`, `sft_conversion.enabled=false`), runs
+`scripts/start.sh` against the configured HF dataset, restores `config.yaml`
+on any exit path via an `EXIT` trap. Wrapped in `timeout --foreground 1800`.
+Passes when at least one trial under
+`artifacts/jobs-smoke/<job>/<trial>/result.json` has a positive value in
+`verifier_result.rewards`.
+</details>

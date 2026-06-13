@@ -1,137 +1,146 @@
 # swegen CI tests
 
-CI gate for the `swegen` block. Calibrated to **this repo's fixed CI runner**
-(specific venv paths, configured `DOCKER_HOST`, `gh_token.txt` on disk, the
-`artifacts/envs/swegen-env` layout). These tests are NOT a drop-in replacement
-for the portable `/swegen:check` skill, which tolerates arbitrary user
-environments.
+Drift detection (cheap, ~30 s) plus an optional end-to-end smoke run
+(~30 min) for the swegen block. Calibrated to this repo's fixed CI runner.
+For portable user-environment diagnostics, use the `/swegen:check` skill instead.
+
+---
+
+## Quickstart
+
+```bash
+# cheap path — every test except the smoke. Safe to run anywhere:
+bash subblock/swegen/tests/run.sh
+
+# full path — adds the 30-min, real-LLM, real-Docker smoke. Self-hosted only:
+bash subblock/swegen/tests/run.sh --with-smoke
+# equivalent:  TESTS_WITH_SMOKE=1 bash subblock/swegen/tests/run.sh
+```
+
+Per-test exit codes: `0` pass · `77` skip · anything else fail.
+`run.sh` returns non-zero iff at least one test failed; skips never fail the suite.
+
+---
+
+## What gets checked
+
+| # | Test | What it asserts | Time |
+|---|---|---|---|
+| 01 | config schema | every required key in `config.yaml` is set and `meta_info.name == "swegen"` | <1 s |
+| 02 | repo pin + venv | `repos/swegen` is at the pinned commit and `swegen` imports inside the venv | <1 s |
+| 03 | GitHub tokens | every entry in `GITHUB_TOKENS` / `gh_token.txt` returns 200 from `/rate_limit` | ~1 s/token |
+| 04 | LLM endpoint | cross-provider hydration succeeds and a real `chat.completions.create` returns content | ~20 s |
+| 05 | Docker | daemon reachable via configured `DOCKER_HOST` | <1 s |
+| 06 | Harbor smoke | known verified task `tox-dev__tox-3813` still produces NOP=0, Oracle=1 (SKIPs if fixture absent) | ~2–5 min |
+| 10 | **10-PR demo** *(smoke)* | `swegen create --max-pr 1` over the 10-PR quick-verify fixture produces ≥1 verified task within 30 min | up to 30 min |
+
+The 10-PR demo runs only with `--with-smoke` and is gated to `push` events on
+`dev`/`main` and manual `workflow_dispatch` runs (`run_smoke=true`) in CI —
+never to PRs, so PR builds don't burn LLM tokens.
+
+---
+
+## When something fails
+
+| You see | Most likely cause | What to do |
+|---|---|---|
+| 02: `.git missing` | `/swegen:setup` never ran on this machine | run `/swegen:setup` |
+| 02: `HEAD does not match commit_id` | someone fetched a different commit into `repos/swegen` | `git -C repos/swegen checkout <pin>` |
+| 02: `swegen not importable` | venv exists but editable install was never done | `pip install -e repos/swegen/` inside `artifacts/envs/swegen-env` |
+| 03: HTTP 401 on a token | PAT expired or was revoked | regenerate the PAT, replace the line in `gh_token.txt` |
+| 03: token file has comment headers, all tokens fail | comments aren't stripped by the collector (per memo `feedback-swegen-gh-token-comments`) | remove `#` lines from `gh_token.txt` |
+| 04: `chat.completions … raised` | `OPENAI_MODEL` / `ANTHROPIC_MODEL` resolve to different providers | check `config.yaml` `runtime_info.input.llm_api` — both should match the same backend |
+| 04: 401 from Claude shell only | sandboxed-shell artifact, not a real cred bug (memo `project-swegen-llm-endpoint`) | re-probe from a non-sandboxed shell |
+| 05: `docker info failed` | daemon down or `DOCKER_HOST` stale | `export DOCKER_HOST=unix:///var/run/docker.sock` |
+| 06: SKIPped | the `tox-dev__tox-3813` fixture isn't on disk | not a failure; either ignore, or run `/swegen:run` once to materialise the fixture |
+| 10: budget hit, no verified task | LLM/Docker stall, or the candidate PRs got harder | tail `artifacts/swe_tasks/.swegen-smoke-py.log` — usually identifies the slow step |
+
+---
 
 ## Layout
 
 ```
-cases/                 cheap deterministic checks (mirror /swegen:check)
+cases/                cheap deterministic checks
   01_config_schema.sh
   02_repo_pin.sh
   03_github_tokens.sh
   04_llm_endpoint.sh
   05_docker_daemon.sh
-  06_harbor_smoke.sh   (SKIP if py-cc/tox-dev__tox-3813 not present)
-smoke/                 end-to-end runs that cost real LLM tokens + Docker time
+  06_harbor_smoke.sh
+smoke/                expensive end-to-end runs (--with-smoke gates them)
   10_pr_demo.sh
   fixtures/python_pr_ids.txt
-run.sh                 aggregator
+run.sh                aggregator
 ```
 
-## Invocation
+---
 
-```bash
-# Cheap path (cases/ only) — safe for cloud CI, runs in ~30s:
-bash subblock/swegen/tests/run.sh
+## Per-test reference
 
-# Full path (cases/ + smoke/) — ~30 min, real LLM + Docker; self-hosted only:
-bash subblock/swegen/tests/run.sh --with-smoke
-# or:  TESTS_WITH_SMOKE=1 bash subblock/swegen/tests/run.sh
-```
+Skip this section unless you're debugging a specific case or about to change one.
 
-Each test exits `0` for pass, `77` for skip, anything else for fail. `run.sh`
-returns non-zero iff any test failed. SKIP does not fail the suite.
-
-## Test cases
-
-### `cases/01_config_schema.sh` — config.yaml shape
+<details>
+<summary><code>cases/01_config_schema.sh</code> — config.yaml shape</summary>
 
 Parses `config.yaml` with PyYAML and asserts every key the runtime contract
-depends on is present and non-empty:
-`meta_info.name == "swegen"`, `meta_info.environment.{venv_path,requirements}`,
-`meta_info.repos.swegen`, `runtime_info.input.github_tokens`,
-`runtime_info.input.llm_api.{api_key,api_base_url,pr_model,task_model}`,
-`runtime_info.output.swe_tasks_dir.path`.
+depends on is present and non-empty: `meta_info.name == "swegen"`,
+`meta_info.environment.{venv_path, requirements}`, `meta_info.repos.swegen`,
+`runtime_info.input.github_tokens`,
+`runtime_info.input.llm_api.{api_key, api_base_url, pr_model, task_model}`,
+`runtime_info.output.swe_tasks_dir.path`. Pure-Python check, no I/O.
+</details>
 
-**Fails when** a required key is missing, blank, or `meta_info.name` drifts
-from the directory name. Pure-Python check — no I/O, no shell. <1 s.
+<details>
+<summary><code>cases/02_repo_pin.sh</code> — submodule pin + venv editable install</summary>
 
-### `cases/02_repo_pin.sh` — submodule pin + venv editable install
+Three checks: (1) `repos/swegen/.git` exists (file or directory); (2) if
+`meta_info.repos.swegen.commit_id` is non-null, `git rev-parse HEAD` matches
+the pin (a `null` pin is treated as "track latest"); (3)
+`artifacts/envs/swegen-env/bin/python -c "import swegen"` succeeds.
+</details>
 
-Three things in one:
+<details>
+<summary><code>cases/03_github_tokens.sh</code> — every PAT authenticates</summary>
 
-1. `repos/swegen/.git` exists (file or directory — submodule gitlinks are
-   files, plain clones are directories).
-2. If `meta_info.repos.swegen.commit_id` is non-null, `git rev-parse HEAD`
-   on `repos/swegen/` matches that pin. A `null` pin is interpreted as
-   "track latest" and the pin check is skipped (an INFO line is emitted).
-3. `artifacts/envs/swegen-env/bin/python -c "import swegen"` succeeds.
+Sources `scripts/load_runtime_env.sh` to hydrate `GITHUB_TOKENS` (env →
+`gh_token.txt` → `~/gh_token.txt`, same precedence as the swegen collector).
+Splits the comma-separated list and `GET /rate_limit` per token. Reports the
+last six chars of any failing PAT.
+</details>
 
-**Fails when** the submodule isn't checked out (`/swegen:setup` never ran on
-this machine), the working commit drifts from the pin, or the editable
-install was never done. <1 s.
+<details>
+<summary><code>cases/04_llm_endpoint.sh</code> — chat completion succeeds</summary>
 
-### `cases/03_github_tokens.sh` — every GitHub token authenticates
+Runs inside `artifacts/envs/swegen-env` with `PYTHONPATH=repos/swegen/src`.
+Calls `hydrate_cross_provider_env()` then `get_openai_compatible_config()`,
+then `client.chat.completions.create(model=…, max_tokens=16)`. Catches the
+failure mode where `/models` would pass but the actual chat call doesn't —
+typically a mismatched cross-provider config.
+</details>
 
-Sources `scripts/load_runtime_env.sh` to hydrate `GITHUB_TOKENS` from env,
-`gh_token.txt`, or `~/gh_token.txt` (same precedence the swegen collector
-uses). Splits by comma and issues
-`GET https://api.github.com/rate_limit` per token with the matching
-`Authorization: token …` header.
-
-**Fails when** any token returns ≠ 200 or no token is found at all. Reports
-the token's last six characters on failure so you can identify which one
-expired. ~1 s per token. Catches expired PATs, commented-out tokens
-(per `feedback-swegen-gh-token-comments` memo), and unusable revoked
-credentials before the collector hits them at scale.
-
-### `cases/04_llm_endpoint.sh` — LLM endpoint completes a real request
-
-Runs inside `artifacts/envs/swegen-env`, with
-`PYTHONPATH=repos/swegen/src` so it can `from swegen.llm_env import …`.
-Calls `hydrate_cross_provider_env()`, then `get_openai_compatible_config()`
-(which mirrors `OPENAI_*` → `ANTHROPIC_*` so the Claude SDK works), then
-issues `client.chat.completions.create(model=…, max_tokens=16)`.
-
-**Fails when** the cross-provider hydration is misconfigured (e.g. mismatched
-`OPENAI_MODEL` vs `ANTHROPIC_MODEL`), the endpoint is unreachable,
-credentials are rejected, or the configured model isn't served. Light token
-spend (~16 output tokens). ~20 s typical. Catches the failure mode where
-`/models` would pass but the actual chat call doesn't.
-
-### `cases/05_docker_daemon.sh` — Docker socket reachable
+<details>
+<summary><code>cases/05_docker_daemon.sh</code> — Docker socket reachable</summary>
 
 Asserts `docker` is on `PATH` and `docker info` exits 0 with
-`DOCKER_HOST=unix:///var/run/docker.sock` (which the test exports so the
-result doesn't depend on the runner shell's env). Reports the server
-version on success.
+`DOCKER_HOST=unix:///var/run/docker.sock` exported by the test itself (so
+the result doesn't depend on the runner shell's env).
+</details>
 
-**Fails when** the daemon is down, the socket isn't readable, or the runner
-shell has `DOCKER_HOST` pointing at a stale/unreachable socket (per
-`feedback-swegen-state-dir-convention`-adjacent learnings about Harbor's
-default Podman socket). <1 s.
+<details>
+<summary><code>cases/06_harbor_smoke.sh</code> — known verified task still works</summary>
 
-### `cases/06_harbor_smoke.sh` — known verified task still passes Harbor
-
-If `artifacts/swe_tasks/py-cc/tox-dev__tox-3813/` exists locally, runs
+If `artifacts/swe_tasks/py-cc/tox-dev__tox-3813/` exists, runs
 `swegen validate … --task tox-dev__tox-3813 --env docker` and asserts the
-output contains both `NOP reward=0` and `Oracle reward=1`. Otherwise
-**SKIPs** (exit 77) — there's no point asserting Harbor health without a
-known-good fixture.
+output contains both `NOP reward=0` and `Oracle reward=1`. Otherwise SKIPs.
+</details>
 
-**Fails when** Harbor's NOP/Oracle execution produces different rewards
-(usually means the Docker stack regressed, not that the task changed).
-~2–5 min when it runs.
-
-### `smoke/10_pr_demo.sh` — end-to-end 10-PR demo
+<details>
+<summary><code>smoke/10_pr_demo.sh</code> — end-to-end 10-PR demo</summary>
 
 Runs `swegen create --max-pr 1 --no-require-issue --min-source-files 1`
 against the 10 Python PRs in `fixtures/python_pr_ids.txt` (the quick-verify
-set with `tox-dev/tox:pr-3813` first). Output lands in
-`artifacts/swe_tasks/py-cc-smoke/`. Wrapped in `timeout --foreground 1800`
-for a hard 30-minute wall-clock budget.
-
-**Passes when** `artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt`
-contains at least one task ID (i.e. NOP=0 + Oracle=1 verified) before the
-budget expires. **Fails when** the timeout hits without a verified task, or
-the CLI exits non-zero without producing the manifest. On failure, prints
-the last 40 lines of `artifacts/swe_tasks/.swegen-smoke-py.log`.
-
-Burns real LLM tokens + Docker build time. Only fires when the test runner
-is invoked with `--with-smoke` (or `TESTS_WITH_SMOKE=1`). The GitHub
-Actions workflow gates this to `push` events on `dev`/`main` and to
-`workflow_dispatch` runs with `run_smoke=true`, never to PRs.
+set with `tox-dev/tox:pr-3813` first). Wrapped in `timeout --foreground 1800`
+for a 30-minute hard budget. Passes when
+`artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt` has ≥1 task ID. On
+failure, tails the last 40 lines of `artifacts/swe_tasks/.swegen-smoke-py.log`.
+</details>
