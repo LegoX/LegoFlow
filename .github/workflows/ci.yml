@@ -78,11 +78,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - name: Isolate HOME so the runner's ~/.gitconfig can't leak in
+      - name: Isolate HOME + load shared CI env
         run: |
+          set -euo pipefail
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
-          echo "HOME=$CI_HOME" >> "$GITHUB_ENV"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+          } >> "$GITHUB_ENV"
       - name: Link runtime state from canonical checkout
         working-directory: subblock/swegen
         run: |
@@ -132,11 +142,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - name: Isolate HOME
+      - name: Isolate HOME + load shared CI env
         run: |
+          set -euo pipefail
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
-          echo "HOME=$CI_HOME" >> "$GITHUB_ENV"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+          } >> "$GITHUB_ENV"
       - name: Link runtime state from canonical checkout
         working-directory: subblock/swegen
         run: |
@@ -175,11 +195,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - name: Isolate HOME
+      - name: Isolate HOME + load shared CI env
         run: |
+          set -euo pipefail
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
-          echo "HOME=$CI_HOME" >> "$GITHUB_ENV"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+          } >> "$GITHUB_ENV"
       - name: Link runtime state from canonical checkout
         working-directory: subblock/trajgen
         run: |
@@ -224,11 +254,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - name: Isolate HOME
+      - name: Isolate HOME + load shared CI env
         run: |
+          set -euo pipefail
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
-          echo "HOME=$CI_HOME" >> "$GITHUB_ENV"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+          } >> "$GITHUB_ENV"
       - name: Link runtime state from canonical checkout
         working-directory: subblock/trajgen
         run: |
