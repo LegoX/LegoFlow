@@ -93,10 +93,10 @@ if ! bash "$BLOCK_DIR/scripts/prepare_tasks.sh" >>"$LOG" 2>&1; then
 fi
 
 set +e
-# --kill-after 60s ensures SIGKILL fires if start.sh ignores SIGTERM (Harbor
-# pipes the signal up the bash chain unreliably; without this the job-level
-# timeout-minutes lops everything off before the result scan + PASS report).
-timeout --foreground --kill-after=60s 1500 bash "$BLOCK_DIR/scripts/start.sh" >>"$LOG" 2>&1
+# 1800 s budget for trials + --kill-after 60 s so SIGKILL fires if start.sh
+# ignores SIGTERM (Harbor pipes the signal up the bash chain unreliably).
+# Job-level timeout-minutes is 55 → ~25 min of slack for cleanup + result scan.
+timeout --foreground --kill-after=60s 1800 bash "$BLOCK_DIR/scripts/start.sh" >>"$LOG" 2>&1
 rc=$?
 set -e
 
