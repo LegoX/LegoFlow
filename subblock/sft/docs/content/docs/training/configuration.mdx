@@ -1,0 +1,77 @@
+---
+title: Configuration
+description: The training hyperparameters and their gotchas
+---
+
+All training parameters live in `config.yaml` → `runtime_info.input.training`. The block generates the LLaMA-Factory YAML from these values at runtime. This page documents the fields that matter most and the gotchas behind them.
+
+## Core fields
+
+| Field | Meaning |
+| --- | --- |
+| `stage` | Training stage (`sft`) |
+| `finetuning_type` | `full` for full fine-tuning |
+| `deepspeed` | DeepSpeed config path (`ds_z3_config.json` = ZeRO-3) |
+| `template` | Chat template (see below) |
+| `cutoff_len` | Max sequence length (tokens) |
+| `rope_scaling` | RoPE scaling method (see below) |
+| `output_dir` | Run name / checkpoint directory |
+| `per_device_train_batch_size` | Batch size per GPU |
+| `gradient_accumulation_steps` | Gradient accumulation steps |
+| `learning_rate` | Learning rate |
+| `num_train_epochs` | Number of epochs |
+| `lr_scheduler_type` | LR schedule (e.g. `cosine`) |
+| `warmup_ratio` | Warmup fraction of total steps |
+| `save_steps` | Checkpoint interval (steps) |
+
+The effective global batch size is `per_device_train_batch_size × gradient_accumulation_steps × n_gpus`.
+
+## Template
+
+`template: qwen3_nothink` disables thinking mode in the Qwen3 chat template. Use `template: qwen3` when training on trajectories that carry chain-of-thought (`reasoning_content` present) so the reasoning is kept. See [Scaffolds](/docs/data-pipeline/scaffolds#reasoning-content-and-templates).
+
+## Long context
+
+`rope_scaling: yarn` is **required** whenever `cutoff_len > 32768`. Without it, position embeddings overflow and training OOMs or produces garbage.
+
+## Checkpointing
+
+- `save_only_model: true` skips saving optimizer state — it saves disk but prevents resuming.
+- `resume_from_checkpoint: null` — set it to a checkpoint directory path to resume.
+- `overwrite_output_dir: true` will **silently overwrite** an existing checkpoint directory. Rename `output_dir` or set this to `false` to protect an in-progress run.
+- A relative `output_dir` writes to `artifacts/model/<basename>`; an absolute path is honored as-is by both training and the dashboard.
+
+## Performance toggles
+
+| Field | Effect |
+| --- | --- |
+| `bf16: true` | bf16 mixed-precision training |
+| `enable_liger_kernel: true` | Liger fused kernels |
+| `use_unsloth_gc: true` | Unsloth gradient checkpointing |
+| `flash_attn: fa2` | FlashAttention-2 (pinned flash-attn 2.8.3 wheel) |
+
+## Experiment tracking
+
+`experiment.wandb_mode` controls reporting: `disabled` generates `report_to: none`; `offline` logs locally without an API key; `online` requires `credentials.wandb_api_key`.
+
+## Tunable parameters
+
+The block declares the parameters safe to auto-tune under `evolving.tunable_params`:
+
+| Parameter | Range / meaning |
+| --- | --- |
+| `learning_rate` | 1e-5 to 1e-3 |
+| `num_train_epochs` | Number of epochs |
+| `per_device_train_batch_size` | Batch size per GPU |
+| `gradient_accumulation_steps` | Gradient accumulation steps |
+| `max_instances` | Maximum training instances (conversion cap) |
+
+## Common failure modes
+
+| Symptom | Fix |
+| --- | --- |
+| Single-GPU run on an 8-GPU node | Ensure `FORCE_TORCHRUN=1` (set by `train.sh`) and `n_gpus_per_node` is correct |
+| Dataset key points to an old LF filename | Let `train.sh` update the mapping, or pick a new `conversion.data_name` |
+| Position-embedding OOM at long context | Add `rope_scaling: yarn` for `cutoff_len > 32768` |
+| In-progress checkpoint overwritten | Rename `output_dir` or set `overwrite_output_dir: false` |
+| WandB online mode without an API key | Set `credentials.wandb_api_key`, or switch to `offline`/`disabled` |

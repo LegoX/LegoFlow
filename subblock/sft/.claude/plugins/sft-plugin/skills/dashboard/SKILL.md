@@ -1,73 +1,80 @@
 ---
 name: dashboard
 description: >
-  Read-only progress surface for the sft block. Regenerates
-  dashboard/status.mdx via scripts/update_status.py (config summary +
-  current step/loss/throughput parsed from the trainer log + final results
-  from train_results.json), then prints a textual table: status
-  (not-started / training / done), config summary, latest step + loss +
-  ETA, final metrics, the WandB run id from runtime_info.output, the
-  training_loss.png path, and the newest artifacts/index.yaml run entry.
+  Read-only progress surface for the sft block. Backed by the web dashboard
+  under dashboard/ (React + server.py) that parses artifacts/model/<run>/
+  (trainer_log.jsonl, trainer_state.json, *_results.json) and console logs in
+  artifacts/logs/. This skill prints a quick textual summary (status, config,
+  latest step/loss/ETA, final metrics, WandB run id, artifacts, newest
+  artifacts/index.yaml entry) and, on request, launches the web UI on :8091.
   Never modifies training state. Triggers on phrases like "sft dashboard",
-  "show sft progress", "training loss", "where's the sft run",
-  "wandb run id for sft", "how's sft training going".
+  "show sft progress", "training loss", "where's the sft run", "wandb run id
+  for sft", "how's sft training going".
 ---
 
 # /sft:dashboard
 
 The per-block "show me what's happening" surface for sft. Read-only — it
-regenerates the status doc and prints a summary; it never launches, edits
-config, or touches `repos/`.
+summarizes state and can launch the monitoring web UI; it never launches or
+edits training, config, or `repos/`.
 
 ## Step 0 — Orient
 
-Run only from inside the sft block (`./config.yaml`, `meta_info.name ==
-'sft'`); otherwise abort. Resolve `PY = <meta_info.environment.sft_uv>/bin/
-python` (default `artifacts/env/lf/bin/python`); fall back to `python3` if
-that env isn't built yet (the status generator only needs `pyyaml`).
+Run only from inside the sft block (`./config.yaml`, `meta_info.name == 'sft'`);
+otherwise abort. Resolve the run output root from `config.yaml`
+(`training.output_dir`): a relative value lives at `artifacts/model/<basename>`,
+an absolute value is used as-is. Runs land under `artifacts/model/<run>/`.
 
-## Step 1 — Refresh the status doc
+## Step 1 — Quick textual status (default deliverable)
 
-`scripts/update_status.py` does the parsing for us — it reads `config.yaml`,
-the resolved `output_dir`'s `trainer_log.jsonl` and `train_results.json`,
-and writes `dashboard/status.mdx`. Run it **once** (not `--loop`):
+Agents can't open a browser, so the default output is a text summary parsed
+directly from the latest run's artifacts — no daemon, no side effects.
 
-```bash
-"$PY" scripts/update_status.py --block-dir . 2>&1 || python3 scripts/update_status.py --block-dir .
-```
+1. Find the active run dir (the resolved `output_dir`, or the most recently
+   modified immediate subdir of `artifacts/model/` containing
+   `trainer_log.jsonl` or `trainer_state.json`).
+2. Read the **last** line of `<run>/trainer_log.jsonl` for live step / loss /
+   learning_rate / epoch / percentage / elapsed / remaining. If absent, fall
+   back to the last `log_history` entry in `<run>/trainer_state.json`.
+3. If `<run>/train_results.json` (or `all_results.json`) exists, the run is
+   finished — read `final_loss` / `train_runtime` / `total_steps` from there.
 
-Then read `dashboard/status.mdx` — that file is the authoritative rendered
-state (status, config summary, progress table, final results, loss-plot
-link). Note: it's written in Chinese (训练状态 / 配置摘要 / 训练进度 /
-最终结果); present it faithfully, translating section labels if the user
-prefers English.
+State = `not started` (no run dir) / `training` (jsonl modified < 3 min ago and
+percentage < 100) / `done` (results json present or percentage ≈ 100).
 
-## Step 2 — Gather the extras `status.mdx` doesn't surface
+## Step 2 — Gather the extras
 
-Read from `config.yaml → runtime_info.output` (populated by `train.sh`
-STEP 3 after a run):
+Read from `config.yaml → runtime_info.output` (populated by `train.sh` STEP 3):
 
 - `checkpoint_path.value` — latest checkpoint dir
 - `training_curves.value` — **WandB run id** (e.g. `lge1jzzt`). With
-  `wandb_mode: offline` there's no public URL; the run lives under
-  `artifacts/wandb/`. With `online`, the URL is
-  `https://wandb.ai/<entity>/<project>/runs/<run_id>` — only print the full
-  URL if you can confirm entity/project; otherwise print the run id.
+  `wandb_mode: offline` there's no public URL (the run lives under
+  `artifacts/wandb/`); with `online` it's
+  `https://wandb.ai/<entity>/<project>/runs/<run_id>` — only print the full URL
+  if you can confirm entity/project, otherwise print the run id.
 - `training_metrics.value` — `final_loss`, `train_runtime`, `total_steps`
 - `artifacts.{train_results, train_loss_plot, training_log}` — file paths
 
-And the run history from `artifacts/index.yaml` (newest `runs[]` entry).
-Entries written by `scripts/archive_run.sh` carry: `id`, `started_at`,
-`completed_at`, `status`, `archive` (the `run_NNN/` dir), and `notes` (a
-one-line summary). (Older hand-seeded rows may also have `label`/`detail`;
-read whichever fields are present.)
+And the newest `runs[]` entry from `artifacts/index.yaml` (written by
+`scripts/archive_run.sh`): `id`, `started_at`, `completed_at`, `status`,
+`archive`, `notes`.
 
-If a live run is in progress, note it (`pgrep -af 'llamafactory.cli
-train'`) and that `status.mdx` auto-refreshes every 30s during training.
+## Step 3 — Offer the live web UI
 
-## Step 3 — Print the summary
+For a rich live view (loss curves, multi-run compare, eval/perf panels, wandb),
+the human can launch the dashboard webui:
 
-A compact textual table is the default deliverable:
+```bash
+cd dashboard && ./start_dashboard.sh          # builds frontend (first run), serves :8091
+# public link (no DNS/login needed) — prints an https://<random>.trycloudflare.com URL:
+cd dashboard && TUNNEL=true ./start_dashboard.sh
+```
+
+It reads `../artifacts/model` (runs) and `../artifacts/logs` (logs) by default.
+Only launch it when the user asks — it's a long-running server. On a headless
+host, just give the command and the textual summary; don't try to open a browser.
+
+## Step 4 — Print the summary
 
 ```
 ## sft dashboard — <CWD>
@@ -76,7 +83,7 @@ Status: <not started | training (<step>/<total>, <pct>%) | done>
 Model:  <basename of model_name_or_path>   Dataset: <data_name>
 Config: gbs=<N> lr=<lr> epochs=<E> template=<t>
 
-Progress (from status.mdx):
+Progress (latest trainer_log.jsonl):
   step <cur>/<total>  loss=<loss>  epoch=<e>  elapsed=<t>  eta=<t>
 
 Final (if done):
@@ -89,21 +96,12 @@ Artifacts:
   wandb:       run_id=<id>  mode=<wandb_mode>
 
 Latest run (artifacts/index.yaml): <id> — <status> — <notes>
+
+Live web UI:  cd dashboard && ./start_dashboard.sh   (:8091)
 ```
-
-Point the user at `dashboard/status.mdx` for the rendered version (it
-embeds the loss curve). On a headless host, just print paths — don't try to
-open a browser or image viewer.
-
-There is no bundled web UI for this block today (unlike rl's `webui/`);
-the `dashboard/*.mdx` files are the surface. If the user asks for a live
-web dashboard, say it's not implemented here and offer the textual view
-plus the `status.mdx` auto-refresh.
 
 ## Guardrails
 
-- Read-only: never edit `config.yaml`, launch training, or write anything
-  except via `update_status.py` (which only writes `dashboard/status.mdx`).
-- Run `update_status.py` **once** here — never with `--loop` (that's the
-  background updater `train.sh` owns during a run).
+- Read-only: never edit `config.yaml`, launch training, or write artifacts.
+- Only start the web server when the user explicitly asks; it's long-running.
 - Never modify `repos/`. Local block — no SSH.

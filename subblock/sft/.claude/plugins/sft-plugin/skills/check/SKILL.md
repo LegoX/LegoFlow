@@ -107,19 +107,16 @@ A second concurrent run on the same GPUs will OOM or corrupt both. Probe:
 ```bash
 pgrep -af 'llamafactory.cli train'   # the training launcher
 pgrep -af 'scripts/train.sh'         # the wrapping pipeline
-pgrep -af 'update_status.py --loop'  # the background status updater
 ```
 
 | Observation | Name | Status |
 |---|---|:---:|
 | a `llamafactory.cli train` / `train.sh` process is alive | `job:running` | ✗ blocks |
-| only an orphaned `update_status.py --loop` is alive | `job:stale-updater` | ⚠ |
 | nothing matches | `job:none` | ✓ |
 
 On `job:running`, report the PID + `etime` (`ps -p <pid> -o pid=,etime=`)
 and tell the user to let it finish or stop it (`kill <pid>`), not to launch
-a second run. On `job:stale-updater`, note it's harmless and will be
-replaced by the next `train.sh`.
+a second run.
 
 ### 2b — Are the GPUs free, ours, or foreign?
 
@@ -177,7 +174,7 @@ rows.
 | det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim dryrun line> |
 | det  | wandb         | <✓/✗>   | <mode=offline/online/disabled · key set?> |
 | det  | gpu-count     | <✓/⚠>   | <nvidia-smi N vs config N_GPUS> |
-| live | job           | <✓/⚠/✗> | <job:none / job:stale-updater / job:running pid=<P>> |
+| live | job           | <✓/✗>   | <job:none / job:running pid=<P>> |
 | live | gpu           | <✓/⚠/✗> | <gpu:idle / gpu:mine / gpu:foreign pid=<P> mem=<M>> |
 | live | checkpoint    | <✓/⚠>   | <ckpt:clean / ckpt:clobber: <dir>> |
 

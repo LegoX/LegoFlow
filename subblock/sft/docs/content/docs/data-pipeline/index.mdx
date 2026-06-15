@@ -1,0 +1,71 @@
+---
+title: Conversion Pipeline
+description: How raw trajectories become LLaMA-Factory datasets
+---
+
+The data pipeline converts raw agent trajectories into a training-ready LLaMA-Factory dataset. It is STEP 0 of `scripts/train.sh` and the entirety of `scripts/dataprep.sh`.
+
+## Input sources
+
+`config.yaml` → `runtime_info.input.source.type` selects where the LF dataset comes from. Conversion (the flow below) only runs for `harbor_job`; the other two skip it and feed a ready-made LF/ShareGPT dataset straight into training.
+
+| `source.type` | Input | Conversion | Required fields |
+| --- | --- | --- | --- |
+| `harbor_job` *(default)* | Raw Harbor trajectories | Runs STEP 0 | `source.scaffold`, `source.job_dir` |
+| `hf_lf` | An LF/ShareGPT dataset on the HuggingFace Hub | Skipped | `source.hf_hub_url` (+ optional `hf_subset`, `hf_split`) |
+| `local_lf` | An existing local LF/ShareGPT json | Skipped | `source.lf_path` |
+
+For `hf_lf`, the dataset is registered with LLaMA-Factory's native `hf_hub_url` and pulled from the Hub at train time; set `credentials.hf_token` for private datasets. For `local_lf`, the json at `source.lf_path` is registered as-is. In both cases `conversion.data_name` is still used as the registered dataset key, and `conversion.max_instances` (if > 0) becomes the dataset's `num_samples` (a random subsample).
+
+<Callout title="Scoring and repo filtering only apply to harbor_job" type="warn">
+The quality [scoring](/docs/data-pipeline/scoring) and eval-repo exclusion happen during conversion. A `hf_lf` / `local_lf` dataset is consumed as-is, so make sure it is already clean (no SWE-bench benchmark repos) and pre-filtered upstream.
+</Callout>
+
+## The flow
+
+```text
+Harbor job trajectories (job_dir, per-scaffold)
+    └─▶  python -m swe_data_process.<subpackage>.convert_*_to_im
+              └─▶  Intermediate "IM" format (PangUML v2 JSONL, score in meta_info.unique_info)
+                        └─▶  rule_score.py (auto-invoked) + optional llm_score.py
+                                  └─▶  LLaMA-Factory "LF" format (ShareGPT JSON)
+                                            └─▶  artifacts/data/lf_data/<dataset>.json
+```
+
+Conversion is invoked as `python -m swe_data_process.<subpackage>...` with `PYTHONPATH=repos/swe_data_process/src`, using the `uv` environment at `meta_info.environment.sft_uv`. The converter is selected from `source.scaffold` — see [Scaffolds](/docs/data-pipeline/scaffolds).
+
+## Run it standalone
+
+`scripts/dataprep.sh` runs conversion only — no dataset registration, no training — so you can inspect and validate the data before committing GPUs to a run:
+
+```bash
+bash scripts/dataprep.sh
+```
+
+It reads `runtime_info.input.source` and `runtime_info.input.conversion` from `config.yaml` and writes the IM JSONL and LF JSON under `artifacts/data/`. For `source.type` of `hf_lf` or `local_lf` there is nothing to convert, so `dataprep.sh` exits early — run `scripts/train.sh` directly to register the dataset and train.
+
+## Conversion settings
+
+From `config.yaml` → `runtime_info.input.conversion`:
+
+| Field | Meaning |
+| --- | --- |
+| `max_instances` | Cap on the number of converted training instances |
+| `exclude_repos_file` | Repo exclusion list (default `artifacts/data/excluded_repos.txt`) |
+| `data_name` | Base name for the LF file and the registered dataset key |
+
+## Output layout
+
+```text
+artifacts/data/
+├── excluded_repos.txt          # eval-repo filter (owner/repo per line)
+└── lf_data/
+    ├── <dataset>.json          # LF / ShareGPT training data
+    └── dataset_info.json       # LLaMA-Factory dataset registration
+```
+
+Both the LF file and `dataset_info.json` live in `artifacts/data/lf_data/`; the generated training YAML sets `dataset_dir` to point there. See [Dataset registration](/docs/core-concepts#dataset-registration) for how the data is wired into training.
+
+<Callout title="Partial outputs" type="warn">
+If a converter is interrupted, a partial IM-only or LF-only file may remain. Delete the partial file (or restore the missing pair) before rerunning, or the converter may skip work it thinks is already done.
+</Callout>

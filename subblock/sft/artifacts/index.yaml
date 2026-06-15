@@ -1,18 +1,7 @@
-# artifacts/index.yaml — append-only run index
-# Agent appends one entry per completed run.
-# Each entry points to the per-run directory under artifacts/files/run_NNN/.
-
 runs:
-  - id: run_001
-    started_at: "2026-04-24T15:53:28Z"
-    completed_at: "2026-04-24T16:14:24Z"
-    status: completed
-    label: "Qwen3-8B SFT run 1"
-    inputs_snapshot: artifacts/files/run_001/inputs.yaml
-    params: artifacts/files/run_001/params.yaml
-    metrics: artifacts/files/run_001/metrics.yaml
-    log: artifacts/files/run_001/run.log
-    detail: >
-      Full fine-tuning of Qwen3-8B on glm5_swerebench_oraclesolved_oh_sdk_test
-      (64 instances, openhands-sdk scaffold). DeepSpeed ZeRO-3, 4 epochs, lr=1e-4,
-      gbs=64. Final loss: 0.6194. Runtime: 20m56s.
+- id: run_001
+  started_at: '2026-06-15T13:09:16Z'
+  completed_at: '2026-06-15T14:44:40Z'
+  status: completed
+  archive: artifacts/archives/run_001/
+  notes: ''

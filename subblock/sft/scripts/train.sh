@@ -71,9 +71,17 @@ cfg() {
 # ---------------------------------------------------------------------------
 # Load config values
 # ---------------------------------------------------------------------------
+SOURCE_TYPE="$(cfg "source.type")"
+[[ -z "$SOURCE_TYPE" ]] && SOURCE_TYPE="harbor_job"
 SCAFFOLD="$(cfg "source.scaffold")"
 JOB_DIR_RAW="$(cfg "source.job_dir")"
 JOB_DIR="$(abspath "$JOB_DIR_RAW")"
+HF_HUB_URL="$(cfg "source.hf_hub_url")"
+HF_SUBSET="$(cfg "source.hf_subset")"
+HF_SPLIT="$(cfg "source.hf_split")"
+LF_PATH_RAW="$(cfg "source.lf_path")"
+LF_PATH="$(abspath "$LF_PATH_RAW")"
+HF_TOKEN_VAL="$(cfg "credentials.hf_token")"
 
 MAX_INSTANCES="$(cfg "conversion.max_instances")"
 EXCLUDE_REPOS_RAW="$(cfg "conversion.exclude_repos_file")"
@@ -138,11 +146,18 @@ else
 fi
 
 echo "=== sft-train pipeline ==="
-echo "    Block:     $BLOCK_DIR"
-echo "    Scaffold:  $SCAFFOLD"
-echo "    LF output: $LF_OUTPUT"
-echo "    Dataset:   $DATASET_NAME"
-echo "    Output dir: $OUTPUT_DIR"
+echo "    Block:       $BLOCK_DIR"
+echo "    Source type: $SOURCE_TYPE"
+case "$SOURCE_TYPE" in
+    harbor_job)
+        echo "    Scaffold:    $SCAFFOLD"
+        echo "    LF output:   $LF_OUTPUT"
+        ;;
+    hf_lf)      echo "    HF dataset:  $HF_HUB_URL${HF_SUBSET:+ (subset=$HF_SUBSET)}${HF_SPLIT:+ split=$HF_SPLIT}" ;;
+    local_lf)   echo "    LF path:     $LF_PATH" ;;
+esac
+echo "    Dataset:     $DATASET_NAME"
+echo "    Output dir:  $OUTPUT_DIR"
 
 if [[ -z "$DATA_NAME" ]]; then
     echo "ERROR: conversion.data_name is empty — set runtime_info.input.conversion.data_name in config.yaml"
@@ -159,79 +174,109 @@ if [[ -z "$RUN_NAME" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Determine converter module and build CLI args. The refactored swe_data_process
-# package exposes job-dir based converters only.
+# STEP 0: Obtain the LF dataset, depending on source.type.
+#   harbor_job — convert raw Harbor trajectories (IM -> LF), idempotent.
+#   hf_lf      — no conversion; the dataset is pulled from the HF Hub at train time.
+#   local_lf   — no conversion; an existing LF json is registered as-is.
+# Sets REGISTER_MODE (file|hf_hub) and REGISTER_VALUE for STEP 1.
 # ---------------------------------------------------------------------------
-CONVERT_ARGS=()
+echo ""
+echo "============================================================"
+echo "STEP 0: Obtain LF dataset (source.type=$SOURCE_TYPE)"
+echo "============================================================"
 
-if [[ -z "$JOB_DIR" ]]; then
-    echo "ERROR: source.job_dir is empty — set runtime_info.input.source.job_dir in config.yaml"
-    exit 1
-fi
+case "$SOURCE_TYPE" in
+    harbor_job)
+        if [[ -z "$JOB_DIR" ]]; then
+            echo "ERROR: source.job_dir is empty — set runtime_info.input.source.job_dir in config.yaml"
+            exit 1
+        fi
+        case "${SCAFFOLD}" in
+            openhands-sdk) CONVERTER_MODULE="swe_data_process.openhands.convert_openhands_sdk_to_im" ;;
+            claude-code)   CONVERTER_MODULE="swe_data_process.claudecode_opencode.convert_cc_to_im" ;;
+            open-code)     CONVERTER_MODULE="swe_data_process.claudecode_opencode.convert_oc_to_im" ;;
+            terminus2)     CONVERTER_MODULE="swe_data_process.terminus2.convert_terminus2_to_im" ;;
+            *)
+                echo "ERROR: Unsupported scaffold for job-dir conversion: '${SCAFFOLD}'"
+                echo "  Valid scaffold: openhands-sdk | claude-code | open-code | terminus2"
+                exit 1
+                ;;
+        esac
 
-case "${SCAFFOLD}" in
-    openhands-sdk)
-        CONVERTER_MODULE="swe_data_process.openhands.convert_openhands_sdk_to_im"
+        CONVERT_ARGS=(--job-dir "$JOB_DIR" --im-output "$IM_OUTPUT" --lf-output "$LF_OUTPUT")
+        if [[ -n "$MAX_INSTANCES" ]] && [[ "$MAX_INSTANCES" -gt 0 ]] 2>/dev/null; then
+            CONVERT_ARGS+=(--max-instances "$MAX_INSTANCES")
+        fi
+        if [[ -n "$EXCLUDE_REPOS_RAW" ]]; then
+            if [[ ! -f "$EXCLUDE_REPOS_FILE" ]]; then
+                echo "ERROR: conversion.exclude_repos_file not found: $EXCLUDE_REPOS_FILE"
+                exit 1
+            fi
+            CONVERT_ARGS+=(--exclude-repos-file "$EXCLUDE_REPOS_FILE")
+        fi
+
+        LF_DIR="$(dirname "$LF_OUTPUT")"
+        IM_DIR="$(dirname "$IM_OUTPUT")"
+        mkdir -p "$LF_DIR" "$IM_DIR"
+
+        if [[ -f "$IM_OUTPUT" && -f "$LF_OUTPUT" ]]; then
+            IM_LINES=$(wc -l < "$IM_OUTPUT" 2>/dev/null || echo "?")
+            LF_COUNT=$("$LF_PYTHON" -c 'import json, sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))))' "$LF_OUTPUT" 2>/dev/null || echo "?")
+            echo "=== IM output already exists ($IM_LINES lines): $IM_OUTPUT ==="
+            echo "=== LF output already exists ($LF_COUNT records): $LF_OUTPUT ==="
+            echo "    Skipping conversion. Delete both files to re-run."
+        elif [[ -f "$IM_OUTPUT" || -f "$LF_OUTPUT" ]]; then
+            echo "ERROR: Found a partial conversion output."
+            echo "  IM: $IM_OUTPUT"
+            echo "  LF: $LF_OUTPUT"
+            echo "Delete the existing partial file or restore the missing pair before re-running."
+            exit 1
+        else
+            echo "=== Running converter module: $CONVERTER_MODULE ==="
+            echo "    Args: ${CONVERT_ARGS[*]}"
+            PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" -m "$CONVERTER_MODULE" "${CONVERT_ARGS[@]}"
+            echo "=== Conversion done ==="
+        fi
+        REGISTER_MODE="file"
+        REGISTER_VALUE="$(basename "$LF_OUTPUT")"
         ;;
-    claude-code)
-        CONVERTER_MODULE="swe_data_process.claudecode_opencode.convert_cc_to_im"
+
+    local_lf)
+        if [[ -z "$LF_PATH" ]]; then
+            echo "ERROR: source.lf_path is empty — set runtime_info.input.source.lf_path for source.type=local_lf"
+            exit 1
+        fi
+        if [[ ! -f "$LF_PATH" ]]; then
+            echo "ERROR: source.lf_path not found: $LF_PATH"
+            exit 1
+        fi
+        echo "=== Using existing local LF dataset (no conversion): $LF_PATH ==="
+        REGISTER_MODE="file"
+        REGISTER_VALUE="$LF_PATH"
         ;;
-    open-code)
-        CONVERTER_MODULE="swe_data_process.claudecode_opencode.convert_oc_to_im"
+
+    hf_lf)
+        if [[ -z "$HF_HUB_URL" ]]; then
+            echo "ERROR: source.hf_hub_url is empty — set runtime_info.input.source.hf_hub_url for source.type=hf_lf"
+            exit 1
+        fi
+        echo "=== Dataset will be loaded from the HuggingFace Hub at train time (no conversion) ==="
+        echo "    hf_hub_url: $HF_HUB_URL${HF_SUBSET:+  subset: $HF_SUBSET}${HF_SPLIT:+  split: $HF_SPLIT}"
+        REGISTER_MODE="hf_hub"
+        REGISTER_VALUE="$HF_HUB_URL"
         ;;
-    terminus2)
-        CONVERTER_MODULE="swe_data_process.terminus2.convert_terminus2_to_im"
-        ;;
+
     *)
-        echo "ERROR: Unsupported scaffold for job-dir conversion: '${SCAFFOLD}'"
-        echo "  Valid scaffold: openhands-sdk | claude-code | open-code | terminus2"
+        echo "ERROR: Unsupported source.type '$SOURCE_TYPE' — valid: harbor_job | hf_lf | local_lf"
         exit 1
         ;;
 esac
 
-# Common conversion args
-CONVERT_ARGS+=(--job-dir "$JOB_DIR")
-CONVERT_ARGS+=(--im-output "$IM_OUTPUT" --lf-output "$LF_OUTPUT")
-if [[ -n "$MAX_INSTANCES" ]] && [[ "$MAX_INSTANCES" -gt 0 ]] 2>/dev/null; then
-    CONVERT_ARGS+=(--max-instances "$MAX_INSTANCES")
-fi
-if [[ -n "$EXCLUDE_REPOS_RAW" ]]; then
-    if [[ ! -f "$EXCLUDE_REPOS_FILE" ]]; then
-        echo "ERROR: conversion.exclude_repos_file not found: $EXCLUDE_REPOS_FILE"
-        exit 1
-    fi
-    CONVERT_ARGS+=(--exclude-repos-file "$EXCLUDE_REPOS_FILE")
-fi
-
-# ---------------------------------------------------------------------------
-# STEP 0: Data conversion (idempotent — skipped if LF output already exists)
-# ---------------------------------------------------------------------------
-echo ""
-echo "============================================================"
-echo "STEP 0: Data conversion"
-echo "============================================================"
-
-LF_DIR="$(dirname "$LF_OUTPUT")"
-IM_DIR="$(dirname "$IM_OUTPUT")"
-mkdir -p "$LF_DIR" "$IM_DIR"
-
-if [[ -f "$IM_OUTPUT" && -f "$LF_OUTPUT" ]]; then
-    IM_LINES=$(wc -l < "$IM_OUTPUT" 2>/dev/null || echo "?")
-    LF_COUNT=$("$LF_PYTHON" -c 'import json, sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))))' "$LF_OUTPUT" 2>/dev/null || echo "?")
-    echo "=== IM output already exists ($IM_LINES lines): $IM_OUTPUT ==="
-    echo "=== LF output already exists ($LF_COUNT records): $LF_OUTPUT ==="
-    echo "    Skipping conversion. Delete both files to re-run."
-elif [[ -f "$IM_OUTPUT" || -f "$LF_OUTPUT" ]]; then
-    echo "ERROR: Found a partial conversion output."
-    echo "  IM: $IM_OUTPUT"
-    echo "  LF: $LF_OUTPUT"
-    echo "Delete the existing partial file or restore the missing pair before re-running."
-    exit 1
-else
-    echo "=== Running converter module: $CONVERTER_MODULE ==="
-    echo "    Args: ${CONVERT_ARGS[*]}"
-    PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" -m "$CONVERTER_MODULE" "${CONVERT_ARGS[@]}"
-    echo "=== Conversion done ==="
+# For ready-made LF sources, cap the loaded rows via the dataset's num_samples
+# (harbor_job already applies max_instances during conversion).
+ENTRY_NUM_SAMPLES=""
+if [[ "$SOURCE_TYPE" != "harbor_job" ]] && [[ -n "$MAX_INSTANCES" ]] && [[ "$MAX_INSTANCES" -gt 0 ]] 2>/dev/null; then
+    ENTRY_NUM_SAMPLES="$MAX_INSTANCES"
 fi
 
 # ---------------------------------------------------------------------------
@@ -243,14 +288,13 @@ echo "STEP 1: Dataset registration"
 echo "============================================================"
 
 DATASET_INFO="$BLOCK_DIR/artifacts/data/lf_data/dataset_info.json"
-LF_FILENAME="$(basename "$LF_OUTPUT")"
 
 mkdir -p "$BLOCK_DIR/artifacts/data/lf_data"
 if [[ ! -f "$DATASET_INFO" ]]; then
     echo '{}' > "$DATASET_INFO"
 fi
 
-"$LF_PYTHON" - "$DATASET_INFO" "$DATASET_NAME" "$LF_FILENAME" <<'PYEOF'
+"$LF_PYTHON" - "$DATASET_INFO" "$DATASET_NAME" "$REGISTER_MODE" "$REGISTER_VALUE" "$HF_SUBSET" "$HF_SPLIT" "$ENTRY_NUM_SAMPLES" <<'PYEOF'
 import fcntl
 import json
 import os
@@ -258,9 +302,42 @@ import sys
 import tempfile
 from pathlib import Path
 
-dataset_info_path, dataset_name, lf_filename = sys.argv[1:4]
+dataset_info_path, dataset_name, mode, value, subset, split, num_samples = sys.argv[1:8]
 path = Path(dataset_info_path)
 lock_path = path.with_suffix(path.suffix + ".lock")
+
+common = {
+    "formatting": "sharegpt",
+    "columns": {"messages": "messages"},
+    "tags": {
+        "role_tag": "role",
+        "content_tag": "content",
+        "user_tag": "user",
+        "assistant_tag": "assistant",
+        "system_tag": "system",
+    },
+}
+
+if mode == "hf_hub":
+    desired_entry = {"hf_hub_url": value}
+    if subset:
+        desired_entry["subset"] = subset
+    if split and split != "train":
+        desired_entry["split"] = split
+    desired_entry.update(common)
+    src_label = f"hf_hub_url={value}"
+else:  # file (local LF json or converted harbor output)
+    desired_entry = {"file_name": value}
+    desired_entry.update(common)
+    src_label = f"file_name={value}"
+
+if num_samples:
+    try:
+        n = int(num_samples)
+        if n > 0:
+            desired_entry["num_samples"] = n
+    except ValueError:
+        pass
 
 with open(lock_path, "w") as lock:
     fcntl.flock(lock, fcntl.LOCK_EX)
@@ -268,21 +345,8 @@ with open(lock_path, "w") as lock:
     with open(path, encoding="utf-8") as f:
         info = json.load(f)
 
-    desired_entry = {
-        "file_name": lf_filename,
-        "formatting": "sharegpt",
-        "columns": {"messages": "messages"},
-        "tags": {
-            "role_tag": "role",
-            "content_tag": "content",
-            "user_tag": "user",
-            "assistant_tag": "assistant",
-            "system_tag": "system"
-        }
-    }
-
-    if dataset_name in info and info[dataset_name] == desired_entry:
-        print(f"=== Dataset '{dataset_name}' already registered with the current LF file — skipping ===")
+    if info.get(dataset_name) == desired_entry:
+        print(f"=== Dataset '{dataset_name}' already registered ({src_label}) — skipping ===")
     else:
         old_entry = info.get(dataset_name)
         info[dataset_name] = desired_entry
@@ -292,9 +356,10 @@ with open(lock_path, "w") as lock:
             tmp_path = tmp.name
         os.replace(tmp_path, path)
         if old_entry is None:
-            print(f"=== Registered dataset '{dataset_name}' -> {lf_filename} ===")
+            print(f"=== Registered dataset '{dataset_name}' -> {src_label} ===")
         else:
-            print(f"=== Updated dataset '{dataset_name}' mapping: {old_entry.get('file_name')} -> {lf_filename} ===")
+            old_src = old_entry.get("hf_hub_url") or old_entry.get("file_name")
+            print(f"=== Updated dataset '{dataset_name}': {old_src} -> {src_label} ===")
 PYEOF
 
 # ---------------------------------------------------------------------------
@@ -433,15 +498,11 @@ if [[ "$WANDB_MODE_CFG" != "disabled" && -n "$WANDB_RUN_ID" ]]; then
     export WANDB_RUN_ID="$WANDB_RUN_ID"
 fi
 
-STATUS_PID=""
-cleanup_status_updater() {
-    if [[ -n "${STATUS_PID:-}" ]]; then
-        kill "$STATUS_PID" 2>/dev/null || true
-        wait "$STATUS_PID" 2>/dev/null || true
-        STATUS_PID=""
-    fi
-}
-trap cleanup_status_updater EXIT
+# HuggingFace token for pulling a private hf_lf dataset at train time.
+if [[ "$SOURCE_TYPE" == "hf_lf" && -n "$HF_TOKEN_VAL" ]]; then
+    export HF_TOKEN="$HF_TOKEN_VAL"
+    export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN_VAL"
+fi
 
 echo "=== Launching training ==="
 echo "    YAML:    $TRAIN_YAML_PATH"
@@ -449,15 +510,9 @@ echo "    Log:     $TRAIN_LOG"
 echo "    GPUs:    $N_GPUS"
 nvidia-smi
 
-# Start status updater in background (refresh every 30s)
-"$LF_PYTHON" "$BLOCK_DIR/scripts/update_status.py" --block-dir "$BLOCK_DIR" --loop 30 &
-STATUS_PID=$!
-
+# Live progress is served by the dashboard webui (dashboard/start_dashboard.sh),
+# which reads trainer_log.jsonl from artifacts/model/<run>/ directly.
 FORCE_TORCHRUN=1 NPROC_PER_NODE="$N_GPUS" PYTHONPATH="$BLOCK_DIR/repos/LLaMA-Factory/src:${PYTHONPATH:-}" PATH="$SFT_UV/bin:$PATH" "$LF_PYTHON" -m llamafactory.cli train "$TRAIN_YAML_PATH" 2>&1 | tee "$TRAIN_LOG"
-
-# Stop status updater and do a final refresh
-cleanup_status_updater
-"$LF_PYTHON" "$BLOCK_DIR/scripts/update_status.py" --block-dir "$BLOCK_DIR"
 
 # ---------------------------------------------------------------------------
 # STEP 3: Update config.yaml runtime_info.output
@@ -600,14 +655,5 @@ print(f"    final_loss: {metrics_value.get('final_loss')}")
 print(f"    total_steps: {metrics_value.get('total_steps')}")
 print(f"    train_runtime: {metrics_value.get('train_runtime')}")
 PYEOF
-
-# ---------------------------------------------------------------------------
-# STEP 4: Update experiment tracking table after a successful run
-# ---------------------------------------------------------------------------
-echo ""
-echo "============================================================"
-echo "STEP 4: Update experiment tracking table"
-echo "============================================================"
-"$LF_PYTHON" "$BLOCK_DIR/scripts/update_tracking.py" --block-dir "$BLOCK_DIR"
 
 echo "=== Training done. Log: $TRAIN_LOG ==="

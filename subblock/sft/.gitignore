@@ -15,6 +15,18 @@ artifacts/logs/
 # Generated training YAML (regenerated from inputs/index.yaml each run)
 artifacts/training_config/*.yaml
 
+# Downloaded wheels (large binaries; reinstalled by scripts/install_env.sh)
+artifacts/wheels/
+
+# Local Claude Code settings (machine-specific, never commit)
+.claude/settings.local.json
+
+# Docs site build outputs (also covered by docs/.gitignore)
+docs/node_modules/
+docs/.next/
+docs/.source/
+docs/out/
+
 # Python
 __pycache__/
 *.pyc

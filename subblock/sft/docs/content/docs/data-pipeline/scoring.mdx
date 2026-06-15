@@ -1,0 +1,32 @@
+---
+title: Scoring
+description: How converted trajectories are scored for quality
+---
+
+Not every rollout is worth training on. The conversion pipeline scores each converted instance so low-quality trajectories can be filtered or down-weighted before training.
+
+## Rule-based scoring
+
+Rule scoring (`rule_score.py`) runs **automatically** as part of conversion to IM. It inspects the trajectory — tool-call validity, turn structure, completion signals — and writes a composite score into `meta_info.unique_info._score`:
+
+```json
+"_score": {"composite_score": 0.72, "...": "..."}
+```
+
+Because it is auto-invoked, every IM row already carries a score with no extra step.
+
+## LLM-based scoring (optional)
+
+LLM scoring (`llm_score.py`) is an **optional** second pass that uses a model to judge trajectory quality on top of the rule score. It requires an LLM endpoint and is off unless explicitly enabled, since it costs API calls. Use it when rule heuristics alone do not separate good rollouts well enough for your data.
+
+## Eval-leak protection
+
+Scoring decides *quality*; the repo exclusion filter decides *eligibility*. All converters default to filtering out repos listed in `artifacts/data/excluded_repos.txt` — the SWE-bench Verified, Pro, and Multilingual benchmark repos — so evaluation tasks never appear in training data.
+
+Regenerate the list with:
+
+```bash
+python scripts/generate_excluded_repos.py
+```
+
+Disable it for a specific experiment by passing `--exclude-repos-file ""` to a converter. See [Core Concepts](/docs/core-concepts#repo-exclusion-filter).

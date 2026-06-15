@@ -49,6 +49,8 @@ cfg() {
 # ---------------------------------------------------------------------------
 # Load config values (only source + conversion + dataset sections needed)
 # ---------------------------------------------------------------------------
+SOURCE_TYPE="$(cfg "source.type")"
+[[ -z "$SOURCE_TYPE" ]] && SOURCE_TYPE="harbor_job"
 SCAFFOLD="$(cfg "source.scaffold")"
 JOB_DIR_RAW="$(cfg "source.job_dir")"
 JOB_DIR="$(abspath "$JOB_DIR_RAW")"
@@ -61,9 +63,19 @@ IM_OUTPUT="$BLOCK_DIR/artifacts/data/im_data/${DATA_NAME}.jsonl"
 LF_OUTPUT="$BLOCK_DIR/artifacts/data/lf_data/${DATA_NAME}.json"
 
 echo "=== sft-train data prep ==="
-echo "    Block:     $BLOCK_DIR"
-echo "    Scaffold:  $SCAFFOLD"
-echo "    LF output: $LF_OUTPUT"
+echo "    Block:       $BLOCK_DIR"
+echo "    Source type: $SOURCE_TYPE"
+echo "    Scaffold:    $SCAFFOLD"
+echo "    LF output:   $LF_OUTPUT"
+
+if [[ "$SOURCE_TYPE" != "harbor_job" ]]; then
+    echo ""
+    echo "=== Source type '$SOURCE_TYPE' uses a ready-made LF dataset — nothing to convert. ==="
+    echo "    hf_lf:    the dataset is pulled from the HuggingFace Hub at train time."
+    echo "    local_lf: source.lf_path is registered as-is."
+    echo "    Run scripts/train.sh (or scripts/start.sh) to register the dataset and train."
+    exit 0
+fi
 
 if [[ -z "$DATA_NAME" ]]; then
     echo "ERROR: conversion.data_name is empty — set runtime_info.input.conversion.data_name in config.yaml"

@@ -162,33 +162,74 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 4. Source data ---"
+SOURCE_TYPE="$(cfg "source.type")"
+[[ -z "$SOURCE_TYPE" ]] && SOURCE_TYPE="harbor_job"
 SCAFFOLD="$(cfg "source.scaffold")"
 JOB_DIR_RAW="$(cfg "source.job_dir")"
 JOB_DIR="$(abspath "$JOB_DIR_RAW")"
+HF_HUB_URL="$(cfg "source.hf_hub_url")"
+HF_SUBSET="$(cfg "source.hf_subset")"
+HF_SPLIT="$(cfg "source.hf_split")"
+LF_PATH_RAW="$(cfg "source.lf_path")"
+LF_PATH="$(abspath "$LF_PATH_RAW")"
+CONVERTER_MODULE=""
 
-info "scaffold=$SCAFFOLD"
-
-CONVERTER_MODULE="$(converter_module_for_scaffold "$SCAFFOLD")"
-if [[ -n "$CONVERTER_MODULE" ]]; then
-    ok "scaffold is supported: $SCAFFOLD"
-else
-    fail "Unsupported scaffold '$SCAFFOLD'. Valid: openhands-sdk claude-code open-code terminus2"
-fi
-
-if [[ -z "$JOB_DIR" ]]; then
-    fail "source.job_dir is empty — set runtime_info.input.source.job_dir"
-elif [[ -d "$JOB_DIR" ]]; then
-    ok "source.job_dir exists: $JOB_DIR"
-else
-    warn "source.job_dir not found (may be on another node): $JOB_DIR"
-fi
+case "$SOURCE_TYPE" in
+    harbor_job)
+        ok "source.type = harbor_job (convert raw Harbor trajectories)"
+        info "scaffold=$SCAFFOLD"
+        CONVERTER_MODULE="$(converter_module_for_scaffold "$SCAFFOLD")"
+        if [[ -n "$CONVERTER_MODULE" ]]; then
+            ok "scaffold is supported: $SCAFFOLD"
+        else
+            fail "Unsupported scaffold '$SCAFFOLD'. Valid: openhands-sdk claude-code open-code terminus2"
+        fi
+        if [[ -z "$JOB_DIR" ]]; then
+            fail "source.job_dir is empty — set runtime_info.input.source.job_dir"
+        elif [[ -d "$JOB_DIR" ]]; then
+            ok "source.job_dir exists: $JOB_DIR"
+        else
+            warn "source.job_dir not found (may be on another node): $JOB_DIR"
+        fi
+        ;;
+    hf_lf)
+        ok "source.type = hf_lf (load a ready-made LF dataset from the HuggingFace Hub)"
+        if [[ -z "$HF_HUB_URL" ]]; then
+            fail "source.hf_hub_url is empty — set runtime_info.input.source.hf_hub_url"
+        else
+            ok "source.hf_hub_url = $HF_HUB_URL"
+            [[ -n "$HF_SUBSET" ]] && info "hf_subset=$HF_SUBSET"
+            info "hf_split=${HF_SPLIT:-train}"
+        fi
+        if [[ -n "$(cfg "credentials.hf_token")" ]]; then
+            ok "credentials.hf_token is set (private datasets supported)"
+        else
+            info "credentials.hf_token is empty — only public datasets will load"
+        fi
+        ;;
+    local_lf)
+        ok "source.type = local_lf (use an existing local LF json)"
+        if [[ -z "$LF_PATH" ]]; then
+            fail "source.lf_path is empty — set runtime_info.input.source.lf_path"
+        elif [[ -f "$LF_PATH" ]]; then
+            ok "source.lf_path exists: $LF_PATH"
+        else
+            fail "source.lf_path not found: $LF_PATH"
+        fi
+        ;;
+    *)
+        fail "Unsupported source.type '$SOURCE_TYPE' — valid: harbor_job | hf_lf | local_lf"
+        ;;
+esac
 
 # ---------------------------------------------------------------------------
 # 5. Converter module
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 5. Converter module ---"
-if [[ -n "$CONVERTER_MODULE" ]]; then
+if [[ "$SOURCE_TYPE" != "harbor_job" ]]; then
+    info "source.type=$SOURCE_TYPE — no trajectory converter needed"
+elif [[ -n "$CONVERTER_MODULE" ]]; then
     if [[ ! -x "$LF_PYTHON" ]]; then
         warn "skipping converter module import check because SFT uv python is unavailable"
     elif PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" - "$CONVERTER_MODULE" <<'PYEOF' 2>/dev/null
@@ -211,6 +252,7 @@ fi
 echo ""
 echo "--- 6. Conversion output paths ---"
 DATA_NAME="$(cfg "conversion.data_name")"
+MAX_INSTANCES_DRYRUN="$(cfg "conversion.max_instances")"
 IM_OUTPUT="$BLOCK_DIR/artifacts/data/im_data/${DATA_NAME}.jsonl"
 LF_OUTPUT="$BLOCK_DIR/artifacts/data/lf_data/${DATA_NAME}.json"
 
@@ -218,6 +260,9 @@ if [[ -z "$DATA_NAME" ]]; then
     fail "conversion.data_name is empty"
 else
     ok "conversion.data_name = $DATA_NAME"
+fi
+
+if [[ "$SOURCE_TYPE" == "harbor_job" ]]; then
     info "im_output = $IM_OUTPUT"
     info "lf_output = $LF_OUTPUT"
     if [[ -f "$IM_OUTPUT" && -f "$LF_OUTPUT" ]]; then
@@ -226,17 +271,22 @@ else
     elif [[ -f "$IM_OUTPUT" || -f "$LF_OUTPUT" ]]; then
         fail "Partial conversion output exists; delete or restore the missing IM/LF pair before running conversion"
     fi
-fi
 
-EXCL_RAW="$(cfg "conversion.exclude_repos_file")"
-EXCL="$(abspath "$EXCL_RAW")"
-if [[ -z "$EXCL_RAW" ]]; then
-    warn "conversion.exclude_repos_file is empty — repo filtering disabled"
-elif [[ -f "$EXCL" ]]; then
-    COUNT=$(awk 'NF && $1 !~ /^#/' "$EXCL" | wc -l)
-    ok "exclude_repos_file exists ($COUNT repos): $EXCL"
+    EXCL_RAW="$(cfg "conversion.exclude_repos_file")"
+    EXCL="$(abspath "$EXCL_RAW")"
+    if [[ -z "$EXCL_RAW" ]]; then
+        warn "conversion.exclude_repos_file is empty — repo filtering disabled"
+    elif [[ -f "$EXCL" ]]; then
+        COUNT=$(awk 'NF && $1 !~ /^#/' "$EXCL" | wc -l)
+        ok "exclude_repos_file exists ($COUNT repos): $EXCL"
+    else
+        fail "exclude_repos_file not found: $EXCL"
+    fi
 else
-    fail "exclude_repos_file not found: $EXCL"
+    info "source.type=$SOURCE_TYPE — STEP 0 conversion skipped; data_name is used only as the dataset key"
+    if [[ -n "$MAX_INSTANCES_DRYRUN" ]] && [[ "$MAX_INSTANCES_DRYRUN" -gt 0 ]] 2>/dev/null; then
+        info "conversion.max_instances=$MAX_INSTANCES_DRYRUN — applied as the dataset's num_samples (random subsample)"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -256,33 +306,39 @@ if [[ -z "$DATASET_NAME" || "$DATASET_NAME" == "." ]]; then
     fail "Could not derive dataset name — set conversion.data_name or dataset.name"
 else
     ok "dataset.name = $DATASET_NAME"
+    case "$SOURCE_TYPE" in
+        harbor_job) EXPECT_MODE="file";   EXPECT_VALUE="$(basename "$LF_OUTPUT")" ;;
+        local_lf)   EXPECT_MODE="file";   EXPECT_VALUE="$LF_PATH" ;;
+        hf_lf)      EXPECT_MODE="hf_hub"; EXPECT_VALUE="$HF_HUB_URL" ;;
+        *)          EXPECT_MODE="file";   EXPECT_VALUE="$(basename "$LF_OUTPUT")" ;;
+    esac
     DATASET_INFO="$BLOCK_DIR/artifacts/data/lf_data/dataset_info.json"
     if [[ -f "$DATASET_INFO" ]]; then
-        LF_FILENAME="$(basename "$LF_OUTPUT")"
-        DATASET_STATUS=$("$CONFIG_PYTHON" - "$DATASET_INFO" "$DATASET_NAME" "$LF_FILENAME" <<'PYEOF'
+        DATASET_STATUS=$("$CONFIG_PYTHON" - "$DATASET_INFO" "$DATASET_NAME" "$EXPECT_MODE" "$EXPECT_VALUE" <<'PYEOF'
 import json
 import sys
 
-info_path, dataset_name, lf_filename = sys.argv[1:4]
+info_path, dataset_name, mode, value = sys.argv[1:5]
 
 with open(info_path, encoding="utf-8") as fh:
     info = json.load(fh)
 
 entry = info.get(dataset_name)
+key = "hf_hub_url" if mode == "hf_hub" else "file_name"
 if entry is None:
     print("missing")
-elif entry.get("file_name") == lf_filename:
+elif entry.get(key) == value:
     print("matched")
 else:
-    print(f"mismatch:{entry.get('file_name')}")
+    print(f"mismatch:{entry.get('hf_hub_url') or entry.get('file_name')}")
 PYEOF
 )
         case "$DATASET_STATUS" in
             matched)
-                info "Dataset '$DATASET_NAME' already points to $LF_FILENAME — STEP 1 will be skipped"
+                info "Dataset '$DATASET_NAME' already points to $EXPECT_VALUE — STEP 1 will be skipped"
                 ;;
             mismatch:*)
-                warn "Dataset '$DATASET_NAME' currently points to ${DATASET_STATUS#mismatch:}; STEP 1 will update it to $LF_FILENAME"
+                warn "Dataset '$DATASET_NAME' currently points to ${DATASET_STATUS#mismatch:}; STEP 1 will update it to $EXPECT_VALUE"
                 ;;
             missing)
                 info "Dataset '$DATASET_NAME' not yet registered — STEP 1 will register it"

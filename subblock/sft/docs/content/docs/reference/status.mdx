@@ -1,0 +1,23 @@
+---
+title: Status
+description: Where the live operational state lives
+---
+
+The live operational state of the block is not kept in these docs — it lives in the files the scripts read and write, so it never goes stale.
+
+## Source of truth
+
+- **`config.yaml` → `runtime_info.output`** — the latest run's checkpoint, metrics, and artifact paths.
+- **`artifacts/index.yaml`** — archived run records (one entry per run, appended by `scripts/archive_run.sh`).
+- **`artifacts/model/<run>/`** — the live training output (`trainer_log.jsonl`, `trainer_state.json`).
+- **[dashboard](/docs/dashboard)** — a live visual view of runs and metrics.
+
+Read `runtime_info.output` for the most recent run and `artifacts/index.yaml` for run history.
+
+## Time convention
+
+`started_at` and `last_updated` in run records are recorded in UTC. Existing run directory names may embed a local launch timestamp so they continue to match the actual artifact path.
+
+## During a run
+
+While a run is active, the dashboard reads `artifacts/model/<run>/trainer_log.jsonl` directly — there is no separate status file to refresh. Monitor it live through the [dashboard](/docs/dashboard), or tail the console log under `artifacts/logs/`.

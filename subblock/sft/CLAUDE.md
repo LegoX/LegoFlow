@@ -14,13 +14,13 @@ This repo is organized as a tree of blocks. The root directory is the root block
 ## What To Read First
 
 1. `config.yaml` — block identity, training config, runtime values (one-shot per run; live state in `artifacts/index.yaml`)
-2. `dashboard/overview.mdx` — current state narrative
+2. `memory/overview.mdx` — current state narrative
 
 ## Input/Output Contract
 
 **Inputs** (read from `config.yaml` → `runtime_info.input`):
-- `source`: Raw trajectory source (supported scaffold and Harbor `job_dir`)
-- `conversion`: Data conversion settings (max_instances, exclude_repos_file, data_name)
+- `source`: Dataset source. `source.type` is `harbor_job` (default; convert raw trajectories from a supported scaffold + Harbor `job_dir`), `hf_lf` (load a ready-made LF/ShareGPT dataset from `source.hf_hub_url` on the HuggingFace Hub), or `local_lf` (register an existing LF json at `source.lf_path`). `hf_lf`/`local_lf` skip conversion.
+- `conversion`: Data conversion settings (max_instances, exclude_repos_file, data_name). For `hf_lf`/`local_lf`, only `data_name` (dataset key) and `max_instances` (→ `num_samples`) apply.
 - `dataset`: LLaMA-Factory dataset registration
 - `model`: Base model path and config
 - `training`: Training hyperparameters (stage, deepspeed, template, cutoff_len, batch size, learning rate, epochs, etc.)
@@ -60,15 +60,29 @@ bash scripts/install_env.sh
 
 ## Artifact Archiving
 
-After each successful run, `scripts/train.sh` updates `config.yaml.runtime_info.output`,
-refreshes `dashboard/status.mdx`, and appends a row to `artifacts/实验追踪表.xlsx`.
+After each successful run, `scripts/train.sh` updates `config.yaml.runtime_info.output`.
 If archiving is needed, create `artifacts/archives/run_NNN/` containing metadata.yaml,
 config snapshot, scripts copy, session.log, and monitor.md, then append an entry to
 `artifacts/index.yaml`.
 
+## Dashboard
+
+`dashboard/` is a real-time, read-only web UI (React + a Python `server.py`) for
+monitoring training runs. It parses `artifacts/model/<run>/`
+(`trainer_log.jsonl`, `trainer_state.json`, `*_results.json`) and the console
+logs under `artifacts/logs/`, and can compare multiple runs or connect to wandb.
+
+```bash
+cd dashboard && ./start_dashboard.sh    # builds the frontend (first run), serves :8091
+```
+
+Defaults read `../artifacts/model` (runs) and `../artifacts/logs` (logs); set
+`TUNNEL=true` for a Cloudflare quick tunnel. See `dashboard/README.md`. It only
+monitors — it never launches or controls training.
+
 ## Memory
 
-Long-form notes, architecture overview, experiment log, and design decisions are kept in `dashboard/memory/`.
+Long-form notes, architecture overview, experiment log, and design decisions are kept in `memory/`.
 
 ## Remote Execution
 

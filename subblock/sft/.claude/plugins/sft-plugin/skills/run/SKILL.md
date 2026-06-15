@@ -8,8 +8,7 @@ description: >
   conversion, dataset registration, LLaMA-Factory + DeepSpeed ZeRO-3
   training on 8× GPU, WandB tracking), and on exit archives the run via
   scripts/archive_run.sh. Background by default — training is long-running.
-  train.sh itself writes runtime_info.output, refreshes dashboard/status.mdx,
-  and appends to the tracking table; archive_run.sh appends to
+  train.sh itself writes runtime_info.output; archive_run.sh appends to
   artifacts/index.yaml. Triggers on phrases like "run sft", "launch sft
   training", "start the sft block", "kick off the supervised fine-tuning",
   "fire off sft".
@@ -49,9 +48,6 @@ A training run is already in flight:
 Refusing to start another. Let it finish, or stop it first
 (`kill <pid>`), then re-run /sft:run.
 ```
-
-An orphaned `update_status.py --loop` with no training process is harmless
-— note it and continue.
 
 ## Step 2 — Preflight via /sft:check
 
@@ -156,9 +152,8 @@ bash ./scripts/start.sh 2>&1 | tee "./artifacts/logs/launch_${TS}.log"
 ```
 
 Stream output. On exit, report the final exit code and the tail of the
-training log. `train.sh`'s STEP 3/4 already wrote
-`runtime_info.output.*`, refreshed `dashboard/status.mdx`, and appended to
-`artifacts/实验追踪表.xlsx`; `archive_run.sh` appended the index entry.
+training log. `train.sh`'s STEP 3 already wrote `runtime_info.output.*`;
+`archive_run.sh` appended the index entry.
 
 ## Step 7 — Report
 
@@ -175,7 +170,7 @@ Launched (background)
 Monitor:
   tail -F artifacts/logs/launch_<TS>.log
   nvidia-smi
-  cat dashboard/status.mdx              # refreshed every 30s by update_status.py
+  (cd dashboard && ./start_dashboard.sh)   # live web dashboard on :8091
 Stop:
   pgrep -af 'llamafactory.cli train'    # then: kill -INT <pid>
 ```
