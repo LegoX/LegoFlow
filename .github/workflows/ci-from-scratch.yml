@@ -1,0 +1,390 @@
+name: CI (from-scratch rebuild)
+
+# Manual-only opt-in workflow. The default CI in `ci.yml` uses the hybrid
+# symlink-from-canonical pattern for speed. This workflow exists for the
+# rare cases where you suspect the canonical machine's runtime state has
+# drifted from what the PR's source code expects (e.g. a dep change in
+# pyproject.toml, a submodule commit bump, or a pulled Docker image), and
+# you want CI to validate the PR against a freshly built environment.
+#
+# Triggers: workflow_dispatch only.
+#   Run from: https://github.com/SWE-Lego/SWE-Lego-Live/actions/workflows/ci-from-scratch.yml
+#
+# What it does, per block:
+#   - Source-only checkout of the PR's branch (no canonical symlinks).
+#   - Clones the private submodule(s) using a PAT from
+#     /gpufs/haoli/cicd/shared/gh_token.txt (HOME isolated to per-job temp
+#     so ~/.gitconfig is never mutated).
+#   - Builds the venv / uv envs from scratch using shared pip + uv caches.
+#   - Pulls the agent runtime image.
+#   - Initializes the consumption ledger if missing.
+#   - Runs `tests/run.sh` (+ `--with-smoke` if requested).
+
+on:
+  workflow_dispatch:
+    inputs:
+      block:
+        description: "Which subblock to rebuild + test"
+        type: choice
+        options: [swegen, trajgen, eval, sft, all]
+        default: all
+      run_smoke:
+        description: "Also run the smoke tests (~30 min each, real LLM + Docker)"
+        type: boolean
+        default: false
+      ref:
+        description: "Branch / tag / commit to test (defaults to the workflow source ref)"
+        type: string
+        default: ""
+
+concurrency:
+  group: ci-from-scratch-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CICD_SHARED: /gpufs/haoli/cicd/shared
+
+jobs:
+  # ===========================================================================
+  # swegen — fresh venv + repos/swegen submodule
+  # ===========================================================================
+  swegen:
+    name: swegen (from-scratch)
+    if: ${{ inputs.block == 'swegen' || inputs.block == 'all' }}
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: false
+      - name: Stage shared CI env + isolated HOME + PAT
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source "$CICD_SHARED/.env"
+          PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
+          [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
+          # Per-job HOME so `git config --global` never touches the runner
+          # user's real ~/.gitconfig (which is shared with their interactive
+          # shell). Without this, every CI run pollutes the host gitconfig.
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          HOME="$CI_HOME" git config --global user.email "ci@swe-lego.local"
+          HOME="$CI_HOME" git config --global user.name "swe-lego-ci"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          # actions/checkout sets a per-repo extraheader with the workflow's
+          # GITHUB_TOKEN; that token can't see private SWE-Lego submodules, so
+          # it must not override our PAT-embedded URL rewrites.
+          git -C "$GITHUB_WORKSPACE" config --local --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Init swegen submodule
+        run: git submodule update --init --depth 1 subblock/swegen/repos/swegen
+      - name: Build swegen venv from scratch
+        working-directory: subblock/swegen
+        run: |
+          set -euo pipefail
+          rm -rf artifacts/envs/swegen-env
+          python3 -m venv artifacts/envs/swegen-env
+          artifacts/envs/swegen-env/bin/pip install --upgrade pip
+          artifacts/envs/swegen-env/bin/pip install -e repos/swegen/
+      - name: Stage gh_token.txt
+        run: cp "$CICD_SHARED/gh_token.txt" subblock/swegen/gh_token.txt
+      - name: Run swegen test cases
+        working-directory: subblock/swegen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh
+      - name: Run swegen smoke (if requested)
+        if: ${{ inputs.run_smoke == true }}
+        working-directory: subblock/swegen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh --with-smoke
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swegen-from-scratch-logs-${{ github.run_id }}
+          path: |
+            subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py.log
+            subblock/swegen/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
+            subblock/swegen/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ===========================================================================
+  # trajgen — fresh harbor + swe_data_process + litellm envs, pulled image
+  # ===========================================================================
+  trajgen:
+    name: trajgen (from-scratch)
+    if: ${{ inputs.block == 'trajgen' || inputs.block == 'all' }}
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 90
+    env:
+      RUNTIME_IMAGE: docker.io/jierun/c-cc-2.1.118:v0.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: false
+      - name: Stage shared CI env + isolated HOME + PAT
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source "$CICD_SHARED/.env"
+          PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
+          [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          HOME="$CI_HOME" git config --global user.email "ci@swe-lego.local"
+          HOME="$CI_HOME" git config --global user.name "swe-lego-ci"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          git -C "$GITHUB_WORKSPACE" config --local --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Clone harbor + swe_data_process via config-managed URLs
+        working-directory: subblock/trajgen
+        run: |
+          set -euo pipefail
+          # Use scripts/update_repos.sh for BOTH repos so the saved `origin` URL
+          # matches `meta_info.repositories.<name>.url` in config.yaml exactly.
+          # `git submodule update --init` would write the .gitmodules URL
+          # (git@github.com:…), which the PAT insteadOf rewrites only at
+          # transport, so cases/02_repo_pins.sh's `git remote get-url origin`
+          # equality check would always fail with an origin URL mismatch.
+          bash scripts/update_repos.sh --repo harbor
+          bash scripts/update_repos.sh --repo swe_data_process
+      - name: Build harbor uv env from scratch
+        working-directory: subblock/trajgen
+        run: |
+          rm -rf artifacts/env/harbor-uv
+          bash scripts/setup_harbor_env.sh
+      - name: Build swe_data_process uv env from scratch
+        working-directory: subblock/trajgen
+        run: |
+          rm -rf artifacts/env/swe-data-process-uv
+          bash scripts/setup_swe_data_process_env.sh
+      - name: Build litellm venv from scratch
+        working-directory: subblock/trajgen
+        run: |
+          set -euo pipefail
+          rm -rf artifacts/env/litellm-venv
+          uv venv artifacts/env/litellm-venv --python 3.13
+          uv pip install --python artifacts/env/litellm-venv/bin/python 'litellm[proxy]==1.83.14'
+      - name: Pull agent runtime image + materialize runtime_host_path
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        working-directory: subblock/trajgen
+        run: |
+          set -euo pipefail
+          docker pull "$RUNTIME_IMAGE"
+          # `config.yaml` sets `agent.runtime_host_path: artifacts/agent-runtime/claude-code`.
+          # start.sh treats a non-empty host_path as a bind-mount source, so if
+          # the dir is missing/empty Harbor mounts nothing at /opt/custom-agent-runtime/
+          # and every trial fails at agent setup. Extract the runtime tree from
+          # the pulled image once so the smoke + tests have a real bind source.
+          if [ ! -d artifacts/agent-runtime/claude-code ] || [ -z "$(ls -A artifacts/agent-runtime/claude-code 2>/dev/null)" ]; then
+            mkdir -p artifacts/agent-runtime
+            CID=$(docker create "$RUNTIME_IMAGE")
+            trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
+            rm -rf artifacts/agent-runtime/claude-code
+            docker cp "$CID:/opt/custom-agent-runtime/claude-code" artifacts/agent-runtime/claude-code
+          fi
+      - name: Initialize consumption ledger if missing
+        working-directory: subblock/trajgen
+        run: |
+          mkdir -p artifacts
+          if [ ! -f artifacts/consumption_ledger.yaml ]; then
+            printf 'description: %s\nruns: []\n' "trajgen task consumption ledger" \
+              > artifacts/consumption_ledger.yaml
+          fi
+      - name: Run trajgen test cases
+        working-directory: subblock/trajgen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh
+      - name: Run trajgen smoke (if requested)
+        if: ${{ inputs.run_smoke == true }}
+        working-directory: subblock/trajgen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh --with-smoke
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trajgen-from-scratch-logs-${{ github.run_id }}
+          path: |
+            subblock/trajgen/artifacts/logs/
+            subblock/trajgen/artifacts/jobs/smoke/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ===========================================================================
+  # eval — fresh harbor + litellm envs, extracted agent runtime, pulled image
+  # ===========================================================================
+  eval:
+    name: eval (from-scratch)
+    if: ${{ inputs.block == 'eval' || inputs.block == 'all' }}
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 75
+    env:
+      RUNTIME_IMAGE: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
+      RUNTIME_SUBPATH: oh-sdk
+      RUNTIME_HOST_DIR: artifacts/runtime/openhands-sdk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: false
+      - name: Stage shared CI env + isolated HOME + PAT
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source "$CICD_SHARED/.env"
+          PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
+          [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          HOME="$CI_HOME" git config --global user.email "ci@swe-lego.local"
+          HOME="$CI_HOME" git config --global user.name "swe-lego-ci"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          git -C "$GITHUB_WORKSPACE" config --local --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
+          {
+            echo "HOME=$CI_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Init harbor submodule
+        run: git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 subblock/eval/repos/harbor
+      - name: Build harbor uv env from scratch
+        working-directory: subblock/eval
+        run: |
+          set -euo pipefail
+          rm -rf artifacts/env/harbor-uv
+          ( cd repos/harbor && UV_PROJECT_ENVIRONMENT="$PWD/../../artifacts/env/harbor-uv" uv sync --all-extras )
+      - name: Build litellm venv from scratch
+        working-directory: subblock/eval
+        run: |
+          set -euo pipefail
+          rm -rf artifacts/env/litellm-venv
+          uv venv artifacts/env/litellm-venv --python 3.13
+          uv pip install --python artifacts/env/litellm-venv/bin/python 'litellm[proxy]==1.83.14'
+      - name: Pull agent runtime image
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: docker pull "$RUNTIME_IMAGE"
+      - name: Extract agent runtime into runtime_host_path
+        working-directory: subblock/eval
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: |
+          set -euo pipefail
+          CID=$(docker create "$RUNTIME_IMAGE")
+          rm -rf "$RUNTIME_HOST_DIR" && mkdir -p "$(dirname "$RUNTIME_HOST_DIR")"
+          docker cp "$CID:/opt/custom-agent-runtime/$RUNTIME_SUBPATH" "$RUNTIME_HOST_DIR"
+          docker rm "$CID"
+      - name: Initialize artifacts/index.yaml if missing
+        working-directory: subblock/eval
+        run: |
+          mkdir -p artifacts
+          [ -f artifacts/index.yaml ] || printf 'runs: []\n' > artifacts/index.yaml
+      - name: Run eval test cases
+        working-directory: subblock/eval
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh
+      - name: Run eval smoke (if requested)
+        if: ${{ inputs.run_smoke == true }}
+        working-directory: subblock/eval
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh --with-smoke
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-from-scratch-logs-${{ github.run_id }}
+          path: |
+            subblock/eval/artifacts/logs/
+            subblock/eval/artifacts/jobs/smoke/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ===========================================================================
+  # sft — fresh LLaMA-Factory + swe_data_process submodules + uv training env
+  # ===========================================================================
+  sft:
+    name: sft (from-scratch)
+    if: ${{ inputs.block == 'sft' || inputs.block == 'all' }}
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: false
+      - name: Stage shared CI env + isolated HOME + PAT
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC1091
+          source "$CICD_SHARED/.env"
+          PAT=$(grep -vE '^[[:space:]]*(#|$)' "$CICD_SHARED/gh_token.txt" | head -1 | cut -d, -f1)
+          [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          HOME="$CI_HOME" git config --global user.email "ci@swe-lego.local"
+          HOME="$CI_HOME" git config --global user.name "swe-lego-ci"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
+          HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          git -C "$GITHUB_WORKSPACE" config --local --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
+          {
+            echo "HOME=$CI_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Init submodules (LLaMA-Factory public + swe_data_process private)
+        # The PAT url-rewrite above turns swe_data_process's git@github.com SSH
+        # remote into an https+token URL so the private clone succeeds.
+        run: git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 subblock/sft/repos/LLaMA-Factory subblock/sft/repos/swe_data_process
+      - name: Build sft uv env from scratch
+        working-directory: subblock/sft
+        env:
+          UV_LINK_MODE: copy
+        run: bash scripts/install_env.sh
+      - name: Run sft test cases
+        working-directory: subblock/sft
+        run: bash tests/run.sh
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sft-from-scratch-logs-${{ github.run_id }}
+          path: |
+            subblock/sft/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14

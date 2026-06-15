@@ -4,12 +4,31 @@ on:
   pull_request:
   push:
     branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      run_smoke:
+        description: "Run subblock smoke tests (real LLM tokens + Docker, ~30 min each)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
+# SHARED_RUNTIME is read by the per-block "Link runtime state" steps. It points
+# at a self-contained mirror of the runtime state CI needs — venvs / uv envs /
+# pinned submodule checkouts / agent-runtime / consumption ledger / gh_token —
+# living entirely under /gpufs (NOT under /, NOT under the canonical block
+# tree). Rebuild it from the canonical tree with /gpufs/haoli/cicd/sync_runtime.sh.
+env:
+  SHARED_RUNTIME: /gpufs/haoli/cicd/shared/runtime
+
 jobs:
+  # --- Cheap cloud job: structural sanity of the block tree -------------------
   root-block:
     name: Root block sanity
     runs-on: ubuntu-latest
@@ -25,3 +44,300 @@ jobs:
 
       - name: Run root block tests
         run: pytest tests/test_root_block.py -v
+
+  # --- Decide which subblocks need their CI run -------------------------------
+  detect-changes:
+    name: Detect changed subblocks
+    runs-on: ubuntu-latest
+    outputs:
+      swegen: ${{ steps.filter.outputs.swegen }}
+      trajgen: ${{ steps.filter.outputs.trajgen }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            swegen:
+              - 'subblock/swegen/**'
+              - '.github/workflows/ci.yml'
+            trajgen:
+              - 'subblock/trajgen/**'
+              - '.github/workflows/ci.yml'
+
+  # --- swegen: cheap test cases (self-hosted, fixed-paths CI runner) ---------
+  swegen-cases:
+    name: swegen tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.swegen == 'true'
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 15
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+          fi
+      # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link runtime state from /gpufs/.../shared/runtime
+        working-directory: subblock/swegen
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/swegen"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh swegen"; exit 1; }
+          # actions/checkout creates empty placeholder dirs for declared
+          # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
+          mkdir -p repos artifacts artifacts/swe_tasks
+          rm -rf repos/swegen artifacts/envs artifacts/swe_tasks/py-cc gh_token.txt
+          ln -s "$CANON/repos/swegen"        repos/swegen
+          ln -s "$CANON/artifacts/envs"      artifacts/envs
+          [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
+          # Optional Harbor smoke fixture (case 06 SKIPs if absent)
+          [ -d "$CANON/artifacts/swe_tasks/py-cc" ] && \
+            ln -s "$CANON/artifacts/swe_tasks/py-cc" artifacts/swe_tasks/py-cc || true
+          ls -la repos artifacts artifacts/swe_tasks
+      - name: Run swegen test cases
+        working-directory: subblock/swegen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swegen-cases-logs-${{ github.run_id }}
+          path: |
+            subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py.log
+            subblock/swegen/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # --- swegen: end-to-end 10-PR smoke (~30 min) ------------------------------
+  swegen-smoke:
+    name: swegen tests (smoke)
+    needs: [detect-changes, swegen-cases]
+    if: |
+      needs.detect-changes.outputs.swegen == 'true' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+      )
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 70
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link runtime state from /gpufs/.../shared/runtime
+        working-directory: subblock/swegen
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/swegen"
+          mkdir -p repos artifacts
+          rm -rf repos/swegen artifacts/envs gh_token.txt
+          ln -s "$CANON/repos/swegen"        repos/swegen
+          ln -s "$CANON/artifacts/envs"      artifacts/envs
+          [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
+      - name: Run swegen smoke (--with-smoke)
+        working-directory: subblock/swegen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh --with-smoke
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swegen-smoke-logs-${{ github.run_id }}
+          path: |
+            subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py.log
+            subblock/swegen/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
+            subblock/swegen/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --- trajgen: cheap test cases ---------------------------------------------
+  trajgen-cases:
+    name: trajgen tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.trajgen == 'true'
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 15
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        # Prior trajgen smokes drop root-owned files in the workspace —
+        # Harbor's bind-mounted agent-runtime AND Docker trial containers
+        # running as root drop sessions/state under jobs/smoke/. Any of
+        # these makes actions/checkout's workspace-clean fail with EACCES.
+        # Run docker (which IS root on the daemon) to chown anything in the
+        # workspace not owned by uid 1000 back to us. Idempotent.
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link runtime state from /gpufs/.../shared/runtime
+        working-directory: subblock/trajgen
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/trajgen"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh trajgen"; exit 1; }
+          mkdir -p repos artifacts
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
+          ln -s "$CANON/repos/harbor"                       repos/harbor
+          ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
+          ln -s "$CANON/artifacts/env"                      artifacts/env
+          # agent.runtime_host_path: harbor bind-mounts this into every trial
+          # container at /opt/custom-agent-runtime/claude-code. Without the
+          # symlink the workspace dir is empty → "Mounted runtime detection
+          # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
+          [ -d "$CANON/artifacts/agent-runtime" ] && \
+            ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
+          [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
+            ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+          ls -la repos artifacts
+      - name: Run trajgen test cases
+        working-directory: subblock/trajgen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trajgen-cases-logs-${{ github.run_id }}
+          path: subblock/trajgen/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # --- trajgen: end-to-end 10-HF-task smoke (~30 min) -----------------------
+  trajgen-smoke:
+    name: trajgen tests (smoke)
+    needs: [detect-changes, trajgen-cases]
+    if: |
+      needs.detect-changes.outputs.trajgen == 'true' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+      )
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 55
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link runtime state from /gpufs/.../shared/runtime
+        working-directory: subblock/trajgen
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/trajgen"
+          mkdir -p repos artifacts
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
+          ln -s "$CANON/repos/harbor"                       repos/harbor
+          ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
+          ln -s "$CANON/artifacts/env"                      artifacts/env
+          # agent.runtime_host_path: harbor bind-mounts this into every trial
+          # container at /opt/custom-agent-runtime/claude-code. Without the
+          # symlink the workspace dir is empty → "Mounted runtime detection
+          # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
+          [ -d "$CANON/artifacts/agent-runtime" ] && \
+            ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
+          [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
+            ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+      - name: Run trajgen smoke (--with-smoke)
+        working-directory: subblock/trajgen
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh --with-smoke
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trajgen-smoke-logs-${{ github.run_id }}
+          path: |
+            subblock/trajgen/artifacts/logs/
+            subblock/trajgen/artifacts/jobs/smoke/
+          if-no-files-found: ignore
+          retention-days: 14

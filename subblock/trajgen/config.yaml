@@ -61,7 +61,7 @@ runtime_info:
 
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
-      port: 4001
+      port: 4003   # 4001 squatted by an unowned stale LiteLLM; 4002 reserved for the host-wide root-owned LiteLLM
       master_key: dummy-key-cf
 
     # task_source: wired from swegen.output.swe_tasks_dir (dependency declared in meta_info.dependencies)
