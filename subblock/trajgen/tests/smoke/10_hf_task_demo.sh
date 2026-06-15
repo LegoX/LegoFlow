@@ -30,8 +30,12 @@ cleanup() {
   # Kill any Harbor smoke containers that survived the internal timeout —
   # GNU timeout's SIGTERM doesn't propagate cleanly into Docker children,
   # so they sometimes outlive start.sh and burn the job-level timeout.
-  if command -v docker >/dev/null 2>&1; then
-    docker ps --filter "name=harbor-trial-" --format '{{.ID}}' 2>/dev/null \
+  # Only kill containers SPAWNED DURING THIS SMOKE (diff vs PRE snapshot);
+  # the runner shares the docker daemon with other workflows + interactive
+  # sessions, so we must not kill anything we didn't start.
+  if command -v docker >/dev/null 2>&1 && [[ -n "${SMOKE_PRE_CONTAINERS:-}" ]]; then
+    docker_now="$(docker ps -q 2>/dev/null | sort -u)"
+    comm -13 <(printf '%s\n' "$SMOKE_PRE_CONTAINERS") <(printf '%s\n' "$docker_now") \
       | head -50 | xargs -r docker kill >/dev/null 2>&1 || true
     # Trial containers run as root and drop files under <trial>/agent/sessions
     # with mode 700. Reclaim ownership + open up so the runner user (and
@@ -48,6 +52,14 @@ cleanup() {
   exit "$rc"
 }
 trap cleanup EXIT INT TERM
+
+# Snapshot the docker daemon's running containers BEFORE start.sh launches —
+# the cleanup trap will only kill containers that didn't exist at this point,
+# so a smoke timeout never disturbs co-tenants on the shared daemon.
+if command -v docker >/dev/null 2>&1; then
+  SMOKE_PRE_CONTAINERS="$(docker ps -q 2>/dev/null | sort -u)"
+  export SMOKE_PRE_CONTAINERS
+fi
 
 cp -f "$CONFIG" "$BACKUP"
 
