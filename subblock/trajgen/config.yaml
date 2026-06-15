@@ -93,7 +93,7 @@ runtime_info:
       n_concurrent: 8
       n_tasks: 40                     # cap per swegen→trajgen run target (set to 1 for smoke tests, null for all manifest tasks)
       max_retries: 2
-      timeout_multiplier: 2
+      timeout_multiplier: 5
 
     agent:
       name: custom-claude-code
