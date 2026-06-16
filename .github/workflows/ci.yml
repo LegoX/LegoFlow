@@ -52,6 +52,8 @@ jobs:
     outputs:
       swegen: ${{ steps.filter.outputs.swegen }}
       trajgen: ${{ steps.filter.outputs.trajgen }}
+      eval: ${{ steps.filter.outputs.eval }}
+      sft: ${{ steps.filter.outputs.sft }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -63,6 +65,12 @@ jobs:
               - '.github/workflows/ci.yml'
             trajgen:
               - 'subblock/trajgen/**'
+              - '.github/workflows/ci.yml'
+            eval:
+              - 'subblock/eval/**'
+              - '.github/workflows/ci.yml'
+            sft:
+              - 'subblock/sft/**'
               - '.github/workflows/ci.yml'
 
   # --- swegen: cheap test cases (self-hosted, fixed-paths CI runner) ---------
@@ -341,3 +349,201 @@ jobs:
             subblock/trajgen/artifacts/jobs/smoke/
           if-no-files-found: ignore
           retention-days: 14
+
+  # --- eval: cheap test cases ------------------------------------------------
+  eval-cases:
+    name: eval tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.eval == 'true'
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 15
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        # eval smokes drop root-owned files in the workspace — Harbor's
+        # bind-mounted agent-runtime AND Docker trial containers running as
+        # root drop state under artifacts/jobs/smoke/. Any of these makes
+        # actions/checkout's workspace-clean fail with EACCES. Run docker
+        # (root on the daemon) to chown anything not owned by uid 1000 back to
+        # us. Idempotent.
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+          fi
+      # Source-only checkout — submodules + envs come from $SHARED_RUNTIME.
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link runtime state from /gpufs/.../shared/runtime
+        working-directory: subblock/eval
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/eval"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh eval"; exit 1; }
+          # actions/checkout creates empty placeholder dirs for declared
+          # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
+          mkdir -p repos artifacts
+          rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
+          ln -s "$CANON/repos/harbor"        repos/harbor
+          ln -s "$CANON/artifacts/env"       artifacts/env
+          # agent.runtime_host_path: harbor bind-mounts this into every task
+          # container at container_runtime_root. Without the symlink the dir is
+          # empty → agent falls back to an in-container install → 403 on
+          # isolated networks → zero usable trajectories.
+          ln -s "$CANON/artifacts/runtime"   artifacts/runtime
+          [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
+            || printf 'runs: []\n' > artifacts/index.yaml
+          ls -la repos artifacts
+      - name: Run eval test cases
+        working-directory: subblock/eval
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-cases-logs-${{ github.run_id }}
+          path: subblock/eval/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # --- eval: end-to-end registry-task smoke (~30 min) ------------------------
+  eval-smoke:
+    name: eval tests (smoke)
+    needs: [detect-changes, eval-cases]
+    if: |
+      needs.detect-changes.outputs.eval == 'true' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+      )
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 55
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link runtime state from /gpufs/.../shared/runtime
+        working-directory: subblock/eval
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/eval"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh eval"; exit 1; }
+          mkdir -p repos artifacts
+          rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
+          ln -s "$CANON/repos/harbor"        repos/harbor
+          ln -s "$CANON/artifacts/env"       artifacts/env
+          ln -s "$CANON/artifacts/runtime"   artifacts/runtime
+          [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
+            || printf 'runs: []\n' > artifacts/index.yaml
+      - name: Run eval smoke (--with-smoke)
+        working-directory: subblock/eval
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh --with-smoke
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-smoke-logs-${{ github.run_id }}
+          path: |
+            subblock/eval/artifacts/logs/
+            subblock/eval/artifacts/jobs/smoke/
+            subblock/eval/artifacts/litellm/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --- sft: cheap test cases -------------------------------------------------
+  sft-cases:
+    name: sft tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.sft == 'true'
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 15
+    steps:
+      - name: Pre-checkout — reclaim residue from prior runs
+        # The sft cases don't write root-owned files, but a previous job on this
+        # runner might have; chown anything not owned by uid 1000 back to us so
+        # actions/checkout's workspace-clean never trips on EACCES.
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+          fi
+      # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link runtime state from /gpufs/.../shared/runtime
+        working-directory: subblock/sft
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/sft"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh sft"; exit 1; }
+          # actions/checkout creates empty placeholder dirs for declared
+          # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
+          # The tracked artifacts/training_config/deepspeed/*.json come from the
+          # checkout (case 07), so only repos/ + the uv env are symlinked.
+          mkdir -p repos artifacts
+          rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env
+          ln -s "$CANON/repos/LLaMA-Factory"     repos/LLaMA-Factory
+          ln -s "$CANON/repos/swe_data_process"  repos/swe_data_process
+          ln -s "$CANON/artifacts/env"           artifacts/env
+          ls -la repos artifacts
+      - name: Run sft test cases
+        working-directory: subblock/sft
+        run: bash tests/run.sh
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sft-cases-logs-${{ github.run_id }}
+          path: subblock/sft/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 7

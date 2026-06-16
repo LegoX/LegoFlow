@@ -111,6 +111,13 @@ if ! bash "$BLOCK_DIR/scripts/prepare_tasks.sh" >>"$LOG" 2>&1; then
   exit 1
 fi
 
+# LiteLLM proxy: force a single uvicorn worker for the smoke. See the matching
+# block in eval's smoke for the full rationale — short version: gunicorn's 30s
+# worker-boot timeout vs slow cpfs litellm[proxy] import = crashloop. Single
+# worker skips gunicorn. Trajgen sometimes recovers from the crashloop (vs
+# eval, which never does); set it here too so the smoke is deterministic.
+export LITELLM_NUM_WORKERS=1
+
 set +e
 # 1800 s budget for trials + --kill-after 60 s so SIGKILL fires if start.sh
 # ignores SIGTERM (Harbor pipes the signal up the bash chain unreliably).

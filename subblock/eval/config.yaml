@@ -38,14 +38,14 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      api_key: dummy-key
-      api_base_url: "https://qwen.jierungogogo.com/v1"
-      model: "openai/Qwen3.5-35B-A3B"
-      description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
+      api_key: dummy-cf
+      api_base_url: "http://llm10.jierungogogo.com/v1"
+      model: "openai/GLM-5-FP8"
+      description: Raw upstream model API used to configure per-job LiteLLM proxy startup. Shared with trajgen (llm10 GLM endpoint).
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
-      # input_cost_per_token: 0.0000021
-      # output_cost_per_token: 0.0000084
+      input_cost_per_token: 0.0000021
+      output_cost_per_token: 0.0000084
 
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
