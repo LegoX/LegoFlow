@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# CI test runner for the sft block — deterministic cases only.
+# CI test runner for the sft block.
 #
 # Usage:
-#   bash tests/run.sh        # run every cases/NN_*.sh
+#   bash tests/run.sh                 # cases/ only (cheap, no GPU)
+#   bash tests/run.sh --with-smoke    # cases/ then smoke/ (real GPU training, ~30 min)
 #
 # Cases exit 0=PASS, 77=SKIP, anything else=FAIL.
 
 set -uo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WITH_SMOKE="${TESTS_WITH_SMOKE:-0}"
 for arg in "$@"; do
   case "$arg" in
+    --with-smoke) WITH_SMOKE=1 ;;
     -h|--help)
       sed -n '2,8p' "$0"
       exit 0
@@ -53,6 +56,17 @@ for f in "$BLOCK_DIR"/tests/cases/*.sh; do
   [[ -f "$f" ]] || continue
   run_one "$f" cases
 done
+
+if [[ "$WITH_SMOKE" == "1" ]]; then
+  for f in "$BLOCK_DIR"/tests/smoke/*.sh; do
+    [[ -f "$f" ]] || continue
+    case "$(basename "$f")" in
+      [0-9]*) run_one "$f" smoke ;;   # only numbered smoke tests; helpers are skipped
+    esac
+  done
+else
+  echo "INFO: smoke tests skipped (re-run with --with-smoke to include them)"
+fi
 
 echo "================================================================="
 echo "  sft tests: PASS=$pass  SKIP=$skip  FAIL=$fail"

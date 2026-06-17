@@ -15,7 +15,11 @@ set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SWE_DP_REPO="$BLOCK_DIR/repos/swe_data_process"
 SWE_DP_SRC="$SWE_DP_REPO/src"
-CONFIG="$BLOCK_DIR/config.yaml"
+# CONFIG defaults to the block's canonical config.yaml. Override with SFT_CONFIG
+# to run against an alternate config without touching the canonical one — used by
+# the training smoke (tests/smoke/10_train_demo.sh), which points train.sh at a
+# disposable copy so STEP 3's runtime_info.output write lands in the copy.
+CONFIG="${SFT_CONFIG:-$BLOCK_DIR/config.yaml}"
 CONFIG_PYTHON="${CONFIG_PYTHON:-python3}"
 
 abspath() {
@@ -443,6 +447,8 @@ data = {
     "max_grad_norm": training["max_grad_norm"],
     "num_train_epochs": training["num_train_epochs"],
     "lr_scheduler_type": training["lr_scheduler_type"],
+    # (max_steps injected below when set — HF caps training at this many
+    #  optimizer steps and ignores num_train_epochs; default config omits it)
     "warmup_ratio": training["warmup_ratio"],
     "bf16": training["bf16"],
     "ddp_timeout": training["ddp_timeout"],
@@ -450,6 +456,23 @@ data = {
     "use_unsloth_gc": training["use_unsloth_gc"],
     "flash_attn": training["flash_attn"],
 }
+
+# Optional hard cap on optimizer steps. Only emitted when training.max_steps is
+# present and > 0 (default config omits it, so full-length runs are unaffected).
+# HF Trainer treats max_steps > 0 as authoritative over num_train_epochs.
+_max_steps = training.get("max_steps")
+try:
+    _max_steps = int(_max_steps) if _max_steps not in (None, "", "None", "null") else 0
+except (TypeError, ValueError):
+    _max_steps = 0
+if _max_steps > 0:
+    data["max_steps"] = _max_steps
+
+# save_strategy "no" disables checkpoint writes entirely — train_results.json /
+# trainer_state.json / training_loss.png are still produced at run end.
+if str(training.get("save_strategy", "")).lower() in ("no", "none"):
+    data["save_strategy"] = "no"
+    data.pop("save_steps", None)
 
 path = Path(train_yaml_path)
 with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as tmp:
@@ -521,7 +544,7 @@ echo ""
 echo "============================================================"
 echo "STEP 3: Update config.yaml runtime_info.output"
 echo "============================================================"
-"$LF_PYTHON" - "$BLOCK_DIR" "$ABS_OUTPUT_DIR" "$TRAIN_LOG" <<'PYEOF'
+"$LF_PYTHON" - "$BLOCK_DIR" "$ABS_OUTPUT_DIR" "$TRAIN_LOG" "$CONFIG" <<'PYEOF'
 import fcntl
 import json
 import os
@@ -532,8 +555,10 @@ from pathlib import Path
 
 import yaml
 
-block_dir, output_dir, train_log = sys.argv[1:4]
-config_path = Path(block_dir) / "config.yaml"
+# config_path comes from $CONFIG (honors the SFT_CONFIG override) so a smoke /
+# alt run writes runtime_info.output into ITS config, never the canonical one.
+block_dir, output_dir, train_log, config_path_arg = sys.argv[1:5]
+config_path = Path(config_path_arg)
 lock_path = config_path.with_suffix(config_path.suffix + ".lock")
 
 

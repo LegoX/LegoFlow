@@ -2,6 +2,16 @@
 artifacts/data/im_data/
 artifacts/data/lf_data/
 artifacts/data/raw/
+# Staged smoke dataset snapshot (88 MB; produced by tests/smoke/prepare_smoke_data.sh,
+# canonical copy lives in $SHARED_RUNTIME/sft and is symlinked in for CI)
+artifacts/data/examples/
+
+# Disposable smoke training config (written per-run by tests/smoke/10_train_demo.sh)
+tests/smoke/.config.smoke.*.yaml
+tests/smoke/.config.smoke.*.yaml.lock
+
+# Transient fcntl lock sidecars written next to config.yaml / dataset_info.json
+config.yaml.lock
 
 # Model checkpoints
 artifacts/model/

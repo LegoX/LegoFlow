@@ -9,8 +9,11 @@ this repo's fixed CI runner. For portable user-environment diagnostics, use the
 ## Quickstart
 
 ```bash
-# runs every cases/NN_*.sh — safe to run anywhere:
+# cases only — runs every cases/NN_*.sh, safe to run anywhere (no GPU):
 bash subblock/sft/tests/run.sh
+
+# cases + the training smoke (real GPU training, ~30 min, needs 8 idle GPUs):
+bash subblock/sft/tests/run.sh --with-smoke
 ```
 
 Per-test exit codes: `0` pass · `77` skip · anything else fail.
@@ -35,9 +38,36 @@ Cases 05/06/08 SKIP rather than FAIL when their large local asset (trajectory
 source, base model, GPUs) isn't staged on the runner — so the suite stays green
 on a CPU-only cases runner, while still catching real config drift.
 
-There is no end-to-end training smoke for this block; the deterministic cases
-are the whole suite. To actually exercise a (real) training run, use
-`/sft:check` then `/sft:run`.
+### Smoke (gated — `--with-smoke`)
+
+| # | Test | What it does | Time |
+|---|---|---|---|
+| 10 | train demo | runs the real `train.sh` pipeline at the **production shape** — the 512-sample dataset at `cutoff_len=131072` on `n_gpus_per_node` GPUs with DeepSpeed ZeRO-3 — bounded to `SFT_SMOKE_MAX_STEPS` (default 4) optimizer steps with `save_strategy=no` (no checkpoint) | ~25-40 min |
+
+`smoke/10_train_demo.sh` is the end-to-end training smoke. It exercises dataset
+registration → train-YAML generation → `torchrun llamafactory` launch → the
+`runtime_info.output` write, isolated from canonical state: `train.sh` runs
+against a **disposable config copy** (`SFT_CONFIG=…`) whose `output_dir` is a
+throwaway `_smoke_*` dir, so the real `config.yaml` is never touched, and the
+trap removes the smoke model dir + generated YAML + temp config on exit.
+
+It feeds on a **staged 512-sample snapshot** (`source.type=local_lf`,
+`artifacts/data/examples/lf_512.json`) rather than a live HF pull. Produce /
+refresh that snapshot with:
+
+```bash
+bash subblock/sft/tests/smoke/prepare_smoke_data.sh   # → $SHARED_RUNTIME/sft/.../lf_512.json
+```
+
+Pass condition: `train.sh` exits 0 **and** the run dir has a `train_results.json`
+with a finite `train_loss` **and** `trainer_state.json` reached `>= max_steps`
+**and** no `checkpoint-*` dir was written. SKIPs (77) when a heavy prerequisite
+isn't present: uv env, base model, deepspeed config, the staged dataset, or
+`>= n_gpus_per_node` **idle** GPUs (a co-tenant job → SKIP, never launch onto
+foreign-held GPUs).
+
+Tunables: `SFT_SMOKE_MAX_STEPS` (default 4), `SFT_SMOKE_LF_PATH` (override the
+dataset), `SFT_SMOKE_BUDGET` (timeout seconds, default 2700).
 
 ---
 
@@ -69,6 +99,9 @@ cases/                cheap deterministic checks
   06_model_path.sh
   07_deepspeed_config.sh
   08_gpu_count.sh
+smoke/                gated (--with-smoke): real GPU training
+  10_train_demo.sh
+  prepare_smoke_data.sh   helper: snapshot the 512-sample dataset (not a test)
 run.sh                aggregator
 ```
 

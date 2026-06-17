@@ -547,3 +547,81 @@ jobs:
           path: subblock/sft/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 7
+
+  # --- sft: GPU training smoke (gated) --------------------------------------
+  sft-smoke:
+    name: sft tests (smoke)
+    needs: [detect-changes, sft-cases]
+    if: |
+      needs.detect-changes.outputs.sft == 'true' &&
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
+        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+      )
+    # Training-job exception: every other CI job runs on the generic
+    # `swe-lego-ci` pool, but this one launches real 8-GPU DeepSpeed ZeRO-3
+    # training, so it MUST land on the GPU host (the only machine with the 8×
+    # L20X). It is pinned to the dedicated `swe-lego-gpu` label, which only the
+    # runner registered on that machine carries. If no GPU runner is online the
+    # job queues rather than risk landing on a CPU-only runner.
+    runs-on: [self-hosted, swe-lego-gpu]
+    timeout-minutes: 60
+    steps:
+      - name: Pre-checkout — reclaim residue from prior runs
+        # Reclaim anything not owned by uid 1000 so checkout's workspace-clean
+        # never trips on EACCES, and drop any leftover _smoke_* run dirs from a
+        # killed prior smoke (the in-script trap normally removes them).
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+          fi
+      # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HOME=$CI_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link runtime state from /gpufs/.../shared/runtime
+        working-directory: subblock/sft
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/sft"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh sft"; exit 1; }
+          mkdir -p repos artifacts artifacts/data
+          rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env artifacts/data/examples
+          ln -s "$CANON/repos/LLaMA-Factory"     repos/LLaMA-Factory
+          ln -s "$CANON/repos/swe_data_process"  repos/swe_data_process
+          ln -s "$CANON/artifacts/env"           artifacts/env
+          # The 512-sample snapshot the local_lf smoke trains on (source.type
+          # is overridden to local_lf by the smoke's disposable config copy).
+          # Link it only if seeded — a missing snapshot must let the smoke SKIP
+          # (exit 77), not fail the job, on a freshly-registered GPU runner.
+          if [ -s "$CANON/artifacts/data/examples/lf_512.json" ]; then
+            ln -s "$CANON/artifacts/data/examples" artifacts/data/examples
+          else
+            echo "WARNING: staged smoke dataset missing at $CANON/artifacts/data/examples/lf_512.json — the smoke will SKIP. Seed it with: bash subblock/sft/tests/smoke/prepare_smoke_data.sh"
+          fi
+          ls -la repos artifacts artifacts/data
+      - name: Run sft smoke (--with-smoke)
+        working-directory: subblock/sft
+        run: bash tests/run.sh --with-smoke
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sft-smoke-logs-${{ github.run_id }}
+          path: subblock/sft/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14

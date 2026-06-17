@@ -366,6 +366,12 @@ jobs:
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            # HF creds + shared cache so the optional smoke's prepare_smoke_data.sh
+            # (load_dataset) can pull SWE-Lego/samples_for_llama_factory_sft even
+            # if it's gated/uncached — matches the other from-scratch jobs.
+            echo "HF_TOKEN=${HF_TOKEN:-}"
+            echo "HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-${HF_TOKEN:-}}"
+            echo "HF_HOME=${HF_HOME:-}"
           } >> "$GITHUB_ENV"
       - name: Init submodules (LLaMA-Factory public + swe_data_process private)
         # The PAT url-rewrite above turns swe_data_process's git@github.com SSH
@@ -379,6 +385,15 @@ jobs:
       - name: Run sft test cases
         working-directory: subblock/sft
         run: bash tests/run.sh
+      - name: Stage + run sft smoke (if requested)
+        if: ${{ inputs.run_smoke == true }}
+        working-directory: subblock/sft
+        # Snapshot the 512-sample dataset into the block (local_lf source), then
+        # run the GPU training smoke. The smoke SKIPs gracefully if this
+        # from-scratch runner lacks the base model or idle GPUs.
+        run: |
+          bash tests/smoke/prepare_smoke_data.sh "$PWD/artifacts/data/examples/lf_512.json"
+          bash tests/run.sh --with-smoke
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
