@@ -1,0 +1,11 @@
+{
+    "pages": [
+        "index",
+        "getting-started",
+        "core-concepts",
+        "run-training",
+        "dashboard",
+        "troubleshooting",
+        "reference"
+    ]
+}

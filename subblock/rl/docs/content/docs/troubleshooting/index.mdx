@@ -1,0 +1,35 @@
+---
+title: Troubleshooting
+description: Symptom-indexed fixes for the issues that actually block RL training
+---
+
+These are the failure modes that recur when operating the rl block — distilled to
+**symptom → root cause → fix**. They are curated from the development write-ups
+under `repos/harbor-verl-train/docs/`; each page links back to the full original
+for the deep dive.
+
+## Quick index
+
+Find your symptom, jump to the fix.
+
+| Symptom | Page |
+| --- | --- |
+| Step 0 crashes: `response_mask must contain at least one valid token` | [Tool-call parser mismatch](/docs/troubleshooting/training-startup#tool-call-parser-mismatch) |
+| Half the GPUs sit at 0% util / 100% memory; LiteLLM config lists only one server | [LiteLLM replica discovery race](/docs/troubleshooting/training-startup#litellm-replica-discovery-race) |
+| `import torch` / `import vllm` cold-start takes ~9s every launch | [venv on network FS](/docs/troubleshooting/training-startup#slow-venv-imports-on-a-network-filesystem) |
+| Every reward is `0.0`; `critic/score` flat at zero though the grader runs | [Reward always zero](/docs/troubleshooting/rewards-and-throughput#reward-always-zero-swe-rebench-v2) |
+| Pod startup time creeps up over hours (30s → 100s+); throughput tanks | [cgroup / memcg leak](/docs/troubleshooting/rewards-and-throughput#training-slowdown-from-a-cgroupmemcg-leak) |
+| Remote Docker mode won't start (FlashInfer / Ray env / docker SDK / compose) | [Remote Docker gotchas](/docs/troubleshooting/sandbox-backends#remote-docker-four-startup-gotchas) |
+| nvme at 100% util with no pods being created; `load` 30+ | [Kyverno IO storm](/docs/troubleshooting/sandbox-backends#kyverno-reports-controller-io-storm) |
+| Pods stuck `ContainerCreating`; uv install storms the disk; tasks 5× slower | [Pod-startup disk bottleneck](/docs/troubleshooting/sandbox-backends#pod-startup-disk-bottleneck-uv-cache) |
+
+## By area
+
+- [Training startup](/docs/troubleshooting/training-startup) — the model/serving config issues you hit the moment a run starts
+- [Rewards & throughput](/docs/troubleshooting/rewards-and-throughput) — the reward signal is zero, or the host degrades over time
+- [Sandbox backends](/docs/troubleshooting/sandbox-backends) — Docker and Kubernetes runtime issues
+
+<Callout title="First, run the preflight" type="info">
+Most config-level problems are caught by `bash scripts/dryrun.sh` /
+`/rl:check` before they cost you a multi-hour run — see [Preflight](/docs/run-training/preflight).
+</Callout>

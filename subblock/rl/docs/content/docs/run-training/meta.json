@@ -1,0 +1,4 @@
+{
+    "title": "Run Training",
+    "pages": ["index", "preflight", "inference-stack", "backends", "results-and-artifacts", "scaling"]
+}

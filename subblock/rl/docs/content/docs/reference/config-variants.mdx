@@ -1,0 +1,61 @@
+---
+title: Config Variants
+description: Common config edits, the upstream-fixed tier, and building the docs site
+---
+
+This page collects the edits you make most often, explains which knobs live
+upstream, and documents how to build and deploy this docs site.
+
+## Common edits
+
+| Goal | Edit |
+| --- | --- |
+| Switch policy model | `model.model_path` (re-check `vllm.gen_tp` divides `num_key_value_heads`) |
+| Different K8s cluster | `k8s.kubeconfig` |
+| Switch to Docker mode | `harbor_agent.environment_import_path` + `docker_host` (see [Backends](/docs/run-training/backends)) |
+| Reuse a prebuilt venv | `environment.venv_path` (mind the editable-install gotcha) |
+| Bump rollout parallelism | `harbor_runtime.num_workers` (16 cold-start; 32–96 steady) |
+| Enable tail-killer | `harbor_runtime.tail_kill_target=0.95` (`tail_kill_grace_sec=180`) |
+| Opt out of wandb | `credentials.wandb_mode: disabled` |
+
+## The upstream-fixed tier
+
+`vllm`, `training`, and `algorithm` are **hardcoded** in
+`repos/harbor-verl-train/scripts/sync_1node_cc.sh` and only mirrored into
+`config.yaml` for documentation. To change them, edit the upstream script (or
+fork it) — editing `config.yaml` alone has no effect on those values.
+
+The current profile runs GRPO advantages with a GSPO policy loss
+(`adv_estimator: grpo`, `policy_loss_mode: gspo`), `lr 1e-6`, batch
+`64 × 8 = 512` trials/step, context `40k` prompt + `68k` response, on Qwen3-30B
+with vLLM TP=4.
+
+## wandb
+
+Never hardcode the key in `config.yaml`. Keep `credentials.wandb_api_key: ""`
+and `export WANDB_API_KEY=...` in your shell before launch (or set
+`wandb_mode: disabled`). `dryrun.sh` checks both sources.
+
+## Build & deploy the docs site
+
+This documentation is a [fumadocs](https://fumadocs.dev/) (Next.js) static
+export, deployed to a dedicated Cloudflare Pages project (`swe-rl-docs`),
+separate from the training dashboard's `swe-lego-rl-dashboard`.
+
+```bash
+cd docs
+export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"; nvm use 22
+npm install            # first time
+npm run dev            # local preview at http://localhost:3000
+npm run build          # static export to out/
+bash deploy_cloudflare_pages.sh   # build + deploy to swe-rl-docs
+```
+
+The deploy script asserts Node >= 20 (via nvm), reuses the dashboard's Cloudflare
+credentials (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or
+`~/.config/rl_dashboard_cloudflare.env`), and publishes `out/`. Override the
+project with `PROJECT_NAME=...` (or `DOCS_PROJECT_NAME=...` in the env file).
+
+To add a page: drop an `.mdx` file under `content/docs/` with `title` +
+`description` frontmatter, and add its slug to the folder's `meta.json` `pages`
+array.

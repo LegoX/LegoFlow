@@ -1,0 +1,98 @@
+---
+title: Training Startup
+description: Model-format and serving issues that surface the moment a run starts
+---
+
+These three issues all bite right at launch — a crash on step 0, half the GPUs
+idle, or every launch paying a slow-import tax.
+
+## Tool-call parser mismatch
+
+**Symptom.** Training crashes on the very first step with:
+
+```text
+response_mask must contain at least one valid token (1)
+```
+
+vLLM is healthy and the model clearly generates text, but the *entire* batch has
+zero tool calls (e.g. 0/1024 trials) and the trajectories are single-turn.
+
+**Root cause.** The vLLM rollout is configured with the wrong **tool-call
+parser** for the model's output format. A Qwen3-Coder model emits XML tool calls:
+
+```text
+<function=EnterWorktree>...</function>
+```
+
+but the rollout config sets `tool-call-parser: hermes`, which expects JSON. vLLM's
+hermes parser runs `json.loads()` on the XML, throws `JSONDecodeError` on every
+turn, recognizes **zero** tool calls, so the agent never takes an action — no
+assistant tokens are produced and `response_mask` is all zeros.
+
+**Fix.** Match the parser to the model. The runtime exposes one knob,
+`HARBOR_TOOL_PARSER` (default `qwen3_coder`), which drives every config point
+(`harbor_verl_*.yaml` → `tool-call-parser`, `agent_loop_config_cc.yaml` →
+`tool_parser`):
+
+| Model output format | `HARBOR_TOOL_PARSER` |
+| --- | --- |
+| Qwen3-Coder XML (`<function=...>`) | `qwen3_coder` |
+| Hermes/JSON tool calls | `hermes` |
+
+**Verify.** The vLLM logs stop printing `JSONDecodeError`, and the first one or
+two steps' `litellm-trajectory.jsonl` show non-zero `tool_calls` with
+`finish_reason: tool_calls`.
+
+> Full write-up: `repos/harbor-verl-train/docs/training_env/tool-call-parser-mismatch.md`
+
+## LiteLLM replica discovery race
+
+**Symptom.** On 8 GPUs with two `tp=4` vLLM replicas (GPU 0–3 and 4–7), four
+cards sit at **0% util / 100% memory** — loaded but receiving no traffic. The
+generated `/tmp/litellm_cc_8002.yaml` lists only `vllm_server_0`.
+
+**Root cause.** The discovery step enumerates the Ray named actors
+(`vllm_server_0_0`, `vllm_server_1_0`, …) and stops at the first gap. If
+`vllm_server_1` hasn't finished registering at that instant, discovery gives up
+early and writes a config with only one backend, so half the rollout GPUs never
+get requests.
+
+**Immediate fix.** Add the missing backend by hand and restart the proxy:
+
+1. Edit `/tmp/litellm_cc_8002.yaml` to list **both** servers (repeat each model
+   name once per backend).
+2. Stop the proxy — note that `pkill -f litellm` misses the
+   `multiprocessing.spawn` workers; find the real listener with
+   `fuser 8002/tcp` (or `/proc/net/tcp`) and kill that PID.
+3. Restart the proxy against the corrected config.
+
+**Root fix.** Discovery should wait until the expected number of replicas —
+`expected_replicas = total_rollout_gpus / gen_tp` — has actually registered
+before writing the config, rather than bailing at the first missing server.
+
+> Full write-up: `repos/harbor-verl-train/docs/training_env/litellm-rollout-replica-discovery-race.md`
+
+## Slow venv imports on a network filesystem
+
+**Symptom.** Every launch pays a cold-import tax — `import torch` takes ~8.7s
+(vs ~1.8s), because the venv lives on a network filesystem (CPFS /
+`fuse.aliyun-alinas-efc`) and small-file metadata I/O goes over the network.
+
+**Fix.** Copy the venv onto local NVMe once and point `VENV_PATH` at it:
+
+```bash
+cp -a repos/harbor-verl-train/.venv /root/venvs/harbor-verl-train-venv
+VENV_PATH=/root/venvs/harbor-verl-train-venv bash scripts/start.sh
+```
+
+`/root` is per-node local storage, so **each node needs its own copy**. Re-sync
+when `pyproject.toml` changes or packages are added:
+`rsync -a --delete <src>/.venv/ /root/venvs/harbor-verl-train-venv/`.
+
+<Callout title="Editable installs still apply" type="warn">
+A copied venv keeps its editable installs pointing at the original `repos/` trees.
+Verify with `python -c "import harbor, verl, verl_patch; print(harbor.__file__)"`
+— see [Core Concepts](/docs/core-concepts#the-training-venv).
+</Callout>
+
+> Full write-up: `repos/harbor-verl-train/docs/training_env/local-venv-cache.md`
