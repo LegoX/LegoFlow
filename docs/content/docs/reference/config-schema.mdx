@@ -1,0 +1,61 @@
+---
+title: config.yaml schema
+description: The fixed schema every block's config.yaml follows
+---
+
+Every block in the tree — root or subblock — has a `config.yaml` with the same top-level shape. Live state is **not** stored here; that lives in `artifacts/index.yaml`.
+
+## Top-level structure
+
+```yaml
+meta_info:
+  name:                 # short identifier, kebab-case
+  label:                # human-friendly title
+  description:          # one-sentence purpose
+  parent:               # parent block's `name`, or null for the root
+  subblocks:            # one entry per child block (optional)
+    <child_name>:
+      role:             # one-line purpose of the child
+      dependencies:     # input wiring — see "Wiring rule" below
+        <input_key>: <source_block>.output.<key>     # or: human
+  repos: {}             # name → {commit_id, role}; pinned vendored deps under repos/
+  resources:
+    ip:                 # 'local' (default) or null = current host; remote IP = SSH+tmux
+    directory:          # working directory on the remote node (when ip is remote)
+
+runtime_info:
+  input: {}             # ONLY values originating outside the block tree
+  output: {}            # values produced for downstream blocks
+
+evolving:
+  tunable_params: {}    # auto-tuned parameters with bounds (optional)
+```
+
+## Wiring rule
+
+This is the rule the whole pipeline depends on:
+
+> Inter-block values go in `meta_info.subblocks[].dependencies`, never in `runtime_info.input`. Only values originating **outside** the block tree go in `runtime_info.input`.
+
+That keeps every path/handle that connects two blocks resolvable at preflight time — and means you never copy paths by hand. `/root:check` validates that every `subblocks[].dependencies` entry resolves to a non-null `output` of the named sibling.
+
+## `runtime_info.input` vs `runtime_info.output`
+
+- `input` is what you (or another tool) must fill before the block can run. Examples: API keys, GitHub tokens, human decisions about model names.
+- `output` is what the block promises to publish once it has run. Examples: a directory of verified tasks, a checkpoint path. Downstream blocks reference these via `dependencies`.
+
+## `resources.ip`
+
+- `local` or `null` → run on the current host (default; no SSH).
+- Real remote IP → the agent must SSH into that node and run inside a tmux session, with `meta_info.resources.directory` as the working directory.
+
+Do **not** "restore" an old remote IP from git history. The local default is intentional.
+
+## `evolving.tunable_params`
+
+Optional. When set, the orchestrator may adjust these within bounds across runs as part of the self-evolving loop. Leave empty if the block is not tuned.
+
+## Where to read more
+
+- The canonical contract: `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`.
+- A worked example scaffold: `.claude/plugins/root-plugin/references/example_block/`.

@@ -1,0 +1,32 @@
+---
+title: rl
+description: Online RL from the SFT checkpoint
+---
+
+`rl` is the online reinforcement learning stage. Starting from the actor `sft` produced, it runs GRPO/GSPO against SWE-bench tasks via Harbor + vLLM + verl, on a multi-GPU node with Kubernetes-backed task execution.
+
+Full docs: **[swe-rl-docs.pages.dev/docs](https://swe-rl-docs.pages.dev/docs)**
+
+<Callout title="Long-form docs live there" type="info">
+The rl block ships its own complete documentation site — getting started, core concepts, running training (preflight, the vLLM + LiteLLM inference stack, sandbox backends, results, and scaling), the dashboard, a troubleshooting guide, and the full reference. This page is just an orientation; follow the link above for everything else.
+</Callout>
+
+## At a glance
+
+- **Inputs**: `model` (typically wired from `sft.output.checkpoint_path`), `infrastructure`, `training`, `data`, `experiment`, `credentials`.
+- **Output**: actor checkpoints under `repos/harbor-verl-train/outputs/`.
+- **Runs**: Local (8× GPU + K8s). Long-running.
+
+## How to run
+
+```text
+/rl:setup        # build venv, sync submodules, apply verl patch
+/rl:check        # preflight: GPUs, K8s reachability, vLLM env, base model
+/rl:run          # launch training (long-running)
+/rl:dashboard    # launch the trajectory + metric webui
+```
+
+## Reference
+
+- Block contract: `subblock/rl/CLAUDE.md`
+- Full docs site: [swe-rl-docs.pages.dev/docs](https://swe-rl-docs.pages.dev/docs)

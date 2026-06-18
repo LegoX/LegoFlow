@@ -1,0 +1,56 @@
+---
+title: Block Design
+description: The abstraction the whole pipeline is built on
+---
+
+A **block** is the unit of work in LegoFactory. Every stage of the pipeline — data curation, trajectory generation, SFT, RL — is a block, with the same shape and the same three skills (`:setup`, `:check`, `:run`). This page is the long-form design: the vocabulary, the schema, the dependency rules, and the archive format.
+
+## Block
+
+A self-contained directory that owns one stage of the pipeline. Every block has the same shape: a `config.yaml` for inputs and outputs, a `scripts/` set for execution, an `artifacts/` tree for results, an optional `repos/` for vendored dependencies, and a `CLAUDE.md` that documents the agent contract.
+
+## Root block / subblock
+
+The repo is a **tree of blocks**. The repo root is the **root block**; every directory under `subblock/` is a child block. A parent block declares its children under `meta_info.subblocks` and wires the children together by name. Children can have children — the abstraction nests.
+
+## `config.yaml`
+
+Every block's `config.yaml` is **one-shot per run**: every key is configuration. Live state — running, completed, failed — does not live here. It lives in `artifacts/index.yaml`. See [Reference / config.yaml](/docs/reference/config-schema) for the full schema.
+
+## `runtime_info.input`
+
+The values a block needs that originate **outside** the block tree: API keys, GitHub tokens, model names, human decisions. These are the only values you fill by hand.
+
+## `runtime_info.output`
+
+The values a block publishes once it has run, for downstream blocks to consume — e.g. `swegen.output.swe_tasks_dir`. Downstream blocks reference these through `dependencies`, never by hand.
+
+## Dependency
+
+Inter-block values are wired in `meta_info.subblocks[].dependencies` as `<source_block>.output.<key>` (or the literal `human` for things only a person can decide). `/root:check` resolves every dependency at preflight time; an unresolvable dependency fails the check before anything heavy runs.
+
+## Repo
+
+A vendored, pinned dependency under a block's `repos/` directory (e.g. `trajgen/repos/harbor/`). Pinned by commit SHA in `config.yaml` under `meta_info.repositories.<name>`. Editing files under `repos/` is forbidden — auth/env fixes belong in `scripts/` or `config.yaml`.
+
+## Resources
+
+`meta_info.resources.ip` declares where a block runs. `local` (or null) means the current host. A real remote IP means the agent SSHes into that node and runs inside a tmux session, with `meta_info.resources.directory` as the working directory.
+
+## Archive
+
+Every run is archived to `artifacts/archives/run_NNN/`: a snapshot of the config, the scripts as they were, the repo SHAs, and a `metadata.yaml` with timestamps and exit code. The EXIT trap installed by `scripts/start.sh` fires `archive_run.sh` regardless of how the run ended, so the timeline is always complete. See [Reference / Artifacts](/docs/reference/artifacts).
+
+## Live state
+
+The newest entry of `artifacts/index.yaml`. Status is one of `completed | failed | interrupted`, derived from `scripts/start.sh`'s exit code. Always read live state from here — never from `config.yaml`.
+
+## `root` plugin
+
+The Claude Code plugin at `.claude/plugins/root-plugin/` that operates any block in the tree. Three skills:
+
+- **`/root:create`** — scaffold a new block with the full directory tree wired to the contract.
+- **`/root:check`** — recursively sanity-check schema, inputs, dependencies, remote-resource reachability, and LLM endpoints. Read-only.
+- **`/root:run`** — preflight, then execute `scripts/start.sh` (locally, or in tmux over SSH) and archive the result.
+
+Both `/root:check` and `/root:run` take a free-form argument. The agent resolves the target block by name or unambiguous paraphrase; ambiguity triggers a clarification question rather than a guess.

@@ -1,0 +1,32 @@
+---
+title: swegen
+description: Convert GitHub PRs into verified SWE tasks
+---
+
+`swegen` is the data-curation stage. It collects PRs from configured GitHub repositories, scores them with an LLM, generates Harbor-compatible SWE tasks, and verifies each one with NOP and Oracle checks before adding its ID to the per-language `verifiable_tasks.txt` manifest.
+
+Full docs: **[swe-swegen-docs.pages.dev/docs](https://swe-swegen-docs.pages.dev/docs)**
+
+<Callout title="Long-form docs live there" type="info">
+The swegen block ships its own complete documentation site — getting started, PR collection, task generation, NOP/Oracle verification, and the full reference. This page is just an orientation; follow the link above for everything else.
+</Callout>
+
+## At a glance
+
+- **Inputs**: `github_tokens`, `llm_api` (api_key, api_base_url, pr_model, task_model).
+- **Output**: `swe_tasks_dir` — `subblock/swegen/artifacts/swe_tasks/{lang}-cc/`. The authoritative manifest is `verifiable_tasks.txt`; only task IDs in that file have passed NOP/Oracle.
+- **Runs**: Local (CPU + Docker). Long-running — hours per language.
+
+## How to run
+
+```text
+/swegen:setup     # clone repos, build envs, prepare default config
+/swegen:check     # preflight: tokens, LLM endpoint, Docker, schema
+/swegen:run       # full pipeline: collect PRs → generate tasks → verify
+/swegen:dashboard # progress dashboard
+```
+
+## Reference
+
+- Block contract: `subblock/swegen/CLAUDE.md`
+- Full docs site: [swe-swegen-docs.pages.dev/docs](https://swe-swegen-docs.pages.dev/docs)

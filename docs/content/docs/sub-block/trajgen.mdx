@@ -1,0 +1,32 @@
+---
+title: trajgen
+description: Roll a coding agent out across verified tasks
+---
+
+`trajgen` is the trajectory-generation stage. It runs a coding agent (Claude Code, OpenCode, OpenHands SDK, or Terminus-2) over the tasks `swegen` verified, captures every rollout via a per-job LiteLLM proxy, and optionally converts the good ones into LLaMA-Factory SFT data.
+
+Full docs: **[swe-trajgen-docs.pages.dev/docs](https://swe-trajgen-docs.pages.dev/docs)**
+
+<Callout title="Long-form docs live there" type="info">
+The trajgen block ships its own complete documentation site — getting started, run-jobs walkthroughs, SFT-data conversion, dashboard, and the full reference. This page is just an orientation; follow the link above for everything else.
+</Callout>
+
+## At a glance
+
+- **Inputs**: `llm_api` (api_key, api_base_url, model). Task source comes from the swegen dependency.
+- **Outputs**: `raw_trajectories_dir` and `sft_data_dir` (LLaMA-Factory LF format; consumed by `sft`).
+- **Runs**: Local (CPU + Docker). Long-running.
+
+## How to run
+
+```text
+/trajgen:setup     # clone harbor + swe_data_process, build uv envs
+/trajgen:check     # preflight: envs, LLM endpoint, Harbor image, ledger
+/trajgen:run       # prepare_tasks → proxy → Harbor → optional convert
+/trajgen:dashboard # local HTML board or Cloudflare sync
+```
+
+## Reference
+
+- Block contract: `subblock/trajgen/CLAUDE.md`
+- Full docs site: [swe-trajgen-docs.pages.dev/docs](https://swe-trajgen-docs.pages.dev/docs)

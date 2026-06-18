@@ -1,0 +1,69 @@
+---
+title: Artifacts & archives
+description: How every run is recorded — index.yaml + per-run snapshots
+---
+
+After each run, a block's `scripts/start.sh` fires `archive_run.sh` via an EXIT trap. The trap runs regardless of how the script exited (success, error, SIGINT, SIGTERM), so the archive timeline is always complete. The contract:
+
+## `artifacts/index.yaml`
+
+Append-only run index. The newest entry's `status` is the block's live state.
+
+```yaml
+runs:
+  - id: run_001
+    started_at: "2026-05-04T08:00:00Z"
+    completed_at: "2026-05-04T10:11:35Z"
+    status: completed          # completed | failed | interrupted
+    archive: artifacts/archives/run_001/
+    notes: ""                  # agent may refine after the run
+```
+
+`status` is derived from `start.sh`'s exit code:
+
+| Exit code | Status |
+| --- | --- |
+| `0` | `completed` |
+| `130`, `143` | `interrupted` (SIGINT / SIGTERM) |
+| anything else | `failed` |
+
+Field order is fixed (`sort_keys=False` in the YAML writer) so diffs across runs stay readable.
+
+## `artifacts/archives/run_NNN/`
+
+Snapshot of one run. The required files are written automatically:
+
+| File | Content |
+| --- | --- |
+| `metadata.yaml` | run id, block, timestamps, exit code, status, repo commit SHAs, optional `stage` / `results` / `inputs` |
+| `config.yaml` | copy of the block's `config.yaml` at run time |
+| `scripts/` | copy of the scripts executed |
+| `repos/` | optional snapshot of repo state for the run |
+| `session.log` | optional agent-added Claude Code session log |
+| `monitor.md` | optional agent-added monitor narrative |
+
+The `metadata.yaml` schema:
+
+```yaml
+id: run_001
+block: <block_name>
+started_at: "2026-05-04T08:00:00Z"
+completed_at: "2026-05-04T10:11:35Z"
+status: completed              # completed | failed | interrupted
+exit_code: 0
+repos:
+  <name>: <40-char git sha>    # one per dir under repos/; {} if none
+notes: ""
+# Optional, agent-added: stage, results, inputs
+```
+
+`status` uses the same vocabulary as `index.yaml`, derived from the same exit code.
+
+## Reading the live state
+
+Two equivalent ways:
+
+- **Tail the index**: the newest entry of `artifacts/index.yaml` always reflects the block's last run.
+- **Read the archive**: `artifacts/archives/run_NNN/metadata.yaml` for one run's detail; `config.yaml` next to it for the exact config that produced it.
+
+`config.yaml` at the block root is **not** the place to look — it is one-shot per run and is not edited during execution.
