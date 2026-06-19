@@ -8,7 +8,7 @@
 # so it can help with those too.
 #
 # Usage (on the GPU machine):
-#   REG_TOKEN=<token> bash .github/runners/register-gpu-runner.sh
+#   REG_TOKEN=<token> bash .github/scripts/register-gpu-runner.sh
 #
 #   token: repo Settings → Actions → Runners → New self-hosted runner, or
 #     gh api -X POST repos/SWE-Lego/SWE-Lego-Live/actions/runners/registration-token -q .token

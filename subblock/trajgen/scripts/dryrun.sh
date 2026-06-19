@@ -411,10 +411,10 @@ if [[ -n "${HARBOR_DIR:-}" && -e "$HARBOR_DIR/.git" ]]; then
   esac
 fi
 
-if run_in_harbor_env "timeout 45 $HARBOR_CHECK_COMMAND --help >/dev/null" 2>/dev/null; then
+if run_in_harbor_env "timeout 120 $HARBOR_CHECK_COMMAND --help >/dev/null" 2>/dev/null; then
   ok "harbor check command works: $HARBOR_CHECK_COMMAND"
 else
-  fail "harbor check command failed or timed out (>45s): $HARBOR_CHECK_COMMAND"
+  fail "harbor check command failed or timed out (>120s): $HARBOR_CHECK_COMMAND"
 fi
 else
   warn "skipping Harbor import/CLI health checks because the configured uv environment is missing"

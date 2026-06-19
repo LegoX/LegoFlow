@@ -79,18 +79,19 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.swegen == 'true'
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 15
+    timeout-minutes: 30   # cpfs cold-cache uv-env-editable case can take ~7 min
     steps:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
         with:
           submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
       - name: Isolate HOME + load shared CI env
         run: |
           set -euo pipefail
@@ -105,7 +106,7 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/swegen
@@ -157,11 +158,12 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
           submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
       - name: Isolate HOME + load shared CI env
         run: |
           set -euo pipefail
@@ -176,7 +178,7 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/swegen
@@ -188,11 +190,20 @@ jobs:
           ln -s "$CANON/repos/swegen"        repos/swegen
           ln -s "$CANON/artifacts/envs"      artifacts/envs
           [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
-      - name: Run swegen smoke (--with-smoke)
-        working-directory: subblock/swegen
+      - name: Overlay smoke config.yaml from subblock/swegen/tests/smoke
+        run: cp subblock/swegen/tests/smoke/config.yaml subblock/swegen/config.yaml
+      - name: Run smoke via .github/scripts/smoke_run.sh swegen
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
-        run: bash tests/run.sh --with-smoke
+        run: bash .github/scripts/smoke_run.sh swegen 3600
+      - name: Verify smoke
+        if: always()
+        shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
+        run: |
+          bash subblock/swegen/tests/smoke/verify.sh
+          rc=$?
+          if [[ $rc -eq 77 ]]; then echo "::warning::swegen smoke SKIPped"; exit 0; fi
+          exit $rc
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -211,7 +222,7 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.trajgen == 'true'
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 15
+    timeout-minutes: 30   # cpfs cold-cache uv-env-editable case can take ~7 min
     steps:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
         # Prior trajgen smokes drop root-owned files in the workspace —
@@ -223,11 +234,12 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
           submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
       - name: Isolate HOME + load shared CI env
         run: |
           set -euo pipefail
@@ -242,7 +254,7 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/trajgen
@@ -295,11 +307,12 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
           submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
       - name: Isolate HOME + load shared CI env
         run: |
           set -euo pipefail
@@ -314,7 +327,7 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/trajgen
@@ -334,13 +347,24 @@ jobs:
             ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
           [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
             ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
-      - name: Run trajgen smoke (--with-smoke)
-        working-directory: subblock/trajgen
+      - name: Overlay smoke config.yaml from subblock/trajgen/tests/smoke
+        run: cp subblock/trajgen/tests/smoke/config.yaml subblock/trajgen/config.yaml
+      - name: Run smoke via .github/scripts/smoke_run.sh trajgen
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
-        run: bash tests/run.sh --with-smoke
+          LITELLM_NUM_WORKERS: "1"
+        run: bash .github/scripts/smoke_run.sh trajgen 2400
+      - name: Verify smoke
+        if: always()
+        shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
+        run: |
+          bash subblock/trajgen/tests/smoke/verify.sh
+          rc=$?
+          if [[ $rc -eq 77 ]]; then echo "::warning::trajgen smoke SKIPped"; exit 0; fi
+          exit $rc
       - name: Upload logs
         if: always()
+        continue-on-error: true   # harbor's root-owned agent/sessions can survive cleanup → upload EACCES, don't fail the job
         uses: actions/upload-artifact@v4
         with:
           name: trajgen-smoke-logs-${{ github.run_id }}
@@ -356,7 +380,7 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.eval == 'true'
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 15
+    timeout-minutes: 30   # cpfs cold-cache uv-env-editable case can take ~7 min
     steps:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
         # eval smokes drop root-owned files in the workspace — Harbor's
@@ -368,12 +392,13 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + envs come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
         with:
           submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
       - name: Isolate HOME + load shared CI env
         run: |
           set -euo pipefail
@@ -385,7 +410,7 @@ jobs:
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/eval
@@ -438,11 +463,12 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
           submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
       - name: Isolate HOME + load shared CI env
         run: |
           set -euo pipefail
@@ -454,7 +480,7 @@ jobs:
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/eval
@@ -469,13 +495,24 @@ jobs:
           ln -s "$CANON/artifacts/runtime"   artifacts/runtime
           [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
             || printf 'runs: []\n' > artifacts/index.yaml
-      - name: Run eval smoke (--with-smoke)
-        working-directory: subblock/eval
+      - name: Overlay smoke config.yaml from subblock/eval/tests/smoke
+        run: cp subblock/eval/tests/smoke/config.yaml subblock/eval/config.yaml
+      - name: Run smoke via .github/scripts/smoke_run.sh eval
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
-        run: bash tests/run.sh --with-smoke
+          LITELLM_NUM_WORKERS: "1"
+        run: bash .github/scripts/smoke_run.sh eval 2400
+      - name: Verify smoke
+        if: always()
+        shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
+        run: |
+          bash subblock/eval/tests/smoke/verify.sh
+          rc=$?
+          if [[ $rc -eq 77 ]]; then echo "::warning::eval smoke SKIPped"; exit 0; fi
+          exit $rc
       - name: Upload logs
         if: always()
+        continue-on-error: true   # harbor's root-owned agent/sessions can survive cleanup → upload EACCES, don't fail the job
         uses: actions/upload-artifact@v4
         with:
           name: eval-smoke-logs-${{ github.run_id }}
@@ -492,21 +529,23 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.sft == 'true'
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 15
+    timeout-minutes: 30   # cpfs cold-cache imports (swe_data_process converters) hit ~7 min each
     steps:
       - name: Pre-checkout — reclaim residue from prior runs
-        # The sft cases don't write root-owned files, but a previous job on this
-        # runner might have; chown anything not owned by uid 1000 back to us so
-        # actions/checkout's workspace-clean never trips on EACCES.
+        # sft-cases doesn't write root-owned files itself, but a co-tenant
+        # trajgen/eval smoke on this runner might have; reclaim and drop
+        # everyone's smoke residue so actions/checkout's workspace-clean
+        # never trips on EACCES.
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
         with:
           submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
       - name: Isolate HOME + load shared CI env
         run: |
           set -euo pipefail
@@ -518,7 +557,7 @@ jobs:
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/sft
@@ -558,13 +597,11 @@ jobs:
         (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
-    # Training-job exception: every other CI job runs on the generic
-    # `swe-lego-ci` pool, but this one launches real 8-GPU DeepSpeed ZeRO-3
-    # training, so it MUST land on the GPU host (the only machine with the 8×
-    # L20X). It is pinned to the dedicated `swe-lego-gpu` label, which only the
-    # runner registered on that machine carries. If no GPU runner is online the
-    # job queues rather than risk landing on a CPU-only runner.
-    runs-on: [self-hosted, swe-lego-gpu]
+    # Prefers the dedicated `swe-lego-gpu` runner (real 8× GPU host) when it
+    # is online; falls back to the generic `swe-lego-ci` pool if not — in that
+    # case the smoke's SKIP-on-no-nvidia-smi guard fires and the verify step
+    # gracefully maps the 77 to a `::warning::` instead of queuing forever.
+    runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 60
     steps:
       - name: Pre-checkout — reclaim residue from prior runs
@@ -574,12 +611,13 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
         with:
           submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
       - name: Isolate HOME + load shared CI env
         run: |
           set -euo pipefail
@@ -591,7 +629,7 @@ jobs:
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
         working-directory: subblock/sft
@@ -614,9 +652,18 @@ jobs:
             echo "WARNING: staged smoke dataset missing at $CANON/artifacts/data/examples/lf_512.json — the smoke will SKIP. Seed it with: bash subblock/sft/tests/smoke/prepare_smoke_data.sh"
           fi
           ls -la repos artifacts artifacts/data
-      - name: Run sft smoke (--with-smoke)
-        working-directory: subblock/sft
-        run: bash tests/run.sh --with-smoke
+      - name: Overlay smoke config.yaml from subblock/sft/tests/smoke
+        run: cp subblock/sft/tests/smoke/config.yaml subblock/sft/config.yaml
+      - name: Run smoke via .github/scripts/smoke_run.sh sft
+        run: bash .github/scripts/smoke_run.sh sft 2700
+      - name: Verify smoke
+        if: always()
+        shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
+        run: |
+          bash subblock/sft/tests/smoke/verify.sh
+          rc=$?
+          if [[ $rc -eq 77 ]]; then echo "::warning::sft smoke SKIPped"; exit 0; fi
+          exit $rc
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

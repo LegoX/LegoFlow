@@ -1,0 +1,97 @@
+# SMOKE CI CONFIG — copied over subblock/eval/config.yaml by
+# .github/workflows/ci.yml before invoking `claude -p "/eval:run"`.
+# Production config lives at subblock/eval/config.yaml on dev.
+# Delta from production is documented in comments tagged "# SMOKE:".
+meta_info:
+  name: eval
+  label: "Evaluation"
+  description: Runs registered benchmark evaluations through Harbor against a configurable upstream LLM.
+  parent: swe_lego_live
+  subblocks: {}
+  dependencies: {}
+
+  resources:
+    ip: local                          # SMOKE: was 192.168.35.240 (production remote)
+    user: null
+    pwd: null
+    directory: /gpufs/haoli/code/
+    description: local execution on the swe-lego-ci runner
+    public_storage: /gpufs/haoli/swedata
+
+  repositories:
+    harbor:
+      url: git@github.com:SWE-Lego/harbor.git
+      branch: main
+      commit: 149e75770f8c369d6fae31c158ea761d676b4d3a
+      path: repos/harbor
+      readonly: true
+
+  environment:
+    harbor_uv: artifacts/env/harbor-uv
+    litellm_uv: artifacts/env/litellm-venv
+    litellm:
+      python_version: "3.13"
+      litellm_version: "1.83.14"
+
+runtime_info:
+  input:
+    llm_api:
+      api_key: dummy-cf
+      api_base_url: "http://llm10.jierungogogo.com/v1"
+      model: "openai/GLM-5-FP8"
+      description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
+      protocols: [openai_compatible, anthropic_compatible]
+      served_via: per_job_litellm_proxy
+      input_cost_per_token: 0.0000021
+      output_cost_per_token: 0.0000084
+
+    litellm_proxy:
+      config_template: scripts/serve_llm/litellm_config.example.yaml
+      port: 4101
+      master_key: dummy-key-cf
+
+    task_source:
+      provider: harbor_registry
+      dataset_name: swebench-verified   # SMOKE: full benchmark; harbor_job.n_tasks caps it to 10
+      version: "1.0"
+      registry_path: repos/harbor/registry.json
+
+    harbor_job:
+      jobs_dir: artifacts/jobs/smoke    # SMOKE: was artifacts/jobs
+      n_concurrent: 5                   # SMOKE: was 16
+      n_tasks: 10                       # SMOKE: was null (full 500)
+      max_retries: 0                    # SMOKE: was 2
+      timeout_multiplier: 1
+
+    agent:
+      name: custom-openhands-sdk
+      version: 1.14.0
+      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
+      runtime_host_path: artifacts/runtime/openhands-sdk
+      max_turns: 50                     # SMOKE: was 200
+      temperature: 0.7
+
+  output:
+    eval_results_dir:
+      description: Harbor job directories containing per-task evaluation results and LiteLLM trajectory logs
+      path: artifacts/jobs
+      job_layout: "artifacts/jobs/<job>/<task>/{agent,evaluation}/"
+      trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
+      results_summary_format: "artifacts/jobs/<job>/results.json"
+      consumer_block: null
+
+environment:
+  extra:
+    HARBOR_EXCLUDE_TASKS: ""
+    LITELLM_STICKY_ROUTING_ALIASES: ""
+    # SMOKE: force a single uvicorn worker (skip gunicorn's 30s boot timeout).
+    LITELLM_NUM_WORKERS: "1"
+
+evolving:
+  description: Runs evaluation benchmarks via Harbor.
+  tunable_params:
+    temperature: "Agent sampling temperature (0.0-1.0)"
+    max_turns: "Maximum agent turns per task"
+    n_concurrent: "Harbor concurrent tasks"
+    timeout_multiplier: "Task timeout multiplier"
+    n_tasks: "Smoke-run cap on number of tasks (null = full benchmark)"

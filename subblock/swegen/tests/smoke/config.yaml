@@ -1,0 +1,85 @@
+# SMOKE CI CONFIG — copied over subblock/swegen/config.yaml by
+# .github/workflows/ci.yml before .github/cicd/smoke/run.sh launches the
+# smoke. Production config lives at subblock/swegen/config.yaml on dev.
+#
+# Design: schema-compatible with the production config — every key that
+# exists in production keeps its name and meaning. Production fields the
+# smoke doesn't consume are pruned. The smoke-specific fields all live in
+# `runtime_info.input.smoke.*`.
+
+meta_info:
+  name: swegen
+  label: "SWE-gen"
+  description: Converts GitHub PRs into verified SWE-Bench tasks. Smoke mode runs against a committed PR list.
+  parent: swe_lego_live
+  subblocks: {}
+
+  repos:
+    swegen:
+      name: swegen
+      commit_id: null
+
+  environment:
+    venv_name: swegen-env
+    venv_path: artifacts/envs/swegen-env
+
+  resources:
+    ip: local
+    user: root
+    pwd: null
+    directory: /gpufs/haoli/code/
+
+runtime_info:
+  input:
+    github_tokens: human
+
+    llm_api:
+      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
+      api_base_url: https://az.gptplus5.com/v1
+      pr_model: deepseek-v4-flash
+      task_model: deepseek-v4-flash
+
+    # Smoke uses only py. Other languages and the adaptive `global` /
+    # `status` blocks from production are dropped; they're not read by
+    # `swegen create`.
+    languages:
+      py:
+        enabled: true
+        params:
+          # SMOKE: shorter than production (was 3200 / 2400 / 20). Same
+          # field names — read by .github/cicd/smoke/run.sh.
+          timeout: 2400
+          cc_timeout: 1800
+          n_concurrent: 1
+
+    # Smoke-only knobs that production config doesn't express (these live
+    # hardcoded inside scripts/create_<lang>.sh in production). The smoke
+    # surfaces them so the smoke shape stays declarative.
+    smoke:
+      max_pr: 1                       # stop after N verified tasks
+      min_source_files: 1             # relax production's --min-source-files 3
+      max_source_files: 10
+      docker_prune_batch: 0
+      # Output subdir, appended to runtime_info.output.swe_tasks_dir.path.
+      # Result: artifacts/swe_tasks/py-cc-smoke (full path used by verify.sh).
+      output_subdir: py-cc-smoke
+      state_subdir: .swegen-smoke-py
+      # PR list the smoke iterates. swegen stops after `max_pr` successfully
+      # verified tasks (1 by default). Keep multiple PRs as fallbacks if an
+      # upstream Dockerfile drifts and one fails to build.
+      input_prs:
+        - tox-dev/tox:pr-3813
+        - tox-dev/tox:pr-3814
+        - AnswerDotAI/RAGatouille:pr-157
+        - tox-dev/tox:pr-3810
+        - electricitymaps/electricitymaps-contrib:pr-8113
+        - tox-dev/tox:pr-3803
+        - morpheus65535/bazarr:pr-2691
+        - tox-dev/tox:pr-3804
+        - tox-dev/tox:pr-3800
+        - electricitymaps/electricitymaps-contrib:pr-8119
+
+  # Reused from production: smoke output paths are derived from this base.
+  output:
+    swe_tasks_dir:
+      path: artifacts/swe_tasks
