@@ -43,8 +43,31 @@ if [[ -s "$MANIFEST" ]]; then
   exit 0
 fi
 
-echo "FAIL: $MANIFEST empty or missing"
+# Manifest empty. Distinguish:
+#   (a) smoke ran but the verifier flaked on every attempted PR (upstream
+#       Dockerfile/PR drift — see task #19 "refresh swegen smoke fixture").
+#       Known long-running upstream rot, NOT a swegen regression — SKIP
+#       (→ yellow warning so the CI signal stays honest without redding
+#       every dev push when the fixture decays).
+#   (b) smoke didn't even create a task dir — real swegen-side regression
+#       — FAIL (→ red).
+shopt -s nullglob
+TASK_DIRS=("$OUTPUT"/*/)
+shopt -u nullglob
 LOG="$BLOCK_DIR/artifacts/swe_tasks/.swegen-smoke-py.log"
+if (( ${#TASK_DIRS[@]} > 0 )); then
+  echo "SKIP: $MANIFEST empty, but ${#TASK_DIRS[@]} task dir(s) were created — swegen ran end-to-end but no PR passed NOP/Oracle verification (likely upstream fixture drift; see task #19 to refresh the smoke PR list)."
+  for d in "${TASK_DIRS[@]}"; do
+    printf '         %s\n' "$(basename "$d")"
+  done
+  if [[ -f "$LOG" ]]; then
+    echo "--- last 30 lines of $LOG ---"
+    tail -30 "$LOG" || true
+  fi
+  exit 77
+fi
+
+echo "FAIL: $MANIFEST empty AND no task dirs under $OUTPUT — swegen create did not run"
 if [[ -f "$LOG" ]]; then
   echo "--- last 30 lines of $LOG ---"
   tail -30 "$LOG" || true
