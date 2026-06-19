@@ -6,10 +6,19 @@ on:
     branches: [dev, main]
   workflow_dispatch:
     inputs:
-      run_smoke:
-        description: "Run subblock smoke tests (real LLM tokens + Docker, ~30 min each)"
-        type: boolean
-        default: false
+      smoke_scope:
+        description: "Which smoke to run (real LLM tokens + Docker/GPU)"
+        type: choice
+        options:
+          - none        # cheap cases only
+          - subblocks   # each subblock's ISOLATED smoke (~30 min each)
+          - root        # the ROOT chained end-to-end smoke (all 4 blocks, hours)
+          - all         # subblocks + root
+        default: none
+      root_budget:
+        description: "Per-stage budget (sec) for the ROOT chain; blank = config defaults (swegen 4h). Set e.g. 1800 for a quick pass."
+        type: string
+        default: ""
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -42,8 +51,11 @@ jobs:
       - name: Install test deps
         run: pip install --no-cache-dir pytest pyyaml
 
-      - name: Run root block tests
-        run: pytest tests/test_root_block.py -v
+      - name: Run root block cheap cases (pytest + shell cases)
+        # tests/run.sh (no --smoke) runs pytest tests/test_root_block.py AND the
+        # tests/cases/*.sh shell cases — all cheap, no network/Docker/GPU. They
+        # read the subblock + tests/smoke config.yaml files present on checkout.
+        run: bash tests/run.sh
 
   # --- Decide which subblocks need their CI run -------------------------------
   detect-changes:
@@ -148,7 +160,7 @@ jobs:
     if: |
       needs.detect-changes.outputs.swegen == 'true' &&
       (
-        (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
@@ -297,7 +309,7 @@ jobs:
     if: |
       needs.detect-changes.outputs.trajgen == 'true' &&
       (
-        (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
@@ -453,7 +465,7 @@ jobs:
     if: |
       needs.detect-changes.outputs.eval == 'true' &&
       (
-        (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
@@ -594,7 +606,7 @@ jobs:
     if: |
       needs.detect-changes.outputs.sft == 'true' &&
       (
-        (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     # Prefers the dedicated `swe-lego-gpu` runner (real 8× GPU host) when it
@@ -670,5 +682,104 @@ jobs:
         with:
           name: sft-smoke-logs-${{ github.run_id }}
           path: subblock/sft/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --- root: CHAINED end-to-end smoke (manual dispatch only) -----------------
+  # Runs tests/smoke/run_pipeline.sh, which overlays each tests/smoke/<block>/
+  # config.yaml and runs all four blocks in sequence (swegen -> trajgen -> sft
+  # -> eval), feeding each block's real output into the next. Far heavier than
+  # the per-block smokes (hours; touches the remote GPU pod for sft + serving),
+  # so it is workflow_dispatch-only and never runs on push. Set `root_budget`
+  # (e.g. 1800) for a quick pass; blank uses the config defaults (swegen 4h),
+  # which can exceed the 6h job cap — tune accordingly.
+  root-smoke:
+    name: root smoke (chained end-to-end)
+    needs: root-block
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.smoke_scope == 'root' || inputs.smoke_scope == 'all')
+    runs-on: [self-hosted, swe-lego-ci]
+    timeout-minutes: 360
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/root-smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/root-smoke-src-tasks /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/root-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-root-smoke /x/SWE-Lego-Live/subblock/sft/artifacts/model/root_smoke_model 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          clean: false
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"; mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source /gpufs/haoli/cicd/shared/.env
+          {
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link runtime state for ALL blocks (swegen, trajgen, sft, eval)
+        run: |
+          set -euo pipefail
+          # swegen — venv + repo + gh_token
+          C="${SHARED_RUNTIME}/swegen"; cd "$GITHUB_WORKSPACE/subblock/swegen"
+          mkdir -p repos artifacts
+          rm -rf repos/swegen artifacts/envs gh_token.txt
+          ln -s "$C/repos/swegen" repos/swegen
+          ln -s "$C/artifacts/envs" artifacts/envs
+          [ -f "$C/gh_token.txt" ] && ln -s "$C/gh_token.txt" gh_token.txt || true
+          # trajgen — uv envs + repos + agent runtime + ledger
+          C="${SHARED_RUNTIME}/trajgen"; cd "$GITHUB_WORKSPACE/subblock/trajgen"
+          mkdir -p repos artifacts
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
+          ln -s "$C/repos/harbor" repos/harbor
+          ln -s "$C/repos/swe_data_process" repos/swe_data_process
+          ln -s "$C/artifacts/env" artifacts/env
+          [ -d "$C/artifacts/agent-runtime" ] && ln -s "$C/artifacts/agent-runtime" artifacts/agent-runtime || true
+          [ -f "$C/artifacts/consumption_ledger.yaml" ] && ln -s "$C/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+          # sft — uv env + repos + 512 fixture (remote pod hosts the GPUs)
+          C="${SHARED_RUNTIME}/sft"; cd "$GITHUB_WORKSPACE/subblock/sft"
+          mkdir -p repos artifacts artifacts/data
+          rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env artifacts/data/examples
+          ln -s "$C/repos/LLaMA-Factory" repos/LLaMA-Factory
+          ln -s "$C/repos/swe_data_process" repos/swe_data_process
+          ln -s "$C/artifacts/env" artifacts/env
+          [ -s "$C/artifacts/data/examples/lf_512.json" ] && ln -s "$C/artifacts/data/examples" artifacts/data/examples || true
+          # eval — uv env + repo + agent runtime
+          C="${SHARED_RUNTIME}/eval"; cd "$GITHUB_WORKSPACE/subblock/eval"
+          mkdir -p repos artifacts
+          rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
+          ln -s "$C/repos/harbor" repos/harbor
+          ln -s "$C/artifacts/env" artifacts/env
+          ln -s "$C/artifacts/runtime" artifacts/runtime
+          [ -f "$C/artifacts/index.yaml" ] && ln -s "$C/artifacts/index.yaml" artifacts/index.yaml || printf 'runs: []\n' > artifacts/index.yaml
+      - name: Run the ROOT chained smoke
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+          LITELLM_NUM_WORKERS: "1"
+        # HOME=/home/haoli so the in-chain `claude -p` launcher finds its auth
+        # (mirrors .github/scripts/smoke_run.sh); CLAUDE_SDK=1 uses that launcher.
+        run: |
+          set -uo pipefail
+          BUDGET_ARG=""
+          [ -n "${{ inputs.root_budget }}" ] && BUDGET_ARG="--budget ${{ inputs.root_budget }}"
+          HOME=/home/haoli CLAUDE_SDK=1 bash tests/smoke/run_pipeline.sh $BUDGET_ARG
+      - name: Upload logs
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-smoke-logs-${{ github.run_id }}
+          path: |
+            .root-smoke-run.log
+            subblock/*/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 14

@@ -1,0 +1,114 @@
+# ROOT SMOKE — stage 1/4: swegen.
+# Overlaid onto subblock/swegen/config.yaml by tests/smoke/run_pipeline.sh
+# before the Claude-SDK launcher kicks off the run. Schema-compatible with the
+# production swegen config: every shared key keeps its name/meaning; production
+# fields this stage doesn't read are pruned; root-smoke-only knobs live under
+# runtime_info.input.smoke.*.
+#
+# Delta from the per-subblock swegen smoke (subblock/swegen/tests/smoke/
+# config.yaml): that smoke iterates a committed 10-PR list and stops at the
+# FIRST verified task. The ROOT smoke instead COLLECTS ~200 PRs from scratch
+# (smoke.collect.*) and generates tasks, stopping after `smoke.max_pr` verified
+# ones — those verified tasks are the real handoff trajgen (stage 2) consumes.
+
+meta_info:
+  name: swegen
+  label: "SWE-gen"
+  description: Converts GitHub PRs into verified SWE-Bench tasks. Root smoke collects ~200 PRs from scratch.
+  parent: swe_lego_live
+  subblocks: {}
+
+  repos:
+    swegen:
+      name: swegen
+      commit_id: null
+
+  environment:
+    venv_name: swegen-env
+    venv_path: artifacts/envs/swegen-env
+
+  resources:
+    ip: local
+    user: root
+    pwd: null
+    directory: /gpufs/haoli/code/
+
+runtime_info:
+  input:
+    github_tokens: human
+
+    # deepseek-v4-flash: GLM-5-FP8 via llm10's anthropic-compatible endpoint
+    # fails categorically for swegen's Claude Code SDK task-completion step
+    # (0/46 succeeded — "error result: success"). deepseek-v4-flash drives the
+    # SDK correctly (matches PR #49's subblock revert).
+    llm_api:
+      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
+      api_base_url: https://az.gptplus5.com/v1
+      pr_model: deepseek-v4-flash
+      task_model: deepseek-v4-flash
+
+    languages:
+      py:
+        enabled: true
+        params:
+          # Root smoke: full-ish per-task budget so verified tasks actually
+          # materialize (the 1-PR subblock smoke can afford to be stingier).
+          timeout: 3000
+          cc_timeout: 2200
+          n_concurrent: 4
+
+    # Root-smoke-only knobs. Production hardcodes these inside
+    # scripts/create_<lang>.sh; the smoke surfaces them so the chain stays
+    # declarative and tests/cases/07 can validate the scale.
+    smoke:
+      # Stop after N verified tasks. >1 so trajgen (stage 2) has several tasks
+      # to infer on — with a single task, reward==1 becomes a coin-flip and the
+      # whole chain gets flaky on one trial's luck.
+      max_pr: 5
+      min_source_files: 1
+      max_source_files: 10
+      docker_prune_batch: 10
+      # Verified tasks land here (appended to runtime_info.output.swe_tasks_dir.path).
+      # Result: artifacts/swe_tasks/py-cc-root-smoke — the dir trajgen consumes.
+      output_subdir: py-cc-root-smoke
+      state_subdir: .swegen-root-smoke-py
+
+      # Collect ~200 PRs from scratch (design step 1). run_pipeline.sh runs
+      # repos/swegen/tools/collect_prs_wo_image.py with these params, then feeds
+      # the resulting <lang>_pr_ids.txt into `swegen create`.
+      collect:
+        enabled: true
+        languages: python
+        # Genuinely pull ~200 PRs from scratch (design step 1). The collector
+        # (repos/swegen/tools/collect_prs_wo_image.py) stops once it has
+        # `repo_num` QUALIFYING repos, each contributing up to `max_prs_per_repo`
+        # PRs, so repo_num*max_prs_per_repo is the upper bound on the pool; the
+        # orchestrator then head-caps to `target_prs`. time_budget_s is a
+        # generous backstop (collection runs to completion well within it), NOT
+        # a 20-min cap. The committed fallback_prs is now an EMERGENCY floor only
+        # (used when collection yields < min_ids — i.e. an endpoint/API outage),
+        # not the normal path. repo_num*max_prs_per_repo >= target_prs (cases/07).
+        repo_num: 15
+        max_prs_per_repo: 50
+        target_prs: 200
+        time_budget_s: 7200       # generous backstop for a real ~200-PR pull
+        min_ids: 8                # emergency-only fallback floor
+        # Known-good PRs (shared with the subblock swegen smoke) — the safety net
+        # so the chain never stalls on collection flakiness. Real PRs, real
+        # create/verify downstream.
+        fallback_prs:
+          - tox-dev/tox:pr-3813
+          - tox-dev/tox:pr-3814
+          - tox-dev/tox:pr-3810
+          - tox-dev/tox:pr-3803
+          - tox-dev/tox:pr-3804
+          - tox-dev/tox:pr-3800
+          - AnswerDotAI/RAGatouille:pr-157
+          - electricitymaps/electricitymaps-contrib:pr-8113
+          - electricitymaps/electricitymaps-contrib:pr-8119
+          - morpheus65535/bazarr:pr-2691
+        output_dir: artifacts/collected_prs/root-smoke
+
+  output:
+    swe_tasks_dir:
+      path: artifacts/swe_tasks
