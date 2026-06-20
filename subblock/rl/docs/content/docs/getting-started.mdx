@@ -16,7 +16,7 @@ about getting that runtime, the policy model, and a sandbox backend in place.
   or a **Docker** daemon (local or remote) for Harbor to run each trial in.
 - **[uv](https://docs.astral.sh/uv/)** — used by `setup_env.sh` to build the
   training venv (vllm, flash_attn, verl, harbor, harbor-verl-train, editable).
-- **A policy checkpoint** — e.g. an `sft`-trained Qwen3 model on local disk.
+- **A policy checkpoint** — e.g. a `trainer`-produced Qwen3 model on local disk.
 - **Train/val task indexes** — Harbor task parquet files (`*.parquet`) that the
   trainer samples rollouts from.
 

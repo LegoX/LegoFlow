@@ -1,6 +1,0 @@
-{
-  "name": "swegen",
-  "description": "swegen block skills — env/venv bootstrap, preflight (GitHub tokens + LLM endpoint + docker), dashboard, and pipeline launch (PR collection → task generation → verification). Provides /swegen:setup, /swegen:check, /swegen:dashboard, /swegen:run.",
-  "version": "0.1.0",
-  "author": { "name": "haoli" }
-}

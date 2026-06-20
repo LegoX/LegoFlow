@@ -1,0 +1,16 @@
+---
+title: Memory
+block: evaluator
+source: memory/notes.md
+---
+
+# Memory
+
+Long-form context is maintained in `memory/notes.md`.
+
+## Current Notes
+
+- Harbor is a managed local dependency under `repos/harbor`.
+- `repos/harbor` is gitignored and managed by `scripts/update_repos.sh`.
+- Benchmark task data is loaded from Harbor's `registry.json` (no local `artifacts/tasks/`).
+- Harbor job outputs and LiteLLM trajectory logs live under `artifacts/jobs`.

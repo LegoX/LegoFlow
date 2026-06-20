@@ -23,7 +23,7 @@ The values a block needs that originate **outside** the block tree: API keys, Gi
 
 ## `runtime_info.output`
 
-The values a block publishes once it has run, for downstream blocks to consume — e.g. `swegen.output.swe_tasks_dir`. Downstream blocks reference these through `dependencies`, never by hand.
+The values a block publishes once it has run, for downstream blocks to consume — e.g. `curator.output.swe_tasks_dir`. Downstream blocks reference these through `dependencies`, never by hand.
 
 ## Dependency
 
@@ -31,7 +31,7 @@ Inter-block values are wired in `meta_info.subblocks[].dependencies` as `<source
 
 ## Repo
 
-A vendored, pinned dependency under a block's `repos/` directory (e.g. `trajgen/repos/harbor/`). Pinned by commit SHA in `config.yaml` under `meta_info.repositories.<name>`. Editing files under `repos/` is forbidden — auth/env fixes belong in `scripts/` or `config.yaml`.
+A vendored, pinned dependency under a block's `repos/` directory (e.g. `tracer/repos/harbor/`). Pinned by commit SHA in `config.yaml` under `meta_info.repositories.<name>`. Editing files under `repos/` is forbidden — auth/env fixes belong in `scripts/` or `config.yaml`.
 
 ## Resources
 

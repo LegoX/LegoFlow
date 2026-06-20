@@ -10,7 +10,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 
 - **Name**: rl
 - **Role**: Training — single-node sync RL (PPO/GRPO/GSPO) over agent trajectories
-- **Parent**: swe_lego_live
+- **Parent**: lego_factory
 - **Children**: none
 
 ## What To Read First
@@ -181,7 +181,7 @@ python3 -c "import ray; ray.init(address='auto', ignore_reinit_error=True); \
 | Symptom | Likely cause |
 |---|---|
 | `connection refused` on :8002 for >30 min | vLLM not registering — check `logs/<exp_name>.log` for vLLM init errors |
-| GPU memory high, util 0% sustained during rollout | k8s side stuck (no traffic from claude-code pods) — `kubectl get pods -l harbor-run=swe-lego-live-rl` |
+| GPU memory high, util 0% sustained during rollout | k8s side stuck (no traffic from claude-code pods) — `kubectl get pods -l harbor-run=lego-factory-rl` |
 | `CUDA error: an illegal memory access` at first forward pass | `vllm.gen_tp` does not divide `num_key_value_heads` — re-run `dryrun.sh` |
 | LiteLLM started but `claude-code` returns 404 | model name mismatch — proxy serves `claude-*`, `hosted_vllm/<served>`, and `<served>` aliases |
 
@@ -231,7 +231,7 @@ nohup python3 server.py \
 | `--static-dir` | Frontend build output | `dist` (auto-detected) |
 | `--port` | Listen port | `8080` |
 | `--wandb-entity` | WandB entity for fetching runs | `$WANDB_ENTITY` |
-| `--wandb-project` | WandB project name | `swe-lego-live-rl` |
+| `--wandb-project` | WandB project name | `lego-factory-rl` |
 | `--wandb-api-key` | WandB API key | `$WANDB_API_KEY` |
 
 ### Features
@@ -292,4 +292,4 @@ yourself for now.
 The pre-`ydu_dev` versions of `artifacts/`, `scripts/`, `CLAUDE.md`, and
 `config.yaml` (last update 2026-05-06, written for the rLLM/Hydra-override
 launch path) are preserved at:
-`/mnt/ydu/SWE-Lego-Live-RL-rl-legacy-backup/`.
+`/mnt/ydu/LegoFactory-RL-rl-legacy-backup/`.

@@ -1,4 +1,4 @@
-# SWE-Lego-Live
+# LegoFactory
 
 A self-evolving LLM development pipeline. It generates coding-agent training data from real GitHub PRs, runs agent trajectories, and feeds the results into SFT and RL training — all coordinated by an AI agent that monitors progress and tunes parameters automatically.
 
@@ -10,15 +10,15 @@ This entire project is built on a **block** abstraction. The pipeline consists o
 
 | Block | Role | Primary output |
 |-------|------|----------------|
-| `subblock/swegen/` | Converts GitHub PRs → verified SWE tasks | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` |
-| `subblock/trajgen/` | Runs an agent on SWE tasks → raw trajectories | `artifacts/jobs/<job>/` (Harbor job dirs) |
-| `subblock/sft/` | Converts trajectories → sharegpt data, trains with LLaMA-Factory | `artifacts/model/<run>/` (checkpoints) |
+| `subblock/curator/` | Converts GitHub PRs → verified SWE tasks | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` |
+| `subblock/tracer/` | Runs an agent on SWE tasks → raw trajectories | `artifacts/jobs/<job>/` (Harbor job dirs) |
+| `subblock/trainer/` | Converts trajectories → sharegpt data, trains with LLaMA-Factory | `artifacts/model/<run>/` (checkpoints) |
 | `subblock/rl/` | Online RL (GRPO/GSPO) on SWE-bench via Harbor + vLLM + verl | `repos/harbor-verl-train/outputs/` (actor checkpoints) |
 
 
 ### What is a Block?
 
-Each unit of work — `swegen`, `trajgen`, `sft`, `rl` — is a self-contained directory with the same fixed structure:
+Each unit of work — `curator`, `tracer`, `trainer`, `rl` — is a self-contained directory with the same fixed structure:
 
 - `config.yaml` declares the block's inputs, outputs, children, dependencies between children, and (optionally) a remote node it must run on. It is **one-shot per run** — every key is configuration; no live state is stored here.
 - `scripts/start.sh`, `dryrun.sh`, `clean.sh`, `archive_run.sh` are how it actually executes. `start.sh` installs an EXIT trap that fires `archive_run.sh` on completion (success, failure, or signal), producing a `artifacts/archives/run_NNN/` snapshot and appending one entry to `artifacts/index.yaml`.
@@ -34,7 +34,7 @@ GitHub PRs
     │
     ▼
 ┌────────┐  SWE tasks  ┌─────────┐  trajectories  ┌─────┐  ┌────┐
-│ swegen │ ──────────► │ trajgen │ ─────────────► │ sft │─►│ rl │
+│ curator │ ──────────► │ tracer │ ─────────────► │ trainer │─►│ rl │
 └────────┘             └─────────┘                └─────┘  └────┘
 ```
 
@@ -42,12 +42,12 @@ GitHub PRs
 ## Project Layout
 
 ```
-SWE-Lego-Live/
+LegoFactory/
 ├── CLAUDE.md                  # root block agent contract
 ├── BLOCK_DEFINITION.md        # block system specification
 ├── scripts/
 │   ├── dryrun.sh              # validate root block
-│   ├── start.sh               # launch data blocks (swegen + trajgen); installs EXIT-trap → archive_run.sh
+│   ├── start.sh               # launch data blocks (curator + tracer); installs EXIT-trap → archive_run.sh
 │   ├── archive_run.sh         # snapshot config + scripts + repo SHAs → artifacts/archives/run_NNN/
 │   └── clean.sh               # purge intermediate artifacts (keeps env/, index.yaml, archives/)
 ├── dashboard/
@@ -56,26 +56,26 @@ SWE-Lego-Live/
 │   ├── index.yaml             # append-only run index (newest entry = live state)
 │   └── archives/run_NNN/      # per-run snapshots (metadata.yaml + config.yaml + scripts/)
 └── subblock/
-    ├── swegen/                # SWE task generation block (same scripts/ + artifacts/ layout)
-    ├── trajgen/               # trajectory generation block
-    ├── sft/                   # SFT training block
+    ├── curator/                # SWE task generation block (same scripts/ + artifacts/ layout)
+    ├── tracer/               # trajectory generation block
+    ├── trainer/                   # SFT training block
     └── rl/                    # RL training block
 ```
 
 
 ## Quick Start
 
-Run the pipeline block by block in order: **swegen → trajgen → sft → rl**. Each step produces artifacts the next block depends on. You can also run blocks individually once their inputs and upstream dependencies are satisfied.
+Run the pipeline block by block in order: **curator → tracer → trainer → rl**. Each step produces artifacts the next block depends on. You can also run blocks individually once their inputs and upstream dependencies are satisfied.
 
 ### Prerequisites
 
 - **All blocks**: Claude Code with this repo's block plugin loaded (`/reload-plugins` shows `1 plugin · 3 skills`); `git submodule update --init --recursive` after clone
-- **swegen**: GitHub token(s) with `repo` read scope; OpenAI-compatible LLM API; Docker on the run host
-- **trajgen**: OpenAI-compatible LLM API; Docker; verified tasks from swegen (wired via `meta_info.dependencies`)
-- **sft**: Multi-GPU node (typically 8× GPU); conda env and model paths per `subblock/sft/CLAUDE.md`; trajectory source (from trajgen or an existing job dir)
+- **curator**: GitHub token(s) with `repo` read scope; OpenAI-compatible LLM API; Docker on the run host
+- **tracer**: OpenAI-compatible LLM API; Docker; verified tasks from swegen (wired via `meta_info.dependencies`)
+- **trainer**: Multi-GPU node (typically 8× GPU); conda env and model paths per `subblock/trainer/CLAUDE.md`; trajectory source (from tracer or an existing job dir)
 - **rl**: Multi-GPU node; Kubernetes access for Harbor task execution; vLLM + Ray; paths to SWE-bench parquet/task data per `subblock/rl/CLAUDE.md`; optional WandB key
 
-Root `scripts/start.sh` only automates the **data** stage (swegen + trajgen on the configured remote node). **sft** and **rl** are started from their own directories via `/root:run` or `scripts/start.sh`.
+Root `scripts/start.sh` only automates the **data** stage (curator + tracer on the configured remote node). **trainer** and **rl** are started from their own directories via `/root:run` or `scripts/start.sh`.
 
 ### The `Block` Plugin
 
@@ -89,12 +89,12 @@ Both `/root:check` and `/root:run` take a free-form natural-language argument. T
 
 ```text
 /root:run                                       # root orchestrator
-/root:run swegen                                # subblock/swegen
-/root:run swegen only 32 verified tasks         # swegen + propose config/flag change, confirm, run
-/root:run run swegen with 32 verified tasks     # same — block name embedded in sentence
-/root:run run the trajectory generator          # trajgen — resolved by paraphrase
+/root:run curator                                # subblock/curator
+/root:run curator only 32 verified tasks         # curator + propose config/flag change, confirm, run
+/root:run run curator with 32 verified tasks     # same — block name embedded in sentence
+/root:run run the trajectory generator          # tracer — resolved by paraphrase
 /root:run start the data pipeline               # root — no block mentioned
-/root:run run swegen and trajgen                # ambiguous — agent asks which one
+/root:run run curator and tracer                # ambiguous — agent asks which one
 ```
 
 For `/root:run`, if the instruction implies a config edit or flag injection, the agent proposes the concrete change (file path, old → new value) and confirms before applying. For `/root:check`, the instruction only shapes the report's focus — every check still runs, and no files are ever modified.
@@ -103,8 +103,8 @@ For `/root:run`, if the instruction implies a config edit or flag injection, the
 ### 1. Clone
 
 ```bash
-git clone --recurse-submodules <repo-url> SWE-Lego-Live
-cd SWE-Lego-Live
+git clone --recurse-submodules <repo-url> LegoFactory
+cd LegoFactory
 ```
 
 If you already cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.
@@ -115,12 +115,12 @@ Open Claude Code in the repo root, then ask:
 
 ```text
 /root:check              # check root + every subblock
-/root:check swegen       # only check the swegen subblock
+/root:check curator       # only check the curator subblock
 ```
 
 On a fresh clone, the report tells you exactly which `runtime_info.input` keys are unfilled, which submodules are missing, whether the remote node is reachable, and whether your LLM endpoint answers a `GET /models` probe (no chat-completion calls — `/root:check` never costs anything to run). You don't need to read each `config.yaml` cold; let the skill point at the gaps.
 
-Pass a subblock name (e.g. `/root:check trajgen`) when you're iterating on one block and don't want noise from the others.
+Pass a subblock name (e.g. `/root:check tracer`) when you're iterating on one block and don't want noise from the others.
 
 ### 3. Fill the gaps
 
@@ -128,9 +128,9 @@ Edit each `config.yaml` flagged in step 2, setting only keys under `runtime_info
 
 | Block | What to fill (see that block's `CLAUDE.md` for the full list) |
 |-------|------------------------------------------------------------------|
-| **swegen** | `github_tokens`; `llm_api` (api_key, api_base_url, pr_model, task_model) |
-| **trajgen** | `llm_api` (api_key, api_base_url, model); task source comes from swegen dependency |
-| **sft** | `source` (provider, scaffold, job_dir / trajs_dir); `conversion`; `model`; `training`; `infrastructure`; `credentials` (WandB if online) |
+| **curator** | `github_tokens`; `llm_api` (api_key, api_base_url, pr_model, task_model) |
+| **tracer** | `llm_api` (api_key, api_base_url, model); task source comes from swegen dependency |
+| **trainer** | `source` (provider, scaffold, job_dir / trajs_dir); `conversion`; `model`; `training`; `infrastructure`; `credentials` (WandB if online) |
 | **rl** | `model`; `infrastructure` (nodes, GPUs, K8s); `training`; `data` (parquet + Harbor task dirs); `experiment`; `credentials` |
 
 Re-run `/root:check` until it prints `All blocks healthy — safe to /root:run.`
@@ -139,39 +139,39 @@ Re-run `/root:check` until it prints `All blocks healthy — safe to /root:run.`
 
 Invoke `/root:run <block_name>` from the repo root, or `cd` into the subblock and invoke `/root:run` with no args. Both forms are equivalent. Preflight matches `/root:check`; execution runs locally or over SSH + tmux when `meta_info.resources.ip` is set. Each run archives under `artifacts/archives/run_NNN/` automatically — `start.sh`'s EXIT trap fires `scripts/archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM).
 
-**1. swegen** — generate and validate SWE tasks:
+**1. curator** — generate and validate SWE tasks:
 
 ```text
-/root:run swegen        # from repo root
+/root:run curator        # from repo root
 # or, equivalently:
-cd subblock/swegen && /root:run
+cd subblock/curator && /root:run
 ```
 
-**2. trajgen** — run the agent on verified tasks (after swegen has entries in `verifiable_tasks.txt`):
+**2. tracer** — run the agent on verified tasks (after curator has entries in `verifiable_tasks.txt`):
 
 ```text
-/root:run trajgen
+/root:run tracer
 ```
 
-**3. sft** — convert trajectories and fine-tune (after trajgen job dirs exist; `trajectories_dir` dependency points at trajgen output):
+**3. trainer** — convert trajectories and fine-tune (after tracer job dirs exist; `trajectories_dir` dependency points at tracer output):
 
 ```text
-/root:run sft
+/root:run trainer
 ```
 
-**4. rl** — online RL from the SFT checkpoint (after sft writes `runtime_info.output.checkpoint_path`):
+**4. rl** — online RL from the SFT checkpoint (after trainer writes `runtime_info.output.checkpoint_path`):
 
 ```text
 /root:run rl
 ```
 
-You can also run the **root orchestrator** to launch the data stage (swegen + trajgen on the configured remote node) as one step:
+You can also run the **root orchestrator** to launch the data stage (curator + tracer on the configured remote node) as one step:
 
 ```text
 /root:run              # equivalent to: bash scripts/start.sh
 ```
 
-`bash scripts/start.sh` directly also works and accepts `--swegen-only` / `--trajgen-only` for selective launching.
+`bash scripts/start.sh` directly also works and accepts `--curator-only` / `--tracer-only` for selective launching.
 
 ### 5. Monitor
 

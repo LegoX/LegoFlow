@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build the SWE-Lego-Live root docs (fumadocs/Next.js static export) and deploy
+# Build the LegoFactory root docs (fumadocs/Next.js static export) and deploy
 # to a dedicated Cloudflare Pages project. Independent of the per-subblock docs
-# projects (e.g. swe-trajgen-docs); this one defaults to swe-lego-live-docs.
+# projects (e.g. swe-tracer-docs); this one defaults to lego-factory-docs.
 #
-# Reuses the same Cloudflare credentials pattern as the trajgen dashboard sync:
+# Reuses the same Cloudflare credentials pattern as the tracer dashboard sync:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
 # read from $ENV_FILE (default ~/.config/trajgen_progress_cloudflare.env), or
 # already-exported env vars (e.g. via .env.cf).
@@ -12,7 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PROJECT_NAME="${PROJECT_NAME:-swe-lego-live-docs}"
+PROJECT_NAME="${PROJECT_NAME:-lego-factory-docs}"
 BRANCH_NAME="${BRANCH_NAME:-main}"
 OUT_DIR="${OUT_DIR:-out}"
 # Node 22 supports current wrangler.
@@ -38,9 +38,9 @@ fi
 log "Using node $(node -v), npm $(npm -v)"
 
 # 2. Load Cloudflare credentials. Shared env files may set PROJECT_NAME for the
-# trajgen DASHBOARD project; capture our targets first, then prefer the file's
+# tracer DASHBOARD project; capture our targets first, then prefer the file's
 # ROOT_DOCS_PROJECT_NAME / ROOT_DOCS_BRANCH_NAME if present so this script does
-# not collide with the trajgen projects.
+# not collide with the tracer projects.
 WANT_PROJECT="$PROJECT_NAME"
 WANT_BRANCH="$BRANCH_NAME"
 if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" || -f "$ENV_FILE" ]]; then

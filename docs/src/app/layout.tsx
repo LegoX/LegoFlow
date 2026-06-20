@@ -5,7 +5,7 @@ import "./global.css";
 export const metadata: Metadata = {
   title: "LegoFactory",
   description:
-    "A self-evolving LLM development pipeline composed of pluggable blocks: swegen → trajgen → sft → rl.",
+    "A self-evolving LLM development pipeline composed of pluggable blocks: curator → tracer → trainer → rl.",
 };
 
 export default function Layout({ children }: LayoutProps<"/">) {

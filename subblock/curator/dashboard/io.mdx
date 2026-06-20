@@ -1,0 +1,30 @@
+# Curator — Inputs & Outputs
+
+See `config.yaml` for the full dependency schema.
+
+## Runtime Inputs (`config.yaml`)
+
+| Field | Description |
+|-------|-------------|
+| `global.*` | Monitor interval, PR pool thresholds, param bounds |
+| `languages.{lang}.params` | Per-language timeout, cc_timeout, n_concurrent |
+| `languages.{lang}.status` | Live per-language metrics (agent-updated) |
+
+Environment variables required before running:
+
+| Variable | Purpose |
+|----------|---------|
+| `GITHUB_TOKENS` | Comma-separated GitHub tokens |
+| `OPENAI_API_KEY` | LLM API key |
+| `OPENAI_API_BASE_URL` | OpenAI-compatible endpoint |
+| `OPENAI_MODEL` | Model for PR evaluation |
+| `ANTHROPIC_MODEL` | Model for Claude Code SDK |
+
+## Runtime Outputs (`config.yaml`)
+
+Verified SWE tasks can be merged into `artifacts/merged_swe_tasks/{task_id}/`. Each task contains:
+- `instruction.md` — problem description
+- `environment/Dockerfile` — build environment
+- `environment/bug.patch` — bug-introducing patch
+- `solution/fix.patch` — ground truth fix
+- `tests/test.sh` — verification script

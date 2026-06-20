@@ -11,7 +11,7 @@ Every block in LegoFactory is operated through the same three Claude Code skills
 | `/<block>:check` | Validate config, inputs, environments, and live endpoints | Read-only |
 | `/<block>:run` | Execute the block end-to-end and archive the run | Long-running; modifies artifacts |
 
-Replace `<block>` with the block name — `swegen`, `trajgen`, `sft`, or `rl`. Same three verbs, every block.
+Replace `<block>` with the block name — `curator`, `tracer`, `trainer`, or `rl`. Same three verbs, every block.
 
 ## A short note on blocks
 
@@ -22,16 +22,16 @@ For the full design — schema, dependency rules, archive format, the `root` plu
 ## Prerequisites
 
 - **Claude Code** with this repo's plugin loaded — `/reload-plugins` should show `1 plugin · 3 skills`.
-- **Docker** on whichever host runs `swegen` and `trajgen` (containerized rollouts).
-- **8× GPU node** for `sft` and `rl`.
-- **An OpenAI-compatible LLM endpoint** with an API key — `swegen` and `trajgen` both call it.
-- **GitHub token(s)** with `repo` read scope, for PR collection in `swegen`.
+- **Docker** on whichever host runs `curator` and `tracer` (containerized rollouts).
+- **8× GPU node** for `trainer` and `rl`.
+- **An OpenAI-compatible LLM endpoint** with an API key — `curator` and `tracer` both call it.
+- **GitHub token(s)** with `repo` read scope, for PR collection in `curator`.
 
 ## 1. Clone
 
 ```bash
-git clone --recurse-submodules <repo-url> SWE-Lego-Live
-cd SWE-Lego-Live
+git clone --recurse-submodules <repo-url> LegoFactory
+cd LegoFactory
 ```
 
 If you cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.
@@ -41,9 +41,9 @@ If you cloned without `--recurse-submodules`, run `git submodule update --init -
 Run setup once per block, in pipeline order:
 
 ```text
-/swegen:setup        # clone repos, build envs, prepare default config
-/trajgen:setup
-/sft:setup
+/curator:setup        # clone repos, build envs, prepare default config
+/tracer:setup
+/trainer:setup
 /rl:setup
 ```
 
@@ -54,9 +54,9 @@ Each `:setup` is idempotent and safe to re-run — it only fills in fields that 
 `<block>:check` is read-only. It validates the schema, every filled input, every inter-block dependency, repo pins, environment paths, and live LLM endpoints (via a no-cost `GET /models` probe). It never modifies anything and never costs anything.
 
 ```text
-/swegen:check
-/trajgen:check
-/sft:check
+/curator:check
+/tracer:check
+/trainer:check
 /rl:check
 ```
 
@@ -67,9 +67,9 @@ Run `:check` after every config edit. It tells you exactly which input is unfill
 Only run after the matching `:check` passes:
 
 ```text
-/swegen:run          # generate and verify SWE tasks
-/trajgen:run         # roll the agent out across verified tasks
-/sft:run             # convert trajectories + SFT
+/curator:run          # generate and verify SWE tasks
+/tracer:run         # roll the agent out across verified tasks
+/trainer:run             # convert trajectories + SFT
 /rl:run              # online RL from the SFT checkpoint
 ```
 
@@ -83,7 +83,7 @@ The block's own artifacts are the source of truth:
 - `artifacts/archives/run_NNN/metadata.yaml` — id, timestamps, exit code, repo SHAs
 - `artifacts/archives/run_NNN/config.yaml` — the frozen config that produced this run
 
-For visual progress, every block also ships a `:dashboard` skill — e.g. `/trajgen:dashboard` for trajectory rollouts, `/sft:dashboard` for training loss. See each block's own docs under [Sub-block](/docs/sub-block/swegen).
+For visual progress, every block also ships a `:dashboard` skill — e.g. `/tracer:dashboard` for trajectory rollouts, `/trainer:dashboard` for training loss. See each block's own docs under [Sub-block](/docs/sub-block/curator).
 
 ## Working at the root
 
@@ -91,8 +91,8 @@ For visual progress, every block also ships a `:dashboard` skill — e.g. `/traj
 
 ```text
 /root:check                         # check root + every subblock
-/root:check swegen                  # one block at a time
-/root:run trajgen                   # equivalent to /trajgen:run
+/root:check curator                  # one block at a time
+/root:run tracer                   # equivalent to /tracer:run
 /root:run start the data pipeline   # paraphrased; resolves to the root orchestrator
 ```
 

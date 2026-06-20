@@ -1,9 +1,9 @@
 {
     "title": "Blocks",
     "pages": [
-        "swegen",
-        "trajgen",
-        "sft",
+        "curator",
+        "tracer",
+        "trainer",
         "rl"
     ]
 }

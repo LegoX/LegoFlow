@@ -1,0 +1,82 @@
+---
+title: Inputs & Outputs
+description: The config-driven input/output contract
+---
+
+trainer is configured entirely through [`config.yaml`](https://github.com/SWE-Lego/LegoFactory/blob/main/subblock/trainer/config.yaml). It uses `config.yaml` rather than a separate `inputs.yaml` because the file describes a full training run profile, not just upstream inputs. Treat `config.yaml` as the source of truth before launching a run, and validate it with `bash scripts/dryrun.sh`.
+
+## Inputs
+
+Read from `config.yaml` → `runtime_info.input`:
+
+| Name | Description | Source |
+| --- | --- | --- |
+| `source.type` | Where the LF dataset comes from: `harbor_job` \| `hf_lf` \| `local_lf` | external |
+| `source` | Per-type fields: `scaffold`+`job_dir` (harbor), `hf_hub_url`+`hf_subset`+`hf_split` (hf), `lf_path` (local) | dependency / external |
+| `conversion` | `max_instances`, `exclude_repos_file`, `data_name` | external |
+| `dataset` | LLaMA-Factory dataset registration (auto-derived from `data_name`) | derived |
+| `model` | Base model path and `trust_remote_code` | external |
+| `training` | Stage, deepspeed, template, cutoff, batch size, lr, epochs, … | external |
+| `infrastructure` | `n_gpus_per_node` | external |
+| `experiment` | WandB mode and run name | external |
+| `credentials` | WandB API key, `hf_token` (private `hf_lf` datasets) | external |
+
+When `source.type` is `harbor_job` (the default), `source.job_dir` is the handoff from tracer, wired via `meta_info.dependencies.trajectories_dir` (`tracer.output.raw_trajectories_dir`). For `hf_lf` / `local_lf` the input is a ready-made LF/ShareGPT dataset and conversion is skipped — see [Input sources](/docs/data-pipeline#input-sources).
+
+## Active runtime values
+
+Excerpted from `config.yaml`:
+
+```yaml
+source:
+  type: harbor_job             # harbor_job | hf_lf | local_lf
+  scaffold: claude-code        # openhands-sdk | claude-code | open-code | terminus2
+  job_dir: ".../tracer/artifacts/jobs/<job>"
+  # hf_lf:    hf_hub_url / hf_subset / hf_split
+  # local_lf: lf_path
+conversion:
+  max_instances: 64
+  exclude_repos_file: artifacts/data/excluded_repos.txt
+  data_name: "m_2.7_swerebenchv2-200-260429_cc_test"
+model:
+  model_name_or_path: /mnt/public/models/Qwen3-8B
+  trust_remote_code: true
+training:
+  stage: sft
+  finetuning_type: full
+  deepspeed: artifacts/training_config/deepspeed/ds_z3_config.json
+  template: qwen3_nothink
+  cutoff_len: 131072
+  rope_scaling: yarn
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 1.0e-4
+  num_train_epochs: 4.0
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.1
+  bf16: true
+  flash_attn: fa2
+infrastructure:
+  n_gpus_per_node: 8
+experiment:
+  wandb_mode: offline
+```
+
+See [Configuration](/docs/training/configuration) for what each training field controls.
+
+## Outputs
+
+Written to `config.yaml` → `runtime_info.output`:
+
+| Output | Path / value | Consumer |
+| --- | --- | --- |
+| `checkpoint_path` | `artifacts/model/<run>/checkpoint-<step>/` | `rl`, `evaluator` |
+| `training_metrics` | `final_loss`, `train_runtime`, `total_steps` | reporting |
+| `artifacts` | `train_results.json`, `training_loss.png`, console log | reporting |
+| `training_curves` | wandb run id, when available | reporting |
+
+See [Results & Artifacts](/docs/training/results-and-artifacts) for the full layout, and [Config Variants](/docs/reference/config-variants) for running experiments without disturbing the active profile.
+
+## Environment
+
+The training environment is a `uv` venv at `meta_info.environment.sft_uv` (default `artifacts/env/lf`, Python 3.12). Recreate it with `bash scripts/install_env.sh`. It is excluded from the repo, so its contents are not version-controlled.

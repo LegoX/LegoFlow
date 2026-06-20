@@ -1,0 +1,246 @@
+meta_info:
+  name: curator
+  label: "Curator"
+  description: Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages. Runs as an adaptive agent that monitors per-language success rates and tunes pipeline parameters automatically.
+  parent: lego_factory
+  subblocks: {}
+
+  repos:
+    swegen:
+      name: swegen
+      commit_id: null # latest
+      role: core pipeline — CLI, task generation, validation, scoring
+
+  environment:
+    venv_name: swegen-env
+    venv_path: artifacts/envs/swegen-env
+    requirements: repos/swegen/pyproject.toml
+    python_version: "3.10+"
+    description: Virtual environment for swegen CLI and dependencies
+
+  resources:
+    ip: local        # CPU-only; runs on any node with Docker available
+    user: root
+    pwd: null
+    directory: /gpufs/haoli/code/
+    description: cpu node server for k8s cluster. By default you should work at ${directory}
+    public_storage: null
+
+runtime_info:
+  input:
+    github_tokens: human              # Comma-separated GitHub API tokens for PR collection
+
+    # llm_api:
+    #   api_key: dummy-cf
+    #   api_base_url: "http://llm10.jierungogogo.com/v1"
+    #   pr_model: "GLM-5-FP8"
+    #   task_model: "GLM-5-FP8"
+
+    # Backup provider (uncomment block and comment the one above to switch):
+    llm_api:
+      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
+      api_base_url: https://az.gptplus5.com/v1
+      pr_model: deepseek-v4-flash
+      task_model: deepseek-v4-flash
+
+    # Adaptive tuning configuration
+    global:
+      monitor_interval_min: 30
+      pr_pool_min_threshold: 100
+      collect_pr_defaults:
+        repo_num: 100
+        max_prs_per_repo: 50
+      restart_policy:
+        allowed: true
+        zero_success_cycles: 3
+      param_bounds:
+        timeout:
+          min: 2400
+          max: 5400
+          step: 400
+        cc_timeout:
+          min: 1800
+          max: 4200
+          step: 300
+        n_concurrent:
+          min: 4
+          max: 32
+          step: 4
+
+    languages:
+      py:
+        enabled: true
+        params:
+          timeout: 3200
+          cc_timeout: 2400
+          n_concurrent: 20
+        status:
+          total_success: 3
+          total_failed: 1
+          total_filtered: 1
+          pr_pool_remaining: 10
+          last_round_success: 1
+          last_round_failed: 1
+          success_rate: 0.5
+          zero_success_streak: 0
+          last_checked: '2026-04-22T12:00:06.085014+00:00'
+      js:
+        enabled: true
+        params:
+          timeout: 3200
+          cc_timeout: 2400
+          n_concurrent: 16
+        status:
+          total_success: 0
+          total_failed: 0
+          total_filtered: 0
+          pr_pool_remaining: 0
+          last_round_success: 0
+          last_round_failed: 0
+          success_rate: 0.0
+          zero_success_streak: 0
+          last_checked: null
+      ts:
+        enabled: true
+        params:
+          timeout: 3600
+          cc_timeout: 3000
+          n_concurrent: 16
+        status:
+          total_success: 0
+          total_failed: 0
+          total_filtered: 0
+          pr_pool_remaining: 0
+          last_round_success: 0
+          last_round_failed: 0
+          success_rate: 0.0
+          zero_success_streak: 0
+          last_checked: null
+      go:
+        enabled: true
+        params:
+          timeout: 3200
+          cc_timeout: 2400
+          n_concurrent: 16
+        status:
+          total_success: 0
+          total_failed: 0
+          total_filtered: 0
+          pr_pool_remaining: 0
+          last_round_success: 0
+          last_round_failed: 0
+          success_rate: 0.0
+          zero_success_streak: 0
+          last_checked: null
+      c:
+        enabled: true
+        params:
+          timeout: 3200
+          cc_timeout: 2400
+          n_concurrent: 16
+        status:
+          total_success: 0
+          total_failed: 0
+          total_filtered: 0
+          pr_pool_remaining: 0
+          last_round_success: 0
+          last_round_failed: 0
+          success_rate: 0.0
+          zero_success_streak: 0
+          last_checked: null
+      cpp:
+        enabled: true
+        params:
+          timeout: 3200
+          cc_timeout: 2400
+          n_concurrent: 16
+        status:
+          total_success: 0
+          total_failed: 0
+          total_filtered: 0
+          pr_pool_remaining: 0
+          last_round_success: 0
+          last_round_failed: 0
+          success_rate: 0.0
+          zero_success_streak: 0
+          last_checked: null
+      java:
+        enabled: true
+        params:
+          timeout: 3200
+          cc_timeout: 2400
+          n_concurrent: 16
+        status:
+          total_success: 0
+          total_failed: 0
+          total_filtered: 0
+          pr_pool_remaining: 0
+          last_round_success: 0
+          last_round_failed: 0
+          success_rate: 0.0
+          zero_success_streak: 0
+          last_checked: null
+      rust:
+        enabled: true
+        params:
+          timeout: 3600
+          cc_timeout: 3000
+          n_concurrent: 16
+        status:
+          total_success: 0
+          total_failed: 0
+          total_filtered: 0
+          pr_pool_remaining: 0
+          last_round_success: 0
+          last_round_failed: 0
+          success_rate: 0.0
+          zero_success_streak: 0
+          last_checked: null
+
+  output:
+    swe_tasks_dir:
+      path: artifacts/swe_tasks
+      description: Per-language task directories ({lang}-cc/), each with verifiable_tasks.txt listing verified task IDs
+      structure: "artifacts/swe_tasks/{lang}-cc/{task_id}/ with instruction.md, environment/, solution/, tests/"
+
+    merged_tasks_dir:
+      path: artifacts/merged_swe_tasks
+      description: Optional flattened directory containing all verified tasks from all languages (populated by scripts/extract_verified_tasks.py)
+      structure: "artifacts/merged_swe_tasks/{task_id}/ with instruction.md, environment/, solution/, tests/"
+      extract_command: python scripts/extract_verified_tasks.py
+
+    logs:
+      - path: artifacts/logs/swegen-create/cc_py_March.txt
+        description: Python task creation log
+      - path: artifacts/logs/swegen-create/cc_js_March.txt
+        description: JavaScript task creation log
+      - path: artifacts/logs/swegen-create/cc_ts_March.txt
+        description: TypeScript task creation log
+      - path: artifacts/logs/swegen-create/cc_go_March.txt
+        description: Go task creation log
+      - path: artifacts/logs/swegen-create/cc_c_March.txt
+        description: C task creation log
+      - path: artifacts/logs/swegen-create/cc_cpp_March.txt
+        description: C++ task creation log
+      - path: artifacts/logs/swegen-create/cc_java_March.txt
+        description: Java task creation log
+      - path: artifacts/logs/swegen-create/cc_rust_March.txt
+        description: Rust task creation log
+      - path: artifacts/logs/adaptive_decisions.jsonl
+        description: Adaptive tuning decisions log (JSONL format)
+
+status:
+  phase: idle
+  progress: "Ready for the next SWE task generation run."
+  next_steps: |
+    1. Run scripts/dryrun.sh before starting a new Curator batch.
+    2. Use quick-verify.md for a small preflight when changing the Curator runtime.
+  blockers: null
+  last_updated: null
+
+evolving:
+  description: Adaptive agent that monitors per-language success rates and tunes pipeline parameters (timeout, cc_timeout, n_concurrent) automatically every 30 minutes.
+  tunable_params:
+    timeout: "Per-language task timeout (2400-5400s)"
+    cc_timeout: "Per-language Claude Code timeout (1800-4200s)"
+    n_concurrent: "Per-language concurrent tasks (4-32)"

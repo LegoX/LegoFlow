@@ -39,11 +39,11 @@ Any extra context in args (beyond identifying the block) is a hint for **how to 
 | Args | Target | Behavior |
 | ---- | ------ | -------- |
 | *(empty)* | root | full report across all blocks |
-| `swegen` | swegen | full report for swegen |
-| `trajgen focus on api connectivity` | trajgen | lead with `api:*` findings |
+| `curator` | curator | full report for curator |
+| `tracer focus on api connectivity` | tracer | lead with `api:*` findings |
 | `are my api keys working` | root | full tree; lead with `api:*` findings |
-| `check swegen for missing inputs` | swegen | lead with `input:*` / `schema:*` findings |
-| `compare swegen and trajgen configs` | ambiguous | ask which block |
+| `check curator for missing inputs` | curator | lead with `input:*` / `schema:*` findings |
+| `compare curator and tracer configs` | ambiguous | ask which block |
 | `check frobnicator` | abort | print valid list, ask user to pick |
 
 ## Step 0 — Orient
@@ -59,7 +59,7 @@ Starting at `TARGET_DIR` (resolved in the Arguments section), decide where to be
 
 1. **If `block_name` was passed** (`TARGET_DIR=./subblock/<block_name>/`): treat that directory as the single block under check. Its `config.yaml` must exist — if not, abort: `"subblock/<block_name>/config.yaml not found."`. Do **not** recurse into its `meta_info.subblocks` (leaf scope by user choice). Skip cases 2 and 3 below.
 2. **No `block_name`, and `./config.yaml` exists**: this directory is the root of the check. Read it and recurse into every child named under `meta_info.subblocks` by descending into `./subblock/<name>/`.
-3. **No `block_name`, no `./config.yaml`, but `./subblock/` exists** with child block directories (each with its own `config.yaml`): treat CWD as a pseudo-root (the SWE-Lego-Live pattern: a coordinator with no config.yaml of its own). Check each child as an independent block; do **not** synthesize a config for the parent.
+3. **No `block_name`, no `./config.yaml`, but `./subblock/` exists** with child block directories (each with its own `config.yaml`): treat CWD as a pseudo-root (the LegoFactory pattern: a coordinator with no config.yaml of its own). Check each child as an independent block; do **not** synthesize a config for the parent.
 4. **None of the above**: abort: `"This directory is not a block (no config.yaml) and has no subblock/ children. Run /root:check from inside a block's directory or from a directory whose subblock/ contains blocks."`.
 
 Build a flat list `[(block_path, parsed_config_yaml)]` of every reachable block — exactly one entry when `block_name` is set, more when walking the full tree. Record any declared subblock whose directory is missing as a `tree:missing-child` failure on its parent (only applicable when walking the tree).
@@ -130,7 +130,7 @@ Print one consolidated report. Lead with the tree shape, then per-block status, 
 ```
 Block tree (CWD = <path>):
   <path>            (no config.yaml — pseudo-root)
-  └─ subblock/swegen
+  └─ subblock/curator
       ✓ all checks
       ✓ dryrun passed
       ✓ api(llm_api) → https://endpoint/v1   models: pr_model, task_model present

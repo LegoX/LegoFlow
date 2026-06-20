@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate the root swe_lego_live block without side effects.
+# Validate the root lego_factory block without side effects.
 # Checks local files, subblock configs, required runtime inputs, and SSH reachability.
 # Pass --full to also run each subblock's own dryrun on the remote node.
 set -euo pipefail
@@ -52,7 +52,7 @@ else:
 PY
 }
 
-echo "=== Block Dryrun: swe_lego_live ==="
+echo "=== Block Dryrun: lego_factory ==="
 echo ""
 
 # ── 1. Local file checks ──────────────────────────────────────────────────────
@@ -78,8 +78,8 @@ done
 echo ""
 echo "2. Subblock configs"
 
-SWEGEN_CFG="$ROOT_DIR/subblock/swegen/config.yaml"
-TRAJGEN_CFG="$ROOT_DIR/subblock/trajgen/config.yaml"
+SWEGEN_CFG="$ROOT_DIR/subblock/curator/config.yaml"
+TRAJGEN_CFG="$ROOT_DIR/subblock/tracer/config.yaml"
 
 for cfg_file in "$SWEGEN_CFG" "$TRAJGEN_CFG"; do
   label="${cfg_file#$ROOT_DIR/}"
@@ -104,26 +104,26 @@ echo "3. Runtime inputs"
 if [[ -f "$SWEGEN_CFG" ]]; then
   gh_tokens="$(cfg "$SWEGEN_CFG" "runtime_info.input.github_tokens")"
   if [[ -n "$gh_tokens" && "$gh_tokens" != "null" ]]; then
-    ok "swegen: github_tokens set"
+    ok "curator: github_tokens set"
   else
-    warn "swegen: github_tokens is empty — set runtime_info.input.github_tokens in subblock/swegen/config.yaml"
+    warn "curator: github_tokens is empty — set runtime_info.input.github_tokens in subblock/curator/config.yaml"
   fi
 
   sw_api_key="$(cfg "$SWEGEN_CFG" "runtime_info.input.llm_api.api_key")"
   sw_api_base="$(cfg "$SWEGEN_CFG" "runtime_info.input.llm_api.api_base_url")"
   sw_pr_model="$(cfg "$SWEGEN_CFG" "runtime_info.input.llm_api.pr_model")"
-  [[ -n "$sw_api_key"  && "$sw_api_key"  != "null" ]] && ok "swegen: llm_api.api_key set"      || warn "swegen: llm_api.api_key is empty"
-  [[ -n "$sw_api_base" && "$sw_api_base" != "null" ]] && ok "swegen: llm_api.api_base_url set"  || warn "swegen: llm_api.api_base_url is empty"
-  [[ -n "$sw_pr_model" && "$sw_pr_model" != "null" ]] && ok "swegen: llm_api.pr_model set"      || warn "swegen: llm_api.pr_model is empty"
+  [[ -n "$sw_api_key"  && "$sw_api_key"  != "null" ]] && ok "curator: llm_api.api_key set"      || warn "curator: llm_api.api_key is empty"
+  [[ -n "$sw_api_base" && "$sw_api_base" != "null" ]] && ok "curator: llm_api.api_base_url set"  || warn "curator: llm_api.api_base_url is empty"
+  [[ -n "$sw_pr_model" && "$sw_pr_model" != "null" ]] && ok "curator: llm_api.pr_model set"      || warn "curator: llm_api.pr_model is empty"
 fi
 
 if [[ -f "$TRAJGEN_CFG" ]]; then
   tj_api_key="$(cfg "$TRAJGEN_CFG" "runtime_info.input.llm_api.api_key")"
   tj_api_base="$(cfg "$TRAJGEN_CFG" "runtime_info.input.llm_api.api_base_url")"
   tj_model="$(cfg "$TRAJGEN_CFG" "runtime_info.input.llm_api.model")"
-  [[ -n "$tj_api_key"  && "$tj_api_key"  != "null" ]] && ok "trajgen: llm_api.api_key set"      || warn "trajgen: llm_api.api_key is empty"
-  [[ -n "$tj_api_base" && "$tj_api_base" != "null" ]] && ok "trajgen: llm_api.api_base_url set"  || warn "trajgen: llm_api.api_base_url is empty"
-  [[ -n "$tj_model"    && "$tj_model"    != "null" ]] && ok "trajgen: llm_api.model set"         || warn "trajgen: llm_api.model is empty"
+  [[ -n "$tj_api_key"  && "$tj_api_key"  != "null" ]] && ok "tracer: llm_api.api_key set"      || warn "tracer: llm_api.api_key is empty"
+  [[ -n "$tj_api_base" && "$tj_api_base" != "null" ]] && ok "tracer: llm_api.api_base_url set"  || warn "tracer: llm_api.api_base_url is empty"
+  [[ -n "$tj_model"    && "$tj_model"    != "null" ]] && ok "tracer: llm_api.model set"         || warn "tracer: llm_api.model is empty"
 fi
 
 # ── 4. SSH reachability ───────────────────────────────────────────────────────
@@ -152,7 +152,7 @@ fi
 if [[ $SSH_OK -eq 1 && -n "$REMOTE_DIR" && "$REMOTE_DIR" != "null" ]]; then
   echo ""
   echo "5. Remote directory"
-  REMOTE_REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
+  REMOTE_REPO_DIR="${REMOTE_DIR%/}/LegoFactory"
   if ssh -o BatchMode=yes "${REMOTE_USER}@${REMOTE_IP}" \
        "test -d '${REMOTE_REPO_DIR}'" 2>/dev/null; then
     ok "remote dir exists: ${REMOTE_REPO_DIR}"
@@ -165,9 +165,9 @@ fi
 if [[ $FULL -eq 1 && $SSH_OK -eq 1 ]]; then
   echo ""
   echo "6. Subblock dryruns (--full)"
-  REMOTE_REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
+  REMOTE_REPO_DIR="${REMOTE_DIR%/}/LegoFactory"
 
-  for subblock in swegen trajgen; do
+  for subblock in curator tracer; do
     info "running subblock/${subblock}/scripts/dryrun.sh on remote ..."
     if ssh -o BatchMode=yes "${REMOTE_USER}@${REMOTE_IP}" \
          "cd '${REMOTE_REPO_DIR}/subblock/${subblock}' && bash scripts/dryrun.sh" 2>&1 \

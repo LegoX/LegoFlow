@@ -8,15 +8,15 @@ Training a strong coding agent is a multi-stage pipeline — curate tasks, roll 
 We built **LegoFactory** so the whole pipeline behaves like one project. Every stage is a self-contained **block** with the same shape — a `config.yaml`, a `scripts/start.sh`, an `artifacts/` tree — wired into a parent by name. Run one block, run the whole tree, or swap a block out; the contracts hold.
 
 ```text
-GitHub PRs ─▶ swegen ─▶ trajgen ─▶ sft ─▶ rl
+GitHub PRs ─▶ curator ─▶ tracer ─▶ trainer ─▶ rl
 ```
 
 LegoFactory provides:
 
 - A **block abstraction** that makes every pipeline stage swappable, restartable, and replayable
-- **swegen** — curated SWE tasks generated and NOP/Oracle-verified directly from GitHub PRs
-- **trajgen** — containerized agent rollouts at scale on Harbor, with pluggable agent scaffolds
-- **sft** — supervised fine-tuning on the resulting trajectories (LLaMA-Factory + DeepSpeed ZeRO-3)
+- **curator** — curated SWE tasks generated and NOP/Oracle-verified directly from GitHub PRs
+- **tracer** — containerized agent rollouts at scale on Harbor, with pluggable agent scaffolds
+- **trainer** — supervised fine-tuning on the resulting trajectories (LLaMA-Factory + DeepSpeed ZeRO-3)
 - **rl** — online RL on SWE-bench through Harbor + vLLM + verl
 - **Per-run archives** with config, scripts, and repo SHAs frozen for every execution
 - **A Claude Code plugin** (`/root:check`, `/root:run`, `/root:create`) that drives the tree end-to-end
@@ -25,5 +25,5 @@ LegoFactory provides:
 
 - [Getting Started](/docs/getting-started) — the three skills (`:setup`, `:check`, `:run`) used to drive every block
 - [Block Design](/docs/block-design) — the abstraction the whole pipeline is built on
-- Blocks: [swegen](/docs/sub-block/swegen) · [trajgen](/docs/sub-block/trajgen) · [sft](/docs/sub-block/sft) · [rl](/docs/sub-block/rl) — each links out to that block's full docs site
+- Blocks: [curator](/docs/sub-block/curator) · [tracer](/docs/sub-block/tracer) · [trainer](/docs/sub-block/trainer) · [rl](/docs/sub-block/rl) — each links out to that block's full docs site
 - [Reference](/docs/reference) — `config.yaml` schema and the archive format

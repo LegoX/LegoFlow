@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Launch swegen and trajgen on the remote node inside named tmux sessions.
-# sft and rl are not yet connected and are skipped.
+# Launch curator and tracer on the remote node inside named tmux sessions.
+# trainer and rl are not yet connected and are skipped.
 #
 # Usage:
 #   bash scripts/start.sh [options]
 #
 # Options:
-#   --swegen-only    start only swegen (skip trajgen)
-#   --trajgen-only   start only trajgen (skip swegen)
+#   --curator-only    start only curator (skip tracer)
+#   --tracer-only   start only tracer (skip curator)
 #   --no-sync        skip rsync of local code to remote node
 #   --no-dryrun      skip the dryrun validation step
 #   --dry-run        print SSH/tmux commands without executing
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SWEGEN_CFG="$ROOT_DIR/subblock/swegen/config.yaml"
+SWEGEN_CFG="$ROOT_DIR/subblock/curator/config.yaml"
 
 # Archive this run when start.sh exits (success, error, or signal).
 RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -41,8 +41,8 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --swegen-only)  START_TRAJGEN=0; shift ;;
-    --trajgen-only) START_SWEGEN=0;  shift ;;
+    --curator-only)  START_TRAJGEN=0; shift ;;
+    --tracer-only) START_SWEGEN=0;  shift ;;
     --no-sync)      DO_SYNC=0;       shift ;;
     --no-dryrun)    DO_DRYRUN=0;     shift ;;
     --dry-run)      DRY_RUN=1;       shift ;;
@@ -92,7 +92,7 @@ ssh_run() {
   fi
 }
 
-echo "=== Starting Block: swe_lego_live ==="
+echo "=== Starting Block: lego_factory ==="
 echo ""
 
 # ── Read execution-location config ───────────────────────────────────────────
@@ -114,15 +114,15 @@ if [[ $IS_LOCAL -eq 1 ]]; then
   echo "Repo path   : ${REPO_DIR}"
 else
   if [[ -z "$REMOTE_DIR" || "$REMOTE_DIR" == "null" ]]; then
-    echo "ERROR: meta_info.resources.directory not set in subblock/swegen/config.yaml" >&2
+    echo "ERROR: meta_info.resources.directory not set in subblock/curator/config.yaml" >&2
     exit 1
   fi
   if [[ -z "$REMOTE_USER" || "$REMOTE_USER" == "null" ]]; then
-    echo "ERROR: meta_info.resources.user not set in subblock/swegen/config.yaml" >&2
+    echo "ERROR: meta_info.resources.user not set in subblock/curator/config.yaml" >&2
     exit 1
   fi
   REMOTE_HOST="${REMOTE_USER}@${REMOTE_IP}"
-  REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
+  REPO_DIR="${REMOTE_DIR%/}/LegoFactory"
   echo "Execution   : remote"
   echo "Remote node : ${REMOTE_HOST}"
   echo "Remote path : ${REPO_DIR}"
@@ -154,11 +154,11 @@ if [[ $DO_SYNC -eq 1 ]]; then
       --exclude='.git/' \
       --exclude='artifacts/' \
       --exclude='.claude/' \
-      --exclude='subblock/swegen/repos/' \
-      --exclude='subblock/trajgen/repos/' \
-      --exclude='subblock/swegen/artifacts/' \
-      --exclude='subblock/trajgen/artifacts/' \
-      --exclude='subblock/swegen/gh_token.txt' \
+      --exclude='subblock/curator/repos/' \
+      --exclude='subblock/tracer/repos/' \
+      --exclude='subblock/curator/artifacts/' \
+      --exclude='subblock/tracer/artifacts/' \
+      --exclude='subblock/curator/gh_token.txt' \
       "${ROOT_DIR}/" "${REMOTE_HOST}:${REPO_DIR}/"
     echo "  synced to ${REMOTE_HOST}:${REPO_DIR}"
     echo ""
@@ -206,11 +206,11 @@ attach_hint() {
   fi
 }
 
-# ── 3. Start swegen ───────────────────────────────────────────────────────────
+# ── 3. Start curator ───────────────────────────────────────────────────────────
 if [[ $START_SWEGEN -eq 1 ]]; then
-  echo "Step 3: Starting swegen ..."
-  SWEGEN_SESSION="swegen-py"
-  SWEGEN_DIR="${REPO_DIR}/subblock/swegen"
+  echo "Step 3: Starting curator ..."
+  SWEGEN_SESSION="curator-py"
+  SWEGEN_DIR="${REPO_DIR}/subblock/curator"
 
   if tmux_has_session "${SWEGEN_SESSION}"; then
     echo "  [SKIP] tmux session '${SWEGEN_SESSION}' already exists"
@@ -224,11 +224,11 @@ if [[ $START_SWEGEN -eq 1 ]]; then
   echo ""
 fi
 
-# ── 4. Start trajgen ──────────────────────────────────────────────────────────
+# ── 4. Start tracer ──────────────────────────────────────────────────────────
 if [[ $START_TRAJGEN -eq 1 ]]; then
-  echo "Step 4: Starting trajgen ..."
-  TRAJGEN_SESSION="trajgen"
-  TRAJGEN_DIR="${REPO_DIR}/subblock/trajgen"
+  echo "Step 4: Starting tracer ..."
+  TRAJGEN_SESSION="tracer"
+  TRAJGEN_DIR="${REPO_DIR}/subblock/tracer"
 
   if tmux_has_session "${TRAJGEN_SESSION}"; then
     echo "  [SKIP] tmux session '${TRAJGEN_SESSION}' already exists"
@@ -248,12 +248,12 @@ echo ""
 if [[ $IS_LOCAL -eq 1 ]]; then
   echo "Monitor sessions locally:"
   echo "  tmux ls"
-  [[ $START_SWEGEN  -eq 1 ]] && echo "  tmux attach -t swegen-py    # swegen task generation"
-  [[ $START_TRAJGEN -eq 1 ]] && echo "  tmux attach -t trajgen      # trajgen trajectory generation"
+  [[ $START_SWEGEN  -eq 1 ]] && echo "  tmux attach -t curator-py    # curator task generation"
+  [[ $START_TRAJGEN -eq 1 ]] && echo "  tmux attach -t tracer      # tracer trajectory generation"
 else
   echo "Monitor sessions on the remote node:"
   echo "  ssh ${REMOTE_HOST}"
   echo "  tmux ls"
-  [[ $START_SWEGEN  -eq 1 ]] && echo "  tmux attach -t swegen-py    # swegen task generation"
-  [[ $START_TRAJGEN -eq 1 ]] && echo "  tmux attach -t trajgen      # trajgen trajectory generation"
+  [[ $START_SWEGEN  -eq 1 ]] && echo "  tmux attach -t curator-py    # curator task generation"
+  [[ $START_TRAJGEN -eq 1 ]] && echo "  tmux attach -t tracer      # tracer trajectory generation"
 fi

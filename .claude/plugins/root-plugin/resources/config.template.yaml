@@ -12,7 +12,7 @@ meta_info:
         # Use dot-notation to reference another block's output: <block>.output.<key>
         # Use "human" for values filled manually before a run.
         # Example:
-        #   dataset_path: swegen.output.verified_tasks_dir
+        #   dataset_path: curator.output.verified_tasks_dir
         #   api_key: human
 
   environment:

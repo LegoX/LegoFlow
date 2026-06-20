@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "tracer-block": {
+      "source": { "source": "directory", "path": ".claude/plugins" }
+    }
+  },
+  "enabledPlugins": {
+    "tracer@tracer-block": true
+  }
+}

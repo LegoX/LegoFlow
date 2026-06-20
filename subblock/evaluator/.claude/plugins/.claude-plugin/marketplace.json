@@ -1,0 +1,11 @@
+{
+  "name": "evaluator-block",
+  "owner": { "name": "haoli" },
+  "plugins": [
+    {
+      "name": "evaluator",
+      "source": "./evaluator-plugin",
+      "description": "evaluator block skills — setup, check, dashboard, run."
+    }
+  ]
+}

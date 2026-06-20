@@ -3,28 +3,28 @@
     "root-block": {
       "source": { "source": "directory", "path": ".claude/plugins" }
     },
-    "swegen-block": {
-      "source": { "source": "directory", "path": "subblock/swegen/.claude/plugins" }
+    "curator-block": {
+      "source": { "source": "directory", "path": "subblock/curator/.claude/plugins" }
     },
-    "trajgen-block": {
-      "source": { "source": "directory", "path": "subblock/trajgen/.claude/plugins" }
+    "tracer-block": {
+      "source": { "source": "directory", "path": "subblock/tracer/.claude/plugins" }
     },
-    "sft-block": {
-      "source": { "source": "directory", "path": "subblock/sft/.claude/plugins" }
+    "trainer-block": {
+      "source": { "source": "directory", "path": "subblock/trainer/.claude/plugins" }
     },
     "rl-block": {
       "source": { "source": "directory", "path": "subblock/rl/.claude/plugins" }
     },
-    "eval-block": {
-      "source": { "source": "directory", "path": "subblock/eval/.claude/plugins" }
+    "evaluator-block": {
+      "source": { "source": "directory", "path": "subblock/evaluator/.claude/plugins" }
     }
   },
   "enabledPlugins": {
     "root@root-block": true,
-    "swegen@swegen-block": true,
-    "trajgen@trajgen-block": true,
-    "sft@sft-block": true,
+    "curator@curator-block": true,
+    "tracer@tracer-block": true,
+    "trainer@trainer-block": true,
     "rl@rl-block": true,
-    "eval@eval-block": true
+    "evaluator@evaluator-block": true
   }
 }

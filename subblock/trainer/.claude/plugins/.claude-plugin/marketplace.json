@@ -1,0 +1,11 @@
+{
+  "name": "trainer-block",
+  "owner": { "name": "haoli" },
+  "plugins": [
+    {
+      "name": "trainer",
+      "source": "./trainer-plugin",
+      "description": "trainer block skills — setup, check, dashboard, run."
+    }
+  ]
+}
