@@ -6,7 +6,7 @@ meta_info:
   name: evaluator
   label: "Evaluator"
   description: Runs registered benchmark evaluations through Harbor against a configurable upstream LLM.
-  parent: lego_factory
+  parent: swe_lego_live
   subblocks: {}
   dependencies: {}
 

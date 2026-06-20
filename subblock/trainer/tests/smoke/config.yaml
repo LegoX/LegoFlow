@@ -12,7 +12,7 @@ meta_info:
   name: trainer
   label: "Trainer"
   description: Trainer block — SFT training pipeline for SWE-bench coding models.
-  parent: lego_factory
+  parent: swe_lego_live
   subblocks: {}
   dependencies:
     trajectories_dir: tracer.output.raw_trajectories_dir
@@ -23,7 +23,7 @@ meta_info:
     pwd: null
     key: /home/haoli/.ssh/dym_id_rsa
     port: 30977
-    directory: /mnt/public/storage/haoli/code/LegoFactory
+    directory: /mnt/public/storage/haoli/code/SWE-Lego-Live
 
   repositories:
     llama_factory:
@@ -34,7 +34,7 @@ meta_info:
       readonly: true
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
-      branch: lego-factory
+      branch: swe-lego-live
       commit: 8f60ee31bc6c0caf36d1fca88b16bb1e024b9c7e
       path: repos/swe_data_process
       readonly: true

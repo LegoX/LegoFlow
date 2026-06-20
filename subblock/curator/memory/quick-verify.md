@@ -1,6 +1,6 @@
 # SWEgen 快速验证流程
 
-本文档用于帮助新的 AI agent 在 5 到 10 分钟内判断当前 `LegoFactory/curator` 接入的 SWEgen 是否能跑通，并快速区分问题属于环境、LLM、Docker/Harbor，还是 SWEgen 代码。
+本文档用于帮助新的 AI agent 在 5 到 10 分钟内判断当前 `SWE-Lego-Live/curator` 接入的 SWEgen 是否能跑通，并快速区分问题属于环境、LLM、Docker/Harbor，还是 SWEgen 代码。
 
 ## 目标
 
@@ -12,7 +12,7 @@
 
 ## 1. 环境 preflight
 
-在 `LegoFactory/subblock/curator` 所在 block 中执行前，先确认 submodule 已初始化：
+在 `SWE-Lego-Live/subblock/curator` 所在 block 中执行前，先确认 submodule 已初始化：
 
 ```bash
 git submodule update --init subblock/curator/repos/swegen

@@ -92,7 +92,7 @@ ssh_run() {
   fi
 }
 
-echo "=== Starting Block: lego_factory ==="
+echo "=== Starting Block: swe_lego_live ==="
 echo ""
 
 # ── Read execution-location config ───────────────────────────────────────────
@@ -122,7 +122,7 @@ else
     exit 1
   fi
   REMOTE_HOST="${REMOTE_USER}@${REMOTE_IP}"
-  REPO_DIR="${REMOTE_DIR%/}/LegoFactory"
+  REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
   echo "Execution   : remote"
   echo "Remote node : ${REMOTE_HOST}"
   echo "Remote path : ${REPO_DIR}"

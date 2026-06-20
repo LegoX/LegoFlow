@@ -1,4 +1,4 @@
-# CI/CD for LegoFactory
+# CI/CD for SWE-Lego-Live
 
 Friendly tour of what runs when you push a commit, open a PR, or click
 **Run workflow** in the GitHub UI. Read this if you want to understand the
@@ -243,7 +243,7 @@ token from `repo Settings → Actions → Runners → New self-hosted runner`,
 or:
 
 ```bash
-gh api -X POST repos/SWE-Lego/LegoFactory/actions/runners/registration-token -q .token
+gh api -X POST repos/SWE-Lego/SWE-Lego-Live/actions/runners/registration-token -q .token
 ```
 
 Then on the GPU host:

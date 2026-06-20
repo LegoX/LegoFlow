@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# Lego Factory
+# SWE Lego Live
 
 Root orchestration block for the self-evolving LLM development pipeline. Coordinates data curation (curator), trajectory generation (tracer), supervised fine-tuning (trainer), and reinforcement learning (rl) in sequence.
 
@@ -47,7 +47,7 @@ If — and only if — `meta_info.resources.ip` is set to a real remote IP, the 
 
 ## Block Identity (Root)
 
-- **Name**: lego_factory
+- **Name**: swe_lego_live
 - **Parent**: none
 - **Children**: curator → tracer → trainer → rl
 

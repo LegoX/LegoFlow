@@ -5,7 +5,7 @@ import Link from "next/link";
 export default function HomePage() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-      <h1 className="text-2xl font-semibold">LegoFactory</h1>
+      <h1 className="text-2xl font-semibold">SWE-Lego-Live</h1>
       <p className="text-fd-muted-foreground max-w-md">
         A self-evolving LLM development pipeline. Curate SWE tasks, roll out
         agent trajectories, and train models with SFT and RL — one block at a

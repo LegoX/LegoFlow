@@ -1,17 +1,17 @@
 ---
 title: Motivation
-description: Why we built LegoFactory
+description: Why we built SWE-Lego-Live
 ---
 
 Training a strong coding agent is a multi-stage pipeline — curate tasks, roll out trajectories, do SFT, then RL. Each stage needs its own data, its own environment, and its own GPUs, and the handoffs between them quietly break every time someone runs them by hand.
 
-We built **LegoFactory** so the whole pipeline behaves like one project. Every stage is a self-contained **block** with the same shape — a `config.yaml`, a `scripts/start.sh`, an `artifacts/` tree — wired into a parent by name. Run one block, run the whole tree, or swap a block out; the contracts hold.
+We built **SWE-Lego-Live** so the whole pipeline behaves like one project. Every stage is a self-contained **block** with the same shape — a `config.yaml`, a `scripts/start.sh`, an `artifacts/` tree — wired into a parent by name. Run one block, run the whole tree, or swap a block out; the contracts hold.
 
 ```text
 GitHub PRs ─▶ curator ─▶ tracer ─▶ trainer ─▶ rl
 ```
 
-LegoFactory provides:
+SWE-Lego-Live provides:
 
 - A **block abstraction** that makes every pipeline stage swappable, restartable, and replayable
 - **curator** — curated SWE tasks generated and NOP/Oracle-verified directly from GitHub PRs

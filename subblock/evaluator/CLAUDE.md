@@ -10,7 +10,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 
 - **Name**: evaluator
 - **Role**: Evaluator - runs Harbor benchmarks end-to-end and stores per-task results / trajectories
-- **Parent**: lego_factory
+- **Parent**: swe_lego_live
 - **Children**: none (leaf block)
 
 ## What To Read First

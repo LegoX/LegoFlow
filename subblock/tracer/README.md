@@ -1,6 +1,6 @@
 # tracer
 
-The trajectory-generation block of [LegoFactory](../../README.md). It runs a
+The trajectory-generation block of [SWE-Lego-Live](../../README.md). It runs a
 coding agent (via [Harbor](https://github.com/SWE-Lego/harbor)) on verified SWE
 tasks, captures each rollout as a raw trajectory, and optionally converts those
 trajectories into SFT training data for the downstream `trainer` block.

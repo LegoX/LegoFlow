@@ -11,7 +11,7 @@
 #   REG_TOKEN=<token> bash .github/scripts/register-gpu-runner.sh
 #
 #   token: repo Settings → Actions → Runners → New self-hosted runner, or
-#     gh api -X POST repos/SWE-Lego/LegoFactory/actions/runners/registration-token -q .token
+#     gh api -X POST repos/SWE-Lego/SWE-Lego-Live/actions/runners/registration-token -q .token
 #
 # Env knobs:
 #   REG_TOKEN     (required) runner registration token
@@ -21,7 +21,7 @@
 #   RUNNER_VERSION  actions/runner version to download (default: 2.323.0)
 set -euo pipefail
 
-REPO_URL="https://github.com/SWE-Lego/LegoFactory"
+REPO_URL="https://github.com/SWE-Lego/SWE-Lego-Live"
 : "${REG_TOKEN:?set REG_TOKEN (registration token from the repo Actions settings)}"
 RUNNER_DIR="${RUNNER_DIR:-$PWD/actions-runner-gpu}"
 RUNNER_NAME="${RUNNER_NAME:-gpu-$(hostname)}"

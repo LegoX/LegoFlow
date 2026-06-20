@@ -8,7 +8,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 
 - **Name**: tracer
 - **Role**: Data generation - creates agent trajectories from SWE tasks
-- **Parent**: lego_factory
+- **Parent**: swe_lego_live
 - **Children**: none (leaf block)
 
 ## Read first

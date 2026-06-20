@@ -1,6 +1,6 @@
 # block — a Claude Code plugin for block-structured projects
 
-This plugin packages the **block** convention used by [LegoFactory](https://github.com/) into two slash commands you can use in any Claude Code session.
+This plugin packages the **block** convention used by [SWE-Lego-Live](https://github.com/) into two slash commands you can use in any Claude Code session.
 
 A **block** is the basic collaboration unit in a block-structured project: a self-describing directory containing a `config.yaml` (identity, I/O, status), a `CLAUDE.md` (agent contract), `scripts/{start,dryrun,clean}.sh`, `artifacts/`, and a `subblock/` tree of children. See `resources/BLOCK_DEFINITION.md` (bundled) for the full specification.
 
@@ -17,7 +17,7 @@ A **block** is the basic collaboration unit in a block-structured project: a sel
 ### Local development
 
 ```bash
-claude --plugin-dir /gpufs/haoli/code/LegoFactory/.claude/plugins/root-plugin
+claude --plugin-dir /gpufs/haoli/code/SWE-Lego-Live/.claude/plugins/root-plugin
 ```
 
 In the session, `/help` will list `/root:create` and `/root:run` under the `root` plugin namespace. Run `/reload-plugins` after editing any file in the plugin.
@@ -43,7 +43,7 @@ root-plugin/
     └── run/SKILL.md             # /root:run
 ```
 
-The plugin is self-contained — it does not require the LegoFactory repo to be present.
+The plugin is self-contained — it does not require the SWE-Lego-Live repo to be present.
 
 ## Quick usage
 

@@ -60,7 +60,7 @@ build_subblock_args() {
     echo "${args[@]}"
 }
 
-echo "=== Cleaning root: lego_factory ==="
+echo "=== Cleaning root: swe_lego_live ==="
 clean_artifacts_dir "$ARTIFACTS_DIR"
 
 for block_dir in "$ROOT_DIR/subblock"/*/; do

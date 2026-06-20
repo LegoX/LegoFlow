@@ -1,5 +1,5 @@
 """
-Lightweight API server for the LegoFactory-Trainer training dashboard.
+Lightweight API server for the SWE-Lego-Live-Trainer training dashboard.
 
 Data sources:
   1. Local run directories under saves/<run>/ — parses HuggingFace Trainer
@@ -802,7 +802,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
 
 def main():
-    p = argparse.ArgumentParser(description="LegoFactory-Trainer Training Dashboard Server")
+    p = argparse.ArgumentParser(description="SWE-Lego-Live-Trainer Training Dashboard Server")
     p.add_argument("--port", type=int, default=8091)
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--save-dir", default="", help="Directory containing saves/<run>/ output dirs")
@@ -843,7 +843,7 @@ def main():
         allow_reuse_port = True
 
     srv = ReusableHTTPServer((args.host, args.port), DashboardHandler)
-    print(f"LegoFactory-Trainer Dashboard on http://{args.host}:{args.port}")
+    print(f"SWE-Lego-Live-Trainer Dashboard on http://{args.host}:{args.port}")
     print(f"  Save dirs:  {save_dirs or '(none)'}")
     print(f"  Log dirs:   {DashboardHandler.log_dirs or '(none)'}")
     print(f"  Static dir: {static_dir or '(none — API only, use vite dev for frontend)'}")

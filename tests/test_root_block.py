@@ -1,4 +1,4 @@
-"""Root-block sanity checks for LegoFactory.
+"""Root-block sanity checks for SWE-Lego-Live.
 
 Validates that the block tree under `subblock/` is structurally sound:
 the five expected blocks exist, each has a parseable config.yaml whose
@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SUBBLOCK_DIR = REPO_ROOT / "subblock"
 EXPECTED_SUBBLOCKS = ["curator", "tracer", "trainer", "rl", "evaluator"]
 UNIFORM_SCRIPTS = ["start.sh", "dryrun.sh", "clean.sh", "archive_run.sh"]
-EXPECTED_PARENT = "lego_factory"
+EXPECTED_PARENT = "swe_lego_live"
 
 
 def test_subblock_dir_exists():

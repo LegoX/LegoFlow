@@ -2,7 +2,7 @@ meta_info:
   name: evaluator
   label: "Evaluator"
   description: Runs registered benchmark evaluations through Harbor against a configurable upstream LLM. Mirrors tracer's runtime shell, but loads tasks from Harbor's registry.json instead of a local curator export.
-  parent: lego_factory
+  parent: swe_lego_live
   subblocks: {}
   # Evaluator is standalone: no upstream block dependency. The benchmark is selected
   # from Harbor's registry below (runtime_info.input.task_source).

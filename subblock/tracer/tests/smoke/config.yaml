@@ -6,7 +6,7 @@ meta_info:
   name: tracer
   label: "Tracer"
   description: Generates raw agent trajectories with Harbor for downstream SFT data conversion. Harbor is managed as a local-only repository under repos/harbor and is updated on demand through the block scripts.
-  parent: lego_factory
+  parent: swe_lego_live
   subblocks: {}
   dependencies:
     task_source_dir: curator.output.swe_tasks_dir

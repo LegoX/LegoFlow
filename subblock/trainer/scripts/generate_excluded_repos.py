@@ -5,7 +5,7 @@
 输出文件每行一个 ``owner/repo``，可直接传给各转换脚本的 ``--exclude-repos-file`` 参数。
 
 用法：
-    cd /path/to/LegoFactory/subblock/trainer
+    cd /path/to/SWE-Lego-Live/subblock/trainer
     artifacts/env/lf/bin/python scripts/generate_excluded_repos.py
     artifacts/env/lf/bin/python scripts/generate_excluded_repos.py -o /tmp/excluded.txt
 """

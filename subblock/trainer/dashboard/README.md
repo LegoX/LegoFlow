@@ -1,4 +1,4 @@
-# LegoFactory-Trainer Training Dashboard
+# SWE-Lego-Live-Trainer Training Dashboard
 
 Real-time, read-only web dashboard for monitoring LLaMA-Factory (HuggingFace
 Trainer) training runs. It parses the standard `saves/<run>/` output —

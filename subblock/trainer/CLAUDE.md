@@ -8,7 +8,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 
 - **Name**: trainer
 - **Role**: Training - supervised fine-tuning on agent trajectories
-- **Parent**: lego_factory
+- **Parent**: swe_lego_live
 - **Children**: none (leaf block)
 
 ## What To Read First

@@ -1,6 +1,6 @@
 # Root-block tests
 
-Structural sanity checks for the LegoFactory block tree as a whole. Pure
+Structural sanity checks for the SWE-Lego-Live block tree as a whole. Pure
 Python + pyaml, no Docker / GPU / network. Runs in the `root-block` job of
 the cloud CI on every PR and push.
 
@@ -30,7 +30,7 @@ structurally sound:
 | `test_subblock_dir_exists` | `subblock/` directory exists at the repo root |
 | `test_subblock_present[<name>]` | every expected subblock dir exists (`curator`, `tracer`, `trainer`, `rl`, `evaluator`) |
 | `test_config_yaml_parses[<name>]` | each block's `config.yaml` is valid YAML with `meta_info` and `runtime_info` top-level keys |
-| `test_meta_info_identity[<name>]` | `meta_info.name` matches the block's directory name, `meta_info.parent` is `lego_factory` |
+| `test_meta_info_identity[<name>]` | `meta_info.name` matches the block's directory name, `meta_info.parent` is `swe_lego_live` |
 | `test_uniform_scripts_present[<name>, <script>]` | each block has the four uniform scripts under `scripts/`: `start.sh`, `dryrun.sh`, `clean.sh`, `archive_run.sh` |
 
 With 5 blocks × 4 scripts the matrix yields ~30 individual test cases —
@@ -45,7 +45,7 @@ each one runs in well under a second.
 | `expected subblock dir … not found` | a block dir was deleted or renamed | restore it or update `EXPECTED_SUBBLOCKS` in the test if intentional |
 | `missing <path>/config.yaml` | block exists but never got a config | scaffold one via `/root:create` or add by hand |
 | `meta_info.name=… does not match dir name` | someone renamed a dir without updating `config.yaml` | edit `config.yaml` to match the dir, or rename the dir back |
-| `meta_info.parent=…, expected lego_factory` | block is wired into the wrong tree | fix `meta_info.parent` in `config.yaml` |
+| `meta_info.parent=…, expected swe_lego_live` | block is wired into the wrong tree | fix `meta_info.parent` in `config.yaml` |
 | `missing uniform script: …/scripts/start.sh` | one of the four contract scripts is gone | per `BLOCK_DEFINITION.md`, every block must ship `start.sh`, `dryrun.sh`, `clean.sh`, `archive_run.sh` — restore the missing one |
 
 ---

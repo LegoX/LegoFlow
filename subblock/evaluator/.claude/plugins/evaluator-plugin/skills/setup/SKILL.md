@@ -61,7 +61,7 @@ For `meta_info.repositories.harbor`:
   (clones, fetches, checks out the pinned `commit` detached, inits
   submodules, then sets the worktree read-only because `readonly: true`).
 - `repos/harbor` is registered as a tracked submodule (`.gitmodules` at
-  the repo root), so a fresh clone of LegoFactory needs
+  the repo root), so a fresh clone of SWE-Lego-Live needs
   `git submodule update --init subblock/evaluator/repos/harbor` first if the
   dir is empty.
 - `update_repos.sh` refuses to update a worktree with local

@@ -11,7 +11,7 @@ meta_info:
   name: curator
   label: "Curator"
   description: Converts GitHub PRs into verified SWE-Bench tasks. Smoke mode runs against a committed PR list.
-  parent: lego_factory
+  parent: swe_lego_live
   subblocks: {}
 
   repos:

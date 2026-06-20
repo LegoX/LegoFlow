@@ -3,7 +3,7 @@ import { Metadata } from "next";
 import "./global.css";
 
 export const metadata: Metadata = {
-  title: "LegoFactory",
+  title: "SWE-Lego-Live",
   description:
     "A self-evolving LLM development pipeline composed of pluggable blocks: curator → tracer → trainer → rl.",
 };

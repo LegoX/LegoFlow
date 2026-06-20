@@ -64,7 +64,7 @@ The "current block" is `TARGET_DIR` (CWD when `block_name` is unset; `./subblock
 
 1. `<TARGET_DIR>/config.yaml`:
    - If `block_name` is **set**, this file is required — abort with "Missing `config.yaml` under `subblock/<block_name>/`." if absent.
-   - If `block_name` is **unset** (root mode) and the file is absent, that's the LegoFactory coordinator pattern: skip config-driven preflight (Step 3 checks #3–#7 are scoped to subblocks via their own configs) and proceed. Emit a warning so the user knows the root config is missing intentionally.
+   - If `block_name` is **unset** (root mode) and the file is absent, that's the SWE-Lego-Live coordinator pattern: skip config-driven preflight (Step 3 checks #3–#7 are scoped to subblocks via their own configs) and proceed. Emit a warning so the user knows the root config is missing intentionally.
 2. `<TARGET_DIR>/CLAUDE.md` — read it; honor any block-specific rules it states.
 3. `<TARGET_DIR>/dashboard/overview.mdx` — useful context, not load-bearing.
 

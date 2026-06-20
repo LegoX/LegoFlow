@@ -85,7 +85,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/LegoFactory/subblock/tracer/artifacts/jobs/smoke /x/LegoFactory/subblock/tracer/artifacts/agent-runtime /x/LegoFactory/subblock/evaluator/artifacts/jobs/smoke /x/LegoFactory/subblock/evaluator/artifacts/runtime /x/LegoFactory/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/LegoFactory/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/LegoFactory/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -158,7 +158,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/LegoFactory/subblock/tracer/artifacts/jobs/smoke /x/LegoFactory/subblock/tracer/artifacts/agent-runtime /x/LegoFactory/subblock/evaluator/artifacts/jobs/smoke /x/LegoFactory/subblock/evaluator/artifacts/runtime /x/LegoFactory/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/LegoFactory/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/LegoFactory/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -234,7 +234,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/LegoFactory/subblock/tracer/artifacts/jobs/smoke /x/LegoFactory/subblock/tracer/artifacts/agent-runtime /x/LegoFactory/subblock/evaluator/artifacts/jobs/smoke /x/LegoFactory/subblock/evaluator/artifacts/runtime /x/LegoFactory/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/LegoFactory/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/LegoFactory/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -307,7 +307,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/LegoFactory/subblock/tracer/artifacts/jobs/smoke /x/LegoFactory/subblock/tracer/artifacts/agent-runtime /x/LegoFactory/subblock/evaluator/artifacts/jobs/smoke /x/LegoFactory/subblock/evaluator/artifacts/runtime /x/LegoFactory/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/LegoFactory/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/LegoFactory/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -392,7 +392,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/LegoFactory/subblock/tracer/artifacts/jobs/smoke /x/LegoFactory/subblock/tracer/artifacts/agent-runtime /x/LegoFactory/subblock/evaluator/artifacts/jobs/smoke /x/LegoFactory/subblock/evaluator/artifacts/runtime /x/LegoFactory/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/LegoFactory/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/LegoFactory/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + envs come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -463,7 +463,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/LegoFactory/subblock/tracer/artifacts/jobs/smoke /x/LegoFactory/subblock/tracer/artifacts/agent-runtime /x/LegoFactory/subblock/evaluator/artifacts/jobs/smoke /x/LegoFactory/subblock/evaluator/artifacts/runtime /x/LegoFactory/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/LegoFactory/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/LegoFactory/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -539,7 +539,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/LegoFactory/subblock/tracer/artifacts/jobs/smoke /x/LegoFactory/subblock/tracer/artifacts/agent-runtime /x/LegoFactory/subblock/evaluator/artifacts/jobs/smoke /x/LegoFactory/subblock/evaluator/artifacts/runtime /x/LegoFactory/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/LegoFactory/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/LegoFactory/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -611,7 +611,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/LegoFactory/subblock/tracer/artifacts/jobs/smoke /x/LegoFactory/subblock/tracer/artifacts/agent-runtime /x/LegoFactory/subblock/evaluator/artifacts/jobs/smoke /x/LegoFactory/subblock/evaluator/artifacts/runtime /x/LegoFactory/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/LegoFactory/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/LegoFactory/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4

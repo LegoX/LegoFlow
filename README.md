@@ -1,4 +1,4 @@
-# LegoFactory
+# SWE-Lego-Live
 
 A self-evolving LLM development pipeline. It generates coding-agent training data from real GitHub PRs, runs agent trajectories, and feeds the results into SFT and RL training — all coordinated by an AI agent that monitors progress and tunes parameters automatically.
 
@@ -42,7 +42,7 @@ GitHub PRs
 ## Project Layout
 
 ```
-LegoFactory/
+SWE-Lego-Live/
 ├── CLAUDE.md                  # root block agent contract
 ├── BLOCK_DEFINITION.md        # block system specification
 ├── scripts/
@@ -103,8 +103,8 @@ For `/root:run`, if the instruction implies a config edit or flag injection, the
 ### 1. Clone
 
 ```bash
-git clone --recurse-submodules <repo-url> LegoFactory
-cd LegoFactory
+git clone --recurse-submodules <repo-url> SWE-Lego-Live
+cd SWE-Lego-Live
 ```
 
 If you already cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.

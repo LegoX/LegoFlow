@@ -16,7 +16,7 @@ export function saveLang(lang: Lang) {
 
 const dict: Record<string, Record<Lang, string>> = {
   // App — sidebar / header
-  "app.title": { en: "LegoFactory-Trainer", zh: "LegoFactory-Trainer" },
+  "app.title": { en: "SWE-Lego-Live-Trainer", zh: "SWE-Lego-Live-Trainer" },
   "app.subtitle": { en: "Training Dashboard", zh: "训练看板" },
   "app.runs": { en: "Runs", zh: "运行记录" },
   "app.refresh": { en: "Refresh", zh: "刷新频率" },

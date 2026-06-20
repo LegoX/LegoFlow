@@ -5,7 +5,7 @@ description: Why we built trainer
 
 trainer turns agent trajectories into ready-to-train datasets and fine-tunes SWE coding models on them.
 
-It is the supervised-fine-tuning stage of the [LegoFactory](https://github.com/SWE-Lego/LegoFactory) pipeline, sitting between trajectory generation (`tracer`) and reinforcement learning (`rl`). It consumes the good rollouts produced upstream, converts them into LLaMA-Factory ShareGPT data, and trains a model with [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) + DeepSpeed ZeRO-3 — all driven by a single `config.yaml`.
+It is the supervised-fine-tuning stage of the [SWE-Lego-Live](https://github.com/SWE-Lego/SWE-Lego-Live) pipeline, sitting between trajectory generation (`tracer`) and reinforcement learning (`rl`). It consumes the good rollouts produced upstream, converts them into LLaMA-Factory ShareGPT data, and trains a model with [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) + DeepSpeed ZeRO-3 — all driven by a single `config.yaml`.
 
 ```text
 curator ─▶ tracer ─▶ trainer ─▶ rl

@@ -1,10 +1,10 @@
-# lego-factory-docs
+# swe-lego-live-docs
 
-User-facing documentation for the [LegoFactory](../README.md) root project,
+User-facing documentation for the [SWE-Lego-Live](../README.md) root project,
 built as a [fumadocs](https://fumadocs.dev/) (Next.js) site and deployed to
 Cloudflare Pages as a static export.
 
-Live site: **<https://lego-factory-docs.pages.dev>**
+Live site: **<https://swe-lego-live-docs.pages.dev>**
 
 The prose lives in `content/docs/`; everything else is the minimal app shell
 needed to render and deploy it. This site documents the *root* block (pipeline,
@@ -43,8 +43,8 @@ npx serve out      # preview the exported site
 bash deploy_cloudflare_pages.sh
 ```
 
-Builds and deploys `out/` to the `lego-factory-docs` Cloudflare Pages project
-(published at <https://lego-factory-docs.pages.dev>, separate from any
+Builds and deploys `out/` to the `swe-lego-live-docs` Cloudflare Pages project
+(published at <https://swe-lego-live-docs.pages.dev>, separate from any
 subblock's docs project). It activates Node 22 via nvm, asserts Node >= 20,
 and reuses Cloudflare credentials (`CLOUDFLARE_API_TOKEN` +
 `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or

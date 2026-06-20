@@ -51,7 +51,7 @@ For each entry under `meta_info.repositories`:
   `bash scripts/update_repos.sh --repo <name>` (clones, checks out the
   pinned commit, chmods read-only when `readonly: true`).
 - `repos/harbor` is registered as a tracked git submodule (`.gitmodules`
-  in the repo root); a fresh clone of LegoFactory therefore needs
+  in the repo root); a fresh clone of SWE-Lego-Live therefore needs
   `git submodule update --init subblock/tracer/repos/harbor` before
   `update_repos.sh` is useful.
 - The script refuses to update a worktree with local modifications. Stop

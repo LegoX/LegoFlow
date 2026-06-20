@@ -8,7 +8,7 @@ name: CI (from-scratch rebuild)
 # you want CI to validate the PR against a freshly built environment.
 #
 # Triggers: workflow_dispatch only.
-#   Run from: https://github.com/SWE-Lego/LegoFactory/actions/workflows/ci-from-scratch.yml
+#   Run from: https://github.com/SWE-Lego/SWE-Lego-Live/actions/workflows/ci-from-scratch.yml
 #
 # What it does, per block:
 #   - Source-only checkout of the PR's branch (no canonical symlinks).

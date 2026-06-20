@@ -9,7 +9,7 @@ LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/../artifacts/logs}"
 PORT="${PORT:-8091}"
 TUNNEL="${TUNNEL:-false}"
 
-echo "=== LegoFactory-Trainer Training Dashboard ==="
+echo "=== SWE-Lego-Live-Trainer Training Dashboard ==="
 echo "  Save dir: $SAVE_DIR"
 echo "  Log dir:  $LOG_DIR"
 echo "  Port:     $PORT"

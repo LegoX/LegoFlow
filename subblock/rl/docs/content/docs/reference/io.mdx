@@ -3,7 +3,7 @@ title: Inputs & Outputs
 description: The config-driven input/output contract
 ---
 
-rl is configured entirely through [`config.yaml`](https://github.com/SWE-Lego/LegoFactory/blob/main/subblock/rl/config.yaml).
+rl is configured entirely through [`config.yaml`](https://github.com/SWE-Lego/SWE-Lego-Live/blob/main/subblock/rl/config.yaml).
 It uses `config.yaml` rather than a separate `inputs.yaml` because the file
 describes a full training run profile, not just upstream inputs. Treat
 `config.yaml` as the source of truth before launching a run.
@@ -63,7 +63,7 @@ algorithm:
   policy_loss_mode: gspo
   learning_rate: 1.0e-06
 experiment:
-  project_name: lego-factory-rl
+  project_name: swe-lego-live-rl
 credentials:
   wandb_mode: online
 ```

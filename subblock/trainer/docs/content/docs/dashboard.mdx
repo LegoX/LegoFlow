@@ -3,7 +3,7 @@ title: Dashboard
 description: Monitor training runs in real time
 ---
 
-trainer ships a real-time, read-only web dashboard for monitoring LLaMA-Factory (HuggingFace Trainer) training runs. It is a React frontend + a Python `server.py` backend under [`dashboard/`](https://github.com/SWE-Lego/LegoFactory/tree/main/subblock/trainer/dashboard), parses the standard training output directly, and can compare multiple runs or connect to wandb.
+trainer ships a real-time, read-only web dashboard for monitoring LLaMA-Factory (HuggingFace Trainer) training runs. It is a React frontend + a Python `server.py` backend under [`dashboard/`](https://github.com/SWE-Lego/SWE-Lego-Live/tree/main/subblock/trainer/dashboard), parses the standard training output directly, and can compare multiple runs or connect to wandb.
 
 Live dashboard: **[cement-here-cross-quotations.trycloudflare.com](https://cement-here-cross-quotations.trycloudflare.com/)**
 
@@ -80,7 +80,7 @@ python server.py --port 8091 --save-dir ../artifacts/model \
   --wandb-entity "$WANDB_ENTITY" --wandb-project "$WANDB_PROJECT" --static-dir dist
 ```
 
-See [`dashboard/README.md`](https://github.com/SWE-Lego/LegoFactory/tree/main/subblock/trainer/dashboard) for the full CLI options and environment variables.
+See [`dashboard/README.md`](https://github.com/SWE-Lego/SWE-Lego-Live/tree/main/subblock/trainer/dashboard) for the full CLI options and environment variables.
 
 <Callout title="Two different sites" type="info">
 This dashboard is a **live local server** that reads training output. The documentation site you are reading is a separate static fumadocs site under `docs/`; see [Build & deploy the docs site](/docs/reference/config-variants#build-and-deploy-the-docs-site).

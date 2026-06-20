@@ -2,7 +2,7 @@ meta_info:
   name: curator
   label: "Curator"
   description: Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages. Runs as an adaptive agent that monitors per-language success rates and tunes pipeline parameters automatically.
-  parent: lego_factory
+  parent: swe_lego_live
   subblocks: {}
 
   repos:

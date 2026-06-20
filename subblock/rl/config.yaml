@@ -6,7 +6,7 @@ meta_info:
     harbor-verl-train sync_1node_cc launch path: claude-code (mounted in a k8s
     pod) → LiteLLM proxy → vLLM (verl-managed). PPO/GRPO updates are driven by
     verl over Harbor-executed agent trajectories.
-  parent: lego_factory
+  parent: swe_lego_live
   subblocks: {}
   dependencies:
     base_model_checkpoint: trainer.output.checkpoint_path  # path: subblock/trainer/artifacts/model/<run>/checkpoint-N
@@ -167,7 +167,7 @@ runtime_info:
       temperature: 1.0
       max_retries: 2
       verifier_enabled: true
-      pod_name_prefix: lego-factory-rl
+      pod_name_prefix: swe-lego-live-rl
       agent_setup_timeout_multiplier: 1.0
       agent_timeout_multiplier: 1.0
       verifier_timeout_multiplier: 1.0
@@ -221,10 +221,10 @@ runtime_info:
     # Experiment / logging
     # ---------------------------------------------------------------------
     experiment:
-      project_name: lego-factory-rl
+      project_name: swe-lego-live-rl
       exp_name: ""                 # empty → auto-generated as harbor-cc-sync-1n-<UTC timestamp>
       trials_dir: ""               # empty → repos/harbor-verl-train/harbor_trials/<project>/<exp>
-      trajectory_logger_src: /mnt/ydu/LegoFactory-RL/subblock/rl/repos/harbor/scripts/serve_llm/trajectory_logger.py
+      trajectory_logger_src: /mnt/ydu/SWE-Lego-Live-RL/subblock/rl/repos/harbor/scripts/serve_llm/trajectory_logger.py
 
     # ---------------------------------------------------------------------
     # Credentials — do NOT commit secrets here.
