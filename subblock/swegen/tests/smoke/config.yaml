@@ -33,20 +33,23 @@ runtime_info:
   input:
     github_tokens: human
 
-    # Smoke uses the same CF-gated on-prem endpoint trajgen drives Harbor
-    # against (`llm10.jierungogogo.com`, GLM-5-FP8). Production swegen
-    # stays on az.gptplus5.com/deepseek-v4-flash. Swap reason: smoke's
-    # historical model `deepseek-v4-flash` started returning HTTP 500 from
-    # the proxy upstream (verified 5/5 attempts with distinct request ids
-    # 2026-06-19/20). The llm10 endpoint is proven stable — it's been
-    # passing 4-block smokes via trajgen for the entire CI history. The
-    # `dummy-cf` key is intentional (the endpoint authenticates via the
-    # Cloudflare zero-trust layer, not the bearer token).
+    # Smoke uses az.gptplus5.com / deepseek-v4-flash (matches production
+    # swegen config). Outage history (kept for context — task #19 still
+    # tracks fixture rot, separate problem):
+    #   - 2026-06-19/20: v4-flash upstream returned HTTP 500 for ~hours
+    #     (13+ probes, distinct request ids). PR #48 temporarily swapped
+    #     to llm10/GLM-5-FP8 to unblock; reverted here once v4-flash
+    #     recovered (probed 3/3 HTTP 200 with real content on 2026-06-20).
+    #   - GLM-5-FP8, claude-opus-4-8, claude-sonnet-4-6 were all tested
+    #     as fallbacks: GLM produced 7 task dirs / 0 verified (LLM-quality
+    #     fix.patch wrong), opus returned empty content for swegen's
+    #     verdict-shaped prompt, sonnet returned empty for ~95% of PRs.
+    #     deepseek-v4-flash is the only model with historical real PASSes.
     llm_api:
-      api_key: dummy-cf
-      api_base_url: http://llm10.jierungogogo.com/v1
-      pr_model: GLM-5-FP8
-      task_model: GLM-5-FP8
+      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
+      api_base_url: https://az.gptplus5.com/v1
+      pr_model: deepseek-v4-flash
+      task_model: deepseek-v4-flash
 
     # Smoke uses only py. Other languages and the adaptive `global` /
     # `status` blocks from production are dropped; they're not read by
