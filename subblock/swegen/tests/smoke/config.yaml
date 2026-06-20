@@ -33,11 +33,20 @@ runtime_info:
   input:
     github_tokens: human
 
+    # Smoke uses the same CF-gated on-prem endpoint trajgen drives Harbor
+    # against (`llm10.jierungogogo.com`, GLM-5-FP8). Production swegen
+    # stays on az.gptplus5.com/deepseek-v4-flash. Swap reason: smoke's
+    # historical model `deepseek-v4-flash` started returning HTTP 500 from
+    # the proxy upstream (verified 5/5 attempts with distinct request ids
+    # 2026-06-19/20). The llm10 endpoint is proven stable — it's been
+    # passing 4-block smokes via trajgen for the entire CI history. The
+    # `dummy-cf` key is intentional (the endpoint authenticates via the
+    # Cloudflare zero-trust layer, not the bearer token).
     llm_api:
-      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
-      api_base_url: https://az.gptplus5.com/v1
-      pr_model: deepseek-v4-flash
-      task_model: deepseek-v4-flash
+      api_key: dummy-cf
+      api_base_url: http://llm10.jierungogogo.com/v1
+      pr_model: GLM-5-FP8
+      task_model: GLM-5-FP8
 
     # Smoke uses only py. Other languages and the adaptive `global` /
     # `status` blocks from production are dropped; they're not read by
