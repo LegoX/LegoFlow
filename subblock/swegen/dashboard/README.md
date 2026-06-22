@@ -1,8 +1,13 @@
-# SWE-gen 进度监控 Dashboard
+# SWE-gen 任务进度监控 Dashboard
 
-这个目录保存 SWE-gen 进度监控网页的生成和部署代码。网页内容格式沿用 SWE-gen
-项目里的原始 dashboard。生成器默认读取 `$SWEGEN_HOME/SWE-gen` 下的实时数据，
-并把运行时文件写到当前 `subblock/swegen/dashboard/` 目录下。
+这个目录保存 SWE-gen 任务进度监控网页的生成和部署代码。生成器默认读取
+`$SWEGEN_HOME/SWE-gen` 下的实时 SWE 任务数据，并把运行时文件写到当前
+`subblock/swegen/dashboard/` 目录下。
+
+页面风格参考 `SWE-Lego-Live` 的 `yuxin/eval` 分支中
+`subblock/eval/dashboard` 的 MDX dashboard contract：克制的文档式布局、
+清晰的 Overview / Inputs & Outputs / Status / Method Notes 分区、紧凑表格
+和运维交接说明。看板只展示 SWE 任务进度，不展示其他数据面板。
 
 ## 配置变量
 
@@ -21,7 +26,6 @@ SWEGEN_DATA_ROOT="$SWEGEN_HOME/SWE-gen"
 SWEGEN_TASK_ROOT="$SWEGEN_DATA_ROOT/tasks/March"
 SWEGEN_PR_DIR="$SWEGEN_DATA_ROOT/collected_prs"
 SWEGEN_DASHBOARD_ROOT="subblock/swegen/dashboard"
-SWEGEN_TRAJ_DIR="/path/to/trajectory-jsonl-dir"
 ```
 
 | 变量 | 怎么填 | 默认值 |
@@ -37,7 +41,6 @@ SWEGEN_TRAJ_DIR="/path/to/trajectory-jsonl-dir"
 | `SWEGEN_TASK_ROOT` | SWE-gen 任务输出目录。 | `$SWEGEN_DATA_ROOT/tasks/March` |
 | `SWEGEN_PR_DIR` | PR ID 文件目录。 | `$SWEGEN_DATA_ROOT/collected_prs` |
 | `SWEGEN_DASHBOARD_ROOT` | Dashboard 运行时输出目录。 | 当前脚本所在目录，即 `subblock/swegen/dashboard` |
-| `SWEGEN_TRAJ_DIR` | 轨迹 `.jsonl` 文件目录；不需要轨迹页数据时可不设置。 | 内置部署环境路径，可用该变量覆盖 |
 
 ## 本地生成
 
@@ -61,7 +64,7 @@ python3 subblock/swegen/dashboard/progress_monitor_all.py --serve
 仓库中包含两个生成器运行状态文件：
 
 - `memory/.progress_monitor_all_state.jsonl`：历史快照文件。每次运行生成器时都会追加一行 JSON，记录当时各语言的 PR 数、已处理数、可验证任务数等概要数据。页面里的 1 小时和 24 小时增量来自这个文件。
-- `memory/.progress_monitor_all_cache.json`：增量缓存文件。生成器扫描任务目录、batch 状态和轨迹文件时会把文件签名和统计结果写入这里，下次运行时可复用未变化文件的统计，避免每次都全量解析大量任务和轨迹数据。
+- `memory/.progress_monitor_all_cache.json`：增量缓存文件。生成器扫描任务目录和 batch 状态时会把文件签名和统计结果写入这里，下次运行时可复用未变化文件的统计，避免每次都全量解析大量任务数据。
 
 这两个文件由下面的命令生成或更新：
 

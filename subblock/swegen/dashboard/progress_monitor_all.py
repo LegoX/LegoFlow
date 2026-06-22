@@ -24,8 +24,6 @@ from pathlib import Path
 from threading import Thread
 from typing import Any
 
-import tiktoken
-
 try:
     import tomllib
 except Exception:  # pragma: no cover - Python < 3.11 fallback path
@@ -43,27 +41,6 @@ DEFAULT_HTML = DASHBOARD_ROOT / "site" / "index.html"
 DEFAULT_STATE = DASHBOARD_ROOT / "memory" / ".progress_monitor_all_state.jsonl"
 DEFAULT_CACHE = DASHBOARD_ROOT / "memory" / ".progress_monitor_all_cache.json"
 CACHE_VERSION = 2
-
-TRAJ_DIR = Path(
-    os.environ.get(
-        "SWEGEN_TRAJ_DIR",
-        "/home/ywxzml3j/ywxzml3juser57/LLaMA-Factory/data/chaofan_jierun_traj",
-    )
-).expanduser()
-
-SCAFFOLD_ALIASES: dict[str, str] = {
-    "cc": "Claude Code",
-    "oc": "OpenCode",
-    "t2": "Terminus-2",
-    "oh": "OpenHands-AI",
-    "ohsdk": "OpenHands SDK",
-    "oh_sdk": "OpenHands SDK",
-}
-
-SCORE_FIELDS = ("composite_score", "efficiency_score", "style_score",
-                "tool_mastery_score", "completion_score", "precision_score")
-
-_tiktoken_enc = tiktoken.get_encoding("cl100k_base")
 
 LANGS: list[tuple[str, str, str, str]] = [
     ("c", "C", "c-cc", "c"),
@@ -150,6 +127,7 @@ def load_cache(path: Path) -> dict[str, Any]:
         return {"version": CACHE_VERSION, "files": {}, "langs": {}}
     data.setdefault("files", {})
     data.setdefault("langs", {})
+    data.pop("traj", None)
     return data
 
 
@@ -655,133 +633,6 @@ def collect_batch_stats(lang: str, lang_dir_name: str, cache: dict[str, Any]) ->
     return result
 
 
-def parse_traj_filename(filename: str) -> dict[str, str]:
-    stem = filename.rsplit(".", 1)[0]
-    parts = stem.split("_")
-    # Last part is count (numeric)
-    count = parts[-1] if parts[-1].isdigit() else "0"
-    rest = parts[:-1]
-    # First part is agent, second is model
-    agent = rest[0] if len(rest) > 0 else "unknown"
-    model = rest[1] if len(rest) > 1 else "unknown"
-    # Last remaining part is scaffold (may be multi-word like oh_sdk)
-    remaining = rest[2:]
-    scaffold = ""
-    dataset_parts: list[str] = []
-    # Try known scaffolds from the end
-    for n in (2, 1):
-        if len(remaining) >= n:
-            candidate = "_".join(remaining[-n:])
-            if candidate in SCAFFOLD_ALIASES:
-                scaffold = candidate
-                dataset_parts = remaining[:-n]
-                break
-    if not scaffold and remaining:
-        scaffold = remaining[-1]
-        dataset_parts = remaining[:-1]
-    dataset = "_".join(dataset_parts) if dataset_parts else "unknown"
-    return {
-        "agent": agent,
-        "model": model,
-        "dataset": dataset,
-        "scaffold": scaffold,
-        "scaffold_display": SCAFFOLD_ALIASES.get(scaffold, scaffold),
-        "count": count,
-    }
-
-
-def collect_single_traj_file(fpath: Path) -> dict[str, Any]:
-    stats: dict[str, Any] = {
-        "main_count": 0, "subagent_count": 0,
-        "main_messages": 0, "subagent_messages": 0,
-        "main_tokens": 0, "subagent_tokens": 0,
-        "main_tool_calls": 0, "subagent_tool_calls": 0,
-        "scores": {f: [] for f in SCORE_FIELDS},
-        "think_modes": {},
-    }
-    with fpath.open("r", encoding="utf-8", errors="replace") as f:
-        for raw_line in f:
-            try:
-                obj = json.loads(raw_line)
-            except Exception:
-                continue
-            agent_type = obj.get("_agent_type")
-            is_sub = agent_type == "subagent"
-            prefix = "subagent" if is_sub else "main"
-            stats[f"{prefix}_count"] += 1
-            msgs = obj.get("messages") or []
-            stats[f"{prefix}_messages"] += len(msgs)
-            tokens = 0
-            tc = 0
-            for m in msgs:
-                text = (m.get("content") or "") + (m.get("reasoning_content") or "")
-                tokens += len(_tiktoken_enc.encode(text, disallowed_special=()))
-                if m.get("tool_calls"):
-                    tc += len(m["tool_calls"])
-                elif m.get("role") == "assistant":
-                    content = m.get("content") or ""
-                    json_str = None
-                    think_end = content.find("</think>")
-                    if think_end >= 0:
-                        json_str = content[think_end + 8:].strip()
-                    elif content.startswith("{"):
-                        json_str = content
-                    if json_str:
-                        try:
-                            parsed = json.loads(json_str)
-                            if isinstance(parsed.get("commands"), list):
-                                tc += len(parsed["commands"])
-                        except (json.JSONDecodeError, ValueError):
-                            pass
-            stats[f"{prefix}_tokens"] += tokens
-            stats[f"{prefix}_tool_calls"] += tc
-            score = obj.get("_score")
-            if isinstance(score, dict):
-                for field in SCORE_FIELDS:
-                    val = score.get(field)
-                    if isinstance(val, (int, float)):
-                        stats["scores"][field].append(float(val))
-            tm = obj.get("think_mode")
-            if tm:
-                stats["think_modes"][str(tm)] = stats["think_modes"].get(str(tm), 0) + 1
-    return stats
-
-
-def collect_trajectory_stats(cache: dict[str, Any], force_full_scan: bool) -> list[dict[str, Any]]:
-    if not TRAJ_DIR.exists():
-        return []
-    traj_cache = cache.setdefault("traj", {"files": {}})
-    cached_files = traj_cache.setdefault("files", {})
-    results: list[dict[str, Any]] = []
-
-    jsonl_files: list[tuple[str, Path]] = []
-    with os.scandir(TRAJ_DIR) as entries:
-        for entry in entries:
-            if entry.is_file() and entry.name.endswith(".jsonl"):
-                jsonl_files.append((entry.name, Path(entry.path)))
-
-    for fname, fpath in sorted(jsonl_files):
-        sig = stat_sig(fpath)
-        if sig is None:
-            continue
-        metadata = parse_traj_filename(fname)
-        prev = cached_files.get(fname)
-        if not force_full_scan and isinstance(prev, dict) and prev.get("sig") == sig:
-            file_stats = prev.get("stats", {})
-        else:
-            file_stats = collect_single_traj_file(fpath)
-            cached_files[fname] = {"sig": sig, "metadata": metadata, "stats": file_stats}
-        file_size = sig["size"] if sig else 0
-        results.append({
-            "filename": fname,
-            "filepath": str(fpath),
-            "file_size": file_size,
-            "metadata": metadata,
-            "stats": file_stats,
-        })
-    return results
-
-
 def delta(current: dict[str, Any], prev: dict[str, Any] | None, lang: str, key: str) -> int | None:
     if prev is None:
         return 0
@@ -857,7 +708,6 @@ def collect_dashboard(rows: list[dict[str, Any]], cache: dict[str, Any], force_f
             "difficulty_labels": dict(label_totals),
             "global_tags": dict(global_tags.most_common(30)),
         },
-        "traj": collect_trajectory_stats(cache, force_full_scan),
         "history_count": len(rows_with_current),
     }
 
@@ -933,158 +783,6 @@ def render_tags(tags: dict[str, int], denominator: int, limit: int = 20) -> str:
     return "\n".join(rows)
 
 
-def render_trajectory_html(traj_data: list[dict[str, Any]]) -> str:
-    if not traj_data:
-        return '<div class="muted">无轨迹数据</div>'
-
-    total_files = len(traj_data)
-    total_lines = sum(d["stats"]["main_count"] + d["stats"]["subagent_count"] for d in traj_data)
-    total_main_msgs = sum(d["stats"]["main_messages"] for d in traj_data)
-    total_main_count = sum(d["stats"]["main_count"] for d in traj_data)
-    all_composite = []
-    for d in traj_data:
-        all_composite.extend(d["stats"].get("scores", {}).get("composite_score", []))
-    avg_msgs = total_main_msgs / total_main_count if total_main_count else 0
-    avg_score = sum(all_composite) / len(all_composite) if all_composite else 0
-
-    # KPI cards
-    kpis = (
-        '<section class="grid kpis">'
-        f'<div class="card"><div class="label">轨迹文件数</div><div class="value">{total_files}</div></div>'
-        f'<div class="card"><div class="label">轨迹总条数</div><div class="value">{total_lines:,}</div></div>'
-        f'<div class="card"><div class="label">平均消息轮数</div><div class="value">{avg_msgs:.1f}</div></div>'
-        f'<div class="card"><div class="label">平均 composite_score</div><div class="value">{avg_score:.4f}</div>'
-        f'<div class="sub">基于 {len(all_composite):,} 条有分数的轨迹</div></div>'
-        '</section>'
-    )
-
-    # Overview table
-    overview_rows = []
-    for d in traj_data:
-        meta = d["metadata"]
-        st = d["stats"]
-        mc = st["main_count"]
-        size_mb = d["file_size"] / 1024 / 1024
-        avg_m = st["main_messages"] / mc if mc else 0
-        avg_tok = st["main_tokens"] / mc if mc else 0
-        avg_tc = st["main_tool_calls"] / mc if mc else 0
-        scores = st.get("scores", {}).get("composite_score", [])
-        avg_s = sum(scores) / len(scores) if scores else None
-        score_cell = f"{avg_s:.4f}" if avg_s is not None else "—"
-        overview_rows.append(
-            "<tr>"
-            f"<td>{html.escape(meta['dataset'])}</td>"
-            f"<td>{html.escape(meta['scaffold_display'])}</td>"
-            f"<td><code>{html.escape(meta['model'])}</code></td>"
-            f"<td>{html.escape(meta['agent'])}</td>"
-            f"<td>{mc:,}</td>"
-            f"<td>{size_mb:.0f} MB</td>"
-            f"<td>{avg_m:.1f}</td><td>{avg_tok:,.0f}</td><td>{avg_tc:.1f}</td>"
-            f"<td>{score_cell}</td>"
-            "</tr>"
-        )
-
-    overview_table = (
-        '<section class="panel"><h2>轨迹文件总览</h2><div class="table-wrap"><table>'
-        '<thead><tr><th>数据集</th><th>脚手架</th><th>模型</th><th>Owner</th>'
-        '<th>轨迹数</th><th>文件大小</th>'
-        '<th>平均轮数</th><th>平均 Token</th><th>平均 Tool Calls</th><th>平均 Score</th></tr></thead>'
-        f'<tbody>{"".join(overview_rows)}</tbody></table></div></section>'
-    )
-
-    # Quality scores table (only files with scores)
-    quality_rows = []
-    for d in traj_data:
-        scores = d["stats"].get("scores", {})
-        if not scores.get("composite_score"):
-            continue
-        meta = d["metadata"]
-        row_cells = [f"<td>{html.escape(meta['dataset'])}</td>", f"<td>{html.escape(meta['scaffold_display'])}</td>"]
-        for field in SCORE_FIELDS:
-            vals = scores.get(field, [])
-            avg = sum(vals) / len(vals) if vals else 0
-            row_cells.append(f"<td>{avg:.4f}</td>")
-        quality_rows.append(f"<tr>{''.join(row_cells)}</tr>")
-
-    quality_table = ""
-    if quality_rows:
-        quality_table = (
-            '<section class="panel"><h2>质量评分统计</h2><div class="table-wrap"><table>'
-            '<thead><tr><th>数据集</th><th>脚手架</th><th>composite</th><th>efficiency</th>'
-            '<th>style</th><th>tool_mastery</th><th>completion</th><th>precision</th></tr></thead>'
-            f'<tbody>{"".join(quality_rows)}</tbody></table></div></section>'
-        )
-
-    # By dataset comparison
-    dataset_agg: dict[str, dict[str, Any]] = {}
-    for d in traj_data:
-        key = d["metadata"]["dataset"]
-        agg = dataset_agg.setdefault(key, {"count": 0, "msgs": 0, "tokens": 0, "tc": 0, "scores": []})
-        agg["count"] += d["stats"]["main_count"]
-        agg["msgs"] += d["stats"]["main_messages"]
-        agg["tokens"] += d["stats"]["main_tokens"]
-        agg["tc"] += d["stats"]["main_tool_calls"]
-        agg["scores"].extend(d["stats"].get("scores", {}).get("composite_score", []))
-    dataset_rows = []
-    for name, agg in sorted(dataset_agg.items()):
-        c = agg["count"] or 1
-        avg_s = sum(agg["scores"]) / len(agg["scores"]) if agg["scores"] else None
-        score_cell = f"{avg_s:.4f}" if avg_s else "—"
-        dataset_rows.append(
-            f"<tr><td><strong>{html.escape(name)}</strong></td>"
-            f"<td>{agg['count']:,}</td><td>{agg['msgs']/c:.1f}</td>"
-            f"<td>{agg['tokens']/c:,.0f}</td><td>{agg['tc']/c:.1f}</td>"
-            f"<td>{score_cell}</td></tr>"
-        )
-    dataset_table = (
-        '<section class="panel"><h2>按数据集对比</h2><div class="table-wrap"><table>'
-        '<thead><tr><th>数据集</th><th>总轨迹数</th><th>平均轮数</th><th>平均 Token</th>'
-        '<th>平均 Tool Calls</th><th>平均 Score</th></tr></thead>'
-        f'<tbody>{"".join(dataset_rows)}</tbody></table></div></section>'
-    )
-
-    # File path directory
-    path_by_dataset: dict[str, list[dict[str, Any]]] = {}
-    for d in traj_data:
-        ds = d["metadata"]["dataset"]
-        path_by_dataset.setdefault(ds, []).append(d)
-    path_rows = []
-    for ds in sorted(path_by_dataset.keys()):
-        files = path_by_dataset[ds]
-        for f in sorted(files, key=lambda x: (x["metadata"]["scaffold"], x["metadata"]["agent"])):
-            meta = f["metadata"]
-            size_mb = f["file_size"] / 1024 / 1024
-            count = f["stats"]["main_count"] + f["stats"]["subagent_count"]
-            path_rows.append(
-                f"<tr><td>{html.escape(ds)}</td>"
-                f"<td>{html.escape(meta['scaffold_display'])}</td>"
-                f"<td>{html.escape(meta['agent'])}</td>"
-                f"<td><code>{html.escape(f['filepath'])}</code></td>"
-                f"<td>{size_mb:.0f} MB</td><td>{count:,}</td></tr>"
-            )
-    path_table = (
-        '<section class="panel"><h2>源数据路径目录</h2><div class="table-wrap"><table>'
-        '<thead><tr><th>数据集</th><th>脚手架</th><th>Owner</th><th>文件路径</th>'
-        '<th>大小</th><th>条数</th></tr></thead>'
-        f'<tbody>{"".join(path_rows)}</tbody></table></div></section>'
-    )
-
-    # Method explanation
-    method_section = (
-        '<section class="panel"><h2>统计方法说明</h2><div class="method-grid">'
-        '<div class="method-card"><h3>平均轮数 / Token / Tool Calls</h3>'
-        '<p><strong>平均轮数</strong>：每条轨迹的 <code>messages</code> 数组长度的平均值。</p>'
-        '<p><strong>平均 Token</strong>：使用 tiktoken cl100k_base tokenizer 对所有 message 的 content + reasoning_content 精确编码计数的平均值。</p>'
-        '<p><strong>平均 Tool Calls</strong>：assistant 消息中 <code>tool_calls</code> 数组长度之和的平均值。对 Terminus-2 脚手架，统计 assistant 消息 JSON content 中 <code>commands</code> 数组的长度。</p></div>'
-        '<div class="method-card"><h3>质量评分</h3>'
-        '<p><code>composite_score</code>（0-1）由五个维度加权：efficiency（效率）、style（风格）、tool_mastery（工具掌握）、completion（完成度）、precision（精确度）。</p>'
-        '<p>仅部分文件包含 <code>_score</code> 字段，无分数的文件显示 "—"。</p></div>'
-        '</div></section>'
-    )
-
-    return kpis + overview_table + quality_table + dataset_table + path_table + method_section
-
-
 def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -> str:
     updated = datetime.fromisoformat(data["ts"]).strftime("%Y-%m-%d %H:%M:%S BJT")
     next_refresh = (now_bjt() + timedelta(seconds=refresh_seconds)).strftime("%Y-%m-%d %H:%M:%S BJT")
@@ -1098,7 +796,6 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     tag_sections = []
     params_rows = []
     failure_rows = []
-    traj_html = render_trajectory_html(data.get("traj", []))
 
     for lang, _, _, _ in LANGS:
         row = langs[lang]
@@ -1188,75 +885,99 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
 
     css = """
     :root {
-      --bg: #f5f7fb;
-      --panel: #ffffff;
-      --text: #1f2937;
-      --muted: #667085;
-      --line: #e5e7eb;
-      --blue: #2563eb;
-      --green: #16a34a;
-      --amber: #d97706;
-      --red: #dc2626;
-      --purple: #7c3aed;
-      --shadow: 0 12px 30px rgba(15, 23, 42, .08);
+      --bg: #fafaf7;
+      --panel: #fffdf8;
+      --text: #111111;
+      --muted: #6b6b66;
+      --line: #e6e3da;
+      --soft: #f1efe9;
+      --soft-2: #efece4;
+      --primary: #b3431f;
+      --primary-soft: #f5ded4;
+      --green: #477a45;
+      --amber: #b7791f;
+      --red: #b4533b;
+      --purple: #7c4d8f;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 18px; line-height: 1.5; }
-    header { padding: 34px 40px 24px; background: linear-gradient(135deg, #172554, #1d4ed8 48%, #0891b2); color: white; }
-    header h1 { margin: 0 0 10px; font-size: 40px; letter-spacing: -.02em; }
-    header p { margin: 6px 0; color: rgba(255,255,255,.84); font-size: 17px; }
-    main { padding: 30px 40px 56px; max-width: 1780px; margin: 0 auto; }
-    .grid { display: grid; gap: 18px; }
-    .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 24px; }
-    .card, .panel, .tag-card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
-    .card { padding: 22px; }
-    .card .label { color: var(--muted); font-size: 16px; }
-    .card .value { font-size: 40px; font-weight: 780; margin-top: 10px; }
-    .card .sub { color: var(--muted); margin-top: 8px; font-size: 15px; }
-    .panel { padding: 24px; margin-top: 22px; overflow: hidden; }
-    .panel h2 { margin: 0 0 18px; font-size: 26px; }
-    .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 17px; }
-    th { text-align: left; color: var(--muted); font-weight: 650; background: #f8fafc; }
-    th, td { padding: 14px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    .page { max-width: 1180px; margin: 0 auto; padding: 42px 28px 64px; }
+    header { border-bottom: 1px solid var(--line); padding-bottom: 24px; margin-bottom: 28px; }
+    header h1 { margin: 0; font-size: 42px; line-height: 1.12; letter-spacing: -.03em; }
+    header p { margin: 10px 0 0; color: var(--muted); max-width: 860px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--muted);
+      padding: 4px 10px;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+    .eyebrow { color: var(--primary); font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .grid { display: grid; gap: 14px; }
+    .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 18px 0 4px; }
+    .card, .panel, .tag-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+    .card { padding: 18px; }
+    .card .label { color: var(--muted); font-size: 14px; }
+    .card .value { font-size: 34px; line-height: 1.1; font-weight: 760; margin-top: 8px; letter-spacing: -.02em; }
+    .card .sub { color: var(--muted); margin-top: 8px; font-size: 13px; }
+    .panel { padding: 22px; margin-top: 18px; overflow: hidden; }
+    .panel h2 { margin: 4px 0 12px; font-size: 24px; line-height: 1.25; letter-spacing: -.015em; }
+    .panel h3 { margin: 0 0 10px; font-size: 18px; line-height: 1.35; }
+    .panel p { margin: 8px 0; color: var(--muted); }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--panel); }
+    th { text-align: left; color: var(--muted); font-weight: 650; background: var(--soft); }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
     tr:last-child td { border-bottom: 0; }
     td:not(:first-child), th:not(:first-child) { text-align: right; }
-    .code { display: inline-block; margin-left: 8px; color: var(--muted); font-size: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .delta { color: var(--blue); font-variant-numeric: tabular-nums; }
-    .muted, .mini { color: var(--muted); font-size: 14px; }
-    .bar { position: relative; height: 28px; min-width: 132px; background: #e8eefc; border-radius: 999px; overflow: hidden; }
-    .bar-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--blue), #06b6d4); border-radius: inherit; }
-    .bar span { position: relative; z-index: 1; display: block; line-height: 28px; text-align: center; font-size: 15px; color: #0f172a; font-weight: 650; }
-    .stacked { display: flex; height: 24px; min-width: 220px; overflow: hidden; border-radius: 999px; background: #eef2f7; }
+    .code { display: inline-block; margin-left: 8px; color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .delta { color: var(--primary); font-variant-numeric: tabular-nums; }
+    .muted, .mini { color: var(--muted); font-size: 13px; }
+    .bar { position: relative; height: 24px; min-width: 118px; background: var(--primary-soft); border-radius: 999px; overflow: hidden; }
+    .bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--primary); border-radius: inherit; }
+    .bar span { position: relative; z-index: 1; display: block; line-height: 24px; text-align: center; font-size: 13px; color: var(--text); font-weight: 650; }
+    .stacked { display: flex; height: 22px; min-width: 180px; overflow: hidden; border-radius: 999px; background: var(--soft); }
     .stacked.empty { display: block; height: auto; background: transparent; color: var(--muted); }
     .seg.easy { background: var(--green); }
     .seg.medium { background: var(--amber); }
     .seg.hard { background: var(--red); }
-    .tags-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-    .tag-card { padding: 20px; box-shadow: none; }
-    .tag-card h3 { margin: 0 0 14px; font-size: 20px; }
-    .tag-card h3 span { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; }
-    .tag-row { display: grid; grid-template-columns: 180px 1fr 132px; align-items: center; gap: 12px; margin: 10px 0; font-size: 16px; }
+    .tags-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .tag-card { padding: 16px; background: var(--bg); }
+    .tag-card h3 { margin: 0 0 12px; font-size: 16px; }
+    .tag-card h3 span { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .tag-row { display: grid; grid-template-columns: 160px 1fr 118px; align-items: center; gap: 10px; margin: 8px 0; font-size: 13px; }
     .tag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-    .tag-track { height: 12px; background: #ede9fe; border-radius: 999px; overflow: hidden; }
-    .tag-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--purple), #2563eb); border-radius: inherit; }
+    .tag-track { height: 10px; background: var(--soft); border-radius: 999px; overflow: hidden; }
+    .tag-fill { display: block; height: 100%; background: var(--purple); border-radius: inherit; }
     .tag-count { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
-    .method-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-    .method-card { padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #f8fafc; }
-    .method-card h3 { margin: 0 0 10px; font-size: 20px; }
-    .method-card p { margin: 8px 0; color: #374151; font-size: 16px; }
-    .method-note { margin-top: 16px; padding: 14px 18px; background: #f8fafc; border-radius: 12px; border: 1px solid var(--line); }
-    .method-note p { margin: 6px 0; color: var(--muted); font-size: 15px; }
-    code { padding: 2px 6px; border-radius: 6px; background: #e5e7eb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
-    .footer { margin-top: 22px; color: var(--muted); font-size: 14px; text-align: center; }
-    .tabs { display: flex; gap: 0; padding: 0 40px; background: #1e3a5f; }
-    .tab { padding: 14px 28px; border: none; background: transparent; color: rgba(255,255,255,.7); font-size: 17px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all .15s; }
-    .tab:hover { color: rgba(255,255,255,.9); }
-    .tab.active { color: white; border-bottom-color: #06b6d4; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-    @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tags-grid, .method-grid { grid-template-columns: 1fr; } }
-    @media (max-width: 760px) { main, header, .tabs { padding-left: 16px; padding-right: 16px; } .kpis { grid-template-columns: 1fr; } }
+    .method-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .method-card { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+    .method-card p { margin: 7px 0; font-size: 14px; }
+    .method-note { margin-top: 14px; padding: 14px 16px; background: var(--soft); border-radius: 12px; border: 1px solid var(--line); }
+    .method-note p { margin: 5px 0; font-size: 13px; }
+    .io-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .io-card { background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .io-card ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); }
+    code { padding: 2px 5px; border-radius: 5px; background: var(--soft); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+    .footer { margin-top: 22px; color: var(--muted); font-size: 13px; text-align: center; }
+    @media (max-width: 1000px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tags-grid, .method-grid, .io-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 680px) { .page { padding: 24px 14px 48px; } header h1 { font-size: 32px; } .kpis { grid-template-columns: 1fr; } .tag-row { grid-template-columns: 1fr; } td:not(:first-child), th:not(:first-child) { text-align: left; } }
     """
 
     global_tags = render_tags(totals["global_tags"], max(1, sum(int(d["tasks_with_tags"]) for d in langs.values())), 30)
@@ -1267,25 +988,61 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="refresh" content="{int(refresh_seconds)}">
-  <title>SWE 任务和轨迹进度看板</title>
+  <title>SWE 任务进度看板</title>
   <style>{css}</style>
 </head>
 <body>
-  <header>
-    <h1>SWE 任务和轨迹进度看板</h1>
-    <p>最后更新时间：{html.escape(updated)}　|　下次刷新：{html.escape(next_refresh)}　|　刷新间隔：{int(refresh_seconds)} 秒</p>
-  </header>
-  <nav class="tabs">
-    <button class="tab active" onclick="switchTab('instance')">Instance</button>
-    <button class="tab" onclick="switchTab('trajectory')">Trajectory</button>
-  </nav>
-  <main>
-  <div id="tab-instance" class="tab-content active">
-    <section class="grid kpis">
-      <div class="card"><div class="label">收集 PR 总数</div><div class="value">{fmt_int(totals['pr_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_pr'])} / 24h {fmt_delta(totals['delta_24h_pr'])}</div></div>
-      <div class="card"><div class="label">有效 SWE 总数</div><div class="value">{fmt_int(totals['valid_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_valid'])} / 24h {fmt_delta(totals['delta_24h_valid'])}</div></div>
-      <div class="card"><div class="label">整体处理成功率</div><div class="value">{fmt_float(totals['success_rate'], 1)}%</div><div class="sub">Valid SWE / 已处理 {fmt_int(totals['processed_count'])}</div></div>
-      <div class="card"><div class="label">difficulty_score 均值</div><div class="value">{fmt_float(total_stats['mean'], 2)}</div><div class="sub">median {fmt_float(total_stats['median'], 1)}，count {fmt_int(total_stats['count'])}</div></div>
+  <main class="page">
+    <header>
+      <div class="eyebrow">SWE-gen Dashboard</div>
+      <h1>SWE 任务进度看板</h1>
+      <p>面向 SWE-gen 任务生产的公开进度页面。页面保留原有 PR 收集、任务验证、失败原因、难度、标签和 patch 复杂度统计口径，展示风格参考 yuxin/eval 的 MDX 运维面板。</p>
+      <div class="meta">
+        <span class="pill">最后更新时间：{html.escape(updated)}</span>
+        <span class="pill">下次刷新：{html.escape(next_refresh)}</span>
+        <span class="pill">刷新间隔：{int(refresh_seconds)} 秒</span>
+      </div>
+    </header>
+
+    <section class="panel" id="overview">
+      <div class="eyebrow">Overview</div>
+      <h2>SWE-gen 任务生成总览</h2>
+      <p>当前看板读取 <code>collected_prs</code>、各语言输出目录、<code>verifiable_tasks.txt</code>、<code>task.toml</code> 和 <code>solution/fix.patch</code>，用于跟踪可验证 SWE 任务的生产进度。</p>
+      <section class="grid kpis">
+        <div class="card"><div class="label">收集 PR 总数</div><div class="value">{fmt_int(totals['pr_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_pr'])} / 24h {fmt_delta(totals['delta_24h_pr'])}</div></div>
+        <div class="card"><div class="label">有效 SWE 总数</div><div class="value">{fmt_int(totals['valid_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_valid'])} / 24h {fmt_delta(totals['delta_24h_valid'])}</div></div>
+        <div class="card"><div class="label">整体处理成功率</div><div class="value">{fmt_float(totals['success_rate'], 1)}%</div><div class="sub">Valid SWE / 已处理 {fmt_int(totals['processed_count'])}</div></div>
+        <div class="card"><div class="label">difficulty_score 均值</div><div class="value">{fmt_float(total_stats['mean'], 2)}</div><div class="sub">median {fmt_float(total_stats['median'], 1)}，count {fmt_int(total_stats['count'])}</div></div>
+      </section>
+    </section>
+
+    <section class="panel" id="inputs-outputs">
+      <div class="eyebrow">Inputs &amp; Outputs</div>
+      <h2>数据来源与产物</h2>
+      <div class="io-grid">
+        <div class="io-card">
+          <h3>Inputs</h3>
+          <ul>
+            <li><code>{html.escape(str(PR_DIR))}</code> 下的 PR ID 文件</li>
+            <li><code>{html.escape(str(ROOT))}</code> 下的各语言任务目录</li>
+            <li><code>verifiable_tasks.txt</code>、<code>task.toml</code>、<code>solution/fix.patch</code></li>
+          </ul>
+        </div>
+        <div class="io-card">
+          <h3>Outputs</h3>
+          <ul>
+            <li>静态 HTML：<code>{html.escape(str(output_path))}</code></li>
+            <li>增量快照：<code>{html.escape(str(DEFAULT_STATE))}</code></li>
+            <li>扫描缓存：<code>{html.escape(str(DEFAULT_CACHE))}</code></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="status">
+      <div class="eyebrow">Status</div>
+      <h2>当前进度</h2>
+      <p>以下表格展示每个语言的 PR 收集、有效任务、处理成功率、运行参数和失败类型分布。</p>
     </section>
 
     <section class="panel">
@@ -1335,7 +1092,8 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="method-notes">
+      <div class="eyebrow">Method Notes</div>
       <h2>统计方法说明</h2>
       <div class="method-grid">
         <div class="method-card">
@@ -1388,20 +1146,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     </section>
 
     <div class="footer">由 progress_monitor_all.py 生成。页面会自动刷新；数据来自 collected_prs、各语言输出目录、verifiable_tasks.txt、task.toml 和 solution/fix.patch。</div>
-  </div>
-  <div id="tab-trajectory" class="tab-content">
-    {traj_html}
-    <div class="footer">轨迹数据来自 {html.escape(str(TRAJ_DIR))} 目录下的 .jsonl 文件。</div>
-  </div>
   </main>
-  <script>
-  function switchTab(name) {{
-    document.querySelectorAll('.tab-content').forEach(function(el) {{ el.classList.remove('active'); }});
-    document.querySelectorAll('.tab').forEach(function(el) {{ el.classList.remove('active'); }});
-    document.getElementById('tab-' + name).classList.add('active');
-    document.querySelector('[onclick*="' + name + '"]').classList.add('active');
-  }}
-  </script>
 </body>
 </html>
 """
