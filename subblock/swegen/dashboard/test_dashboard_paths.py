@@ -98,7 +98,6 @@ def test_render_html_is_swe_task_only_dashboard():
     for required_section in (
         "Overview",
         "Inputs &amp; Outputs",
-        "Status",
         "Method Notes",
         "Language Progress",
         "Run Parameters",

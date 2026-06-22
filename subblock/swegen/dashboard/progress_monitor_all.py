@@ -885,105 +885,167 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
 
     css = """
     :root {
-      --bg: #fafaf7;
-      --panel: #fffdf8;
-      --text: #111111;
-      --muted: #6b6b66;
-      --line: #e6e3da;
-      --soft: #f1efe9;
-      --soft-2: #efece4;
-      --primary: #b3431f;
-      --primary-soft: #f5ded4;
-      --green: #477a45;
-      --amber: #b7791f;
-      --red: #b4533b;
-      --purple: #7c4d8f;
+      --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --c-bg: #020617;
+      --c-bg-2: #0f172a80;
+      --c-panel: #0b1226;
+      --c-border: #1e293b99;
+      --c-fg: #e2e8f0;
+      --c-fg-dim: #94a3b8;
+      --c-fg-mute: #64748b;
+      --c-fg-faint: #475569;
+      --c-accent: #6366f1;
+      --c-accent-soft: #6366f133;
+      --c-accent-border: #6366f180;
+      --c-good: #34d399;
+      --c-bad: #f87171;
+      --c-warn: #fbbf24;
+      --c-violet: #a78bfa;
+      font-size: 14px;
+    }
+    [data-theme="light"] {
+      --c-bg: #f8fafc;
+      --c-bg-2: #ffffff;
+      --c-panel: #ffffff;
+      --c-border: #e2e8f0;
+      --c-fg: #0f172a;
+      --c-fg-dim: #475569;
+      --c-fg-mute: #64748b;
+      --c-fg-faint: #94a3b8;
+      --c-accent: #4f46e5;
+      --c-accent-soft: #6366f122;
+      --c-accent-border: #6366f1;
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 16px;
-      line-height: 1.6;
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--c-bg); color: var(--c-fg);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      height: 100vh;
     }
-    .page { max-width: 1180px; margin: 0 auto; padding: 42px 28px 64px; }
-    header { border-bottom: 1px solid var(--line); padding-bottom: 24px; margin-bottom: 28px; }
-    header h1 { margin: 0; font-size: 42px; line-height: 1.12; letter-spacing: -.03em; }
-    header p { margin: 10px 0 0; color: var(--muted); max-width: 860px; }
-    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: var(--soft);
-      color: var(--muted);
-      padding: 4px 10px;
-      font-size: 13px;
-      font-variant-numeric: tabular-nums;
+    code, pre, .mono { font-family: var(--font-mono); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: var(--c-fg-faint); border-radius: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    /* shell: sidebar + topbar + content (harbor-dashboard layout) */
+    .layout { display: flex; height: 100vh; overflow: hidden; }
+    .sidebar {
+      width: 280px; flex-shrink: 0;
+      border-right: 1px solid var(--c-border);
+      background: linear-gradient(180deg, #0a1226 0%, var(--c-bg) 100%);
+      display: flex; flex-direction: column; overflow: hidden;
     }
-    .eyebrow { color: var(--primary); font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    [data-theme="light"] .sidebar { background: var(--c-bg-2); }
+    .sidebar-logo { padding: 16px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: 10px; }
+    .logo-mark {
+      width: 38px; height: 32px; border-radius: 8px; background: var(--c-accent);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800; font-size: 11px; letter-spacing: -.02em;
+    }
+    .logo-title { font-size: 13px; font-weight: 600; }
+    .logo-sub { font-size: 10px; color: var(--c-fg-mute); }
+    .nav { padding: 8px; display: flex; flex-direction: column; gap: 2px; border-bottom: 1px solid var(--c-border); }
+    .nav-item {
+      background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
+      padding: 7px 10px; border-radius: 8px; text-align: left; cursor: pointer;
+      font-size: 13px; display: flex; align-items: center; gap: 8px; text-decoration: none;
+    }
+    .nav-item:hover { background: #1e293b40; color: var(--c-fg); }
+    .nav-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #c7d2fe; }
+    [data-theme="light"] .nav-item.active { color: var(--c-accent); }
+    .sidebar-section { padding: 12px 8px 8px; flex: 1; overflow: auto; }
+    .section-label { text-transform: uppercase; font-size: 10px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 600; }
+    .sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 12px; }
+    .sidebar-stat .l { color: var(--c-fg-mute); }
+    .sidebar-stat .v { color: var(--c-fg); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .sidebar-footer { padding: 10px 12px; border-top: 1px solid var(--c-border); font-size: 11px; color: var(--c-fg-mute); }
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .topbar {
+      height: 48px; flex-shrink: 0; border-bottom: 1px solid var(--c-border);
+      padding: 0 16px; display: flex; align-items: center; justify-content: space-between; background: var(--c-bg);
+    }
+    .crumbs { font-size: 13px; color: var(--c-fg-dim); display: flex; align-items: center; gap: 6px; }
+    .crumbs .sep { color: var(--c-fg-faint); }
+    .crumbs .here { color: var(--c-fg); font-family: var(--font-mono); font-size: 12px; }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+    .icon-btn {
+      background: transparent; border: 1px solid var(--c-border); border-radius: 6px;
+      width: 28px; height: 28px; color: var(--c-fg-dim); cursor: pointer;
+    }
+    .icon-btn:hover { color: var(--c-fg); border-color: var(--c-accent); }
+    .content { flex: 1; overflow-y: auto; padding: 20px; }
+
+    /* sections */
+    .panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 16px; margin-bottom: 16px; overflow: hidden; }
+    .eyebrow { color: var(--c-fg-mute); font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+    .panel h2 { margin: 0 0 12px; font-size: 18px; line-height: 1.3; letter-spacing: -.01em; }
+    .panel h3 { margin: 0 0 8px; font-size: 14px; }
+    .panel p { margin: 8px 0; color: var(--c-fg-dim); font-size: 13px; }
+
     .grid { display: grid; gap: 14px; }
-    .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 18px 0 4px; }
-    .card, .panel, .tag-card {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-    }
-    .card { padding: 18px; }
-    .card .label { color: var(--muted); font-size: 14px; }
-    .card .value { font-size: 34px; line-height: 1.1; font-weight: 760; margin-top: 8px; letter-spacing: -.02em; }
-    .card .sub { color: var(--muted); margin-top: 8px; font-size: 13px; }
-    .panel { padding: 22px; margin-top: 18px; overflow: hidden; }
-    .panel h2 { margin: 4px 0 12px; font-size: 24px; line-height: 1.25; letter-spacing: -.015em; }
-    .panel h3 { margin: 0 0 10px; font-size: 18px; line-height: 1.35; }
-    .panel p { margin: 8px 0; color: var(--muted); }
-    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--panel); }
-    th { text-align: left; color: var(--muted); font-weight: 650; background: var(--soft); }
-    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
+    .card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 16px; }
+    .card .label { color: var(--c-fg-mute); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+    .card .value { font-size: 26px; line-height: 1.1; font-weight: 600; margin-top: 8px; font-family: var(--font-mono); color: var(--c-fg); }
+    .card .sub { color: var(--c-fg-mute); margin-top: 8px; font-size: 11px; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--c-border); vertical-align: middle; }
+    th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--c-fg-mute); font-weight: 600; background: #1e293b22; }
+    [data-theme="light"] th { background: #f1f5f9; }
     tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #1e293b22; }
+    [data-theme="light"] tbody tr:hover { background: #f1f5f9; }
     td:not(:first-child), th:not(:first-child) { text-align: right; }
-    .code { display: inline-block; margin-left: 8px; color: var(--muted); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .delta { color: var(--primary); font-variant-numeric: tabular-nums; }
-    .muted, .mini { color: var(--muted); font-size: 13px; }
-    .bar { position: relative; height: 24px; min-width: 118px; background: var(--primary-soft); border-radius: 999px; overflow: hidden; }
-    .bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--primary); border-radius: inherit; }
-    .bar span { position: relative; z-index: 1; display: block; line-height: 24px; text-align: center; font-size: 13px; color: var(--text); font-weight: 650; }
-    .stacked { display: flex; height: 22px; min-width: 180px; overflow: hidden; border-radius: 999px; background: var(--soft); }
-    .stacked.empty { display: block; height: auto; background: transparent; color: var(--muted); }
-    .seg.easy { background: var(--green); }
-    .seg.medium { background: var(--amber); }
-    .seg.hard { background: var(--red); }
+    .code { display: inline-block; margin-left: 8px; color: var(--c-fg-mute); font-size: 11px; font-family: var(--font-mono); }
+    .delta { color: var(--c-accent); font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+    .muted, .mini { color: var(--c-fg-mute); font-size: 11px; }
+
+    .bar { position: relative; height: 22px; min-width: 118px; background: var(--c-accent-soft); border-radius: 999px; overflow: hidden; }
+    .bar-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--c-accent), var(--c-violet)); border-radius: inherit; }
+    .bar span { position: relative; z-index: 1; display: block; line-height: 22px; text-align: center; font-size: 12px; color: var(--c-fg); font-weight: 600; }
+    .stacked { display: flex; height: 20px; min-width: 180px; overflow: hidden; border-radius: 999px; background: #1e293b55; }
+    .stacked.empty { display: block; height: auto; background: transparent; color: var(--c-fg-mute); }
+    .seg.easy { background: var(--c-good); }
+    .seg.medium { background: var(--c-warn); }
+    .seg.hard { background: var(--c-bad); }
     .tags-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-    .tag-card { padding: 16px; background: var(--bg); }
-    .tag-card h3 { margin: 0 0 12px; font-size: 16px; }
-    .tag-card h3 span { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-    .tag-row { display: grid; grid-template-columns: 160px 1fr 118px; align-items: center; gap: 10px; margin: 8px 0; font-size: 13px; }
+    .tag-card { padding: 16px; background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; }
+    .tag-card h3 { margin: 0 0 12px; font-size: 14px; }
+    .tag-card h3 span { color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 11px; }
+    .tag-row { display: grid; grid-template-columns: 160px 1fr 118px; align-items: center; gap: 10px; margin: 8px 0; font-size: 12px; }
     .tag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-    .tag-track { height: 10px; background: var(--soft); border-radius: 999px; overflow: hidden; }
-    .tag-fill { display: block; height: 100%; background: var(--purple); border-radius: inherit; }
-    .tag-count { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+    .tag-track { height: 10px; background: #1e293b55; border-radius: 999px; overflow: hidden; }
+    .tag-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--c-violet), var(--c-accent)); border-radius: inherit; }
+    .tag-count { color: var(--c-fg-mute); text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
     .method-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-    .method-card { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
-    .method-card p { margin: 7px 0; font-size: 14px; }
-    .method-note { margin-top: 14px; padding: 14px 16px; background: var(--soft); border-radius: 12px; border: 1px solid var(--line); }
-    .method-note p { margin: 5px 0; font-size: 13px; }
+    .method-card { padding: 16px; border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-bg-2); }
+    .method-card p { margin: 7px 0; font-size: 12px; color: var(--c-fg-dim); }
+    .method-note { margin-top: 14px; padding: 14px 16px; background: var(--c-bg-2); border-radius: 10px; border: 1px solid var(--c-border); }
+    .method-note p { margin: 5px 0; font-size: 12px; color: var(--c-fg-mute); }
     .io-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-    .io-card { background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-    .io-card ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); }
-    code { padding: 2px 5px; border-radius: 5px; background: var(--soft); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
-    .footer { margin-top: 22px; color: var(--muted); font-size: 13px; text-align: center; }
-    @media (max-width: 1000px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tags-grid, .method-grid, .io-grid { grid-template-columns: 1fr; } }
-    @media (max-width: 680px) { .page { padding: 24px 14px 48px; } header h1 { font-size: 32px; } .kpis { grid-template-columns: 1fr; } .tag-row { grid-template-columns: 1fr; } td:not(:first-child), th:not(:first-child) { text-align: left; } }
+    .io-card { background: var(--c-bg-2); border: 1px solid var(--c-border); border-radius: 10px; padding: 14px; }
+    .io-card ul { margin: 8px 0 0; padding-left: 18px; color: var(--c-fg-dim); font-size: 12px; }
+    code { padding: 2px 5px; border-radius: 5px; background: #1e293b55; font-family: var(--font-mono); font-size: .9em; }
+    [data-theme="light"] code { background: #e2e8f0; }
+    .footer { margin-top: 8px; color: var(--c-fg-mute); font-size: 11px; text-align: center; }
+    @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .method-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) {
+      .sidebar { display: none; }
+      .tags-grid, .io-grid, .kpis { grid-template-columns: 1fr; }
+      .tag-row { grid-template-columns: 1fr; }
+      td:not(:first-child), th:not(:first-child) { text-align: left; }
+    }
     """
 
     global_tags = render_tags(totals["global_tags"], max(1, sum(int(d["tasks_with_tags"]) for d in langs.values())), 30)
     total_stats = totals["difficulty_stats"]
     html_doc = f"""<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -992,17 +1054,44 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
   <style>{css}</style>
 </head>
 <body>
-  <main class="page">
-    <header>
-      <div class="eyebrow">SWE-gen Dashboard</div>
-      <h1>SWE Task Progress Dashboard</h1>
-      <p>Public progress page for SWE-gen task production. It keeps the original PR collection, task validation, failure reasons, difficulty, tags, and patch-complexity metrics, with a layout styled after the yuxin/eval MDX ops panel.</p>
-      <div class="meta">
-        <span class="pill">Last updated: {html.escape(updated)}</span>
-        <span class="pill">Next refresh: {html.escape(next_refresh)}</span>
-        <span class="pill">Refresh interval: {int(refresh_seconds)}s</span>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-mark">SWE</div>
+        <div>
+          <div class="logo-title">SWE-gen Progress</div>
+          <div class="logo-sub">Instance Dashboard</div>
+        </div>
       </div>
-    </header>
+      <nav class="nav">
+        <a class="nav-item active" href="#overview">Overview</a>
+        <a class="nav-item" href="#language-progress">Language Progress</a>
+        <a class="nav-item" href="#run-parameters">Run Parameters</a>
+        <a class="nav-item" href="#failures">Failure Breakdown</a>
+        <a class="nav-item" href="#patch-complexity">fix.patch Complexity</a>
+        <a class="nav-item" href="#method-notes">Method Notes</a>
+        <a class="nav-item" href="#difficulty">Difficulty</a>
+        <a class="nav-item" href="#tags">Tags</a>
+      </nav>
+      <div class="sidebar-section">
+        <div class="section-label">Summary</div>
+        <div class="sidebar-stat"><span class="l">PRs collected</span><span class="v">{fmt_int(totals['pr_count'])}</span></div>
+        <div class="sidebar-stat"><span class="l">Valid SWE</span><span class="v">{fmt_int(totals['valid_count'])}</span></div>
+        <div class="sidebar-stat"><span class="l">Success rate</span><span class="v">{fmt_float(totals['success_rate'], 1)}%</span></div>
+        <div class="sidebar-stat"><span class="l">Mean difficulty</span><span class="v">{fmt_float(total_stats['mean'], 2)}</span></div>
+      </div>
+      <div class="sidebar-footer">Generated by progress_monitor_all.py</div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="crumbs"><span>SWE-gen</span><span class="sep">/</span><span class="here">instance</span></div>
+        <div class="top-actions">
+          <span class="muted small">Updated {html.escape(updated)} · next {html.escape(next_refresh)}</span>
+          <button class="icon-btn" title="Reload" onclick="location.reload()">↻</button>
+          <button class="icon-btn" id="theme-toggle" title="Toggle theme">☀</button>
+        </div>
+      </header>
+      <section class="content">
 
     <section class="panel" id="overview">
       <div class="eyebrow">Overview</div>
@@ -1039,13 +1128,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       </div>
     </section>
 
-    <section class="panel" id="status">
-      <div class="eyebrow">Status</div>
-      <h2>Current Progress</h2>
-      <p>The tables below show per-language PR collection, valid tasks, success rate, run parameters, and failure-type distribution.</p>
-    </section>
-
-    <section class="panel">
+    <section class="panel" id="language-progress">
       <h2>Language Progress</h2>
       <div class="table-wrap">
         <table>
@@ -1055,7 +1138,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="run-parameters">
       <h2>Run Parameters</h2>
       <div class="table-wrap">
         <table>
@@ -1065,7 +1148,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="failures">
       <h2>Failure Reason Breakdown</h2>
       <div class="table-wrap">
         <table>
@@ -1082,7 +1165,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="patch-complexity">
       <h2>fix.patch Complexity</h2>
       <div class="table-wrap">
         <table>
@@ -1115,7 +1198,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="difficulty">
       <h2>difficulty_label Distribution</h2>
       <div class="table-wrap">
         <table>
@@ -1135,7 +1218,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="tags">
       <h2>Global Top Tags</h2>
       {global_tags}
     </section>
@@ -1146,7 +1229,28 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     </section>
 
     <div class="footer">Generated by progress_monitor_all.py. The page auto-refreshes; data comes from collected_prs, the per-language output directories, verifiable_tasks.txt, task.toml, and solution/fix.patch.</div>
-  </main>
+      </section>
+    </main>
+  </div>
+  <script>
+    (function() {{
+      var KEY = "swegen.theme";
+      var btn = document.getElementById("theme-toggle");
+      function apply(theme) {{
+        document.documentElement.setAttribute("data-theme", theme);
+        if (btn) btn.textContent = theme === "dark" ? "☀" : "☾";
+      }}
+      var saved = null;
+      try {{ saved = localStorage.getItem(KEY); }} catch (e) {{}}
+      apply(saved || "dark");
+      if (btn) btn.addEventListener("click", function() {{
+        var cur = document.documentElement.getAttribute("data-theme");
+        var next = cur === "dark" ? "light" : "dark";
+        apply(next);
+        try {{ localStorage.setItem(KEY, next); }} catch (e) {{}}
+      }});
+    }})();
+  </script>
 </body>
 </html>
 """
