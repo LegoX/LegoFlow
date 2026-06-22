@@ -165,6 +165,40 @@ def read_nonempty_lines_cached(path: Path, cache: dict[str, Any], *, keep_items:
     return lines
 
 
+def pr_repo_from_id(pr_id: str) -> str | None:
+    """`owner/repo:pr-N` -> `owner/repo`."""
+    pr_id = pr_id.strip()
+    if "/" not in pr_id:
+        return None
+    return pr_id.split(":", 1)[0].strip() or None
+
+
+def task_repo_from_id(task_id: str) -> str | None:
+    """`owner__repo-N` -> `owner/repo` (repo may contain dashes; strip only the trailing -N)."""
+    task_id = task_id.strip()
+    if "__" not in task_id:
+        return None
+    owner, rest = task_id.split("__", 1)
+    base = rest.rsplit("-", 1)[0] if "-" in rest else rest
+    owner, base = owner.strip(), base.strip()
+    return f"{owner}/{base}" if owner and base else None
+
+
+def count_pr_repos_cached(path: Path, cache: dict[str, Any]) -> int:
+    """Count unique `owner/repo` in a PR-ids file, cached by file signature."""
+    sig = stat_sig(path)
+    if sig is None:
+        return 0
+    key = str(path)
+    repos_cache = cache.setdefault("pr_repos", {})
+    prev = repos_cache.get(key)
+    if isinstance(prev, dict) and prev.get("sig") == sig and isinstance(prev.get("count"), int):
+        return int(prev["count"])
+    repos = {r for line in read_nonempty_lines(path) if (r := pr_repo_from_id(line))}
+    repos_cache[key] = {"sig": sig, "count": len(repos)}
+    return len(repos)
+
+
 def task_sig(task_dir: Path) -> dict[str, dict[str, int] | None]:
     return {
         "task_toml": stat_sig(task_dir / "task.toml"),
@@ -422,7 +456,9 @@ def collect_lang(
     force_full_scan: bool,
 ) -> dict[str, Any]:
     lang_dir = ROOT / lang_dir_name
-    pr_count = len(read_nonempty_lines_cached(PR_DIR / f"{pr_prefix}_pr_ids.txt", cache, keep_items=False))
+    pr_ids_path = PR_DIR / f"{pr_prefix}_pr_ids.txt"
+    pr_count = len(read_nonempty_lines_cached(pr_ids_path, cache, keep_items=False))
+    pr_repo_count = count_pr_repos_cached(pr_ids_path, cache)
     raw_task_ids = read_nonempty_lines_cached(lang_dir / "verifiable_tasks.txt", cache, keep_items=True)
     task_ids = unique_preserve_order(raw_task_ids)
     lang_cache = cache.setdefault("langs", {}).setdefault(lang, {})
@@ -507,7 +543,9 @@ def collect_lang(
         "lang": lang,
         "display": display,
         "pr_count": pr_count,
+        "pr_repo_count": pr_repo_count,
         "valid_count": valid_count,
+        "valid_repos": sorted({r for t in task_ids if (r := task_repo_from_id(t))}),
         "processed_count": processed_count,
         "success_rate": (valid_count / processed_count * 100.0) if processed_count else 0.0,
         "patch": {
@@ -672,6 +710,8 @@ def collect_dashboard(rows: list[dict[str, Any]], cache: dict[str, Any], force_f
 
     total_pr = sum(d["pr_count"] for d in langs.values())
     total_valid = sum(d["valid_count"] for d in langs.values())
+    total_pr_repos = sum(int(d.get("pr_repo_count", 0)) for d in langs.values())
+    total_valid_repos = len({r for d in langs.values() for r in d.get("valid_repos", [])})
     total_processed = sum(
         int(d.get("batch", {}).get("status_counts", {}).get("success", 0))
         + int(d.get("batch", {}).get("status_counts", {}).get("failed", 0))
@@ -697,7 +737,9 @@ def collect_dashboard(rows: list[dict[str, Any]], cache: dict[str, Any], force_f
         "langs": langs,
         "totals": {
             "pr_count": total_pr,
+            "pr_repo_count": total_pr_repos,
             "valid_count": total_valid,
+            "valid_repo_count": total_valid_repos,
             "processed_count": total_processed,
             "success_rate": (total_valid / total_processed * 100.0) if total_processed else 0.0,
             "delta_1h_pr": sum_delta(langs, "delta_1h_pr"),
@@ -976,6 +1018,21 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       width: 28px; height: 28px; color: var(--c-fg-dim); cursor: pointer;
     }
     .icon-btn:hover { color: var(--c-fg); border-color: var(--c-accent); }
+    .update-status {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 13px; font-weight: 600; font-family: var(--font-mono);
+      color: var(--c-accent);
+      background: var(--c-accent-soft);
+      border: 1px solid var(--c-accent-border);
+      border-radius: 999px; padding: 4px 12px;
+      letter-spacing: .01em; white-space: nowrap;
+    }
+    .update-status .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--c-good); flex-shrink: 0;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-good) 25%, transparent);
+    }
+    [data-theme="light"] .update-status { color: var(--c-accent); }
     .content { flex: 1; overflow-y: auto; padding: 20px; }
 
     /* sections */
@@ -1076,7 +1133,9 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       <div class="sidebar-section">
         <div class="section-label">Summary</div>
         <div class="sidebar-stat"><span class="l">PRs collected</span><span class="v">{fmt_int(totals['pr_count'])}</span></div>
+        <div class="sidebar-stat"><span class="l">PR unique repos</span><span class="v">{fmt_int(totals['pr_repo_count'])}</span></div>
         <div class="sidebar-stat"><span class="l">Valid SWE</span><span class="v">{fmt_int(totals['valid_count'])}</span></div>
+        <div class="sidebar-stat"><span class="l">SWE unique repos</span><span class="v">{fmt_int(totals['valid_repo_count'])}</span></div>
         <div class="sidebar-stat"><span class="l">Success rate</span><span class="v">{fmt_float(totals['success_rate'], 1)}%</span></div>
         <div class="sidebar-stat"><span class="l">Mean difficulty</span><span class="v">{fmt_float(total_stats['mean'], 2)}</span></div>
       </div>
@@ -1086,7 +1145,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       <header class="topbar">
         <div class="crumbs"><span>SWE-gen</span><span class="sep">/</span><span class="here">instance</span></div>
         <div class="top-actions">
-          <span class="muted small">Updated {html.escape(updated)} · next {html.escape(next_refresh)}</span>
+          <span class="update-status"><span class="dot"></span>Updated {html.escape(updated)} · next {html.escape(next_refresh)}</span>
           <button class="icon-btn" title="Reload" onclick="location.reload()">↻</button>
           <button class="icon-btn" id="theme-toggle" title="Toggle theme">☀</button>
         </div>
@@ -1098,8 +1157,8 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       <h2>SWE-gen Task Generation Overview</h2>
       <p>This dashboard reads <code>collected_prs</code>, the per-language output directories, <code>verifiable_tasks.txt</code>, <code>task.toml</code>, and <code>solution/fix.patch</code> to track production of verifiable SWE tasks.</p>
       <section class="grid kpis">
-        <div class="card"><div class="label">Total PRs collected</div><div class="value">{fmt_int(totals['pr_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_pr'])} / 24h {fmt_delta(totals['delta_24h_pr'])}</div></div>
-        <div class="card"><div class="label">Total valid SWE</div><div class="value">{fmt_int(totals['valid_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_valid'])} / 24h {fmt_delta(totals['delta_24h_valid'])}</div></div>
+        <div class="card"><div class="label">Total PRs collected</div><div class="value">{fmt_int(totals['pr_count'])}</div><div class="sub">{fmt_int(totals['pr_repo_count'])} unique repos · 1h {fmt_delta(totals['delta_1h_pr'])} / 24h {fmt_delta(totals['delta_24h_pr'])}</div></div>
+        <div class="card"><div class="label">Total valid SWE</div><div class="value">{fmt_int(totals['valid_count'])}</div><div class="sub">{fmt_int(totals['valid_repo_count'])} unique repos · 1h {fmt_delta(totals['delta_1h_valid'])} / 24h {fmt_delta(totals['delta_24h_valid'])}</div></div>
         <div class="card"><div class="label">Overall success rate</div><div class="value">{fmt_float(totals['success_rate'], 1)}%</div><div class="sub">Valid SWE / processed {fmt_int(totals['processed_count'])}</div></div>
         <div class="card"><div class="label">Mean difficulty_score</div><div class="value">{fmt_float(total_stats['mean'], 2)}</div><div class="sub">median {fmt_float(total_stats['median'], 1)}, count {fmt_int(total_stats['count'])}</div></div>
       </section>

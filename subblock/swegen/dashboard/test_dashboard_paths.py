@@ -36,9 +36,11 @@ def test_render_html_is_swe_task_only_dashboard():
         lang_rows[lang] = {
             "display": display,
             "pr_count": 10,
+            "pr_repo_count": 4,
             "delta_1h_pr": 1,
             "delta_24h_pr": 2,
             "valid_count": 3,
+            "valid_repos": ["acme/widget", "acme/gadget"],
             "delta_1h_valid": 0,
             "delta_24h_valid": 1,
             "batch": {
@@ -71,9 +73,11 @@ def test_render_html_is_swe_task_only_dashboard():
         "ts": "2026-06-22T00:00:00+08:00",
         "totals": {
             "pr_count": 80,
+            "pr_repo_count": 30,
             "delta_1h_pr": 8,
             "delta_24h_pr": 16,
             "valid_count": 24,
+            "valid_repo_count": 12,
             "delta_1h_valid": 1,
             "delta_24h_valid": 4,
             "success_rate": 75.0,
