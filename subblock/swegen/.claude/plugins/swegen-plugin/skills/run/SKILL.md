@@ -31,7 +31,7 @@ Validate:
    exist.
 4. `repos/swegen/` is initialized and installable.
 
-Read `config.yaml`, `CLAUDE.md`, and `quick-verify.md` before choosing a
+Read `config.yaml`, `CLAUDE.md`, and `memory/quick-verify.md` before choosing a
 mode.
 
 ## Step 1 - Refuse duplicate live runs
@@ -73,6 +73,7 @@ failure:
 - config/package install failed
 - GitHub tokens unavailable
 - LLM completion ping failed
+- CC proxy down while `cc_provider_mode=openai_proxy` (verification would fail silently)
 - Docker unavailable
 - `scripts/dryrun.sh` failed
 - requested smoke validation failed

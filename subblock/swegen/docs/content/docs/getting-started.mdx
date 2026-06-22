@@ -72,6 +72,16 @@ to use for the run. If your shell already contains old `ANTHROPIC_API_KEY` or
 generation; stale Anthropic-compatible variables can make the Claude SDK stage
 use the wrong endpoint or key.
 
+> **Important — the `ANTHROPIC_BASE_URL` path also drives verification.**
+> It runs task completion *and* the step that writes `verifiable_tasks.txt`.
+> If your provider is OpenAI-only (Qwen, GLM, sglang, vLLM, most self-hosted
+> endpoints), it rejects `role:system` on `/v1/messages` and verification fails
+> silently. Set `llm_api.cc_provider_mode: openai_proxy` in `config.yaml` and
+> point `ANTHROPIC_BASE_URL` at a local LiteLLM proxy rather than the raw
+> provider URL. Use `native` only when the provider already speaks the
+> Anthropic Messages API. See the "LLM provider modes" section of the block
+> `CLAUDE.md`.
+
 For reproducible runs on shared machines, use a clean Claude Code config
 directory so user-level hooks and plugins do not affect task completion:
 

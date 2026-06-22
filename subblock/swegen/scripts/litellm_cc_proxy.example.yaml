@@ -1,0 +1,52 @@
+# Example LiteLLM proxy config for swegen's Claude Code (CC) verification path.
+#
+# Use this when cc_provider_mode = openai_proxy (provider is OpenAI-only, e.g.
+# Qwen / GLM / sglang / vLLM). It translates the Anthropic /v1/messages calls
+# the Claude Code SDK makes into OpenAI /v1/chat/completions, so role:system is
+# accepted instead of rejected with HTTP 400.
+#
+# Fill in <UPSTREAM_OPENAI_BASE_URL>, <UPSTREAM_MODEL>, and <API_KEY>, then:
+#   litellm --config scripts/litellm_cc_proxy.example.yaml --port 4010 --host 127.0.0.1 &
+#   curl -sf http://127.0.0.1:4010/health
+# Point config.yaml -> llm_api.anthropic_base_url at http://127.0.0.1:4010.
+
+model_list:
+  # The Claude Code SDK requests claude-* model ids; map them all to the upstream.
+  - model_name: "claude-*"
+    litellm_params:
+      model: "openai/<UPSTREAM_MODEL>"
+      api_base: "<UPSTREAM_OPENAI_BASE_URL>"   # e.g. https://your-endpoint/v1
+      api_key: "<API_KEY>"
+      use_responses_api: false
+      stream: false
+      extra_body:
+        # For Qwen-style endpoints that default to "thinking" output:
+        enable_thinking: false
+        chat_template_kwargs:
+          enable_thinking: false
+    model_info:
+      supports_reasoning: false
+      supports_function_calling: true
+      supports_tool_choice: true
+  - model_name: "<UPSTREAM_MODEL>"
+    litellm_params:
+      model: "openai/<UPSTREAM_MODEL>"
+      api_base: "<UPSTREAM_OPENAI_BASE_URL>"
+      api_key: "<API_KEY>"
+      use_responses_api: false
+      stream: false
+      extra_body:
+        enable_thinking: false
+        chat_template_kwargs:
+          enable_thinking: false
+    model_info:
+      supports_reasoning: false
+      supports_function_calling: true
+      supports_tool_choice: true
+
+litellm_settings:
+  drop_params: true
+  request_timeout: 900
+  # Critical: serve Anthropic /v1/messages via the upstream's chat/completions.
+  use_chat_completions_url_for_anthropic_messages: true
+  use_responses_api: false

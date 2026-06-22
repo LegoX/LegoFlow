@@ -94,26 +94,25 @@ def test_render_html_is_swe_task_only_dashboard():
 
     html = module.render_html(data, refresh_seconds=3600, output_path=Path("site/index.html"))
 
-    assert "SWE 任务进度看板" in html
+    assert "SWE Task Progress Dashboard" in html
     for required_section in (
         "Overview",
         "Inputs &amp; Outputs",
         "Status",
         "Method Notes",
-        "语言进度",
-        "运行参数",
-        "失败原因统计",
-        "fix.patch 复杂度",
-        "difficulty_label 分布",
-        "全局 Top Tags",
-        "每语言 Tags 分布",
+        "Language Progress",
+        "Run Parameters",
+        "Failure Reason Breakdown",
+        "fix.patch Complexity",
+        "difficulty_label Distribution",
+        "Global Top Tags",
+        "Per-Language Tag Distribution",
     ):
         assert required_section in html
 
     for removed_text in (
         "Trajectory",
         "trajectory",
-        "轨迹",
         "tab-trajectory",
         "switchTab",
         "SWEGEN_TRAJ_DIR",

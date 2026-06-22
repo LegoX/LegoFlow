@@ -8,19 +8,19 @@ Long-form context, decisions, and experiment records for the swegen block.
 
 > Source: memory/experiment-log.md (2026-04-20)
 
-端到端管线验证日志 — 本次验证流程完全由 AI agent（Claude Code）自主完成。
+End-to-end pipeline validation log — performed entirely and autonomously by an AI agent (Claude Code).
 
-**日期**: 2026-04-20 | **环境**: Linux 5.15.0, Python 3.12, Docker | **模型**: OPENAI_MODEL=glm-5-urg, ANTHROPIC_MODEL=claude-sonnet-4-6
+**Date**: 2026-04-20 | **Environment**: Linux 5.15.0, Python 3.12, Docker | **Models**: OPENAI_MODEL=glm-5-urg, ANTHROPIC_MODEL=claude-sonnet-4-6
 
 ### Pipeline validation steps
 
-| 步骤 | 命令 | 状态 | 耗时 |
-|------|------|------|------|
-| 安装 | `pip install -e .` | OK | 5s |
-| 收集 PR | `collect_prs_wo_image.py` | 跳过（使用样本） | — |
-| 创建任务 | `swegen create` | 1 个任务验证通过 | 15m 28s |
-| 评分 | `score_tasks.py` | 4 个任务已评分 | <1s |
-| 提取 | `python scripts/extract_verified_tasks.py` | 9 个任务已提取 | <1s |
+| Step | Command | Status | Time |
+|------|---------|--------|------|
+| Install | `pip install -e .` | OK | 5s |
+| Collect PRs | `collect_prs_wo_image.py` | skipped (used samples) | — |
+| Create tasks | `swegen create` | 1 task verified | 15m 28s |
+| Score | `score_tasks.py` | 4 tasks scored | <1s |
+| Extract | `python scripts/extract_verified_tasks.py` | 9 tasks extracted | <1s |
 
 Verified task from this run: `tox-dev__tox-3813`
 
@@ -30,7 +30,7 @@ Verified task from this run: `tox-dev__tox-3813`
 
 > Source: memory/adaptive-tuning-validation.md (2026-04-22)
 
-**机器**: hk01dgx060 | **Python**: 3.12.2 | **Docker**: 29.0.0
+**Machine**: hk01dgx060 | **Python**: 3.12.2 | **Docker**: 29.0.0
 
 ### Validated cycle
 

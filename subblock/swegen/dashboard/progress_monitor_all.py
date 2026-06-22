@@ -754,7 +754,7 @@ def render_label_bar(data: dict[str, Any]) -> str:
     hard = label_count(data, "hard")
     total = easy + medium + hard
     if total <= 0:
-        return '<div class="stacked empty">无数据</div>'
+        return '<div class="stacked empty">no data</div>'
     parts = []
     for name, count, cls in (("easy", easy, "easy"), ("medium", medium, "medium"), ("hard", hard, "hard")):
         width = count / total * 100.0
@@ -765,7 +765,7 @@ def render_label_bar(data: dict[str, Any]) -> str:
 
 def render_tags(tags: dict[str, int], denominator: int, limit: int = 20) -> str:
     if not tags or denominator <= 0:
-        return '<div class="muted">无 tags 数据</div>'
+        return '<div class="muted">no tags data</div>'
     rows = []
     max_count = max(tags.values()) if tags else 1
     for tag, count in list(tags.items())[:limit]:
@@ -983,57 +983,57 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     global_tags = render_tags(totals["global_tags"], max(1, sum(int(d["tasks_with_tags"]) for d in langs.values())), 30)
     total_stats = totals["difficulty_stats"]
     html_doc = f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="refresh" content="{int(refresh_seconds)}">
-  <title>SWE 任务进度看板</title>
+  <title>SWE Task Progress Dashboard</title>
   <style>{css}</style>
 </head>
 <body>
   <main class="page">
     <header>
       <div class="eyebrow">SWE-gen Dashboard</div>
-      <h1>SWE 任务进度看板</h1>
-      <p>面向 SWE-gen 任务生产的公开进度页面。页面保留原有 PR 收集、任务验证、失败原因、难度、标签和 patch 复杂度统计口径，展示风格参考 yuxin/eval 的 MDX 运维面板。</p>
+      <h1>SWE Task Progress Dashboard</h1>
+      <p>Public progress page for SWE-gen task production. It keeps the original PR collection, task validation, failure reasons, difficulty, tags, and patch-complexity metrics, with a layout styled after the yuxin/eval MDX ops panel.</p>
       <div class="meta">
-        <span class="pill">最后更新时间：{html.escape(updated)}</span>
-        <span class="pill">下次刷新：{html.escape(next_refresh)}</span>
-        <span class="pill">刷新间隔：{int(refresh_seconds)} 秒</span>
+        <span class="pill">Last updated: {html.escape(updated)}</span>
+        <span class="pill">Next refresh: {html.escape(next_refresh)}</span>
+        <span class="pill">Refresh interval: {int(refresh_seconds)}s</span>
       </div>
     </header>
 
     <section class="panel" id="overview">
       <div class="eyebrow">Overview</div>
-      <h2>SWE-gen 任务生成总览</h2>
-      <p>当前看板读取 <code>collected_prs</code>、各语言输出目录、<code>verifiable_tasks.txt</code>、<code>task.toml</code> 和 <code>solution/fix.patch</code>，用于跟踪可验证 SWE 任务的生产进度。</p>
+      <h2>SWE-gen Task Generation Overview</h2>
+      <p>This dashboard reads <code>collected_prs</code>, the per-language output directories, <code>verifiable_tasks.txt</code>, <code>task.toml</code>, and <code>solution/fix.patch</code> to track production of verifiable SWE tasks.</p>
       <section class="grid kpis">
-        <div class="card"><div class="label">收集 PR 总数</div><div class="value">{fmt_int(totals['pr_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_pr'])} / 24h {fmt_delta(totals['delta_24h_pr'])}</div></div>
-        <div class="card"><div class="label">有效 SWE 总数</div><div class="value">{fmt_int(totals['valid_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_valid'])} / 24h {fmt_delta(totals['delta_24h_valid'])}</div></div>
-        <div class="card"><div class="label">整体处理成功率</div><div class="value">{fmt_float(totals['success_rate'], 1)}%</div><div class="sub">Valid SWE / 已处理 {fmt_int(totals['processed_count'])}</div></div>
-        <div class="card"><div class="label">difficulty_score 均值</div><div class="value">{fmt_float(total_stats['mean'], 2)}</div><div class="sub">median {fmt_float(total_stats['median'], 1)}，count {fmt_int(total_stats['count'])}</div></div>
+        <div class="card"><div class="label">Total PRs collected</div><div class="value">{fmt_int(totals['pr_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_pr'])} / 24h {fmt_delta(totals['delta_24h_pr'])}</div></div>
+        <div class="card"><div class="label">Total valid SWE</div><div class="value">{fmt_int(totals['valid_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_valid'])} / 24h {fmt_delta(totals['delta_24h_valid'])}</div></div>
+        <div class="card"><div class="label">Overall success rate</div><div class="value">{fmt_float(totals['success_rate'], 1)}%</div><div class="sub">Valid SWE / processed {fmt_int(totals['processed_count'])}</div></div>
+        <div class="card"><div class="label">Mean difficulty_score</div><div class="value">{fmt_float(total_stats['mean'], 2)}</div><div class="sub">median {fmt_float(total_stats['median'], 1)}, count {fmt_int(total_stats['count'])}</div></div>
       </section>
     </section>
 
     <section class="panel" id="inputs-outputs">
       <div class="eyebrow">Inputs &amp; Outputs</div>
-      <h2>数据来源与产物</h2>
+      <h2>Data Sources and Artifacts</h2>
       <div class="io-grid">
         <div class="io-card">
           <h3>Inputs</h3>
           <ul>
-            <li><code>{html.escape(str(PR_DIR))}</code> 下的 PR ID 文件</li>
-            <li><code>{html.escape(str(ROOT))}</code> 下的各语言任务目录</li>
-            <li><code>verifiable_tasks.txt</code>、<code>task.toml</code>、<code>solution/fix.patch</code></li>
+            <li>PR ID files under <code>{html.escape(str(PR_DIR))}</code></li>
+            <li>Per-language task directories under <code>{html.escape(str(ROOT))}</code></li>
+            <li><code>verifiable_tasks.txt</code>, <code>task.toml</code>, <code>solution/fix.patch</code></li>
           </ul>
         </div>
         <div class="io-card">
           <h3>Outputs</h3>
           <ul>
-            <li>静态 HTML：<code>{html.escape(str(output_path))}</code></li>
-            <li>增量快照：<code>{html.escape(str(DEFAULT_STATE))}</code></li>
-            <li>扫描缓存：<code>{html.escape(str(DEFAULT_CACHE))}</code></li>
+            <li>Static HTML: <code>{html.escape(str(output_path))}</code></li>
+            <li>Incremental snapshot: <code>{html.escape(str(DEFAULT_STATE))}</code></li>
+            <li>Scan cache: <code>{html.escape(str(DEFAULT_CACHE))}</code></li>
           </ul>
         </div>
       </div>
@@ -1041,52 +1041,52 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
 
     <section class="panel" id="status">
       <div class="eyebrow">Status</div>
-      <h2>当前进度</h2>
-      <p>以下表格展示每个语言的 PR 收集、有效任务、处理成功率、运行参数和失败类型分布。</p>
+      <h2>Current Progress</h2>
+      <p>The tables below show per-language PR collection, valid tasks, success rate, run parameters, and failure-type distribution.</p>
     </section>
 
     <section class="panel">
-      <h2>语言进度</h2>
+      <h2>Language Progress</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>收集 PR</th><th>过去 1h</th><th>过去 24h</th><th>有效 SWE</th><th>过去 1h</th><th>过去 24h</th><th>已处理</th><th>处理成功率</th></tr></thead>
+          <thead><tr><th>Language</th><th>PRs collected</th><th>Last 1h</th><th>Last 24h</th><th>Valid SWE</th><th>Last 1h</th><th>Last 24h</th><th>Processed</th><th>Success rate</th></tr></thead>
           <tbody>{''.join(progress_rows)}</tbody>
         </table>
       </div>
     </section>
 
     <section class="panel">
-      <h2>运行参数</h2>
+      <h2>Run Parameters</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>评估模型 (OPENAI)</th><th>填充模型 (ANTHROPIC)</th><th>并发数</th><th>min_source_files</th><th>max_source_files</th></tr></thead>
+          <thead><tr><th>Language</th><th>Eval model (OPENAI)</th><th>Completion model (ANTHROPIC)</th><th>Concurrency</th><th>min_source_files</th><th>max_source_files</th></tr></thead>
           <tbody>{''.join(params_rows)}</tbody>
         </table>
       </div>
     </section>
 
     <section class="panel">
-      <h2>失败原因统计</h2>
+      <h2>Failure Reason Breakdown</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>已处理</th><th>有效 SWE</th><th>失败</th><th>trivial_pr</th><th>validation</th><th>infra_error</th><th>timeout</th><th>workflow_error</th><th>其他</th></tr></thead>
+          <thead><tr><th>Language</th><th>Processed</th><th>Valid SWE</th><th>Failed</th><th>trivial_pr</th><th>validation</th><th>infra_error</th><th>timeout</th><th>workflow_error</th><th>Other</th></tr></thead>
           <tbody>{''.join(failure_rows)}</tbody>
         </table>
       </div>
       <div class="method-note">
-        <p><strong>trivial_pr</strong>：PR 被 LLM 评估为过于简单（如仅修改配置、文档、依赖版本等），不适合作为 SWE 任务。</p>
-        <p><strong>validation</strong>：任务生成后验证失败（NOP agent 未返回 reward=0 或 ORACLE agent 未返回 reward=1）。</p>
-        <p><strong>infra_error</strong>：基础设施错误（Docker 构建失败、网络超时、磁盘空间不足等）。</p>
-        <p><strong>timeout</strong>：处理超时（单个 PR 总超时或 Claude Code session 超时）。</p>
-        <p><strong>workflow_error</strong>：工作流程错误（PR 元数据获取失败、worktree 创建失败、patch 生成失败等）。</p>
+        <p><strong>trivial_pr</strong>: the PR was judged by the LLM as too trivial (e.g. only config, docs, or dependency-version changes) and unsuitable as a SWE task.</p>
+        <p><strong>validation</strong>: validation failed after task generation (the NOP agent did not return reward=0, or the ORACLE agent did not return reward=1).</p>
+        <p><strong>infra_error</strong>: infrastructure error (Docker build failure, network timeout, insufficient disk space, etc.).</p>
+        <p><strong>timeout</strong>: processing timed out (per-PR total timeout or Claude Code session timeout).</p>
+        <p><strong>workflow_error</strong>: workflow error (PR metadata fetch failure, worktree creation failure, patch generation failure, etc.).</p>
       </div>
     </section>
 
     <section class="panel">
-      <h2>fix.patch 复杂度</h2>
+      <h2>fix.patch Complexity</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>Valid SWE Count</th><th>Avg fix.patch lines</th><th>Avg fix.patch hunks</th><th>Avg fix.patch files</th></tr></thead>
+          <thead><tr><th>Language</th><th>Valid SWE Count</th><th>Avg fix.patch lines</th><th>Avg fix.patch hunks</th><th>Avg fix.patch files</th></tr></thead>
           <tbody>{''.join(patch_rows)}</tbody>
         </table>
       </div>
@@ -1094,58 +1094,58 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
 
     <section class="panel" id="method-notes">
       <div class="eyebrow">Method Notes</div>
-      <h2>统计方法说明</h2>
+      <h2>Metric Definitions</h2>
       <div class="method-grid">
         <div class="method-card">
-          <h3>难度打分 difficulty_score</h3>
-          <p>读取每个有效任务目录的 <code>solution/fix.patch</code>、<code>tests/</code> 和 <code>instruction.md</code>，由 <code>src/swegen/scoring.py</code> 使用零 API 静态评分。</p>
-          <p>当前公式采用 log-scale 连续评分，避免中等规模 patch 过早变成 hard。权重为：<code>patch_scope 38%</code>、<code>logic_complexity 32%</code>、<code>context_breadth 15%</code>、<code>test_complexity 10%</code>、<code>instruction_complexity 5%</code>。</p>
-          <p>label 阈值：<code>easy &lt;= 4.0</code>，<code>medium &lt;= 7.0</code>，<code>hard &gt; 7.0</code>。</p>
+          <h3>Difficulty score (difficulty_score)</h3>
+          <p>Reads each valid task directory's <code>solution/fix.patch</code>, <code>tests/</code>, and <code>instruction.md</code>, scored statically with zero API calls by <code>src/swegen/scoring.py</code>.</p>
+          <p>The current formula uses log-scale continuous scoring to avoid mid-sized patches becoming hard too early. Weights: <code>patch_scope 38%</code>, <code>logic_complexity 32%</code>, <code>context_breadth 15%</code>, <code>test_complexity 10%</code>, <code>instruction_complexity 5%</code>.</p>
+          <p>Label thresholds: <code>easy &lt;= 4.0</code>, <code>medium &lt;= 7.0</code>, <code>hard &gt; 7.0</code>.</p>
         </div>
         <div class="method-card">
-          <h3>Tags 生成与展示</h3>
-          <p><code>tags</code> 不是看板现场计算的，而是在 swegen 构建任务时由 LLM 根据 PR 信息生成，并写入 <code>task.toml</code> 的 <code>[metadata].tags</code>。</p>
-          <p>prompt 要求 tags 按三段式生成：编程语言、项目层级/领域、框架/库名或具体主题。看板只读取已有 <code>task.toml</code> 并统计每个语言的 tag 出现次数和占比。</p>
+          <h3>Tag generation and display</h3>
+          <p><code>tags</code> are not computed live by the dashboard; they are generated by the LLM from PR information when swegen builds the task, and written to <code>[metadata].tags</code> in <code>task.toml</code>.</p>
+          <p>The prompt asks for tags in three parts: programming language, project layer/domain, and framework/library name or specific topic. The dashboard only reads existing <code>task.toml</code> files and counts each language's tag occurrences and share.</p>
         </div>
         <div class="method-card">
-          <h3>fix.patch 统计</h3>
-          <p>patch 统计来自每个有效任务的 <code>solution/fix.patch</code>，并按语言扩展名过滤代码文件，口径与 <code>upload_march_swe_to_hf.py</code> 的 code-only 统计保持一致。</p>
-          <p><code>Avg fix.patch lines</code> 统计代码文件 diff 中新增/删除行数；<code>Avg fix.patch hunks</code> 统计 <code>@@</code> hunk 数；<code>Avg fix.patch files</code> 统计涉及的代码文件数。</p>
+          <h3>fix.patch statistics</h3>
+          <p>Patch stats come from each valid task's <code>solution/fix.patch</code>, filtering code files by language extension, consistent with the code-only stats in <code>upload_march_swe_to_hf.py</code>.</p>
+          <p><code>Avg fix.patch lines</code> counts added/removed lines in code-file diffs; <code>Avg fix.patch hunks</code> counts <code>@@</code> hunks; <code>Avg fix.patch files</code> counts the code files involved.</p>
         </div>
       </div>
     </section>
 
     <section class="panel">
-      <h2>difficulty_label 分布</h2>
+      <h2>difficulty_label Distribution</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>easy / medium / hard</th><th>easy</th><th>medium</th><th>hard</th></tr></thead>
+          <thead><tr><th>Language</th><th>easy / medium / hard</th><th>easy</th><th>medium</th><th>hard</th></tr></thead>
           <tbody>{''.join(difficulty_rows)}</tbody>
         </table>
       </div>
     </section>
 
     <section class="panel">
-      <h2>difficulty_score 概览</h2>
+      <h2>difficulty_score Overview</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr></thead>
+          <thead><tr><th>Language</th><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr></thead>
           <tbody>{''.join(score_rows)}</tbody>
         </table>
       </div>
     </section>
 
     <section class="panel">
-      <h2>全局 Top Tags</h2>
+      <h2>Global Top Tags</h2>
       {global_tags}
     </section>
 
     <section class="panel">
-      <h2>每语言 Tags 分布</h2>
+      <h2>Per-Language Tag Distribution</h2>
       <div class="tags-grid">{''.join(tag_sections)}</div>
     </section>
 
-    <div class="footer">由 progress_monitor_all.py 生成。页面会自动刷新；数据来自 collected_prs、各语言输出目录、verifiable_tasks.txt、task.toml 和 solution/fix.patch。</div>
+    <div class="footer">Generated by progress_monitor_all.py. The page auto-refreshes; data comes from collected_prs, the per-language output directories, verifiable_tasks.txt, task.toml, and solution/fix.patch.</div>
   </main>
 </body>
 </html>

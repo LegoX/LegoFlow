@@ -55,6 +55,12 @@ mapping = {
     # `Authorization: Bearer <key>` in addition to its default `x-api-key`.
     # Required by third-party endpoints like llm10 that reject x-api-key but accept Bearer.
     "ANTHROPIC_AUTH_TOKEN": llm.get("api_key"),
+    # Claude Code (Anthropic /v1/messages) path. For openai_proxy this must be the
+    # local LiteLLM proxy URL; for native it is the provider's Anthropic endpoint.
+    "ANTHROPIC_BASE_URL":   llm.get("anthropic_base_url"),
+    # Informational: surfaced so dryrun/skills can warn when the proxy is required.
+    "SWEGEN_CC_PROVIDER_MODE": llm.get("cc_provider_mode"),
+    "SWEGEN_CC_PROXY_PORT":    llm.get("cc_proxy_port"),
 }
 for k, v in mapping.items():
     if v and not os.environ.get(k):

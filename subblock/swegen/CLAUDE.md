@@ -20,17 +20,67 @@ Automated pipeline that converts GitHub PRs into verified SWE-Bench tasks across
 
 ### Required Environment Variables
 
-Set these BEFORE running any command:
+swegen calls the LLM over **two different API paths**. The recommended way to
+configure both is to fill `config.yaml -> runtime_info.input.llm_api` and let
+`scripts/load_runtime_env.sh` export the env vars for you — every `create_*.sh`,
+`dryrun.sh`, and the skills source it. You normally do **not** set these env
+vars by hand. The mapping is:
 
-| Variable | Purpose | Example |
-|----------|---------|---------|
-| `GITHUB_TOKENS` | Comma-separated GitHub tokens for API access | `ghp_xxx,ghp_yyy` |
-| `OPENAI_API_KEY` | LLM API key (auto-mirrored to ANTHROPIC_API_KEY) | `sk-xxx` |
-| `OPENAI_API_BASE_URL` | OpenAI-compatible API endpoint | `https://api.example.com/v1` |
-| `OPENAI_MODEL` | Model for PR evaluation + instruction generation | `gpt-4o` |
-| `ANTHROPIC_MODEL` | Model for Claude Code SDK (task completion) | `claude-sonnet-4-6` |
+| config.yaml `llm_api` field | Env var it hydrates | Purpose |
+|---|---|---|
+| `api_key` | `OPENAI_API_KEY` / `ANTHROPIC_AUTH_TOKEN` | LLM API key (mirrored to the Anthropic path) |
+| `api_base_url` | `OPENAI_API_BASE_URL` | OpenAI-compatible endpoint (PR eval + instruction generation) |
+| `pr_model` | `OPENAI_MODEL` | Model for PR evaluation + instruction generation |
+| `task_model` | `ANTHROPIC_MODEL` | Model for the Claude Code path |
+| `anthropic_base_url` | `ANTHROPIC_BASE_URL` | Claude Code path endpoint (task completion + verification) |
+| `cc_provider_mode` | `SWEGEN_CC_PROVIDER_MODE` | `native` or `openai_proxy` (see below) |
+| `cc_proxy_port` | `SWEGEN_CC_PROXY_PORT` | local LiteLLM proxy port (openai_proxy only) |
+| `github_tokens` (top-level input) | `GITHUB_TOKENS` | comma-separated GitHub tokens |
 
-Optional: place GitHub tokens in `gh_token.txt` (one per line) at project root or `~/gh_token.txt`.
+**Priority is env > `.env` > `config.yaml`** — hydration only fills vars that are
+not already set, so a stale value in your shell will *override* config.yaml. If a
+run ignores your config, unset the conflicting `OPENAI_*` / `ANTHROPIC_*` shell
+vars (or put the intended values in the block's `.env`). Keep real keys out of
+`config.yaml`; prefer `.env` or the shell. GitHub tokens may instead go in
+`gh_token.txt` (one per line) at the project root or `~/gh_token.txt`.
+
+### LLM provider modes (read this before your first run)
+
+The two paths matter because the **Claude Code path is what writes
+`verifiable_tasks.txt`** — get it wrong and verification fails *silently*: task
+skeletons stay as templates, no task is verified, yet batch state still reports
+`success`. There are two supported modes, selected by
+`llm_api.cc_provider_mode` in `config.yaml`:
+
+- **`native`** — your provider already speaks the Anthropic Messages API (real
+  Claude, or a gateway exposing `/v1/messages`). Point `anthropic_base_url`
+  straight at it. No proxy needed.
+- **`openai_proxy`** — your provider is **OpenAI-only** (Qwen / GLM / sglang /
+  vLLM and most self-hosted endpoints). These reject `role:system` on
+  `/v1/messages` with HTTP 400, so you must run a local **LiteLLM** proxy that
+  translates Anthropic → OpenAI, and point `anthropic_base_url` at it:
+
+  ```bash
+  # one-time, before `swegen create`; fill in your endpoint/model/key first.
+  # The config maps the Claude Code SDK's claude-* calls to your OpenAI endpoint
+  # via use_chat_completions_url_for_anthropic_messages.
+  litellm --config scripts/litellm_cc_proxy.example.yaml \
+          --port 4010 --host 127.0.0.1 &
+  curl -sf http://127.0.0.1:4010/health   # must succeed before generating
+  ```
+
+`scripts/dryrun.sh` probes this endpoint and fails loudly when
+`cc_provider_mode=openai_proxy` but the proxy is down — always run it first.
+
+> **Pick a stable PR-evaluation endpoint.** The PR-evaluation step (OpenAI path,
+> `pr_model`) expects a single JSON reply and does **not** retry on an empty or
+> non-JSON response, so a flaky endpoint silently drops those PRs (logged as
+> `Combined LLM call failed: Expecting value`). Two gotchas seen in practice:
+> some Claude-via-OpenAI gateways force a `tool_calls` reply with empty
+> `content` for this prompt (send `tool_choice: "none"`, e.g. via the proxy, to
+> get text back); and reasoning models can spend the whole `max_tokens` budget on
+> reasoning and return empty content. Prefer a non-reasoning, JSON-reliable model
+> for `pr_model`; the `task_model` (Claude Code path) is unaffected.
 
 ### Install
 
@@ -49,7 +99,7 @@ docker run --rm hello-world
 
 ### Quick Verification
 
-Before running a large batch, a new AI agent should run the short verification flow in [`quick-verify.md`](quick-verify.md). It checks GitHub/LLM/Docker preflight, validates a known task, and runs a 10-PR Python smoke test with `--min-source-files 1`.
+Before running a large batch, a new AI agent should run the short verification flow in [`memory/quick-verify.md`](memory/quick-verify.md). It checks GitHub/LLM/Docker preflight, validates a known task, and runs a small Python smoke test with `--min-source-files 1`.
 
 ### Step 1: Collect PRs
 
@@ -81,7 +131,20 @@ swegen create \
 
 Output: task directories under `artifacts/swe_tasks/{lang}-cc/`. Verified task IDs appended to `verifiable_tasks.txt`.
 
+`--min-source-files` controls the yield/difficulty tradeoff: `1` keeps the most PRs (including small fixes, highest throughput), `2`–`3` keep only larger changes (harder tasks, lower yield). Use `1` for maximum data; the per-language scripts default to `2`–`3`.
+
 Per-language scripts with tuned parameters: `bash scripts/create_{lang}.sh` where lang = py, js, ts, go, c, cpp, java, rust.
+
+### Scaled parallel runs (proven recipe)
+
+To accumulate hundreds of verified tasks, run several `swegen create` shards
+**writing to the same `--output` pool but different `--state-dir`** — appends to
+`verifiable_tasks.txt` are atomic (O_APPEND), so shards never collide. Keep
+`--n-concurrent` around 16–20 (CPU-bound; higher causes Docker/LLM contention).
+All shards share one CC proxy (see provider modes above); confirm the LLM
+endpoint's QPS supports the combined concurrency. Downstream trajectory
+collection can start incrementally as soon as a pool has a handful of verified
+tasks — no need to wait for the full run.
 
 ### Step 3: Validate (optional, built into create)
 
@@ -157,20 +220,20 @@ artifacts/
 
 ### Overview
 
-You (the AI agent) monitor and tune the SWE-gen pipeline. Configuration and per-language status live in `config.yaml` under `runtime_info.input.languages.<lang>` and `runtime_info.input.global`.
+You (the AI agent) monitor and tune the SWE-gen pipeline. Tunable params live in `config.yaml` under `runtime_info.input.languages.<lang>.params` and the bounds under `runtime_info.input.global`. `config.yaml` holds no live status — track per-cycle metrics in `artifacts/index.yaml` (and the decision log below).
 
 ### Monitoring Cycle (every 30 minutes)
 
-1. **Collect status**: Count verified tasks from `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt`. Count failures from batch state in `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/`. Update `config.yaml` → `runtime_info.input.languages.<lang>.status` fields.
-2. **Decide tuning**: If `success_rate < 0.15` for 2 consecutive cycles, increase `timeout` (+400) or `cc_timeout` (+300). If `success_rate > 0.4` and `n_concurrent < 24`, increase `n_concurrent` (+4). If `success_rate >= 0.25`, do nothing.
-3. **Check PR pool**: If `pr_pool_remaining < 100`, run `python repos/swegen/tools/collect_prs_wo_image.py --languages {lang} --repo_num 100 --max_prs_per_repo 50 --output_dir ./artifacts/collected_prs`, then deduplicate against processed PRs and update the input-ids-file.
+1. **Collect status**: Count verified tasks from `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt`. Count failures from batch state in `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/`. Record the cycle's counts/rate in `artifacts/index.yaml`.
+2. **Decide tuning**: If `success_rate < 0.15` for 2 consecutive cycles, increase `timeout` (+400) or `cc_timeout` (+300) in `languages.<lang>.params`. If `success_rate > 0.4` and `n_concurrent < 24`, increase `n_concurrent` (+4). If `success_rate >= 0.25`, do nothing.
+3. **Check PR pool**: If the remaining PR pool drops below `global.pr_pool_min_threshold`, run `python repos/swegen/tools/collect_prs_wo_image.py --languages {lang} --repo_num 100 --max_prs_per_repo 50 --output_dir ./artifacts/collected_prs`, then deduplicate against processed PRs and update the input-ids-file.
 
 ### Constraints
 
 - Adjust at most 1 parameter per language per cycle
 - Wait ≥ 2 cycles (60 min) between adjustments for the same language
 - Parameter bounds (read from `runtime_info.input.global.param_bounds`): timeout [2400, 5400], cc_timeout [1800, 4200], n_concurrent [4, 32]
-- Do NOT restart running create scripts unless `zero_success_streak >= 3`
+- Do NOT restart running create scripts unless the zero-success streak reaches `global.restart_policy.zero_success_cycles`
 - Log every decision to `artifacts/logs/adaptive_decisions.jsonl`
 
 ### Reading params from config.yaml

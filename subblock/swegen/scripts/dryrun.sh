@@ -25,6 +25,25 @@ for var in GITHUB_TOKENS OPENAI_API_KEY OPENAI_API_BASE_URL OPENAI_MODEL ANTHROP
     [ -n "$val" ] && echo "${var}: set" || echo "WARN: ${var} not set"
 done
 
+# Claude Code path (writes verifiable_tasks.txt). When the provider is OpenAI-only
+# (cc_provider_mode=openai_proxy), ANTHROPIC_BASE_URL must point at a running LiteLLM
+# proxy; otherwise CC verification fails silently and no tasks are ever verified.
+cc_mode="${SWEGEN_CC_PROVIDER_MODE:-}"
+echo "cc_provider_mode: ${cc_mode:-unset}"
+if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
+    if curl -sf "${ANTHROPIC_BASE_URL%/}/health" >/dev/null 2>&1; then
+        echo "CC endpoint (${ANTHROPIC_BASE_URL}): OK"
+    elif [ "$cc_mode" = "openai_proxy" ]; then
+        echo "FATAL: CC proxy at ${ANTHROPIC_BASE_URL} is down. Start the LiteLLM proxy first" \
+             "(see CLAUDE.md 'LLM provider modes'); otherwise CC verification fails silently" \
+             "and verifiable_tasks.txt is never written."
+    else
+        echo "WARN: CC endpoint ${ANTHROPIC_BASE_URL} did not answer /health (native providers may not expose it)."
+    fi
+else
+    echo "WARN: ANTHROPIC_BASE_URL not set; CC verification path is unconfigured."
+fi
+
 docker run --rm hello-world >/dev/null 2>&1 && echo "Docker: OK" || echo "WARN: Docker not available"
 
 echo "=== dryrun complete ==="
