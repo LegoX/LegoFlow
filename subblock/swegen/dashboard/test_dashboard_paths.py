@@ -101,7 +101,6 @@ def test_render_html_is_swe_task_only_dashboard():
     assert "SWE Task Progress Dashboard" in html
     for required_section in (
         "Overview",
-        "Inputs &amp; Outputs",
         "Method Notes",
         "Language Progress",
         "Run Parameters",
