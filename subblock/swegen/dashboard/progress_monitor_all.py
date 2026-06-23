@@ -1028,6 +1028,9 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     .nav-item:hover { background: #1e293b40; color: var(--c-fg); }
     .nav-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #c7d2fe; }
     [data-theme="light"] .nav-item.active { color: var(--c-accent); }
+    .sidebar-docs { padding: 10px 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 2px; }
+    .nav-ext { justify-content: space-between; }
+    .nav-ext .ext-arrow { color: var(--c-fg-mute); font-size: 13px; }
     .sidebar-section { padding: 12px 8px 8px; flex: 1; overflow: auto; }
     .section-label { text-transform: uppercase; font-size: 13px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 600; }
     .sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 15px; }
@@ -1192,6 +1195,10 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
         <a class="nav-item" href="#tags">Tags</a>
         <a class="nav-item" href="#bug-classes">Bug Classes</a>
       </nav>
+      <div class="sidebar-docs">
+        <div class="section-label">Documentation</div>
+        <a class="nav-item nav-ext" href="https://swe-swegen-docs.pages.dev/docs" target="_blank" rel="noopener">Documents <span class="ext-arrow">&#x2197;</span></a>
+      </div>
       <div class="sidebar-section">
         <div class="section-label">Summary</div>
         <div class="sidebar-stat"><span class="l">PRs collected</span><span class="v">{fmt_int(totals['pr_count'])}</span></div>
