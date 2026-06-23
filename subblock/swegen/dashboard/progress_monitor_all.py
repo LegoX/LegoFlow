@@ -1067,6 +1067,14 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
 
     /* sections */
     .panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 16px; margin-bottom: 16px; overflow: hidden; }
+    details.panel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; outline: none; }
+    details.panel > summary::-webkit-details-marker { display: none; }
+    details.panel > summary h2 { margin: 0; }
+    details.panel > summary::before { content: "\\25B8"; color: var(--c-fg-mute); font-size: 15px; transition: transform .15s ease; }
+    details.panel[open] > summary::before { transform: rotate(90deg); }
+    details.panel > summary .summary-hint { margin-left: auto; color: var(--c-fg-mute); font-size: 13px; font-weight: 500; }
+    details.panel[open] > summary { margin-bottom: 12px; }
+    details.panel[open] > summary .summary-hint { display: none; }
     .eyebrow { color: var(--c-fg-mute); font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
     .panel h2 { margin: 0 0 12px; font-size: 21px; line-height: 1.3; letter-spacing: -.01em; }
     .panel h3 { margin: 0 0 8px; font-size: 17px; }
@@ -1121,8 +1129,8 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     .tag-card h3 span { color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 14px; }
     .tag-card h3 span.tag-card-sub { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--c-bg-2); border: 1px solid var(--c-border); font-size: 12px; }
     .small { font-size: 13px; }
-    .tag-row { display: grid; grid-template-columns: 160px 1fr 118px; align-items: center; gap: 10px; margin: 8px 0; font-size: 15px; }
-    .tag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+    .tag-row { display: grid; grid-template-columns: 190px 1fr 118px; align-items: center; gap: 10px; margin: 8px 0; font-size: 15px; }
+    .tag-name { font-weight: 600; word-break: break-word; min-width: 0; }
     .tag-track { height: 10px; background: #1e293b55; border-radius: 999px; overflow: hidden; }
     .tag-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--c-violet), var(--c-accent)); border-radius: inherit; }
     .tag-count { color: var(--c-fg-mute); text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
@@ -1209,7 +1217,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     <section class="panel" id="overview">
       <div class="eyebrow">Overview</div>
       <h2>Live Dashboard of PRs collections and SWE Tasks Generation</h2>
-      <p>This dashboard surfaces the live state of GitHub PR collection and verifiable SWE-Bench task generation across 8 programming languages: total PRs ingested with their unique repository coverage, total verified SWE tasks (NOP=0 / Oracle=1) with unique repos, the overall processing success rate, and aggregate task difficulty. Per-language tables below break down progress, run parameters (eval and completion models, concurrency, source-file bounds), failure-reason distribution, fix-patch complexity, difficulty score statistics, and tag distribution &mdash; all auto-refreshing on a fixed interval.</p>
+      <p>Live state of GitHub PR collection and verifiable SWE-Bench task generation across 8 languages. Detailed per-language analysis is collapsed below &mdash; click any section to expand.</p>
       <section class="grid kpis">
         <div class="card"><div class="label">Total PRs collected</div><div class="value">{fmt_int(totals['pr_count'])}</div><div class="sub">{fmt_int(totals['pr_repo_count'])} unique repos · 1h {fmt_delta(totals['delta_1h_pr'])} / 24h {fmt_delta(totals['delta_24h_pr'])}</div></div>
         <div class="card"><div class="label">Total valid SWE</div><div class="value">{fmt_int(totals['valid_count'])}</div><div class="sub">{fmt_int(totals['valid_repo_count'])} unique repos · 1h {fmt_delta(totals['delta_1h_valid'])} / 24h {fmt_delta(totals['delta_24h_valid'])}</div></div>
@@ -1238,8 +1246,8 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
       </div>
     </section>
 
-    <section class="panel" id="failures">
-      <h2>Failure Reason Breakdown</h2>
+    <details class="panel" id="failures">
+      <summary><h2>Failure Reason Breakdown</h2><span class="summary-hint">click to expand</span></summary>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Language</th><th>Processed</th><th>Valid SWE</th><th>Failed</th><th>trivial_pr</th><th>validation</th><th>infra_error</th><th>timeout</th><th>workflow_error</th><th>Other</th></tr></thead>
@@ -1253,21 +1261,20 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
         <p><strong>timeout</strong>: processing timed out (per-PR total timeout or Claude Code session timeout).</p>
         <p><strong>workflow_error</strong>: workflow error (PR metadata fetch failure, worktree creation failure, patch generation failure, etc.).</p>
       </div>
-    </section>
+    </details>
 
-    <section class="panel" id="patch-complexity">
-      <h2>fix.patch Complexity</h2>
+    <details class="panel" id="patch-complexity">
+      <summary><h2>fix.patch Complexity</h2><span class="summary-hint">click to expand</span></summary>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Language</th><th>Valid SWE Count</th><th>Avg fix.patch lines</th><th>Avg fix.patch hunks</th><th>Avg fix.patch files</th></tr></thead>
           <tbody>{''.join(patch_rows)}</tbody>
         </table>
       </div>
-    </section>
+    </details>
 
-    <section class="panel" id="method-notes">
-      <div class="eyebrow">Method Notes</div>
-      <h2>Metric Definitions</h2>
+    <details class="panel" id="method-notes">
+      <summary><h2>Metric Definitions</h2><span class="summary-hint">click to expand</span></summary>
       <div class="method-grid">
         <div class="method-card">
           <h3>Difficulty score (difficulty_score)</h3>
@@ -1286,49 +1293,49 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
           <p><code>Avg fix.patch lines</code> counts added/removed lines in code-file diffs; <code>Avg fix.patch hunks</code> counts <code>@@</code> hunks; <code>Avg fix.patch files</code> counts the code files involved.</p>
         </div>
       </div>
-    </section>
+    </details>
 
-    <section class="panel" id="difficulty">
-      <h2>difficulty_label Distribution</h2>
+    <details class="panel" id="difficulty">
+      <summary><h2>difficulty_label Distribution</h2><span class="summary-hint">click to expand</span></summary>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Language</th><th>easy / medium / hard</th><th>easy</th><th>medium</th><th>hard</th></tr></thead>
           <tbody>{''.join(difficulty_rows)}</tbody>
         </table>
       </div>
-    </section>
+    </details>
 
-    <section class="panel">
-      <h2>difficulty_score Overview</h2>
+    <details class="panel">
+      <summary><h2>difficulty_score Overview</h2><span class="summary-hint">click to expand</span></summary>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Language</th><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr></thead>
           <tbody>{''.join(score_rows)}</tbody>
         </table>
       </div>
-    </section>
+    </details>
 
-    <section class="panel" id="tags">
-      <h2>Global Top Tags</h2>
+    <details class="panel" id="tags">
+      <summary><h2>Global Top Tags</h2><span class="summary-hint">click to expand</span></summary>
       {global_tags}
-    </section>
+    </details>
 
-    <section class="panel">
-      <h2>Per-Language Tag Distribution</h2>
+    <details class="panel">
+      <summary><h2>Per-Language Tag Distribution</h2><span class="summary-hint">click to expand</span></summary>
       <div class="tags-grid">{''.join(tag_sections)}</div>
-    </section>
+    </details>
 
-    <section class="panel" id="bug-classes">
-      <h2>Global Top Bug Classes</h2>
+    <details class="panel" id="bug-classes">
+      <summary><h2>Global Top Bug Classes</h2><span class="summary-hint">click to expand</span></summary>
       <p class="muted small">Bug class is the 4th tag in <code>task.toml -&gt; [metadata].tags</code>: a domain-independent label describing the defect mechanism (e.g. <code>missing-fallback</code>, <code>incomplete-validation</code>, <code>off-by-one-error</code>). Generated by the LLM during <code>swegen create</code> and backfilled into legacy 3-tag tasks via <code>swegen backfill-tags</code>.</p>
       {global_bug_classes}
-    </section>
+    </details>
 
-    <section class="panel">
-      <h2>Per-Language Bug-Class Distribution</h2>
+    <details class="panel">
+      <summary><h2>Per-Language Bug-Class Distribution</h2><span class="summary-hint">click to expand</span></summary>
       <p class="muted small">Top bug classes per mainstream language. Counts are over tasks whose <code>task.toml</code> already carries a 4-tag entry; tasks still on the legacy 3-tag schema do not contribute until the backfill catches up.</p>
       <div class="tags-grid">{''.join(bug_class_sections)}</div>
-    </section>
+    </details>
 
       </section>
     </main>
@@ -1350,6 +1357,20 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
         apply(next);
         try {{ localStorage.setItem(KEY, next); }} catch (e) {{}}
       }});
+    }})();
+    (function() {{
+      // Open a collapsed <details> panel when its id is targeted via the sidebar
+      // nav or the URL hash, so anchor links don't scroll to a closed section.
+      function openTarget(hash) {{
+        if (!hash) return;
+        var el = document.getElementById(hash.replace(/^#/, ""));
+        if (el && el.tagName === "DETAILS") el.open = true;
+      }}
+      document.querySelectorAll('.nav a[href^="#"]').forEach(function(a) {{
+        a.addEventListener("click", function() {{ openTarget(a.getAttribute("href")); }});
+      }});
+      window.addEventListener("hashchange", function() {{ openTarget(location.hash); }});
+      openTarget(location.hash);
     }})();
   </script>
 </body>
