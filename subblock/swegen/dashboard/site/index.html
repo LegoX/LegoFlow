@@ -117,6 +117,14 @@
 
     /* sections */
     .panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 16px; margin-bottom: 16px; overflow: hidden; }
+    details.panel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; outline: none; }
+    details.panel > summary::-webkit-details-marker { display: none; }
+    details.panel > summary h2 { margin: 0; }
+    details.panel > summary::before { content: "\25B8"; color: var(--c-fg-mute); font-size: 15px; transition: transform .15s ease; }
+    details.panel[open] > summary::before { transform: rotate(90deg); }
+    details.panel > summary .summary-hint { margin-left: auto; color: var(--c-fg-mute); font-size: 13px; font-weight: 500; }
+    details.panel[open] > summary { margin-bottom: 12px; }
+    details.panel[open] > summary .summary-hint { display: none; }
     .eyebrow { color: var(--c-fg-mute); font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
     .panel h2 { margin: 0 0 12px; font-size: 21px; line-height: 1.3; letter-spacing: -.01em; }
     .panel h3 { margin: 0 0 8px; font-size: 17px; }
@@ -171,8 +179,8 @@
     .tag-card h3 span { color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 14px; }
     .tag-card h3 span.tag-card-sub { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--c-bg-2); border: 1px solid var(--c-border); font-size: 12px; }
     .small { font-size: 13px; }
-    .tag-row { display: grid; grid-template-columns: 160px 1fr 118px; align-items: center; gap: 10px; margin: 8px 0; font-size: 15px; }
-    .tag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+    .tag-row { display: grid; grid-template-columns: 190px 1fr 118px; align-items: center; gap: 10px; margin: 8px 0; font-size: 15px; }
+    .tag-name { font-weight: 600; word-break: break-word; min-width: 0; }
     .tag-track { height: 10px; background: #1e293b55; border-radius: 999px; overflow: hidden; }
     .tag-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--c-violet), var(--c-accent)); border-radius: inherit; }
     .tag-count { color: var(--c-fg-mute); text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
@@ -219,11 +227,11 @@
       </nav>
       <div class="sidebar-section">
         <div class="section-label">Summary</div>
-        <div class="sidebar-stat"><span class="l">PRs collected</span><span class="v">585,929</span></div>
-        <div class="sidebar-stat"><span class="l">PR unique repos</span><span class="v">23,668</span></div>
-        <div class="sidebar-stat"><span class="l">Valid SWE</span><span class="v">49,961</span></div>
-        <div class="sidebar-stat"><span class="l">SWE unique repos</span><span class="v">9,925</span></div>
-        <div class="sidebar-stat"><span class="l">Success rate</span><span class="v">10.4%</span></div>
+        <div class="sidebar-stat"><span class="l">PRs collected</span><span class="v">588,569</span></div>
+        <div class="sidebar-stat"><span class="l">PR unique repos</span><span class="v">23,777</span></div>
+        <div class="sidebar-stat"><span class="l">Valid SWE</span><span class="v">49,965</span></div>
+        <div class="sidebar-stat"><span class="l">SWE unique repos</span><span class="v">9,926</span></div>
+        <div class="sidebar-stat"><span class="l">Success rate</span><span class="v">10.3%</span></div>
         <div class="sidebar-stat"><span class="l">Mean difficulty</span><span class="v">5.89</span></div>
       </div>
       <div class="sidebar-footer">Auto-refreshes every 3600s</div>
@@ -232,7 +240,7 @@
       <header class="topbar">
         <div class="crumbs"><span>SWE-gen</span><span class="sep">/</span><span class="here">instance</span></div>
         <div class="top-actions">
-          <span class="update-status"><span class="dot"></span>Updated 2026-06-23 12:15:58 BJT · next 2026-06-23 13:15:58 BJT</span>
+          <span class="update-status"><span class="dot"></span>Updated 2026-06-23 15:52:10 BJT · next 2026-06-23 16:52:10 BJT</span>
           <button class="icon-btn" title="Reload" onclick="location.reload()">↻</button>
           <button class="icon-btn" id="theme-toggle" title="Toggle theme">☀</button>
         </div>
@@ -242,12 +250,12 @@
     <section class="panel" id="overview">
       <div class="eyebrow">Overview</div>
       <h2>Live Dashboard of PRs collections and SWE Tasks Generation</h2>
-      <p>This dashboard surfaces the live state of GitHub PR collection and verifiable SWE-Bench task generation across 8 programming languages: total PRs ingested with their unique repository coverage, total verified SWE tasks (NOP=0 / Oracle=1) with unique repos, the overall processing success rate, and aggregate task difficulty. Per-language tables below break down progress, run parameters (eval and completion models, concurrency, source-file bounds), failure-reason distribution, fix-patch complexity, difficulty score statistics, and tag distribution &mdash; all auto-refreshing on a fixed interval.</p>
+      <p>Live state of GitHub PR collection and verifiable SWE-Bench task generation across 8 languages. Detailed per-language analysis is collapsed below &mdash; click any section to expand.</p>
       <section class="grid kpis">
-        <div class="card"><div class="label">Total PRs collected</div><div class="value">585,929</div><div class="sub">23,668 unique repos · 1h +27,252 / 24h +35,932</div></div>
-        <div class="card"><div class="label">Total valid SWE</div><div class="value">49,961</div><div class="sub">9,925 unique repos · 1h +250 / 24h +19,737</div></div>
-        <div class="card"><div class="label">Overall success rate</div><div class="value">10.4%</div><div class="sub">Valid SWE / processed 482,548</div></div>
-        <div class="card"><div class="label">Mean difficulty_score</div><div class="value">5.89</div><div class="sub">median 5.9, count 49,911</div></div>
+        <div class="card"><div class="label">Total PRs collected</div><div class="value">588,569</div><div class="sub">23,777 unique repos · 1h +2,640 / 24h +31,502</div></div>
+        <div class="card"><div class="label">Total valid SWE</div><div class="value">49,965</div><div class="sub">9,926 unique repos · 1h +4 / 24h +439</div></div>
+        <div class="card"><div class="label">Overall success rate</div><div class="value">10.3%</div><div class="sub">Valid SWE / processed 486,498</div></div>
+        <div class="card"><div class="label">Mean difficulty_score</div><div class="value">5.89</div><div class="sub">median 5.9, count 49,915</div></div>
       </section>
     </section>
 
@@ -256,7 +264,7 @@
       <div class="table-wrap">
         <table>
           <thead><tr><th>Language</th><th>PRs collected</th><th>Last 1h</th><th>Last 24h</th><th>Valid SWE</th><th>Last 1h</th><th>Last 24h</th><th>Processed</th><th>Success rate</th></tr></thead>
-          <tbody><tr><td><strong>C</strong><span class='code'>c</span></td><td>32,258</td><td class='delta'>+2,789</td><td class='delta'>+2,789</td><td>9,709</td><td class='delta'>+14</td><td class='delta'>+1,970</td><td>29,612</td><td><div class="bar"><div class="bar-fill" style="width: 32.79%"></div><span>32.8%</span></div></td></tr><tr><td><strong>C++</strong><span class='code'>cpp</span></td><td>47,783</td><td class='delta'>+2,163</td><td class='delta'>+2,171</td><td>4,039</td><td class='delta'>+7</td><td class='delta'>+1,650</td><td>20,565</td><td><div class="bar"><div class="bar-fill" style="width: 19.64%"></div><span>19.6%</span></div></td></tr><tr><td><strong>Go</strong><span class='code'>go</span></td><td>131,169</td><td class='delta'>+4,730</td><td class='delta'>+8,549</td><td>8,095</td><td class='delta'>+59</td><td class='delta'>+3,475</td><td>89,296</td><td><div class="bar"><div class="bar-fill" style="width: 9.07%"></div><span>9.1%</span></div></td></tr><tr><td><strong>Java</strong><span class='code'>java</span></td><td>88,863</td><td class='delta'>+3,532</td><td class='delta'>+4,695</td><td>4,017</td><td class='delta'>+4</td><td class='delta'>+1,334</td><td>81,015</td><td><div class="bar"><div class="bar-fill" style="width: 4.96%"></div><span>5.0%</span></div></td></tr><tr><td><strong>JavaScript</strong><span class='code'>js</span></td><td>39,650</td><td class='delta'>+2,094</td><td class='delta'>+3,241</td><td>7,135</td><td class='delta'>+37</td><td class='delta'>+3,412</td><td>36,727</td><td><div class="bar"><div class="bar-fill" style="width: 19.43%"></div><span>19.4%</span></div></td></tr><tr><td><strong>Python</strong><span class='code'>py</span></td><td>104,973</td><td class='delta'>+6,090</td><td class='delta'>+6,462</td><td>5,058</td><td class='delta'>+48</td><td class='delta'>+2,275</td><td>98,909</td><td><div class="bar"><div class="bar-fill" style="width: 5.11%"></div><span>5.1%</span></div></td></tr><tr><td><strong>Rust</strong><span class='code'>rust</span></td><td>71,144</td><td class='delta'>+2,494</td><td class='delta'>+4,665</td><td>5,505</td><td class='delta'>+30</td><td class='delta'>+2,775</td><td>68,708</td><td><div class="bar"><div class="bar-fill" style="width: 8.01%"></div><span>8.0%</span></div></td></tr><tr><td><strong>TypeScript</strong><span class='code'>ts</span></td><td>70,089</td><td class='delta'>+3,360</td><td class='delta'>+3,360</td><td>6,403</td><td class='delta'>+51</td><td class='delta'>+2,846</td><td>57,716</td><td><div class="bar"><div class="bar-fill" style="width: 11.09%"></div><span>11.1%</span></div></td></tr></tbody>
+          <tbody><tr><td><strong>C</strong><span class='code'>c</span></td><td>32,357</td><td class='delta'>+99</td><td class='delta'>+2,888</td><td>9,709</td><td class='delta'>0</td><td class='delta'>+26</td><td>30,109</td><td><div class="bar"><div class="bar-fill" style="width: 32.25%"></div><span>32.2%</span></div></td></tr><tr><td><strong>C++</strong><span class='code'>cpp</span></td><td>47,883</td><td class='delta'>+100</td><td class='delta'>+2,263</td><td>4,039</td><td class='delta'>0</td><td class='delta'>+7</td><td>20,720</td><td><div class="bar"><div class="bar-fill" style="width: 19.49%"></div><span>19.5%</span></div></td></tr><tr><td><strong>Go</strong><span class='code'>go</span></td><td>132,051</td><td class='delta'>+882</td><td class='delta'>+5,612</td><td>8,095</td><td class='delta'>0</td><td class='delta'>+121</td><td>89,598</td><td><div class="bar"><div class="bar-fill" style="width: 9.03%"></div><span>9.0%</span></div></td></tr><tr><td><strong>Java</strong><span class='code'>java</span></td><td>88,998</td><td class='delta'>+135</td><td class='delta'>+4,130</td><td>4,017</td><td class='delta'>0</td><td class='delta'>+6</td><td>81,662</td><td><div class="bar"><div class="bar-fill" style="width: 4.92%"></div><span>4.9%</span></div></td></tr><tr><td><strong>JavaScript</strong><span class='code'>js</span></td><td>39,681</td><td class='delta'>+31</td><td class='delta'>+3,272</td><td>7,137</td><td class='delta'>+2</td><td class='delta'>+54</td><td>36,982</td><td><div class="bar"><div class="bar-fill" style="width: 19.30%"></div><span>19.3%</span></div></td></tr><tr><td><strong>Python</strong><span class='code'>py</span></td><td>105,463</td><td class='delta'>+490</td><td class='delta'>+6,580</td><td>5,058</td><td class='delta'>0</td><td class='delta'>+102</td><td>100,097</td><td><div class="bar"><div class="bar-fill" style="width: 5.05%"></div><span>5.1%</span></div></td></tr><tr><td><strong>Rust</strong><span class='code'>rust</span></td><td>71,701</td><td class='delta'>+557</td><td class='delta'>+3,051</td><td>5,505</td><td class='delta'>0</td><td class='delta'>+51</td><td>69,384</td><td><div class="bar"><div class="bar-fill" style="width: 7.93%"></div><span>7.9%</span></div></td></tr><tr><td><strong>TypeScript</strong><span class='code'>ts</span></td><td>70,435</td><td class='delta'>+346</td><td class='delta'>+3,706</td><td>6,405</td><td class='delta'>+2</td><td class='delta'>+72</td><td>57,946</td><td><div class="bar"><div class="bar-fill" style="width: 11.05%"></div><span>11.1%</span></div></td></tr></tbody>
         </table>
       </div>
     </section>
@@ -271,12 +279,12 @@
       </div>
     </section>
 
-    <section class="panel" id="failures">
-      <h2>Failure Reason Breakdown</h2>
+    <details class="panel" id="failures">
+      <summary><h2>Failure Reason Breakdown</h2><span class="summary-hint">click to expand</span></summary>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Language</th><th>Processed</th><th>Valid SWE</th><th>Failed</th><th>trivial_pr</th><th>validation</th><th>infra_error</th><th>timeout</th><th>workflow_error</th><th>Other</th></tr></thead>
-          <tbody><tr><td><strong>C</strong></td><td>29,612</td><td>9,709</td><td>19,903</td><td>14,707</td><td>764</td><td>4,668</td><td>21</td><td>31</td><td>1</td></tr><tr><td><strong>C++</strong></td><td>20,565</td><td>4,039</td><td>16,526</td><td>2,494</td><td>483</td><td>15,056</td><td>158</td><td>313</td><td>266</td></tr><tr><td><strong>Go</strong></td><td>89,296</td><td>8,095</td><td>81,201</td><td>22,518</td><td>8,244</td><td>47,623</td><td>1,530</td><td>793</td><td>477</td></tr><tr><td><strong>Java</strong></td><td>81,015</td><td>4,017</td><td>76,998</td><td>19,128</td><td>6,594</td><td>44,854</td><td>1,298</td><td>3,919</td><td>1,602</td></tr><tr><td><strong>JavaScript</strong></td><td>36,727</td><td>7,135</td><td>29,592</td><td>15,149</td><td>1,074</td><td>14,067</td><td>525</td><td>159</td><td>0</td></tr><tr><td><strong>Python</strong></td><td>98,909</td><td>5,058</td><td>93,851</td><td>28,267</td><td>6,882</td><td>58,973</td><td>961</td><td>366</td><td>120</td></tr><tr><td><strong>Rust</strong></td><td>68,708</td><td>5,505</td><td>63,203</td><td>19,480</td><td>5,005</td><td>36,061</td><td>1,239</td><td>842</td><td>1,234</td></tr><tr><td><strong>TypeScript</strong></td><td>57,716</td><td>6,403</td><td>51,313</td><td>14,376</td><td>4,137</td><td>30,587</td><td>1,754</td><td>775</td><td>11</td></tr></tbody>
+          <tbody><tr><td><strong>C</strong></td><td>30,109</td><td>9,709</td><td>20,400</td><td>14,934</td><td>1,024</td><td>4,674</td><td>21</td><td>35</td><td>1</td></tr><tr><td><strong>C++</strong></td><td>20,720</td><td>4,039</td><td>16,681</td><td>2,568</td><td>548</td><td>15,065</td><td>158</td><td>320</td><td>266</td></tr><tr><td><strong>Go</strong></td><td>89,598</td><td>8,095</td><td>81,503</td><td>22,638</td><td>8,417</td><td>47,626</td><td>1,529</td><td>802</td><td>475</td></tr><tr><td><strong>Java</strong></td><td>81,662</td><td>4,017</td><td>77,645</td><td>19,413</td><td>6,594</td><td>44,872</td><td>1,298</td><td>4,263</td><td>1,602</td></tr><tr><td><strong>JavaScript</strong></td><td>36,982</td><td>7,137</td><td>29,845</td><td>15,277</td><td>1,190</td><td>14,072</td><td>525</td><td>163</td><td>0</td></tr><tr><td><strong>Python</strong></td><td>100,097</td><td>5,058</td><td>95,039</td><td>29,007</td><td>7,295</td><td>59,008</td><td>961</td><td>366</td><td>120</td></tr><tr><td><strong>Rust</strong></td><td>69,384</td><td>5,505</td><td>63,879</td><td>19,819</td><td>5,292</td><td>36,078</td><td>1,239</td><td>875</td><td>1,234</td></tr><tr><td><strong>TypeScript</strong></td><td>57,946</td><td>6,405</td><td>51,541</td><td>14,519</td><td>4,313</td><td>30,491</td><td>1,754</td><td>780</td><td>11</td></tr></tbody>
         </table>
       </div>
       <div class="method-note">
@@ -286,21 +294,20 @@
         <p><strong>timeout</strong>: processing timed out (per-PR total timeout or Claude Code session timeout).</p>
         <p><strong>workflow_error</strong>: workflow error (PR metadata fetch failure, worktree creation failure, patch generation failure, etc.).</p>
       </div>
-    </section>
+    </details>
 
-    <section class="panel" id="patch-complexity">
-      <h2>fix.patch Complexity</h2>
+    <details class="panel" id="patch-complexity">
+      <summary><h2>fix.patch Complexity</h2><span class="summary-hint">click to expand</span></summary>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Language</th><th>Valid SWE Count</th><th>Avg fix.patch lines</th><th>Avg fix.patch hunks</th><th>Avg fix.patch files</th></tr></thead>
-          <tbody><tr><td><strong>C</strong></td><td>9,709</td><td>336.57</td><td>17.94</td><td>5.85</td></tr><tr><td><strong>C++</strong></td><td>4,039</td><td>286.89</td><td>13.76</td><td>5.10</td></tr><tr><td><strong>Go</strong></td><td>8,095</td><td>213.28</td><td>12.66</td><td>4.36</td></tr><tr><td><strong>Java</strong></td><td>4,017</td><td>163.39</td><td>10.50</td><td>4.23</td></tr><tr><td><strong>JavaScript</strong></td><td>7,135</td><td>77.12</td><td>6.28</td><td>2.79</td></tr><tr><td><strong>Python</strong></td><td>5,058</td><td>151.42</td><td>10.98</td><td>3.83</td></tr><tr><td><strong>Rust</strong></td><td>5,505</td><td>225.88</td><td>13.17</td><td>4.10</td></tr><tr><td><strong>TypeScript</strong></td><td>6,403</td><td>158.38</td><td>9.61</td><td>4.13</td></tr></tbody>
+          <tbody><tr><td><strong>C</strong></td><td>9,709</td><td>336.57</td><td>17.94</td><td>5.85</td></tr><tr><td><strong>C++</strong></td><td>4,039</td><td>286.89</td><td>13.76</td><td>5.10</td></tr><tr><td><strong>Go</strong></td><td>8,095</td><td>213.28</td><td>12.66</td><td>4.36</td></tr><tr><td><strong>Java</strong></td><td>4,017</td><td>163.39</td><td>10.50</td><td>4.23</td></tr><tr><td><strong>JavaScript</strong></td><td>7,137</td><td>77.11</td><td>6.28</td><td>2.79</td></tr><tr><td><strong>Python</strong></td><td>5,058</td><td>151.42</td><td>10.98</td><td>3.83</td></tr><tr><td><strong>Rust</strong></td><td>5,505</td><td>225.88</td><td>13.17</td><td>4.10</td></tr><tr><td><strong>TypeScript</strong></td><td>6,405</td><td>158.40</td><td>9.61</td><td>4.13</td></tr></tbody>
         </table>
       </div>
-    </section>
+    </details>
 
-    <section class="panel" id="method-notes">
-      <div class="eyebrow">Method Notes</div>
-      <h2>Metric Definitions</h2>
+    <details class="panel" id="method-notes">
+      <summary><h2>Metric Definitions</h2><span class="summary-hint">click to expand</span></summary>
       <div class="method-grid">
         <div class="method-card">
           <h3>Difficulty score (difficulty_score)</h3>
@@ -319,89 +326,92 @@
           <p><code>Avg fix.patch lines</code> counts added/removed lines in code-file diffs; <code>Avg fix.patch hunks</code> counts <code>@@</code> hunks; <code>Avg fix.patch files</code> counts the code files involved.</p>
         </div>
       </div>
-    </section>
+    </details>
 
-    <section class="panel" id="difficulty">
-      <h2>difficulty_label Distribution</h2>
+    <details class="panel" id="difficulty">
+      <summary><h2>difficulty_label Distribution</h2><span class="summary-hint">click to expand</span></summary>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Language</th><th>easy / medium / hard</th><th>easy</th><th>medium</th><th>hard</th></tr></thead>
-          <tbody><tr><td><strong>C</strong></td><td><div class="stacked"><div class="seg easy" style="width:8.958%" title="easy: 869"></div><div class="seg medium" style="width:66.117%" title="medium: 6414"></div><div class="seg hard" style="width:24.925%" title="hard: 2418"></div></div><div class="mini">869 / 6414 / 2418</div></td><td>869</td><td>6,414</td><td>2,418</td></tr><tr><td><strong>C++</strong></td><td><div class="stacked"><div class="seg easy" style="width:10.659%" title="easy: 430"></div><div class="seg medium" style="width:62.147%" title="medium: 2507"></div><div class="seg hard" style="width:27.194%" title="hard: 1097"></div></div><div class="mini">430 / 2507 / 1097</div></td><td>430</td><td>2,507</td><td>1,097</td></tr><tr><td><strong>Go</strong></td><td><div class="stacked"><div class="seg easy" style="width:7.788%" title="easy: 630"></div><div class="seg medium" style="width:72.382%" title="medium: 5855"></div><div class="seg hard" style="width:19.829%" title="hard: 1604"></div></div><div class="mini">630 / 5855 / 1604</div></td><td>630</td><td>5,855</td><td>1,604</td></tr><tr><td><strong>Java</strong></td><td><div class="stacked"><div class="seg easy" style="width:11.039%" title="easy: 443"></div><div class="seg medium" style="width:64.864%" title="medium: 2603"></div><div class="seg hard" style="width:24.097%" title="hard: 967"></div></div><div class="mini">443 / 2603 / 967</div></td><td>443</td><td>2,603</td><td>967</td></tr><tr><td><strong>JavaScript</strong></td><td><div class="stacked"><div class="seg easy" style="width:15.083%" title="easy: 1076"></div><div class="seg medium" style="width:74.124%" title="medium: 5288"></div><div class="seg hard" style="width:10.793%" title="hard: 770"></div></div><div class="mini">1076 / 5288 / 770</div></td><td>1,076</td><td>5,288</td><td>770</td></tr><tr><td><strong>Python</strong></td><td><div class="stacked"><div class="seg easy" style="width:5.423%" title="easy: 273"></div><div class="seg medium" style="width:64.521%" title="medium: 3248"></div><div class="seg hard" style="width:30.056%" title="hard: 1513"></div></div><div class="mini">273 / 3248 / 1513</div></td><td>273</td><td>3,248</td><td>1,513</td></tr><tr><td><strong>Rust</strong></td><td><div class="stacked"><div class="seg easy" style="width:6.942%" title="easy: 382"></div><div class="seg medium" style="width:59.240%" title="medium: 3260"></div><div class="seg hard" style="width:33.818%" title="hard: 1861"></div></div><div class="mini">382 / 3260 / 1861</div></td><td>382</td><td>3,260</td><td>1,861</td></tr><tr><td><strong>TypeScript</strong></td><td><div class="stacked"><div class="seg easy" style="width:8.918%" title="easy: 571"></div><div class="seg medium" style="width:73.997%" title="medium: 4738"></div><div class="seg hard" style="width:17.086%" title="hard: 1094"></div></div><div class="mini">571 / 4738 / 1094</div></td><td>571</td><td>4,738</td><td>1,094</td></tr></tbody>
+          <tbody><tr><td><strong>C</strong></td><td><div class="stacked"><div class="seg easy" style="width:8.958%" title="easy: 869"></div><div class="seg medium" style="width:66.117%" title="medium: 6414"></div><div class="seg hard" style="width:24.925%" title="hard: 2418"></div></div><div class="mini">869 / 6414 / 2418</div></td><td>869</td><td>6,414</td><td>2,418</td></tr><tr><td><strong>C++</strong></td><td><div class="stacked"><div class="seg easy" style="width:10.659%" title="easy: 430"></div><div class="seg medium" style="width:62.147%" title="medium: 2507"></div><div class="seg hard" style="width:27.194%" title="hard: 1097"></div></div><div class="mini">430 / 2507 / 1097</div></td><td>430</td><td>2,507</td><td>1,097</td></tr><tr><td><strong>Go</strong></td><td><div class="stacked"><div class="seg easy" style="width:7.788%" title="easy: 630"></div><div class="seg medium" style="width:72.382%" title="medium: 5855"></div><div class="seg hard" style="width:19.829%" title="hard: 1604"></div></div><div class="mini">630 / 5855 / 1604</div></td><td>630</td><td>5,855</td><td>1,604</td></tr><tr><td><strong>Java</strong></td><td><div class="stacked"><div class="seg easy" style="width:11.039%" title="easy: 443"></div><div class="seg medium" style="width:64.864%" title="medium: 2603"></div><div class="seg hard" style="width:24.097%" title="hard: 967"></div></div><div class="mini">443 / 2603 / 967</div></td><td>443</td><td>2,603</td><td>967</td></tr><tr><td><strong>JavaScript</strong></td><td><div class="stacked"><div class="seg easy" style="width:15.092%" title="easy: 1077"></div><div class="seg medium" style="width:74.117%" title="medium: 5289"></div><div class="seg hard" style="width:10.790%" title="hard: 770"></div></div><div class="mini">1077 / 5289 / 770</div></td><td>1,077</td><td>5,289</td><td>770</td></tr><tr><td><strong>Python</strong></td><td><div class="stacked"><div class="seg easy" style="width:5.423%" title="easy: 273"></div><div class="seg medium" style="width:64.521%" title="medium: 3248"></div><div class="seg hard" style="width:30.056%" title="hard: 1513"></div></div><div class="mini">273 / 3248 / 1513</div></td><td>273</td><td>3,248</td><td>1,513</td></tr><tr><td><strong>Rust</strong></td><td><div class="stacked"><div class="seg easy" style="width:6.942%" title="easy: 382"></div><div class="seg medium" style="width:59.240%" title="medium: 3260"></div><div class="seg hard" style="width:33.818%" title="hard: 1861"></div></div><div class="mini">382 / 3260 / 1861</div></td><td>382</td><td>3,260</td><td>1,861</td></tr><tr><td><strong>TypeScript</strong></td><td><div class="stacked"><div class="seg easy" style="width:8.915%" title="easy: 571"></div><div class="seg medium" style="width:74.005%" title="medium: 4740"></div><div class="seg hard" style="width:17.080%" title="hard: 1094"></div></div><div class="mini">571 / 4740 / 1094</div></td><td>571</td><td>4,740</td><td>1,094</td></tr></tbody>
         </table>
       </div>
-    </section>
+    </details>
 
-    <section class="panel">
-      <h2>difficulty_score Overview</h2>
+    <details class="panel">
+      <summary><h2>difficulty_score Overview</h2><span class="summary-hint">click to expand</span></summary>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Language</th><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr></thead>
-          <tbody><tr><td><strong>C</strong></td><td>9,701</td><td>2.4</td><td>4.9</td><td>6.0</td><td>5.97</td><td>7.0</td><td>9.2</td></tr><tr><td><strong>C++</strong></td><td>4,034</td><td>2.5</td><td>4.9</td><td>6.0</td><td>5.99</td><td>7.2</td><td>9.1</td></tr><tr><td><strong>Go</strong></td><td>8,089</td><td>2.6</td><td>4.9</td><td>5.8</td><td>5.87</td><td>6.8</td><td>9.1</td></tr><tr><td><strong>Java</strong></td><td>4,013</td><td>2.8</td><td>4.8</td><td>5.9</td><td>5.90</td><td>7.0</td><td>9.2</td></tr><tr><td><strong>JavaScript</strong></td><td>7,134</td><td>2.6</td><td>4.4</td><td>5.2</td><td>5.36</td><td>6.2</td><td>9.2</td></tr><tr><td><strong>Python</strong></td><td>5,034</td><td>2.6</td><td>5.2</td><td>6.2</td><td>6.22</td><td>7.3</td><td>9.1</td></tr><tr><td><strong>Rust</strong></td><td>5,503</td><td>2.7</td><td>5.2</td><td>6.3</td><td>6.26</td><td>7.4</td><td>9.0</td></tr><tr><td><strong>TypeScript</strong></td><td>6,403</td><td>2.7</td><td>4.7</td><td>5.7</td><td>5.72</td><td>6.6</td><td>9.1</td></tr></tbody>
+          <tbody><tr><td><strong>C</strong></td><td>9,701</td><td>2.4</td><td>4.9</td><td>6.0</td><td>5.97</td><td>7.0</td><td>9.2</td></tr><tr><td><strong>C++</strong></td><td>4,034</td><td>2.5</td><td>4.9</td><td>6.0</td><td>5.99</td><td>7.2</td><td>9.1</td></tr><tr><td><strong>Go</strong></td><td>8,089</td><td>2.6</td><td>4.9</td><td>5.8</td><td>5.87</td><td>6.8</td><td>9.1</td></tr><tr><td><strong>Java</strong></td><td>4,013</td><td>2.8</td><td>4.8</td><td>5.9</td><td>5.90</td><td>7.0</td><td>9.2</td></tr><tr><td><strong>JavaScript</strong></td><td>7,136</td><td>2.6</td><td>4.4</td><td>5.2</td><td>5.36</td><td>6.2</td><td>9.2</td></tr><tr><td><strong>Python</strong></td><td>5,034</td><td>2.6</td><td>5.2</td><td>6.2</td><td>6.22</td><td>7.3</td><td>9.1</td></tr><tr><td><strong>Rust</strong></td><td>5,503</td><td>2.7</td><td>5.2</td><td>6.3</td><td>6.26</td><td>7.4</td><td>9.0</td></tr><tr><td><strong>TypeScript</strong></td><td>6,405</td><td>2.7</td><td>4.7</td><td>5.7</td><td>5.72</td><td>6.6</td><td>9.1</td></tr></tbody>
         </table>
       </div>
-    </section>
+    </details>
 
-    <section class="panel" id="tags">
-      <h2>Global Top Tags</h2>
-      <div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">23,290 (46.6%)</span></div>
+    <details class="panel" id="tags">
+      <summary><h2>Global Top Tags</h2><span class="summary-hint">click to expand</span></summary>
+      <div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">23,293 (46.6%)</span></div>
 <div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:65.93%"></span></span><span class="tag-count">15,356 (30.8%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:29.04%"></span></span><span class="tag-count">6,764 (13.5%)</span></div>
-<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:13.09%"></span></span><span class="tag-count">3,049 (6.1%)</span></div>
-<div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:9.36%"></span></span><span class="tag-count">2,179 (4.4%)</span></div>
-<div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:6.60%"></span></span><span class="tag-count">1,536 (3.1%)</span></div>
-<div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:5.96%"></span></span><span class="tag-count">1,388 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:13.09%"></span></span><span class="tag-count">3,050 (6.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:11.52%"></span></span><span class="tag-count">2,684 (5.4%)</span></div>
+<div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:9.35%"></span></span><span class="tag-count">2,179 (4.4%)</span></div>
+<div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:6.59%"></span></span><span class="tag-count">1,536 (3.1%)</span></div>
+<div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:5.96%"></span></span><span class="tag-count">1,389 (2.8%)</span></div>
 <div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:5.24%"></span></span><span class="tag-count">1,221 (2.4%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:4.41%"></span></span><span class="tag-count">1,027 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:3.82%"></span></span><span class="tag-count">890 (1.8%)</span></div>
 <div class="tag-row"><span class="tag-name">kubernetes</span><span class="tag-track"><span class="tag-fill" style="width:3.04%"></span></span><span class="tag-count">709 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:2.97%"></span></span><span class="tag-count">691 (1.4%)</span></div>
 <div class="tag-row"><span class="tag-name">async</span><span class="tag-track"><span class="tag-fill" style="width:2.89%"></span></span><span class="tag-count">674 (1.3%)</span></div>
-<div class="tag-row"><span class="tag-name">embedded</span><span class="tag-track"><span class="tag-fill" style="width:2.74%"></span></span><span class="tag-count">637 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">embedded</span><span class="tag-track"><span class="tag-fill" style="width:2.73%"></span></span><span class="tag-count">637 (1.3%)</span></div>
 <div class="tag-row"><span class="tag-name">networking</span><span class="tag-track"><span class="tag-fill" style="width:2.64%"></span></span><span class="tag-count">615 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:2.62%"></span></span><span class="tag-count">611 (1.2%)</span></div>
 <div class="tag-row"><span class="tag-name">cpp</span><span class="tag-track"><span class="tag-fill" style="width:2.55%"></span></span><span class="tag-count">594 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:2.00%"></span></span><span class="tag-count">467 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:1.82%"></span></span><span class="tag-count">425 (0.9%)</span></div>
 <div class="tag-row"><span class="tag-name">typescript</span><span class="tag-track"><span class="tag-fill" style="width:1.64%"></span></span><span class="tag-count">383 (0.8%)</span></div>
 <div class="tag-row"><span class="tag-name">parsing</span><span class="tag-track"><span class="tag-fill" style="width:1.54%"></span></span><span class="tag-count">358 (0.7%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:1.52%"></span></span><span class="tag-count">353 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:1.51%"></span></span><span class="tag-count">352 (0.7%)</span></div>
 <div class="tag-row"><span class="tag-name">eslint</span><span class="tag-track"><span class="tag-fill" style="width:1.47%"></span></span><span class="tag-count">342 (0.7%)</span></div>
 <div class="tag-row"><span class="tag-name">graphql</span><span class="tag-track"><span class="tag-fill" style="width:1.44%"></span></span><span class="tag-count">336 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:1.37%"></span></span><span class="tag-count">319 (0.6%)</span></div>
 <div class="tag-row"><span class="tag-name">postgresql</span><span class="tag-track"><span class="tag-fill" style="width:1.28%"></span></span><span class="tag-count">298 (0.6%)</span></div>
 <div class="tag-row"><span class="tag-name">security</span><span class="tag-track"><span class="tag-fill" style="width:1.23%"></span></span><span class="tag-count">286 (0.6%)</span></div>
 <div class="tag-row"><span class="tag-name">compiler</span><span class="tag-track"><span class="tag-fill" style="width:1.22%"></span></span><span class="tag-count">284 (0.6%)</span></div>
 <div class="tag-row"><span class="tag-name">git</span><span class="tag-track"><span class="tag-fill" style="width:1.22%"></span></span><span class="tag-count">284 (0.6%)</span></div>
-<div class="tag-row"><span class="tag-name">database</span><span class="tag-track"><span class="tag-fill" style="width:1.22%"></span></span><span class="tag-count">283 (0.6%)</span></div>
-<div class="tag-row"><span class="tag-name">aws</span><span class="tag-track"><span class="tag-fill" style="width:1.12%"></span></span><span class="tag-count">262 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">json</span><span class="tag-track"><span class="tag-fill" style="width:1.06%"></span></span><span class="tag-count">247 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">redis</span><span class="tag-track"><span class="tag-fill" style="width:1.02%"></span></span><span class="tag-count">237 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">fastapi</span><span class="tag-track"><span class="tag-fill" style="width:0.97%"></span></span><span class="tag-count">227 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">api</span><span class="tag-track"><span class="tag-fill" style="width:0.97%"></span></span><span class="tag-count">225 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">ruby</span><span class="tag-track"><span class="tag-fill" style="width:0.96%"></span></span><span class="tag-count">224 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">angular</span><span class="tag-track"><span class="tag-fill" style="width:0.89%"></span></span><span class="tag-count">208 (0.4%)</span></div>
-    </section>
+    </details>
 
-    <section class="panel">
-      <h2>Per-Language Tag Distribution</h2>
+    <details class="panel">
+      <summary><h2>Per-Language Tag Distribution</h2><span class="summary-hint">click to expand</span></summary>
       <div class="tags-grid"><section class="tag-card"><h3>C <span>c</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">5,096 (52.5%)</span></div>
 <div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:49.23%"></span></span><span class="tag-count">2,509 (25.8%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:21.96%"></span></span><span class="tag-count">1,119 (11.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:12.70%"></span></span><span class="tag-count">647 (6.7%)</span></div>
 <div class="tag-row"><span class="tag-name">embedded</span><span class="tag-track"><span class="tag-fill" style="width:11.99%"></span></span><span class="tag-count">611 (6.3%)</span></div>
 <div class="tag-row"><span class="tag-name">cpp</span><span class="tag-track"><span class="tag-fill" style="width:11.60%"></span></span><span class="tag-count">591 (6.1%)</span></div>
 <div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:8.12%"></span></span><span class="tag-count">414 (4.3%)</span></div>
 <div class="tag-row"><span class="tag-name">networking</span><span class="tag-track"><span class="tag-fill" style="width:7.85%"></span></span><span class="tag-count">400 (4.1%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:6.93%"></span></span><span class="tag-count">353 (3.6%)</span></div>
 <div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:5.75%"></span></span><span class="tag-count">293 (3.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:5.55%"></span></span><span class="tag-count">283 (2.9%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:5.34%"></span></span><span class="tag-count">272 (2.8%)</span></div>
 <div class="tag-row"><span class="tag-name">ruby</span><span class="tag-track"><span class="tag-fill" style="width:4.18%"></span></span><span class="tag-count">213 (2.2%)</span></div>
 <div class="tag-row"><span class="tag-name">postgresql</span><span class="tag-track"><span class="tag-fill" style="width:4.16%"></span></span><span class="tag-count">212 (2.2%)</span></div>
 <div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:3.94%"></span></span><span class="tag-count">201 (2.1%)</span></div>
 <div class="tag-row"><span class="tag-name">firmware</span><span class="tag-track"><span class="tag-fill" style="width:3.59%"></span></span><span class="tag-count">183 (1.9%)</span></div>
 <div class="tag-row"><span class="tag-name">kernel</span><span class="tag-track"><span class="tag-fill" style="width:3.47%"></span></span><span class="tag-count">177 (1.8%)</span></div>
 <div class="tag-row"><span class="tag-name">quic</span><span class="tag-track"><span class="tag-fill" style="width:3.30%"></span></span><span class="tag-count">168 (1.7%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:2.86%"></span></span><span class="tag-count">146 (1.5%)</span></div>
-<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:2.81%"></span></span><span class="tag-count">143 (1.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:2.94%"></span></span><span class="tag-count">150 (1.5%)</span></div>
 <div class="tag-row"><span class="tag-name">rust</span><span class="tag-track"><span class="tag-fill" style="width:2.75%"></span></span><span class="tag-count">140 (1.4%)</span></div>
-<div class="tag-row"><span class="tag-name">bluetooth</span><span class="tag-track"><span class="tag-fill" style="width:2.53%"></span></span><span class="tag-count">129 (1.3%)</span></div>
-<div class="tag-row"><span class="tag-name">tls</span><span class="tag-track"><span class="tag-fill" style="width:2.53%"></span></span><span class="tag-count">129 (1.3%)</span></div></section><section class="tag-card"><h3>C++ <span>cpp</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">2,784 (69.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:2.61%"></span></span><span class="tag-count">133 (1.4%)</span></div></section><section class="tag-card"><h3>C++ <span>cpp</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">2,784 (69.0%)</span></div>
 <div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:26.22%"></span></span><span class="tag-count">730 (18.1%)</span></div>
 <div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:17.64%"></span></span><span class="tag-count">491 (12.2%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:12.82%"></span></span><span class="tag-count">357 (8.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:9.63%"></span></span><span class="tag-count">268 (6.6%)</span></div>
 <div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:6.68%"></span></span><span class="tag-count">186 (4.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:5.17%"></span></span><span class="tag-count">144 (3.6%)</span></div>
 <div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:4.63%"></span></span><span class="tag-count">129 (3.2%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:4.24%"></span></span><span class="tag-count">118 (2.9%)</span></div>
 <div class="tag-row"><span class="tag-name">boost</span><span class="tag-track"><span class="tag-fill" style="width:4.09%"></span></span><span class="tag-count">114 (2.8%)</span></div>
 <div class="tag-row"><span class="tag-name">async</span><span class="tag-track"><span class="tag-fill" style="width:3.27%"></span></span><span class="tag-count">91 (2.3%)</span></div>
 <div class="tag-row"><span class="tag-name">parsing</span><span class="tag-track"><span class="tag-fill" style="width:2.73%"></span></span><span class="tag-count">76 (1.9%)</span></div>
@@ -409,89 +419,86 @@
 <div class="tag-row"><span class="tag-name">compiler</span><span class="tag-track"><span class="tag-fill" style="width:1.94%"></span></span><span class="tag-count">54 (1.3%)</span></div>
 <div class="tag-row"><span class="tag-name">serialization</span><span class="tag-track"><span class="tag-fill" style="width:1.94%"></span></span><span class="tag-count">54 (1.3%)</span></div>
 <div class="tag-row"><span class="tag-name">geometry</span><span class="tag-track"><span class="tag-fill" style="width:1.83%"></span></span><span class="tag-count">51 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:1.76%"></span></span><span class="tag-count">49 (1.2%)</span></div>
 <div class="tag-row"><span class="tag-name">networking</span><span class="tag-track"><span class="tag-fill" style="width:1.76%"></span></span><span class="tag-count">49 (1.2%)</span></div>
-<div class="tag-row"><span class="tag-name">formatting</span><span class="tag-track"><span class="tag-fill" style="width:1.62%"></span></span><span class="tag-count">45 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">ros2</span><span class="tag-track"><span class="tag-fill" style="width:1.58%"></span></span><span class="tag-count">44 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">json</span><span class="tag-track"><span class="tag-fill" style="width:1.44%"></span></span><span class="tag-count">40 (1.0%)</span></div>
-<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:1.44%"></span></span><span class="tag-count">40 (1.0%)</span></div>
-<div class="tag-row"><span class="tag-name">logging</span><span class="tag-track"><span class="tag-fill" style="width:1.33%"></span></span><span class="tag-count">37 (0.9%)</span></div>
-<div class="tag-row"><span class="tag-name">templates</span><span class="tag-track"><span class="tag-fill" style="width:1.29%"></span></span><span class="tag-count">36 (0.9%)</span></div></section><section class="tag-card"><h3>Go <span>go</span></h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">4,243 (52.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:1.69%"></span></span><span class="tag-count">47 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">formatting</span><span class="tag-track"><span class="tag-fill" style="width:1.62%"></span></span><span class="tag-count">45 (1.1%)</span></div></section><section class="tag-card"><h3>Go <span>go</span></h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">4,243 (52.5%)</span></div>
 <div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:48.03%"></span></span><span class="tag-count">2,038 (25.2%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:46.15%"></span></span><span class="tag-count">1,958 (24.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:17.13%"></span></span><span class="tag-count">727 (9.0%)</span></div>
 <div class="tag-row"><span class="tag-name">kubernetes</span><span class="tag-track"><span class="tag-fill" style="width:15.30%"></span></span><span class="tag-count">649 (8.0%)</span></div>
 <div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:12.26%"></span></span><span class="tag-count">520 (6.4%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:5.66%"></span></span><span class="tag-count">240 (3.0%)</span></div>
 <div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:5.28%"></span></span><span class="tag-count">224 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:4.74%"></span></span><span class="tag-count">201 (2.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:4.17%"></span></span><span class="tag-count">177 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:4.05%"></span></span><span class="tag-count">172 (2.1%)</span></div>
 <div class="tag-row"><span class="tag-name">docker</span><span class="tag-track"><span class="tag-fill" style="width:3.13%"></span></span><span class="tag-count">133 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:3.02%"></span></span><span class="tag-count">128 (1.6%)</span></div>
 <div class="tag-row"><span class="tag-name">aws</span><span class="tag-track"><span class="tag-fill" style="width:2.80%"></span></span><span class="tag-count">119 (1.5%)</span></div>
 <div class="tag-row"><span class="tag-name">terraform</span><span class="tag-track"><span class="tag-fill" style="width:2.78%"></span></span><span class="tag-count">118 (1.5%)</span></div>
 <div class="tag-row"><span class="tag-name">grpc</span><span class="tag-track"><span class="tag-fill" style="width:2.76%"></span></span><span class="tag-count">117 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:2.73%"></span></span><span class="tag-count">116 (1.4%)</span></div>
 <div class="tag-row"><span class="tag-name">prometheus</span><span class="tag-track"><span class="tag-fill" style="width:2.43%"></span></span><span class="tag-count">103 (1.3%)</span></div>
 <div class="tag-row"><span class="tag-name">networking</span><span class="tag-track"><span class="tag-fill" style="width:2.29%"></span></span><span class="tag-count">97 (1.2%)</span></div>
-<div class="tag-row"><span class="tag-name">database</span><span class="tag-track"><span class="tag-fill" style="width:2.12%"></span></span><span class="tag-count">90 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:2.03%"></span></span><span class="tag-count">86 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">api</span><span class="tag-track"><span class="tag-fill" style="width:1.91%"></span></span><span class="tag-count">81 (1.0%)</span></div>
-<div class="tag-row"><span class="tag-name">git</span><span class="tag-track"><span class="tag-fill" style="width:1.86%"></span></span><span class="tag-count">79 (1.0%)</span></div>
-<div class="tag-row"><span class="tag-name">security</span><span class="tag-track"><span class="tag-fill" style="width:1.63%"></span></span><span class="tag-count">69 (0.9%)</span></div>
-<div class="tag-row"><span class="tag-name">aws-sdk</span><span class="tag-track"><span class="tag-fill" style="width:1.53%"></span></span><span class="tag-count">65 (0.8%)</span></div>
-<div class="tag-row"><span class="tag-name">blockchain</span><span class="tag-track"><span class="tag-fill" style="width:1.32%"></span></span><span class="tag-count">56 (0.7%)</span></div>
-<div class="tag-row"><span class="tag-name">configuration</span><span class="tag-track"><span class="tag-fill" style="width:1.32%"></span></span><span class="tag-count">56 (0.7%)</span></div></section><section class="tag-card"><h3>Java <span>java</span></h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,949 (48.6%)</span></div>
+<div class="tag-row"><span class="tag-name">database</span><span class="tag-track"><span class="tag-fill" style="width:2.12%"></span></span><span class="tag-count">90 (1.1%)</span></div></section><section class="tag-card"><h3>Java <span>java</span></h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,949 (48.6%)</span></div>
 <div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:93.02%"></span></span><span class="tag-count">1,813 (45.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:11.29%"></span></span><span class="tag-count">220 (5.5%)</span></div>
 <div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:10.77%"></span></span><span class="tag-count">210 (5.2%)</span></div>
 <div class="tag-row"><span class="tag-name">spring</span><span class="tag-track"><span class="tag-fill" style="width:8.16%"></span></span><span class="tag-count">159 (4.0%)</span></div>
 <div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:7.80%"></span></span><span class="tag-count">152 (3.8%)</span></div>
 <div class="tag-row"><span class="tag-name">aem</span><span class="tag-track"><span class="tag-fill" style="width:7.54%"></span></span><span class="tag-count">147 (3.7%)</span></div>
 <div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:6.98%"></span></span><span class="tag-count">136 (3.4%)</span></div>
 <div class="tag-row"><span class="tag-name">android</span><span class="tag-track"><span class="tag-fill" style="width:6.05%"></span></span><span class="tag-count">118 (2.9%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:4.72%"></span></span><span class="tag-count">92 (2.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:4.67%"></span></span><span class="tag-count">91 (2.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:4.10%"></span></span><span class="tag-count">80 (2.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:3.44%"></span></span><span class="tag-count">67 (1.7%)</span></div>
 <div class="tag-row"><span class="tag-name">json</span><span class="tag-track"><span class="tag-fill" style="width:3.44%"></span></span><span class="tag-count">67 (1.7%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:3.34%"></span></span><span class="tag-count">65 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-null-check</span><span class="tag-track"><span class="tag-fill" style="width:3.28%"></span></span><span class="tag-count">64 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:3.13%"></span></span><span class="tag-count">61 (1.5%)</span></div>
 <div class="tag-row"><span class="tag-name">maven</span><span class="tag-track"><span class="tag-fill" style="width:3.03%"></span></span><span class="tag-count">59 (1.5%)</span></div>
 <div class="tag-row"><span class="tag-name">sling</span><span class="tag-track"><span class="tag-fill" style="width:2.92%"></span></span><span class="tag-count">57 (1.4%)</span></div>
-<div class="tag-row"><span class="tag-name">kafka</span><span class="tag-track"><span class="tag-fill" style="width:2.72%"></span></span><span class="tag-count">53 (1.3%)</span></div>
-<div class="tag-row"><span class="tag-name">flink</span><span class="tag-track"><span class="tag-fill" style="width:2.46%"></span></span><span class="tag-count">48 (1.2%)</span></div>
-<div class="tag-row"><span class="tag-name">concurrency</span><span class="tag-track"><span class="tag-fill" style="width:2.41%"></span></span><span class="tag-count">47 (1.2%)</span></div>
-<div class="tag-row"><span class="tag-name">grpc</span><span class="tag-track"><span class="tag-fill" style="width:2.41%"></span></span><span class="tag-count">47 (1.2%)</span></div>
-<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:2.36%"></span></span><span class="tag-count">46 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">mybatis</span><span class="tag-track"><span class="tag-fill" style="width:1.90%"></span></span><span class="tag-count">37 (0.9%)</span></div>
-<div class="tag-row"><span class="tag-name">nacos</span><span class="tag-track"><span class="tag-fill" style="width:1.74%"></span></span><span class="tag-count">34 (0.8%)</span></div>
-<div class="tag-row"><span class="tag-name">security</span><span class="tag-track"><span class="tag-fill" style="width:1.74%"></span></span><span class="tag-count">34 (0.8%)</span></div></section><section class="tag-card"><h3>JavaScript <span>js</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">3,853 (54.0%)</span></div>
-<div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:31.87%"></span></span><span class="tag-count">1,228 (17.2%)</span></div>
-<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:26.14%"></span></span><span class="tag-count">1,007 (14.1%)</span></div>
-<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:22.09%"></span></span><span class="tag-count">851 (11.9%)</span></div>
+<div class="tag-row"><span class="tag-name">kafka</span><span class="tag-track"><span class="tag-fill" style="width:2.72%"></span></span><span class="tag-count">53 (1.3%)</span></div></section><section class="tag-card"><h3>JavaScript <span>js</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">3,854 (54.0%)</span></div>
+<div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:31.86%"></span></span><span class="tag-count">1,228 (17.2%)</span></div>
+<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:26.15%"></span></span><span class="tag-count">1,008 (14.1%)</span></div>
+<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:22.08%"></span></span><span class="tag-count">851 (11.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:12.61%"></span></span><span class="tag-count">486 (6.8%)</span></div>
 <div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:8.98%"></span></span><span class="tag-count">346 (4.8%)</span></div>
-<div class="tag-row"><span class="tag-name">typescript</span><span class="tag-track"><span class="tag-fill" style="width:8.31%"></span></span><span class="tag-count">320 (4.5%)</span></div>
-<div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:7.66%"></span></span><span class="tag-count">295 (4.1%)</span></div>
+<div class="tag-row"><span class="tag-name">typescript</span><span class="tag-track"><span class="tag-fill" style="width:8.30%"></span></span><span class="tag-count">320 (4.5%)</span></div>
+<div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:7.65%"></span></span><span class="tag-count">295 (4.1%)</span></div>
 <div class="tag-row"><span class="tag-name">eslint</span><span class="tag-track"><span class="tag-fill" style="width:6.80%"></span></span><span class="tag-count">262 (3.7%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:5.63%"></span></span><span class="tag-count">217 (3.0%)</span></div>
 <div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:5.11%"></span></span><span class="tag-count">197 (2.8%)</span></div>
 <div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:4.67%"></span></span><span class="tag-count">180 (2.5%)</span></div>
-<div class="tag-row"><span class="tag-name">fastify</span><span class="tag-track"><span class="tag-fill" style="width:3.82%"></span></span><span class="tag-count">147 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">fastify</span><span class="tag-track"><span class="tag-fill" style="width:3.81%"></span></span><span class="tag-count">147 (2.1%)</span></div>
 <div class="tag-row"><span class="tag-name">webpack</span><span class="tag-track"><span class="tag-fill" style="width:3.76%"></span></span><span class="tag-count">145 (2.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:3.17%"></span></span><span class="tag-count">122 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:2.85%"></span></span><span class="tag-count">110 (1.5%)</span></div>
 <div class="tag-row"><span class="tag-name">nodejs</span><span class="tag-track"><span class="tag-fill" style="width:2.67%"></span></span><span class="tag-count">103 (1.4%)</span></div>
 <div class="tag-row"><span class="tag-name">mongoose</span><span class="tag-track"><span class="tag-fill" style="width:2.67%"></span></span><span class="tag-count">103 (1.4%)</span></div>
 <div class="tag-row"><span class="tag-name">svelte</span><span class="tag-track"><span class="tag-fill" style="width:2.62%"></span></span><span class="tag-count">101 (1.4%)</span></div>
-<div class="tag-row"><span class="tag-name">express</span><span class="tag-track"><span class="tag-fill" style="width:2.36%"></span></span><span class="tag-count">91 (1.3%)</span></div>
-<div class="tag-row"><span class="tag-name">stylelint</span><span class="tag-track"><span class="tag-fill" style="width:1.69%"></span></span><span class="tag-count">65 (0.9%)</span></div>
-<div class="tag-row"><span class="tag-name">vue</span><span class="tag-track"><span class="tag-fill" style="width:1.66%"></span></span><span class="tag-count">64 (0.9%)</span></div>
-<div class="tag-row"><span class="tag-name">lighthouse</span><span class="tag-track"><span class="tag-fill" style="width:1.64%"></span></span><span class="tag-count">63 (0.9%)</span></div>
-<div class="tag-row"><span class="tag-name">async</span><span class="tag-track"><span class="tag-fill" style="width:1.58%"></span></span><span class="tag-count">61 (0.9%)</span></div></section><section class="tag-card"><h3>Python <span>py</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">2,137 (42.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:2.57%"></span></span><span class="tag-count">99 (1.4%)</span></div></section><section class="tag-card"><h3>Python <span>py</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">2,137 (42.4%)</span></div>
 <div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:98.08%"></span></span><span class="tag-count">2,096 (41.6%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:32.62%"></span></span><span class="tag-count">697 (13.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:15.72%"></span></span><span class="tag-count">336 (6.7%)</span></div>
 <div class="tag-row"><span class="tag-name">fastapi</span><span class="tag-track"><span class="tag-fill" style="width:9.59%"></span></span><span class="tag-count">205 (4.1%)</span></div>
 <div class="tag-row"><span class="tag-name">django</span><span class="tag-track"><span class="tag-fill" style="width:6.69%"></span></span><span class="tag-count">143 (2.8%)</span></div>
 <div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:5.38%"></span></span><span class="tag-count">115 (2.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:5.01%"></span></span><span class="tag-count">107 (2.1%)</span></div>
 <div class="tag-row"><span class="tag-name">pytorch</span><span class="tag-track"><span class="tag-fill" style="width:4.91%"></span></span><span class="tag-count">105 (2.1%)</span></div>
 <div class="tag-row"><span class="tag-name">ansible</span><span class="tag-track"><span class="tag-fill" style="width:4.68%"></span></span><span class="tag-count">100 (2.0%)</span></div>
 <div class="tag-row"><span class="tag-name">async</span><span class="tag-track"><span class="tag-fill" style="width:4.63%"></span></span><span class="tag-count">99 (2.0%)</span></div>
 <div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:4.63%"></span></span><span class="tag-count">99 (2.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:4.49%"></span></span><span class="tag-count">96 (1.9%)</span></div>
 <div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:4.35%"></span></span><span class="tag-count">93 (1.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:4.31%"></span></span><span class="tag-count">92 (1.8%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:4.12%"></span></span><span class="tag-count">88 (1.7%)</span></div>
 <div class="tag-row"><span class="tag-name">aws</span><span class="tag-track"><span class="tag-fill" style="width:3.37%"></span></span><span class="tag-count">72 (1.4%)</span></div>
 <div class="tag-row"><span class="tag-name">aiohttp</span><span class="tag-track"><span class="tag-fill" style="width:3.04%"></span></span><span class="tag-count">65 (1.3%)</span></div>
 <div class="tag-row"><span class="tag-name">pydantic</span><span class="tag-track"><span class="tag-fill" style="width:2.81%"></span></span><span class="tag-count">60 (1.2%)</span></div>
-<div class="tag-row"><span class="tag-name">openai</span><span class="tag-track"><span class="tag-fill" style="width:2.57%"></span></span><span class="tag-count">55 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">flask</span><span class="tag-track"><span class="tag-fill" style="width:2.48%"></span></span><span class="tag-count">53 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">click</span><span class="tag-track"><span class="tag-fill" style="width:2.39%"></span></span><span class="tag-count">51 (1.0%)</span></div>
-<div class="tag-row"><span class="tag-name">litellm</span><span class="tag-track"><span class="tag-fill" style="width:2.34%"></span></span><span class="tag-count">50 (1.0%)</span></div>
-<div class="tag-row"><span class="tag-name">beets</span><span class="tag-track"><span class="tag-fill" style="width:2.25%"></span></span><span class="tag-count">48 (1.0%)</span></div>
-<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:2.11%"></span></span><span class="tag-count">45 (0.9%)</span></div></section><section class="tag-card"><h3>Rust <span>rust</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">3,090 (56.2%)</span></div>
+<div class="tag-row"><span class="tag-name">openai</span><span class="tag-track"><span class="tag-fill" style="width:2.57%"></span></span><span class="tag-count">55 (1.1%)</span></div></section><section class="tag-card"><h3>Rust <span>rust</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">3,090 (56.2%)</span></div>
 <div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:38.38%"></span></span><span class="tag-count">1,186 (21.6%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:36.44%"></span></span><span class="tag-count">1,126 (20.5%)</span></div>
 <div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:9.97%"></span></span><span class="tag-count">308 (5.6%)</span></div>
@@ -510,82 +517,152 @@
 <div class="tag-row"><span class="tag-name">datafusion</span><span class="tag-track"><span class="tag-fill" style="width:1.88%"></span></span><span class="tag-count">58 (1.1%)</span></div>
 <div class="tag-row"><span class="tag-name">lsp</span><span class="tag-track"><span class="tag-fill" style="width:1.84%"></span></span><span class="tag-count">57 (1.0%)</span></div>
 <div class="tag-row"><span class="tag-name">database</span><span class="tag-track"><span class="tag-fill" style="width:1.81%"></span></span><span class="tag-count">56 (1.0%)</span></div>
-<div class="tag-row"><span class="tag-name">cryptography</span><span class="tag-track"><span class="tag-fill" style="width:1.81%"></span></span><span class="tag-count">56 (1.0%)</span></div></section><section class="tag-card"><h3>TypeScript <span>ts</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">2,479 (38.7%)</span></div>
-<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:71.36%"></span></span><span class="tag-count">1,769 (27.6%)</span></div>
-<div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:57.08%"></span></span><span class="tag-count">1,415 (22.1%)</span></div>
-<div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:41.71%"></span></span><span class="tag-count">1,034 (16.1%)</span></div>
-<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:23.84%"></span></span><span class="tag-count">591 (9.2%)</span></div>
-<div class="tag-row"><span class="tag-name">angular</span><span class="tag-track"><span class="tag-fill" style="width:8.15%"></span></span><span class="tag-count">202 (3.2%)</span></div>
+<div class="tag-row"><span class="tag-name">cryptography</span><span class="tag-track"><span class="tag-fill" style="width:1.81%"></span></span><span class="tag-count">56 (1.0%)</span></div></section><section class="tag-card"><h3>TypeScript <span>ts</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">2,481 (38.7%)</span></div>
+<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:71.30%"></span></span><span class="tag-count">1,769 (27.6%)</span></div>
+<div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:57.03%"></span></span><span class="tag-count">1,415 (22.1%)</span></div>
+<div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:41.72%"></span></span><span class="tag-count">1,035 (16.2%)</span></div>
+<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:23.82%"></span></span><span class="tag-count">591 (9.2%)</span></div>
+<div class="tag-row"><span class="tag-name">angular</span><span class="tag-track"><span class="tag-fill" style="width:8.14%"></span></span><span class="tag-count">202 (3.2%)</span></div>
 <div class="tag-row"><span class="tag-name">graphql</span><span class="tag-track"><span class="tag-fill" style="width:6.53%"></span></span><span class="tag-count">162 (2.5%)</span></div>
-<div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:5.89%"></span></span><span class="tag-count">146 (2.3%)</span></div>
-<div class="tag-row"><span class="tag-name">javascript</span><span class="tag-track"><span class="tag-fill" style="width:5.57%"></span></span><span class="tag-count">138 (2.2%)</span></div>
-<div class="tag-row"><span class="tag-name">electron</span><span class="tag-track"><span class="tag-fill" style="width:5.41%"></span></span><span class="tag-count">134 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:5.88%"></span></span><span class="tag-count">146 (2.3%)</span></div>
+<div class="tag-row"><span class="tag-name">javascript</span><span class="tag-track"><span class="tag-fill" style="width:5.56%"></span></span><span class="tag-count">138 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">electron</span><span class="tag-track"><span class="tag-fill" style="width:5.40%"></span></span><span class="tag-count">134 (2.1%)</span></div>
 <div class="tag-row"><span class="tag-name">fullstack</span><span class="tag-track"><span class="tag-fill" style="width:5.08%"></span></span><span class="tag-count">126 (2.0%)</span></div>
 <div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:4.92%"></span></span><span class="tag-count">122 (1.9%)</span></div>
 <div class="tag-row"><span class="tag-name">vue</span><span class="tag-track"><span class="tag-fill" style="width:3.95%"></span></span><span class="tag-count">98 (1.5%)</span></div>
 <div class="tag-row"><span class="tag-name">nextjs</span><span class="tag-track"><span class="tag-fill" style="width:3.39%"></span></span><span class="tag-count">84 (1.3%)</span></div>
 <div class="tag-row"><span class="tag-name">github-actions</span><span class="tag-track"><span class="tag-fill" style="width:3.39%"></span></span><span class="tag-count">84 (1.3%)</span></div>
-<div class="tag-row"><span class="tag-name">eslint</span><span class="tag-track"><span class="tag-fill" style="width:3.23%"></span></span><span class="tag-count">80 (1.2%)</span></div>
-<div class="tag-row"><span class="tag-name">express</span><span class="tag-track"><span class="tag-fill" style="width:3.19%"></span></span><span class="tag-count">79 (1.2%)</span></div>
-<div class="tag-row"><span class="tag-name">vscode</span><span class="tag-track"><span class="tag-fill" style="width:2.99%"></span></span><span class="tag-count">74 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">eslint</span><span class="tag-track"><span class="tag-fill" style="width:3.22%"></span></span><span class="tag-count">80 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">express</span><span class="tag-track"><span class="tag-fill" style="width:3.18%"></span></span><span class="tag-count">79 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">vscode</span><span class="tag-track"><span class="tag-fill" style="width:2.98%"></span></span><span class="tag-count">74 (1.2%)</span></div>
 <div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:2.82%"></span></span><span class="tag-count">70 (1.1%)</span></div>
 <div class="tag-row"><span class="tag-name">mcp</span><span class="tag-track"><span class="tag-fill" style="width:2.78%"></span></span><span class="tag-count">69 (1.1%)</span></div></section></div>
-    </section>
+    </details>
 
-    <section class="panel" id="bug-classes">
-      <h2>Global Top Bug Classes</h2>
+    <details class="panel" id="bug-classes">
+      <summary><h2>Global Top Bug Classes</h2><span class="summary-hint">click to expand</span></summary>
       <p class="muted small">Bug class is the 4th tag in <code>task.toml -&gt; [metadata].tags</code>: a domain-independent label describing the defect mechanism (e.g. <code>missing-fallback</code>, <code>incomplete-validation</code>, <code>off-by-one-error</code>). Generated by the LLM during <code>swegen create</code> and backfilled into legacy 3-tag tasks via <code>swegen backfill-tags</code>.</p>
-      <div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">353 (7.0%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:41.36%"></span></span><span class="tag-count">146 (2.9%)</span></div>
-<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:40.51%"></span></span><span class="tag-count">143 (2.8%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:25.78%"></span></span><span class="tag-count">91 (1.8%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:20.68%"></span></span><span class="tag-count">73 (1.4%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-api</span><span class="tag-track"><span class="tag-fill" style="width:15.86%"></span></span><span class="tag-count">56 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:15.58%"></span></span><span class="tag-count">55 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:15.58%"></span></span><span class="tag-count">55 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:15.01%"></span></span><span class="tag-count">53 (1.0%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-initialization</span><span class="tag-track"><span class="tag-fill" style="width:12.46%"></span></span><span class="tag-count">44 (0.9%)</span></div>
-<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:10.76%"></span></span><span class="tag-count">38 (0.7%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:10.20%"></span></span><span class="tag-count">36 (0.7%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-function</span><span class="tag-track"><span class="tag-fill" style="width:8.50%"></span></span><span class="tag-count">30 (0.6%)</span></div>
-<div class="tag-row"><span class="tag-name">memory-leak</span><span class="tag-track"><span class="tag-fill" style="width:7.93%"></span></span><span class="tag-count">28 (0.6%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-configuration-option</span><span class="tag-track"><span class="tag-fill" style="width:7.65%"></span></span><span class="tag-count">27 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:7.08%"></span></span><span class="tag-count">25 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">integer-overflow</span><span class="tag-track"><span class="tag-fill" style="width:6.52%"></span></span><span class="tag-count">23 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-cleanup</span><span class="tag-track"><span class="tag-fill" style="width:6.52%"></span></span><span class="tag-count">23 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-bounds-check</span><span class="tag-track"><span class="tag-fill" style="width:6.52%"></span></span><span class="tag-count">23 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-null-check</span><span class="tag-track"><span class="tag-fill" style="width:5.95%"></span></span><span class="tag-count">21 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-parameter</span><span class="tag-track"><span class="tag-fill" style="width:5.95%"></span></span><span class="tag-count">21 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-platform-support</span><span class="tag-track"><span class="tag-fill" style="width:5.10%"></span></span><span class="tag-count">18 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">off-by-one</span><span class="tag-track"><span class="tag-fill" style="width:4.82%"></span></span><span class="tag-count">17 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-error-propagation</span><span class="tag-track"><span class="tag-fill" style="width:4.82%"></span></span><span class="tag-count">17 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-state-check</span><span class="tag-track"><span class="tag-fill" style="width:4.53%"></span></span><span class="tag-count">16 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-state-tracking</span><span class="tag-track"><span class="tag-fill" style="width:4.53%"></span></span><span class="tag-count">16 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-synchronization</span><span class="tag-track"><span class="tag-fill" style="width:4.53%"></span></span><span class="tag-count">16 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-input-validation</span><span class="tag-track"><span class="tag-fill" style="width:4.53%"></span></span><span class="tag-count">16 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">hardcoded-configuration</span><span class="tag-track"><span class="tag-fill" style="width:4.25%"></span></span><span class="tag-count">15 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">deprecated-api-usage</span><span class="tag-track"><span class="tag-fill" style="width:4.25%"></span></span><span class="tag-count">15 (0.3%)</span></div>
-    </section>
+      <div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">2,684 (7.2%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:38.26%"></span></span><span class="tag-count">1,027 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:33.16%"></span></span><span class="tag-count">890 (2.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:25.75%"></span></span><span class="tag-count">691 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:22.76%"></span></span><span class="tag-count">611 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:17.40%"></span></span><span class="tag-count">467 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:15.83%"></span></span><span class="tag-count">425 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:13.11%"></span></span><span class="tag-count">352 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:11.89%"></span></span><span class="tag-count">319 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:10.25%"></span></span><span class="tag-count">275 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:9.61%"></span></span><span class="tag-count">258 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration-option</span><span class="tag-track"><span class="tag-fill" style="width:8.68%"></span></span><span class="tag-count">233 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-null-check</span><span class="tag-track"><span class="tag-fill" style="width:7.15%"></span></span><span class="tag-count">192 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-api</span><span class="tag-track"><span class="tag-fill" style="width:6.86%"></span></span><span class="tag-count">184 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-method</span><span class="tag-track"><span class="tag-fill" style="width:6.86%"></span></span><span class="tag-count">184 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-initialization</span><span class="tag-track"><span class="tag-fill" style="width:5.51%"></span></span><span class="tag-count">148 (0.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-type-support</span><span class="tag-track"><span class="tag-fill" style="width:5.22%"></span></span><span class="tag-count">140 (0.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-parameter</span><span class="tag-track"><span class="tag-fill" style="width:5.18%"></span></span><span class="tag-count">139 (0.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-cleanup</span><span class="tag-track"><span class="tag-fill" style="width:4.77%"></span></span><span class="tag-count">128 (0.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-error-handling</span><span class="tag-track"><span class="tag-fill" style="width:4.66%"></span></span><span class="tag-count">125 (0.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-field</span><span class="tag-track"><span class="tag-fill" style="width:4.06%"></span></span><span class="tag-count">109 (0.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-bounds-check</span><span class="tag-track"><span class="tag-fill" style="width:3.91%"></span></span><span class="tag-count">105 (0.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-context-propagation</span><span class="tag-track"><span class="tag-fill" style="width:3.87%"></span></span><span class="tag-count">104 (0.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-function</span><span class="tag-track"><span class="tag-fill" style="width:3.50%"></span></span><span class="tag-count">94 (0.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-error-propagation</span><span class="tag-track"><span class="tag-fill" style="width:3.50%"></span></span><span class="tag-count">94 (0.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-input-validation</span><span class="tag-track"><span class="tag-fill" style="width:3.09%"></span></span><span class="tag-count">83 (0.2%)</span></div>
+<div class="tag-row"><span class="tag-name">off-by-one</span><span class="tag-track"><span class="tag-fill" style="width:2.94%"></span></span><span class="tag-count">79 (0.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-format-support</span><span class="tag-track"><span class="tag-fill" style="width:2.91%"></span></span><span class="tag-count">78 (0.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration-propagation</span><span class="tag-track"><span class="tag-fill" style="width:2.91%"></span></span><span class="tag-count">78 (0.2%)</span></div>
+<div class="tag-row"><span class="tag-name">deprecated-api-usage</span><span class="tag-track"><span class="tag-fill" style="width:2.79%"></span></span><span class="tag-count">75 (0.2%)</span></div>
+    </details>
 
-    <section class="panel">
-      <h2>Per-Language Bug-Class Distribution</h2>
+    <details class="panel">
+      <summary><h2>Per-Language Bug-Class Distribution</h2><span class="summary-hint">click to expand</span></summary>
       <p class="muted small">Top bug classes per mainstream language. Counts are over tasks whose <code>task.toml</code> already carries a 4-tag entry; tasks still on the legacy 3-tag schema do not contribute until the backfill catches up.</p>
-      <div class="tags-grid"><section class="tag-card"><h3>C <span>c</span><span class="tag-card-sub">5,069 tagged</span></h3><div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">353 (7.0%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:41.36%"></span></span><span class="tag-count">146 (2.9%)</span></div>
-<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:40.51%"></span></span><span class="tag-count">143 (2.8%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:25.78%"></span></span><span class="tag-count">91 (1.8%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:20.68%"></span></span><span class="tag-count">73 (1.4%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-api</span><span class="tag-track"><span class="tag-fill" style="width:15.86%"></span></span><span class="tag-count">56 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:15.58%"></span></span><span class="tag-count">55 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:15.58%"></span></span><span class="tag-count">55 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:15.01%"></span></span><span class="tag-count">53 (1.0%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-initialization</span><span class="tag-track"><span class="tag-fill" style="width:12.46%"></span></span><span class="tag-count">44 (0.9%)</span></div>
-<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:10.76%"></span></span><span class="tag-count">38 (0.7%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:10.20%"></span></span><span class="tag-count">36 (0.7%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-function</span><span class="tag-track"><span class="tag-fill" style="width:8.50%"></span></span><span class="tag-count">30 (0.6%)</span></div>
-<div class="tag-row"><span class="tag-name">memory-leak</span><span class="tag-track"><span class="tag-fill" style="width:7.93%"></span></span><span class="tag-count">28 (0.6%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-configuration-option</span><span class="tag-track"><span class="tag-fill" style="width:7.65%"></span></span><span class="tag-count">27 (0.5%)</span></div></section><section class="tag-card"><h3>C++ <span>cpp</span><span class="tag-card-sub">1 tagged</span></h3><div class="tag-row"><span class="tag-name">caf</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1 (100.0%)</span></div></section><section class="tag-card"><h3>Go <span>go</span><span class="tag-card-sub">0 tagged</span></h3><div class="muted">no tags data</div></section><section class="tag-card"><h3>Java <span>java</span><span class="tag-card-sub">1 tagged</span></h3><div class="tag-row"><span class="tag-name">immutables</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1 (100.0%)</span></div></section><section class="tag-card"><h3>JavaScript <span>js</span><span class="tag-card-sub">0 tagged</span></h3><div class="muted">no tags data</div></section><section class="tag-card"><h3>Python <span>py</span><span class="tag-card-sub">0 tagged</span></h3><div class="muted">no tags data</div></section><section class="tag-card"><h3>Rust <span>rust</span><span class="tag-card-sub">0 tagged</span></h3><div class="muted">no tags data</div></section><section class="tag-card"><h3>TypeScript <span>ts</span><span class="tag-card-sub">0 tagged</span></h3><div class="muted">no tags data</div></section></div>
-    </section>
+      <div class="tags-grid"><section class="tag-card"><h3>C <span>c</span><span class="tag-card-sub">9,708 tagged</span></h3><div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">647 (6.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:43.74%"></span></span><span class="tag-count">283 (2.9%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:42.04%"></span></span><span class="tag-count">272 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:23.18%"></span></span><span class="tag-count">150 (1.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:20.56%"></span></span><span class="tag-count">133 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:19.47%"></span></span><span class="tag-count">126 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-api</span><span class="tag-track"><span class="tag-fill" style="width:16.69%"></span></span><span class="tag-count">108 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:16.69%"></span></span><span class="tag-count">108 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:14.99%"></span></span><span class="tag-count">97 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-initialization</span><span class="tag-track"><span class="tag-fill" style="width:12.36%"></span></span><span class="tag-count">80 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:11.44%"></span></span><span class="tag-count">74 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:10.51%"></span></span><span class="tag-count">68 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-bounds-check</span><span class="tag-track"><span class="tag-fill" style="width:8.50%"></span></span><span class="tag-count">55 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-null-check</span><span class="tag-track"><span class="tag-fill" style="width:8.04%"></span></span><span class="tag-count">52 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">memory-leak</span><span class="tag-track"><span class="tag-fill" style="width:7.57%"></span></span><span class="tag-count">49 (0.5%)</span></div></section><section class="tag-card"><h3>C++ <span>cpp</span><span class="tag-card-sub">4,037 tagged</span></h3><div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">268 (6.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:53.73%"></span></span><span class="tag-count">144 (3.6%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:44.03%"></span></span><span class="tag-count">118 (2.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:18.28%"></span></span><span class="tag-count">49 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:17.54%"></span></span><span class="tag-count">47 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:14.55%"></span></span><span class="tag-count">39 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:14.18%"></span></span><span class="tag-count">38 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-api</span><span class="tag-track"><span class="tag-fill" style="width:13.81%"></span></span><span class="tag-count">37 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:13.43%"></span></span><span class="tag-count">36 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:12.69%"></span></span><span class="tag-count">34 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-type-support</span><span class="tag-track"><span class="tag-fill" style="width:10.82%"></span></span><span class="tag-count">29 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:9.33%"></span></span><span class="tag-count">25 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:7.46%"></span></span><span class="tag-count">20 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-method</span><span class="tag-track"><span class="tag-fill" style="width:6.34%"></span></span><span class="tag-count">17 (0.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-bounds-check</span><span class="tag-track"><span class="tag-fill" style="width:5.97%"></span></span><span class="tag-count">16 (0.4%)</span></div></section><section class="tag-card"><h3>Go <span>go</span><span class="tag-card-sub">8,088 tagged</span></h3><div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">727 (9.0%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:33.01%"></span></span><span class="tag-count">240 (3.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:27.65%"></span></span><span class="tag-count">201 (2.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:24.35%"></span></span><span class="tag-count">177 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:23.66%"></span></span><span class="tag-count">172 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:17.61%"></span></span><span class="tag-count">128 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:15.96%"></span></span><span class="tag-count">116 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:11.42%"></span></span><span class="tag-count">83 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:11.00%"></span></span><span class="tag-count">80 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:10.18%"></span></span><span class="tag-count">74 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration-option</span><span class="tag-track"><span class="tag-fill" style="width:9.35%"></span></span><span class="tag-count">68 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-field</span><span class="tag-track"><span class="tag-fill" style="width:8.25%"></span></span><span class="tag-count">60 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:7.84%"></span></span><span class="tag-count">57 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-nil-check</span><span class="tag-track"><span class="tag-fill" style="width:7.29%"></span></span><span class="tag-count">53 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-method</span><span class="tag-track"><span class="tag-fill" style="width:5.50%"></span></span><span class="tag-count">40 (0.5%)</span></div></section><section class="tag-card"><h3>Java <span>java</span><span class="tag-card-sub">4,014 tagged</span></h3><div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">220 (5.5%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:41.82%"></span></span><span class="tag-count">92 (2.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:41.36%"></span></span><span class="tag-count">91 (2.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:36.36%"></span></span><span class="tag-count">80 (2.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:30.45%"></span></span><span class="tag-count">67 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-null-check</span><span class="tag-track"><span class="tag-fill" style="width:29.09%"></span></span><span class="tag-count">64 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:27.73%"></span></span><span class="tag-count">61 (1.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:20.91%"></span></span><span class="tag-count">46 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:18.64%"></span></span><span class="tag-count">41 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:18.64%"></span></span><span class="tag-count">41 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:17.27%"></span></span><span class="tag-count">38 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-method</span><span class="tag-track"><span class="tag-fill" style="width:14.55%"></span></span><span class="tag-count">32 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration-option</span><span class="tag-track"><span class="tag-fill" style="width:10.91%"></span></span><span class="tag-count">24 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:9.55%"></span></span><span class="tag-count">21 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-type-support</span><span class="tag-track"><span class="tag-fill" style="width:8.64%"></span></span><span class="tag-count">19 (0.5%)</span></div></section><section class="tag-card"><h3>JavaScript <span>js</span><span class="tag-card-sub">7,136 tagged</span></h3><div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">486 (6.8%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:44.65%"></span></span><span class="tag-count">217 (3.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:25.10%"></span></span><span class="tag-count">122 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:22.63%"></span></span><span class="tag-count">110 (1.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:20.37%"></span></span><span class="tag-count">99 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:18.72%"></span></span><span class="tag-count">91 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:16.87%"></span></span><span class="tag-count">82 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration-option</span><span class="tag-track"><span class="tag-fill" style="width:14.40%"></span></span><span class="tag-count">70 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-method</span><span class="tag-track"><span class="tag-fill" style="width:12.55%"></span></span><span class="tag-count">61 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:11.52%"></span></span><span class="tag-count">56 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:10.70%"></span></span><span class="tag-count">52 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-null-check</span><span class="tag-track"><span class="tag-fill" style="width:9.47%"></span></span><span class="tag-count">46 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:9.47%"></span></span><span class="tag-count">46 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-option</span><span class="tag-track"><span class="tag-fill" style="width:8.23%"></span></span><span class="tag-count">40 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-error-handling</span><span class="tag-track"><span class="tag-fill" style="width:7.82%"></span></span><span class="tag-count">38 (0.5%)</span></div></section><section class="tag-card"><h3>Python <span>py</span><span class="tag-card-sub">4,135 tagged</span></h3><div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">336 (8.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:31.85%"></span></span><span class="tag-count">107 (2.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">96 (2.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:27.38%"></span></span><span class="tag-count">92 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:26.19%"></span></span><span class="tag-count">88 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:16.07%"></span></span><span class="tag-count">54 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-parameter</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">48 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:13.10%"></span></span><span class="tag-count">44 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:12.20%"></span></span><span class="tag-count">41 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration</span><span class="tag-track"><span class="tag-fill" style="width:11.31%"></span></span><span class="tag-count">38 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:10.12%"></span></span><span class="tag-count">34 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-error-handling</span><span class="tag-track"><span class="tag-fill" style="width:8.63%"></span></span><span class="tag-count">29 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-method</span><span class="tag-track"><span class="tag-fill" style="width:6.55%"></span></span><span class="tag-count">22 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-integration</span><span class="tag-track"><span class="tag-fill" style="width:5.95%"></span></span><span class="tag-count">20 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-configuration-option</span><span class="tag-track"><span class="tag-fill" style="width:5.65%"></span></span><span class="tag-count">19 (0.5%)</span></div></section><section class="tag-card"><h3>Rust <span>rust</span><span class="tag-card-sub">0 tagged</span></h3><div class="muted">no tags data</div></section><section class="tag-card"><h3>TypeScript <span>ts</span><span class="tag-card-sub">0 tagged</span></h3><div class="muted">no tags data</div></section></div>
+    </details>
 
       </section>
     </main>
@@ -607,6 +684,20 @@
         apply(next);
         try { localStorage.setItem(KEY, next); } catch (e) {}
       });
+    })();
+    (function() {
+      // Open a collapsed <details> panel when its id is targeted via the sidebar
+      // nav or the URL hash, so anchor links don't scroll to a closed section.
+      function openTarget(hash) {
+        if (!hash) return;
+        var el = document.getElementById(hash.replace(/^#/, ""));
+        if (el && el.tagName === "DETAILS") el.open = true;
+      }
+      document.querySelectorAll('.nav a[href^="#"]').forEach(function(a) {
+        a.addEventListener("click", function() { openTarget(a.getAttribute("href")); });
+      });
+      window.addEventListener("hashchange", function() { openTarget(location.hash); });
+      openTarget(location.hash);
     })();
   </script>
 </body>
