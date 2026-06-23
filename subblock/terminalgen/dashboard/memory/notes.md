@@ -32,7 +32,7 @@ Zero-match questions fall back to `core-terminal-os`.
 
 ## Adaptive tuning rules
 
-- Tunables: `gen_workers` [1,16], `val_workers` [1,8], `val_timeout` [120,600].
+- Tunables: `gen_workers` [1,16], `val_workers` [1,8], `val_timeout` [120,1800] (keep ≥900 on throttled networks — test.sh bootstraps uv over the network).
 - Adjust at most 1 parameter per domain per cycle; wait ≥ 2 cycles (60 min)
   between adjustments for the same domain.
 - If `success_rate < 0.15` for 2 consecutive cycles → increase `val_timeout` (+60).

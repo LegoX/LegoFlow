@@ -66,7 +66,7 @@ Each domain has its own defaults in `config.yaml`:
 
 - `gen_workers` — parallel generation workers (bounds [1, 16])
 - `val_workers` — parallel Docker validation workers (bounds [1, 8])
-- `val_timeout` — per Docker step timeout in seconds (bounds [120, 600])
+- `val_timeout` — per Docker step timeout in seconds (bounds [120, 1800]; keep ≥900 on throttled networks because the task's test.sh bootstraps uv over the network)
 
 Update the config value; the scripts read it at launch.
 

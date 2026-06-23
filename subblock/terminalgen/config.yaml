@@ -60,8 +60,11 @@ runtime_info:
           step: 1
         val_timeout:
           min: 120
-          max: 600
+          max: 1800
           step: 60
+          # Note: terminal-lego's test.sh bootstraps uv over the network at test
+          # time; on throttled egress the uv binary download alone can take
+          # 200-600s+. Keep val_timeout generous (>=900) on slow networks.
 
     # 13 task domains derived from terminal-lego's 54 tags, bucketed per
     # arXiv 2606.03461 Table 11. tag_filter drives scrape bucketing
@@ -70,7 +73,7 @@ runtime_info:
       core-terminal-os:
         enabled: true
         tag_filter: [linux, bash, shell, command-line, terminal, unix, ubuntu, debian, centos, systemd, cron, chmod, sudo, sed, awk, grep, string, vim, tmux]
-        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 900}
         status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
       versioning-containers:
         enabled: true

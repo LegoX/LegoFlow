@@ -164,7 +164,7 @@ You (the AI agent) monitor and tune the terminal-gen pipeline. Configuration and
 
 - Adjust at most 1 parameter per domain per cycle
 - Wait ≥ 2 cycles (60 min) between adjustments for the same domain
-- Parameter bounds (read from `runtime_info.input.global.param_bounds`): gen_workers [1, 16], val_workers [1, 8], val_timeout [120, 600]
+- Parameter bounds (read from `runtime_info.input.global.param_bounds`): gen_workers [1, 16], val_workers [1, 8], val_timeout [120, 1800]
 - Do NOT restart running create scripts unless `zero_success_streak >= 3`
 - Log every decision to `artifacts/logs/adaptive_decisions.jsonl`
 
