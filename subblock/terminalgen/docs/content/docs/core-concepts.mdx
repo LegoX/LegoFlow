@@ -1,0 +1,98 @@
+---
+title: Core Concepts
+description: Core concepts and terminology in Terminal-gen
+---
+
+Terminal-gen has the following core concepts.
+
+## Question bucket
+
+A question bucket is a domain-specific input file of StackOverflow Q&A, produced
+by scraping with terminal-lego and splitting by tag:
+
+```text
+artifacts/collected_questions/{domain}_so_data.json
+```
+
+`scripts/scrape_so_questions.sh` runs terminal-lego's scraper, then
+`scripts/bucket_questions.py` routes each question into one or more of the 13
+domains by intersecting its tags with the domain's `tag_filter` in `config.yaml`.
+
+## Task domains
+
+The 13 domains follow arXiv 2606.03461 Table 11. Each maps a subset of
+terminal-lego's 54 scraper tags:
+
+| Domain | Example tags |
+| --- | --- |
+| core-terminal-os | linux, bash, shell, sed, awk, grep, vim, tmux |
+| versioning-containers | git, docker, kubernetes, qemu |
+| networking-services | tcp, http, https, dns, ssh, nginx, curl |
+| file-text-processing | tar, gzip, json, csv, xml, yaml, regex |
+| python-ecosystem | python, pip, virtualenv, conda |
+| ml-data | pandas, numpy, pytorch, tensorflow, scikit-learn |
+| databases-storage | sqlite, mysql, postgresql, redis, mongodb |
+| web-automation-apis | web-scraping, requests, beautifulsoup, selenium, api |
+| security-cryptography | encryption, ssl, openssl, hash, security |
+| debugging-reliability | debugging, logging, exception |
+| algorithms-concurrency | algorithm, sorting, multiprocessing, asyncio |
+| media-scientific | ffmpeg, opencv, scipy, sympy |
+| build-editor-tooling | makefile, cmake, gcc |
+
+## Task skeleton
+
+A task skeleton is the Terminal-Bench task directory terminal-lego builds from a
+Q&A. The stable structure is:
+
+```text
+task_id/
+├── task.toml
+├── instruction.md
+├── environment/
+│   ├── Dockerfile
+│   └── task_file/        # seed input files
+├── solution/
+│   └── solve.sh          # reference solution script
+└── tests/
+    ├── test.sh           # writes reward to /logs/verifier/reward.txt
+    └── test_outputs.py   # pytest assertions on final state
+```
+
+## Docker round-trip validation
+
+Terminal-gen does not expose every generated skeleton downstream. The validator
+builds the image, runs `solution/solve.sh`, then runs `tests/test.sh` and reads
+`/logs/verifier/reward.txt`. Only tasks scoring **reward=1.0** are kept and
+copied to the domain output directory.
+
+## Verified task manifest
+
+Each domain output directory has a manifest:
+
+```text
+artifacts/terminal_tasks/<domain>-tl/verifiable_tasks.txt
+```
+
+This file is the authoritative downstream contract. The directory also contains
+`_candidates/` (in-progress and failed skeletons); consumers must filter by the
+manifest, never scan raw task dirs.
+
+## Dual output schema
+
+- **In-place** (terminal-lego v1.0): `artifacts/terminal_tasks/<domain>-tl/<task_id>/`.
+- **Merged** (harbor 1.1): `python scripts/extract_verified_tasks.py` converts
+  each verified task's `task.toml` to harbor schema 1.1 and writes
+  `artifacts/merged_terminal_tasks/<domain>__<task_id>/`. This is what downstream
+  trajgen/sft/eval load. See [Outputs](/docs/outputs) for the field mapping.
+
+## Adaptive tuning
+
+The block can be operated as an adaptive agent. It monitors per-domain success
+rates and question pool depth, then adjusts generation parameters within bounds:
+
+- `gen_workers`
+- `val_workers`
+- `val_timeout`
+
+The active values and status live in `config.yaml` under
+`runtime_info.input.domains`.

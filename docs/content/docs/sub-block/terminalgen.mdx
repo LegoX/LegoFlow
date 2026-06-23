@@ -1,0 +1,32 @@
+---
+title: terminalgen
+description: Convert StackOverflow Q&A into verified terminal tasks
+---
+
+`terminalgen` is a data-curation stage **parallel to swegen**: where swegen builds verified SWE tasks from GitHub PRs, terminalgen builds verified **terminal** tasks from StackOverflow Q&A. It wraps the pinned, read-only [terminal-lego](https://github.com/SWE-Lego/terminal-lego) pipeline (scrape → generate → validate) and groups tasks into 13 domains. Its output feeds the same downstream chain (trajgen → sft → eval).
+
+Full docs: **[terminalgen-docs.pages.dev/docs](https://terminalgen-docs.pages.dev/docs)**
+
+<Callout title="Long-form docs live there" type="info">
+The terminalgen block ships its own complete documentation site — getting started, question scraping, task generation, Docker validation, and the v1.0 → harbor 1.1 conversion. This page is just an orientation; follow the link above for everything else.
+</Callout>
+
+## At a glance
+
+- **Inputs**: `so_api_key` (StackExchange), `llm_api` (api_key, api_base_url, gen_model).
+- **Output**: `merged_tasks_dir` — `subblock/terminalgen/artifacts/merged_terminal_tasks/` (harbor 1.1). Per-domain manifests at `artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt`; only task IDs in those files passed Docker validation (reward=1.0).
+- **Runs**: Local (CPU + Docker). Long-running — minutes-to-hours per domain.
+
+## How to run
+
+```text
+/terminalgen:setup     # init terminal-lego submodule, build env, verify keys
+/terminalgen:check     # preflight: SO key, LLM endpoint, Docker, schema
+/terminalgen:run       # pipeline: scrape → generate → Docker-validate → convert
+/terminalgen:dashboard # progress dashboard
+```
+
+## Reference
+
+- Block contract: `subblock/terminalgen/CLAUDE.md`
+- Full docs site: [terminalgen-docs.pages.dev/docs](https://terminalgen-docs.pages.dev/docs)

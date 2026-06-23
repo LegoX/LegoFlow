@@ -1,0 +1,37 @@
+# Terminal-gen — Inputs & Outputs
+
+See `config.yaml` for the full dependency schema.
+
+## Runtime Inputs (`config.yaml`)
+
+| Field | Description |
+|-------|-------------|
+| `global.*` | Monitor interval, question pool thresholds, crawl defaults, param bounds |
+| `domains.{domain}.tag_filter` | StackOverflow tags that route a question into this domain bucket |
+| `domains.{domain}.params` | Per-domain gen_workers, val_workers, val_timeout |
+| `domains.{domain}.status` | Live per-domain metrics (agent-updated) |
+
+Environment variables required before running:
+
+| Variable | Purpose |
+|----------|---------|
+| `OPENAI_API_KEY` | LLM API key for the generator |
+| `OPENAI_API_BASE_URL` | OpenAI-compatible endpoint (passed to generator via `--api-base`) |
+| `MODEL_NAME` | Model for task generation |
+| `SO_API_KEY` | StackExchange API key (10000/day; optional, 300/day without) |
+
+## Runtime Outputs (`config.yaml`)
+
+Two interfaces:
+
+1. **In-place** (terminal-lego v1.0): `artifacts/terminal_tasks/{domain}-tl/{task_id}/`,
+   gated by `{domain}-tl/verifiable_tasks.txt`.
+2. **Merged** (harbor 1.1, downstream input): run `python scripts/extract_verified_tasks.py`
+   to produce `artifacts/merged_terminal_tasks/{domain}__{task_id}/`.
+
+Each task contains:
+- `instruction.md` — problem description
+- `task.toml` — metadata (v1.0 in-place; harbor 1.1 in merged)
+- `environment/Dockerfile` + `environment/task_file/` — build environment + seed files
+- `solution/solve.sh` — reference solution
+- `tests/test.sh` + `tests/test_outputs.py` — verification (writes reward to `/logs/verifier/reward.txt`)

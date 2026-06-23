@@ -1,0 +1,168 @@
+meta_info:
+  name: terminalgen
+  label: "Terminal-gen"
+  description: Converts StackOverflow Q&A into verified terminal-bench tasks across 13 task domains via the terminal-lego pipeline (scrape → generate → validate). Parallel to swegen; runs as an adaptive agent that monitors per-domain success rates and tunes pipeline parameters automatically.
+  parent: swe_lego_live
+  subblocks: {}
+
+  repos:
+    terminal-lego:
+      name: terminal-lego
+      url: https://github.com/SWE-Lego/terminal-lego.git
+      commit_id: 1a2a6048a0d568891407ed3c6a441c995f4491b0
+      role: core pipeline — StackOverflow scraper, LLM task generator, Docker validator (read-only dependency; never modified)
+
+  environment:
+    venv_name: terminalgen-env
+    venv_path: artifacts/envs/terminalgen-env
+    requirements: repos/terminal-lego/requirements.txt
+    python_version: "3.10+"
+    description: Virtual environment for the terminal-lego pipeline (requests) and the harbor-conversion helper
+
+  resources:
+    ip: local        # CPU-only; runs on any node with Docker available
+    user: root
+    pwd: null
+    directory: /gpufs/haoli/code/
+    description: cpu node server for k8s cluster. By default you should work at ${directory}
+    public_storage: null
+
+runtime_info:
+  input:
+    so_api_key: human                 # StackExchange API key (10000 req/day with key, 300 without). Read from SO_API_KEY env.
+
+    # OpenAI-compatible endpoint used by terminal-lego's generator.
+    # NOTE: terminal-lego's generator reads OPENAI_API_BASE_URL; create_domain.sh passes
+    # api_base_url below via --api-base. Keep gen_model resolvable on the endpoint.
+    llm_api:
+      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
+      api_base_url: https://az.gptplus5.com/v1
+      gen_model: deepseek-v4-flash
+
+    # Adaptive tuning configuration
+    global:
+      monitor_interval_min: 30
+      question_pool_min_threshold: 100
+      crawl_defaults:
+        count_per_round: 200
+        min_score: 10
+      restart_policy:
+        allowed: true
+        zero_success_cycles: 3
+      param_bounds:
+        gen_workers:
+          min: 1
+          max: 16
+          step: 1
+        val_workers:
+          min: 1
+          max: 8
+          step: 1
+        val_timeout:
+          min: 120
+          max: 600
+          step: 60
+
+    # 13 task domains derived from terminal-lego's 54 tags, bucketed per
+    # arXiv 2606.03461 Table 11. tag_filter drives scrape bucketing
+    # (a question enters a domain if its tags intersect the domain's tag_filter).
+    domains:
+      core-terminal-os:
+        enabled: true
+        tag_filter: [linux, bash, shell, command-line, terminal, unix, ubuntu, debian, centos, systemd, cron, chmod, sudo, sed, awk, grep, string, vim, tmux]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      versioning-containers:
+        enabled: true
+        tag_filter: [git, docker, kubernetes, virtualization, qemu]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      networking-services:
+        enabled: true
+        tag_filter: [networking, tcp, http, https, dns, ssh, nginx, apache, iptables, firewall, curl, wget]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      file-text-processing:
+        enabled: true
+        tag_filter: [file-io, tar, gzip, zip, json, csv, xml, yaml, regex]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      python-ecosystem:
+        enabled: true
+        tag_filter: [python, pip, virtualenv, conda]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      ml-data:
+        enabled: true
+        tag_filter: [pandas, numpy, matplotlib, jupyter-notebook, pytorch, tensorflow, scikit-learn, machine-learning, deep-learning, keras, nlp, huggingface-transformers, parquet]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 360}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      databases-storage:
+        enabled: true
+        tag_filter: [sqlite, mysql, postgresql, redis, mongodb]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 360}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      web-automation-apis:
+        enabled: true
+        tag_filter: [web-scraping, requests, beautifulsoup, selenium, api]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      security-cryptography:
+        enabled: true
+        tag_filter: [encryption, cryptography, hash, security, ssl, ssl-certificate, openssl]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      debugging-reliability:
+        enabled: true
+        tag_filter: [debugging, logging, exception]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      algorithms-concurrency:
+        enabled: true
+        tag_filter: [algorithm, sorting, recursion, data-structures, multiprocessing, multithreading, asyncio]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      media-scientific:
+        enabled: true
+        tag_filter: [ffmpeg, opencv, image-processing, r, scipy, sympy]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 360}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+      build-editor-tooling:
+        enabled: true
+        tag_filter: [makefile, cmake, gcc]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
+
+  output:
+    terminal_tasks_dir:
+      path: artifacts/terminal_tasks
+      description: Per-domain task directories ({domain}-tl/), each with verifiable_tasks.txt listing verified task IDs (terminal-lego v1.0 schema)
+      structure: "artifacts/terminal_tasks/{domain}-tl/{task_id}/ with instruction.md, task.toml, environment/, solution/, tests/"
+
+    merged_tasks_dir:
+      path: artifacts/merged_terminal_tasks
+      description: Flattened directory of all verified tasks converted to harbor 1.1 schema (populated by scripts/extract_verified_tasks.py). This is what downstream trajgen/sft/eval consume.
+      structure: "artifacts/merged_terminal_tasks/{task_id}/ with harbor-1.1 task.toml, instruction.md, environment/, solution/, tests/"
+      extract_command: python scripts/extract_verified_tasks.py
+
+    logs:
+      - path: artifacts/logs/terminalgen-create/tl_core-terminal-os.txt
+        description: core-terminal-os domain task creation log (one log per enabled domain)
+      - path: artifacts/logs/adaptive_decisions.jsonl
+        description: Adaptive tuning decisions log (JSONL format)
+
+status:
+  phase: idle
+  progress: "Ready for the next terminal task generation run."
+  next_steps: |
+    1. Run scripts/dryrun.sh before starting a new terminal-gen batch.
+    2. Use memory/quick-verify.md for a small preflight when changing the terminalgen runtime.
+  blockers: null
+  last_updated: null
+
+evolving:
+  description: Adaptive agent that monitors per-domain success rates and tunes pipeline parameters (gen_workers, val_workers, val_timeout) automatically every 30 minutes.
+  tunable_params:
+    gen_workers: "Per-domain parallel generation workers (1-16)"
+    val_workers: "Per-domain parallel Docker validation workers (1-8)"
+    val_timeout: "Per-domain Docker per-step timeout (120-600s)"

@@ -1,0 +1,70 @@
+# SMOKE CI CONFIG — copied over subblock/terminalgen/config.yaml by
+# .github/workflows/ci.yml before .github/cicd/smoke/run.sh launches the
+# smoke. Production config lives at subblock/terminalgen/config.yaml.
+#
+# Design: schema-compatible with the production config — every key that
+# exists in production keeps its name and meaning. Production fields the
+# smoke doesn't consume are pruned. The smoke-specific fields all live in
+# `runtime_info.input.smoke.*`.
+
+meta_info:
+  name: terminalgen
+  label: "Terminal-gen"
+  description: Converts StackOverflow Q&A into verified terminal-bench tasks. Smoke mode runs against a committed 2-question SO sample.
+  parent: swe_lego_live
+  subblocks: {}
+
+  repos:
+    terminal-lego:
+      name: terminal-lego
+      url: https://github.com/SWE-Lego/terminal-lego.git
+      commit_id: 1a2a6048a0d568891407ed3c6a441c995f4491b0
+
+  environment:
+    venv_name: terminalgen-env
+    venv_path: artifacts/envs/terminalgen-env
+
+  resources:
+    ip: local
+    user: root
+    pwd: null
+    directory: /gpufs/haoli/code/
+
+runtime_info:
+  input:
+    so_api_key: human
+
+    # Smoke uses az.gptplus5.com / deepseek-v4-flash (matches production
+    # terminalgen config).
+    llm_api:
+      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
+      api_base_url: https://az.gptplus5.com/v1
+      gen_model: deepseek-v4-flash
+
+    # Smoke uses a single representative domain. Other domains and the
+    # adaptive `global` / `status` blocks from production are dropped; they're
+    # not read by the smoke.
+    domains:
+      security-cryptography:
+        enabled: true
+        tag_filter: [ssl, https, certificate, openssl, security]
+        params:
+          gen_workers: 1
+          val_workers: 1
+          val_timeout: 300
+
+    # Smoke-only knobs. The default deterministic smoke (tests/smoke/verify.sh)
+    # replays the committed fixture task through the validator — no LLM, no SO.
+    # The generation smoke (tests/smoke/10_so_demo.sh) consumes these.
+    smoke:
+      limit: 1                          # generate at most N tasks
+      fixture_so: tests/smoke/fixtures/so_data_sample.json
+      fixture_task: tests/smoke/fixtures/https-nginx-cert-setup
+      output_subdir: quick-verify
+      state_subdir: _candidates
+
+  output:
+    terminal_tasks_dir:
+      path: artifacts/terminal_tasks
+    merged_tasks_dir:
+      path: artifacts/merged_terminal_tasks

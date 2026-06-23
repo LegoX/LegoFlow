@@ -2,6 +2,7 @@
     "title": "Blocks",
     "pages": [
         "swegen",
+        "terminalgen",
         "trajgen",
         "sft",
         "rl"

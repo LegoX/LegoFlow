@@ -69,6 +69,14 @@ runtime_info:
     #   provider: local
     #   dataset_name: ../swegen/artifacts/swe_tasks/py-cc
       # prepare_tasks.sh filters by py-cc/verifiable_tasks.txt before copying into artifacts/tasks/.
+    #
+    # Alternative task source — verified TERMINAL tasks from the terminalgen block
+    # (parallel to swegen; harbor 1.1 schema). Select with provider: terminalgen.
+    # task_source:
+    #   provider: terminalgen
+    #   dataset_name: ../terminalgen/artifacts/merged_terminal_tasks
+      # Filter by ../terminalgen/artifacts/merged_terminal_tasks/verifiable_tasks.txt
+      # (or per-domain ../terminalgen/artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt).
 
     # harbor_job:
     #   jobs_dir: artifacts/jobs

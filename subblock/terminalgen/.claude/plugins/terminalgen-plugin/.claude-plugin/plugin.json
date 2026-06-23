@@ -1,0 +1,6 @@
+{
+  "name": "terminalgen",
+  "description": "terminalgen block skills — env/venv bootstrap, preflight (StackExchange key + LLM endpoint + docker), dashboard, and pipeline launch (SO scrape → task generation → verification). Provides /terminalgen:setup, /terminalgen:check, /terminalgen:dashboard, /terminalgen:run.",
+  "version": "0.1.0",
+  "author": { "name": "haoli" }
+}

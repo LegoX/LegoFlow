@@ -1,0 +1,103 @@
+---
+title: Outputs
+description: Files and directories produced by Terminal-gen
+---
+
+Terminal-gen outputs are designed for downstream blocks to consume verified
+tasks without guessing which generated directories are complete.
+
+## Task directories (in-place, v1.0)
+
+Per-domain task directories live under:
+
+```text
+artifacts/terminal_tasks/<domain>-tl/
+```
+
+Each verified task directory contains:
+
+| File | Purpose |
+| --- | --- |
+| `instruction.md` | Natural-language problem statement |
+| `task.toml` | Metadata (terminal-lego v1.0 schema) |
+| `environment/Dockerfile` | Reproducible build environment |
+| `environment/task_file/` | Seed input files |
+| `solution/solve.sh` | Reference solution script |
+| `tests/test.sh` | Verification entrypoint (writes reward to `/logs/verifier/reward.txt`) |
+| `tests/test_outputs.py` | pytest assertions on final state |
+
+## Verified manifest
+
+The most important output is:
+
+```text
+artifacts/terminal_tasks/<domain>-tl/verifiable_tasks.txt
+```
+
+Downstream consumers should filter through this manifest. The sibling
+`_candidates/` directory holds in-progress and failed skeletons — never consume
+those directly.
+
+## Merged verified tasks (harbor 1.1)
+
+```bash
+python scripts/extract_verified_tasks.py
+```
+
+flattens and converts every verified task to **harbor schema 1.1**:
+
+```text
+artifacts/merged_terminal_tasks/<domain>__<task_id>/
+```
+
+This is the directory downstream trajgen/sft/eval load.
+
+### v1.0 → harbor 1.1 field mapping
+
+| terminal-lego v1.0 | harbor 1.1 |
+| --- | --- |
+| `version = "1.0"` | `schema_version = "1.1"` |
+| *(none)* | `[task]` block: `name`, `description` (first instruction line), `authors`, `keywords` |
+| `[metadata]` (kept) | `[metadata]` + `source_domain` added |
+| `[environment].memory = "1G"` | `[environment].memory_mb = 1024` |
+| `[environment].storage = "5G"` | `[environment].storage_mb = 5120` |
+| *(none)* | `gpus = 0`, `allow_internet = true`, `mcp_servers = []` |
+| *(none)* | empty `[verifier.env]`, `[environment.env]`, `[solution.env]` |
+
+The mapping mirrors the proven conversion validated in
+`terminal-lego/data_e2e_run903/harbor_tasks/https-nginx-cert-setup/`.
+
+## Logs
+
+Create logs live under:
+
+```text
+artifacts/logs/terminalgen-create/
+```
+
+Plus `artifacts/logs/adaptive_decisions.jsonl` for tuning decisions. These are
+audit artifacts rather than source files (gitignored).
+
+## State packages
+
+When moving to another node, package runtime state separately from source code:
+
+- `artifacts/collected_questions/<domain>_so_data.json`
+- `artifacts/terminal_tasks/<domain>-tl/` + `verifiable_tasks.txt`
+- `artifacts/merged_terminal_tasks/`
+- optional logs for audit
+
+Do not commit large runtime state to Git.
+
+## Dataset handoff
+
+The trajgen block consumes tasks after Terminal-gen writes manifests:
+
+1. Terminal-gen writes task directories and `verifiable_tasks.txt`, then
+   converts to `artifacts/merged_terminal_tasks/` (harbor 1.1).
+2. Trajgen reads only task IDs listed in the manifest (select the terminalgen
+   provider — see the root docs' terminalgen page).
+3. Trajgen rolls out agents and captures trajectories.
+
+This keeps incomplete, failed, or partially generated task skeletons out of
+training data.
