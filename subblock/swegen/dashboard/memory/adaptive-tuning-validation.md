@@ -1,27 +1,33 @@
-# 自适应调参机制端到端验证日志
+# Adaptive Tuning End-to-End Validation Log
 
-> 本次验证流程完全由 AI agent（Claude Code）自主完成，包括参数读取、任务构建、状态采集、自适应决策和日志记录。
+> This validation was performed entirely and autonomously by an AI agent
+> (Claude Code), including parameter reading, task construction, status
+> collection, adaptive decisions, and logging.
 
-## 验证目标
+## Validation goals
 
-验证 `inputs.yaml` 驱动的自适应调参全流程：
-1. `read_params.py` 从 `inputs.yaml` 读取参数
-2. `swegen create` 使用这些参数构建 SWE 任务
-3. 监控周期：采集状态、计算成功率、更新 `inputs.yaml`
-4. 自适应决策：根据成功率调整参数
-5. PR 池检查：判断是否需要补充 PR
-6. 决策日志：写入 `logs/adaptive_decisions.jsonl`
+Verify the full `inputs.yaml`-driven adaptive tuning flow:
+1. `read_params.py` reads params from `inputs.yaml`
+2. `swegen create` uses those params to build SWE tasks
+3. Monitoring cycle: collect status, compute success rate, update `inputs.yaml`
+4. Adaptive decision: adjust params based on success rate
+5. PR pool check: decide whether PRs need replenishing
+6. Decision log: append to `logs/adaptive_decisions.jsonl`
 
-## 环境
+> Note: this run predates the current `config.yaml`-driven layout, so it refers
+> to `inputs.yaml` and a `languages.<lang>.status` block. The flow is the same;
+> only the config filename and the location of live status changed.
 
-- 日期：2026-04-22
-- 机器：hk01dgx060
-- Python：3.12.2
-- Docker：29.0.0
-- swegen CLI：已安装（`/home/ywxzml3j/ywxzml3juser23/miniconda3/bin/swegen`）
-- 模型：OPENAI_MODEL=glm-5-urg, ANTHROPIC_MODEL=claude-sonnet-4-6
+## Environment
 
-## Step 1: 验证 read_params.py 集成
+- Date: 2026-04-22
+- Machine: hk01dgx060
+- Python: 3.12.2
+- Docker: 29.0.0
+- swegen CLI: installed (`/home/ywxzml3j/ywxzml3juser23/miniconda3/bin/swegen`)
+- Models: OPENAI_MODEL=glm-5-urg, ANTHROPIC_MODEL=claude-sonnet-4-6
+
+## Step 1: Verify read_params.py integration
 
 ```bash
 $ eval $(python scripts/read_params.py --lang py --inputs-yaml inputs.yaml)
@@ -29,11 +35,11 @@ $ echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}
 TIMEOUT=3200 CC_TIMEOUT=2400 N_CONCURRENT=16
 ```
 
-结果：参数正确从 `inputs.yaml` 读取。
+Result: params read correctly from `inputs.yaml`.
 
-## Step 2: 运行 swegen create（使用 inputs.yaml 参数）
+## Step 2: Run swegen create (using inputs.yaml params)
 
-### 尝试 1：tox-dev/tox PR #3814
+### Attempt 1: tox-dev/tox PR #3814
 
 ```bash
 $ swegen create --repo tox-dev/tox --pr 3814 \
@@ -42,9 +48,10 @@ $ swegen create --repo tox-dev/tox --pr 3814 \
     --no-require-issue --min-source-files 3 --max-source-files 10
 ```
 
-结果：**Skipped (Trivial PR)** — 仅 2 个 source files，低于 `--min-source-files 3` 阈值。属于正常的 policy 过滤。
+Result: **Skipped (Trivial PR)** — only 2 source files, below the
+`--min-source-files 3` threshold. Normal policy filtering.
 
-### 尝试 2：AnswerDotAI/RAGatouille PR #157
+### Attempt 2: AnswerDotAI/RAGatouille PR #157
 
 ```bash
 $ swegen create --repo AnswerDotAI/RAGatouille --pr 157 \
@@ -53,9 +60,10 @@ $ swegen create --repo AnswerDotAI/RAGatouille --pr 157 \
     --no-require-issue --min-source-files 2 --max-source-files 10
 ```
 
-结果：Skeleton 生成成功（28.7s），但 CC session 验证失败（47.5s）。NOP 和 Oracle 均未通过。属于 model 级别失败。
+Result: skeleton generated (28.7s), but CC session validation failed (47.5s).
+Neither NOP nor Oracle passed. A model-level failure.
 
-### 尝试 3：electricitymaps/electricitymaps-contrib PR #8113（成功）
+### Attempt 3: electricitymaps/electricitymaps-contrib PR #8113 (success)
 
 ```bash
 $ swegen create --repo electricitymaps/electricitymaps-contrib --pr 8113 \
@@ -64,55 +72,56 @@ $ swegen create --repo electricitymaps/electricitymaps-contrib --pr 8113 \
     --no-require-issue --min-source-files 2 --max-source-files 10
 ```
 
-结果：**成功**
-- Skeleton 生成：116.1s
-- CC session + 验证：1415.0s（约 23.6 分钟）
-- CC NOP: reward=0 ✓（无操作 agent 正确失败）
-- CC Oracle: reward=1 ✓（ground truth 正确通过）
+Result: **success**
+- Skeleton generation: 116.1s
+- CC session + validation: 1415.0s (~23.6 min)
+- CC NOP: reward=0 (no-op agent correctly fails)
+- CC Oracle: reward=1 (ground truth correctly passes)
 - Task ID: `electricitymaps__electricitymaps-contrib-8113`
-- 已自动追加到 `verifiable_tasks.txt`
+- Auto-appended to `verifiable_tasks.txt`
 
-## Step 3: 监控周期 — 状态采集
+## Step 3: Monitoring cycle — status collection
 
-从 `verifiable_tasks.txt` 和运行结果中采集状态：
+Collect status from `verifiable_tasks.txt` and run results:
 
-| 指标 | 值 |
+| Metric | Value |
 |------|-----|
-| 已验证任务总数 (py) | 3 |
-| 本轮成功 | 1 |
-| 本轮失败 | 1 |
-| 本轮过滤 | 1 |
-| 成功率 | 0.50 |
-| PR 池剩余 | 10 |
+| Total verified tasks (py) | 3 |
+| Succeeded this round | 1 |
+| Failed this round | 1 |
+| Filtered this round | 1 |
+| Success rate | 0.50 |
+| PR pool remaining | 10 |
 
-已更新 `inputs.yaml` 中 `languages.py.status` 的所有字段。
+Updated all fields under `languages.py.status` in `inputs.yaml`.
 
-## Step 4: 自适应决策
+## Step 4: Adaptive decision
 
-根据调参规则表：
+Per the tuning rule table:
 
-- `success_rate = 0.50 > 0.4` 且 `n_concurrent = 16 < 24` → **增加并发数**
-- `n_concurrent`: 16 → 20（+4）
+- `success_rate = 0.50 > 0.4` and `n_concurrent = 16 < 24` → **increase concurrency**
+- `n_concurrent`: 16 → 20 (+4)
 
-决策已记录到 `logs/adaptive_decisions.jsonl`：
+Decision logged to `logs/adaptive_decisions.jsonl`:
 ```json
 {"timestamp": "2026-04-22T12:00:06Z", "lang": "py", "action": "adjust_param", "param": "n_concurrent", "old": 16, "new": 20, "reason": "success_rate 0.50 > 0.4, increasing concurrency"}
 ```
 
-## Step 5: PR 池检查
+## Step 5: PR pool check
 
-- PR 池剩余：10
-- 阈值：100
-- 判断：`10 < 100`，**需要补充 PR**
+- PR pool remaining: 10
+- Threshold: 100
+- Decision: `10 < 100`, **PRs need replenishing**
 
-决策已记录：
+Decision logged:
 ```json
 {"timestamp": "2026-04-22T12:00:06Z", "lang": "py", "action": "collect_pr_needed", "pr_pool_before": 10, "reason": "pr_pool_remaining (10) < threshold (100)"}
 ```
 
-注：本次验证未实际执行 collect（需要大量 GitHub API 调用），仅验证触发逻辑正确。
+Note: this validation did not actually run collection (it needs many GitHub API
+calls); it only verified that the trigger logic is correct.
 
-## Step 6: 验证调参生效
+## Step 6: Verify tuning took effect
 
 ```bash
 $ eval $(python scripts/read_params.py --lang py --inputs-yaml inputs.yaml)
@@ -120,19 +129,19 @@ $ echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}
 TIMEOUT=3200 CC_TIMEOUT=2400 N_CONCURRENT=20
 ```
 
-`N_CONCURRENT` 已从 16 更新为 20，下一轮 create 脚本将使用新值。
+`N_CONCURRENT` updated from 16 to 20; the next create run will use the new value.
 
-## 验证结论
+## Validation conclusion
 
-| 环节 | 状态 | 说明 |
+| Stage | Status | Notes |
 |------|------|------|
-| read_params.py 读取 | ✅ | 正确输出 shell 变量 |
-| swegen create 使用参数 | ✅ | timeout/cc_timeout 从 inputs.yaml 传入 |
-| 任务生成 + 验证 | ✅ | 1/3 PR 成功通过 NOP+Oracle |
-| 状态采集 | ✅ | inputs.yaml status 字段已更新 |
-| 自适应决策 | ✅ | 根据规则正确调整 n_concurrent |
-| PR 池检查 | ✅ | 正确识别需要补充 |
-| 决策日志 | ✅ | adaptive_decisions.jsonl 记录完整 |
-| 调参生效 | ✅ | read_params.py 读到新值 |
+| read_params.py read | OK | shell variables emitted correctly |
+| swegen create uses params | OK | timeout/cc_timeout passed in from inputs.yaml |
+| Task generation + validation | OK | 1/3 PRs passed NOP+Oracle |
+| Status collection | OK | inputs.yaml status fields updated |
+| Adaptive decision | OK | n_concurrent adjusted per the rules |
+| PR pool check | OK | correctly flagged replenishment |
+| Decision log | OK | adaptive_decisions.jsonl complete |
+| Tuning took effect | OK | read_params.py read the new value |
 
-自适应调参全流程验证通过。
+The full adaptive tuning flow passed validation.

@@ -24,8 +24,6 @@ from pathlib import Path
 from threading import Thread
 from typing import Any
 
-import tiktoken
-
 try:
     import tomllib
 except Exception:  # pragma: no cover - Python < 3.11 fallback path
@@ -42,28 +40,7 @@ PR_DIR = Path(os.environ.get("SWEGEN_PR_DIR", str(REPO_ROOT / "collected_prs")))
 DEFAULT_HTML = DASHBOARD_ROOT / "site" / "index.html"
 DEFAULT_STATE = DASHBOARD_ROOT / "memory" / ".progress_monitor_all_state.jsonl"
 DEFAULT_CACHE = DASHBOARD_ROOT / "memory" / ".progress_monitor_all_cache.json"
-CACHE_VERSION = 2
-
-TRAJ_DIR = Path(
-    os.environ.get(
-        "SWEGEN_TRAJ_DIR",
-        "/home/ywxzml3j/ywxzml3juser57/LLaMA-Factory/data/chaofan_jierun_traj",
-    )
-).expanduser()
-
-SCAFFOLD_ALIASES: dict[str, str] = {
-    "cc": "Claude Code",
-    "oc": "OpenCode",
-    "t2": "Terminus-2",
-    "oh": "OpenHands-AI",
-    "ohsdk": "OpenHands SDK",
-    "oh_sdk": "OpenHands SDK",
-}
-
-SCORE_FIELDS = ("composite_score", "efficiency_score", "style_score",
-                "tool_mastery_score", "completion_score", "precision_score")
-
-_tiktoken_enc = tiktoken.get_encoding("cl100k_base")
+CACHE_VERSION = 3
 
 LANGS: list[tuple[str, str, str, str]] = [
     ("c", "C", "c-cc", "c"),
@@ -150,6 +127,7 @@ def load_cache(path: Path) -> dict[str, Any]:
         return {"version": CACHE_VERSION, "files": {}, "langs": {}}
     data.setdefault("files", {})
     data.setdefault("langs", {})
+    data.pop("traj", None)
     return data
 
 
@@ -185,6 +163,40 @@ def read_nonempty_lines_cached(path: Path, cache: dict[str, Any], *, keep_items:
     if keep_items:
         files[key]["items"] = lines
     return lines
+
+
+def pr_repo_from_id(pr_id: str) -> str | None:
+    """`owner/repo:pr-N` -> `owner/repo`."""
+    pr_id = pr_id.strip()
+    if "/" not in pr_id:
+        return None
+    return pr_id.split(":", 1)[0].strip() or None
+
+
+def task_repo_from_id(task_id: str) -> str | None:
+    """`owner__repo-N` -> `owner/repo` (repo may contain dashes; strip only the trailing -N)."""
+    task_id = task_id.strip()
+    if "__" not in task_id:
+        return None
+    owner, rest = task_id.split("__", 1)
+    base = rest.rsplit("-", 1)[0] if "-" in rest else rest
+    owner, base = owner.strip(), base.strip()
+    return f"{owner}/{base}" if owner and base else None
+
+
+def count_pr_repos_cached(path: Path, cache: dict[str, Any]) -> int:
+    """Count unique `owner/repo` in a PR-ids file, cached by file signature."""
+    sig = stat_sig(path)
+    if sig is None:
+        return 0
+    key = str(path)
+    repos_cache = cache.setdefault("pr_repos", {})
+    prev = repos_cache.get(key)
+    if isinstance(prev, dict) and prev.get("sig") == sig and isinstance(prev.get("count"), int):
+        return int(prev["count"])
+    repos = {r for line in read_nonempty_lines(path) if (r := pr_repo_from_id(line))}
+    repos_cache[key] = {"sig": sig, "count": len(repos)}
+    return len(repos)
 
 
 def task_sig(task_dir: Path) -> dict[str, dict[str, int] | None]:
@@ -373,13 +385,13 @@ def score_bins(values: list[float]) -> dict[str, int]:
 def collect_task_stats(task_dir: Path, lang: str) -> dict[str, Any]:
     lines, hunks, files = count_patch_stats_code_only(task_dir / "solution" / "fix.patch", lang)
     meta = parse_task_toml_metadata(task_dir / "task.toml")
+    raw_tags = [str(t).strip() for t in meta.get("tags", []) if str(t).strip()]
     task_tags = sorted(
-        {
-            str(t).strip()
-            for t in meta.get("tags", [])
-            if str(t).strip() and not is_language_tag(lang, str(t))
-        }
+        {t for t in raw_tags if not is_language_tag(lang, t)}
     )
+    # 4-tag schema is [language, area, topic, bug_class]; tag #4 is the bug class.
+    # See repos/swegen/src/swegen/task_metadata.py for the canonical generator.
+    bug_class = raw_tags[3] if len(raw_tags) >= 4 else None
     return {
         "patch_lines": lines,
         "patch_hunks": hunks,
@@ -387,6 +399,7 @@ def collect_task_stats(task_dir: Path, lang: str) -> dict[str, Any]:
         "difficulty_score": float(meta["difficulty_score"]) if "difficulty_score" in meta else None,
         "difficulty_label": str(meta["difficulty_label"]) if meta.get("difficulty_label") else None,
         "tags": task_tags,
+        "bug_class": bug_class,
     }
 
 
@@ -400,6 +413,8 @@ def empty_lang_aggregate() -> dict[str, Any]:
         "difficulty_labels": {},
         "tags": {},
         "tasks_with_tags": 0,
+        "bug_classes": {},
+        "tasks_with_bug_class": 0,
     }
 
 
@@ -413,6 +428,8 @@ def copy_lang_aggregate(raw: dict[str, Any]) -> dict[str, Any]:
         "difficulty_labels": {str(k): int(v) for k, v in raw.get("difficulty_labels", {}).items()},
         "tags": {str(k): int(v) for k, v in raw.get("tags", {}).items()},
         "tasks_with_tags": int(raw.get("tasks_with_tags") or 0),
+        "bug_classes": {str(k): int(v) for k, v in raw.get("bug_classes", {}).items()},
+        "tasks_with_bug_class": int(raw.get("tasks_with_bug_class") or 0),
     }
 
 
@@ -434,6 +451,14 @@ def add_task_stats_to_aggregate(agg: dict[str, Any], stats: dict[str, Any]) -> N
         for tag in task_tags:
             agg["tags"][tag] = int(agg["tags"].get(tag, 0)) + 1
 
+    bug_class = stats.get("bug_class")
+    if bug_class:
+        bug_class = str(bug_class).strip()
+        if bug_class:
+            agg["tasks_with_bug_class"] = int(agg.get("tasks_with_bug_class") or 0) + 1
+            bug_classes = agg.setdefault("bug_classes", {})
+            bug_classes[bug_class] = int(bug_classes.get(bug_class, 0)) + 1
+
 
 def collect_lang(
     lang: str,
@@ -444,7 +469,9 @@ def collect_lang(
     force_full_scan: bool,
 ) -> dict[str, Any]:
     lang_dir = ROOT / lang_dir_name
-    pr_count = len(read_nonempty_lines_cached(PR_DIR / f"{pr_prefix}_pr_ids.txt", cache, keep_items=False))
+    pr_ids_path = PR_DIR / f"{pr_prefix}_pr_ids.txt"
+    pr_count = len(read_nonempty_lines_cached(pr_ids_path, cache, keep_items=False))
+    pr_repo_count = count_pr_repos_cached(pr_ids_path, cache)
     raw_task_ids = read_nonempty_lines_cached(lang_dir / "verifiable_tasks.txt", cache, keep_items=True)
     task_ids = unique_preserve_order(raw_task_ids)
     lang_cache = cache.setdefault("langs", {}).setdefault(lang, {})
@@ -525,11 +552,15 @@ def collect_lang(
     difficulty_labels = Counter({str(k): int(v) for k, v in aggregate["difficulty_labels"].items()})
     tags = Counter({str(k): int(v) for k, v in aggregate["tags"].items()})
     tasks_with_tags = int(aggregate["tasks_with_tags"])
+    bug_classes = Counter({str(k): int(v) for k, v in aggregate.get("bug_classes", {}).items()})
+    tasks_with_bug_class = int(aggregate.get("tasks_with_bug_class") or 0)
     return {
         "lang": lang,
         "display": display,
         "pr_count": pr_count,
+        "pr_repo_count": pr_repo_count,
         "valid_count": valid_count,
+        "valid_repos": sorted({r for t in task_ids if (r := task_repo_from_id(t))}),
         "processed_count": processed_count,
         "success_rate": (valid_count / processed_count * 100.0) if processed_count else 0.0,
         "patch": {
@@ -544,6 +575,8 @@ def collect_lang(
         "difficulty_labels": dict(difficulty_labels),
         "tags": dict(tags.most_common()),
         "tasks_with_tags": tasks_with_tags,
+        "bug_classes": dict(bug_classes.most_common()),
+        "tasks_with_bug_class": tasks_with_bug_class,
     }
 
 
@@ -655,133 +688,6 @@ def collect_batch_stats(lang: str, lang_dir_name: str, cache: dict[str, Any]) ->
     return result
 
 
-def parse_traj_filename(filename: str) -> dict[str, str]:
-    stem = filename.rsplit(".", 1)[0]
-    parts = stem.split("_")
-    # Last part is count (numeric)
-    count = parts[-1] if parts[-1].isdigit() else "0"
-    rest = parts[:-1]
-    # First part is agent, second is model
-    agent = rest[0] if len(rest) > 0 else "unknown"
-    model = rest[1] if len(rest) > 1 else "unknown"
-    # Last remaining part is scaffold (may be multi-word like oh_sdk)
-    remaining = rest[2:]
-    scaffold = ""
-    dataset_parts: list[str] = []
-    # Try known scaffolds from the end
-    for n in (2, 1):
-        if len(remaining) >= n:
-            candidate = "_".join(remaining[-n:])
-            if candidate in SCAFFOLD_ALIASES:
-                scaffold = candidate
-                dataset_parts = remaining[:-n]
-                break
-    if not scaffold and remaining:
-        scaffold = remaining[-1]
-        dataset_parts = remaining[:-1]
-    dataset = "_".join(dataset_parts) if dataset_parts else "unknown"
-    return {
-        "agent": agent,
-        "model": model,
-        "dataset": dataset,
-        "scaffold": scaffold,
-        "scaffold_display": SCAFFOLD_ALIASES.get(scaffold, scaffold),
-        "count": count,
-    }
-
-
-def collect_single_traj_file(fpath: Path) -> dict[str, Any]:
-    stats: dict[str, Any] = {
-        "main_count": 0, "subagent_count": 0,
-        "main_messages": 0, "subagent_messages": 0,
-        "main_tokens": 0, "subagent_tokens": 0,
-        "main_tool_calls": 0, "subagent_tool_calls": 0,
-        "scores": {f: [] for f in SCORE_FIELDS},
-        "think_modes": {},
-    }
-    with fpath.open("r", encoding="utf-8", errors="replace") as f:
-        for raw_line in f:
-            try:
-                obj = json.loads(raw_line)
-            except Exception:
-                continue
-            agent_type = obj.get("_agent_type")
-            is_sub = agent_type == "subagent"
-            prefix = "subagent" if is_sub else "main"
-            stats[f"{prefix}_count"] += 1
-            msgs = obj.get("messages") or []
-            stats[f"{prefix}_messages"] += len(msgs)
-            tokens = 0
-            tc = 0
-            for m in msgs:
-                text = (m.get("content") or "") + (m.get("reasoning_content") or "")
-                tokens += len(_tiktoken_enc.encode(text, disallowed_special=()))
-                if m.get("tool_calls"):
-                    tc += len(m["tool_calls"])
-                elif m.get("role") == "assistant":
-                    content = m.get("content") or ""
-                    json_str = None
-                    think_end = content.find("</think>")
-                    if think_end >= 0:
-                        json_str = content[think_end + 8:].strip()
-                    elif content.startswith("{"):
-                        json_str = content
-                    if json_str:
-                        try:
-                            parsed = json.loads(json_str)
-                            if isinstance(parsed.get("commands"), list):
-                                tc += len(parsed["commands"])
-                        except (json.JSONDecodeError, ValueError):
-                            pass
-            stats[f"{prefix}_tokens"] += tokens
-            stats[f"{prefix}_tool_calls"] += tc
-            score = obj.get("_score")
-            if isinstance(score, dict):
-                for field in SCORE_FIELDS:
-                    val = score.get(field)
-                    if isinstance(val, (int, float)):
-                        stats["scores"][field].append(float(val))
-            tm = obj.get("think_mode")
-            if tm:
-                stats["think_modes"][str(tm)] = stats["think_modes"].get(str(tm), 0) + 1
-    return stats
-
-
-def collect_trajectory_stats(cache: dict[str, Any], force_full_scan: bool) -> list[dict[str, Any]]:
-    if not TRAJ_DIR.exists():
-        return []
-    traj_cache = cache.setdefault("traj", {"files": {}})
-    cached_files = traj_cache.setdefault("files", {})
-    results: list[dict[str, Any]] = []
-
-    jsonl_files: list[tuple[str, Path]] = []
-    with os.scandir(TRAJ_DIR) as entries:
-        for entry in entries:
-            if entry.is_file() and entry.name.endswith(".jsonl"):
-                jsonl_files.append((entry.name, Path(entry.path)))
-
-    for fname, fpath in sorted(jsonl_files):
-        sig = stat_sig(fpath)
-        if sig is None:
-            continue
-        metadata = parse_traj_filename(fname)
-        prev = cached_files.get(fname)
-        if not force_full_scan and isinstance(prev, dict) and prev.get("sig") == sig:
-            file_stats = prev.get("stats", {})
-        else:
-            file_stats = collect_single_traj_file(fpath)
-            cached_files[fname] = {"sig": sig, "metadata": metadata, "stats": file_stats}
-        file_size = sig["size"] if sig else 0
-        results.append({
-            "filename": fname,
-            "filepath": str(fpath),
-            "file_size": file_size,
-            "metadata": metadata,
-            "stats": file_stats,
-        })
-    return results
-
-
 def delta(current: dict[str, Any], prev: dict[str, Any] | None, lang: str, key: str) -> int | None:
     if prev is None:
         return 0
@@ -821,6 +727,8 @@ def collect_dashboard(rows: list[dict[str, Any]], cache: dict[str, Any], force_f
 
     total_pr = sum(d["pr_count"] for d in langs.values())
     total_valid = sum(d["valid_count"] for d in langs.values())
+    total_pr_repos = sum(int(d.get("pr_repo_count", 0)) for d in langs.values())
+    total_valid_repos = len({r for d in langs.values() for r in d.get("valid_repos", [])})
     total_processed = sum(
         int(d.get("batch", {}).get("status_counts", {}).get("success", 0))
         + int(d.get("batch", {}).get("status_counts", {}).get("failed", 0))
@@ -828,10 +736,12 @@ def collect_dashboard(rows: list[dict[str, Any]], cache: dict[str, Any], force_f
     )
     total_scores: list[float] = []
     global_tags: Counter[str] = Counter()
+    global_bug_classes: Counter[str] = Counter()
     label_totals: Counter[str] = Counter()
     for data in langs.values():
         total_scores.extend(data["difficulty_scores"])
         global_tags.update(data["tags"])
+        global_bug_classes.update(data.get("bug_classes", {}))
         label_totals.update(data["difficulty_labels"])
 
     for lang, data in langs.items():
@@ -846,7 +756,9 @@ def collect_dashboard(rows: list[dict[str, Any]], cache: dict[str, Any], force_f
         "langs": langs,
         "totals": {
             "pr_count": total_pr,
+            "pr_repo_count": total_pr_repos,
             "valid_count": total_valid,
+            "valid_repo_count": total_valid_repos,
             "processed_count": total_processed,
             "success_rate": (total_valid / total_processed * 100.0) if total_processed else 0.0,
             "delta_1h_pr": sum_delta(langs, "delta_1h_pr"),
@@ -856,8 +768,8 @@ def collect_dashboard(rows: list[dict[str, Any]], cache: dict[str, Any], force_f
             "difficulty_stats": score_stats(total_scores),
             "difficulty_labels": dict(label_totals),
             "global_tags": dict(global_tags.most_common(30)),
+            "global_bug_classes": dict(global_bug_classes.most_common(30)),
         },
-        "traj": collect_trajectory_stats(cache, force_full_scan),
         "history_count": len(rows_with_current),
     }
 
@@ -904,7 +816,7 @@ def render_label_bar(data: dict[str, Any]) -> str:
     hard = label_count(data, "hard")
     total = easy + medium + hard
     if total <= 0:
-        return '<div class="stacked empty">无数据</div>'
+        return '<div class="stacked empty">no data</div>'
     parts = []
     for name, count, cls in (("easy", easy, "easy"), ("medium", medium, "medium"), ("hard", hard, "hard")):
         width = count / total * 100.0
@@ -915,7 +827,7 @@ def render_label_bar(data: dict[str, Any]) -> str:
 
 def render_tags(tags: dict[str, int], denominator: int, limit: int = 20) -> str:
     if not tags or denominator <= 0:
-        return '<div class="muted">无 tags 数据</div>'
+        return '<div class="muted">no tags data</div>'
     rows = []
     max_count = max(tags.values()) if tags else 1
     for tag, count in list(tags.items())[:limit]:
@@ -933,158 +845,6 @@ def render_tags(tags: dict[str, int], denominator: int, limit: int = 20) -> str:
     return "\n".join(rows)
 
 
-def render_trajectory_html(traj_data: list[dict[str, Any]]) -> str:
-    if not traj_data:
-        return '<div class="muted">无轨迹数据</div>'
-
-    total_files = len(traj_data)
-    total_lines = sum(d["stats"]["main_count"] + d["stats"]["subagent_count"] for d in traj_data)
-    total_main_msgs = sum(d["stats"]["main_messages"] for d in traj_data)
-    total_main_count = sum(d["stats"]["main_count"] for d in traj_data)
-    all_composite = []
-    for d in traj_data:
-        all_composite.extend(d["stats"].get("scores", {}).get("composite_score", []))
-    avg_msgs = total_main_msgs / total_main_count if total_main_count else 0
-    avg_score = sum(all_composite) / len(all_composite) if all_composite else 0
-
-    # KPI cards
-    kpis = (
-        '<section class="grid kpis">'
-        f'<div class="card"><div class="label">轨迹文件数</div><div class="value">{total_files}</div></div>'
-        f'<div class="card"><div class="label">轨迹总条数</div><div class="value">{total_lines:,}</div></div>'
-        f'<div class="card"><div class="label">平均消息轮数</div><div class="value">{avg_msgs:.1f}</div></div>'
-        f'<div class="card"><div class="label">平均 composite_score</div><div class="value">{avg_score:.4f}</div>'
-        f'<div class="sub">基于 {len(all_composite):,} 条有分数的轨迹</div></div>'
-        '</section>'
-    )
-
-    # Overview table
-    overview_rows = []
-    for d in traj_data:
-        meta = d["metadata"]
-        st = d["stats"]
-        mc = st["main_count"]
-        size_mb = d["file_size"] / 1024 / 1024
-        avg_m = st["main_messages"] / mc if mc else 0
-        avg_tok = st["main_tokens"] / mc if mc else 0
-        avg_tc = st["main_tool_calls"] / mc if mc else 0
-        scores = st.get("scores", {}).get("composite_score", [])
-        avg_s = sum(scores) / len(scores) if scores else None
-        score_cell = f"{avg_s:.4f}" if avg_s is not None else "—"
-        overview_rows.append(
-            "<tr>"
-            f"<td>{html.escape(meta['dataset'])}</td>"
-            f"<td>{html.escape(meta['scaffold_display'])}</td>"
-            f"<td><code>{html.escape(meta['model'])}</code></td>"
-            f"<td>{html.escape(meta['agent'])}</td>"
-            f"<td>{mc:,}</td>"
-            f"<td>{size_mb:.0f} MB</td>"
-            f"<td>{avg_m:.1f}</td><td>{avg_tok:,.0f}</td><td>{avg_tc:.1f}</td>"
-            f"<td>{score_cell}</td>"
-            "</tr>"
-        )
-
-    overview_table = (
-        '<section class="panel"><h2>轨迹文件总览</h2><div class="table-wrap"><table>'
-        '<thead><tr><th>数据集</th><th>脚手架</th><th>模型</th><th>Owner</th>'
-        '<th>轨迹数</th><th>文件大小</th>'
-        '<th>平均轮数</th><th>平均 Token</th><th>平均 Tool Calls</th><th>平均 Score</th></tr></thead>'
-        f'<tbody>{"".join(overview_rows)}</tbody></table></div></section>'
-    )
-
-    # Quality scores table (only files with scores)
-    quality_rows = []
-    for d in traj_data:
-        scores = d["stats"].get("scores", {})
-        if not scores.get("composite_score"):
-            continue
-        meta = d["metadata"]
-        row_cells = [f"<td>{html.escape(meta['dataset'])}</td>", f"<td>{html.escape(meta['scaffold_display'])}</td>"]
-        for field in SCORE_FIELDS:
-            vals = scores.get(field, [])
-            avg = sum(vals) / len(vals) if vals else 0
-            row_cells.append(f"<td>{avg:.4f}</td>")
-        quality_rows.append(f"<tr>{''.join(row_cells)}</tr>")
-
-    quality_table = ""
-    if quality_rows:
-        quality_table = (
-            '<section class="panel"><h2>质量评分统计</h2><div class="table-wrap"><table>'
-            '<thead><tr><th>数据集</th><th>脚手架</th><th>composite</th><th>efficiency</th>'
-            '<th>style</th><th>tool_mastery</th><th>completion</th><th>precision</th></tr></thead>'
-            f'<tbody>{"".join(quality_rows)}</tbody></table></div></section>'
-        )
-
-    # By dataset comparison
-    dataset_agg: dict[str, dict[str, Any]] = {}
-    for d in traj_data:
-        key = d["metadata"]["dataset"]
-        agg = dataset_agg.setdefault(key, {"count": 0, "msgs": 0, "tokens": 0, "tc": 0, "scores": []})
-        agg["count"] += d["stats"]["main_count"]
-        agg["msgs"] += d["stats"]["main_messages"]
-        agg["tokens"] += d["stats"]["main_tokens"]
-        agg["tc"] += d["stats"]["main_tool_calls"]
-        agg["scores"].extend(d["stats"].get("scores", {}).get("composite_score", []))
-    dataset_rows = []
-    for name, agg in sorted(dataset_agg.items()):
-        c = agg["count"] or 1
-        avg_s = sum(agg["scores"]) / len(agg["scores"]) if agg["scores"] else None
-        score_cell = f"{avg_s:.4f}" if avg_s else "—"
-        dataset_rows.append(
-            f"<tr><td><strong>{html.escape(name)}</strong></td>"
-            f"<td>{agg['count']:,}</td><td>{agg['msgs']/c:.1f}</td>"
-            f"<td>{agg['tokens']/c:,.0f}</td><td>{agg['tc']/c:.1f}</td>"
-            f"<td>{score_cell}</td></tr>"
-        )
-    dataset_table = (
-        '<section class="panel"><h2>按数据集对比</h2><div class="table-wrap"><table>'
-        '<thead><tr><th>数据集</th><th>总轨迹数</th><th>平均轮数</th><th>平均 Token</th>'
-        '<th>平均 Tool Calls</th><th>平均 Score</th></tr></thead>'
-        f'<tbody>{"".join(dataset_rows)}</tbody></table></div></section>'
-    )
-
-    # File path directory
-    path_by_dataset: dict[str, list[dict[str, Any]]] = {}
-    for d in traj_data:
-        ds = d["metadata"]["dataset"]
-        path_by_dataset.setdefault(ds, []).append(d)
-    path_rows = []
-    for ds in sorted(path_by_dataset.keys()):
-        files = path_by_dataset[ds]
-        for f in sorted(files, key=lambda x: (x["metadata"]["scaffold"], x["metadata"]["agent"])):
-            meta = f["metadata"]
-            size_mb = f["file_size"] / 1024 / 1024
-            count = f["stats"]["main_count"] + f["stats"]["subagent_count"]
-            path_rows.append(
-                f"<tr><td>{html.escape(ds)}</td>"
-                f"<td>{html.escape(meta['scaffold_display'])}</td>"
-                f"<td>{html.escape(meta['agent'])}</td>"
-                f"<td><code>{html.escape(f['filepath'])}</code></td>"
-                f"<td>{size_mb:.0f} MB</td><td>{count:,}</td></tr>"
-            )
-    path_table = (
-        '<section class="panel"><h2>源数据路径目录</h2><div class="table-wrap"><table>'
-        '<thead><tr><th>数据集</th><th>脚手架</th><th>Owner</th><th>文件路径</th>'
-        '<th>大小</th><th>条数</th></tr></thead>'
-        f'<tbody>{"".join(path_rows)}</tbody></table></div></section>'
-    )
-
-    # Method explanation
-    method_section = (
-        '<section class="panel"><h2>统计方法说明</h2><div class="method-grid">'
-        '<div class="method-card"><h3>平均轮数 / Token / Tool Calls</h3>'
-        '<p><strong>平均轮数</strong>：每条轨迹的 <code>messages</code> 数组长度的平均值。</p>'
-        '<p><strong>平均 Token</strong>：使用 tiktoken cl100k_base tokenizer 对所有 message 的 content + reasoning_content 精确编码计数的平均值。</p>'
-        '<p><strong>平均 Tool Calls</strong>：assistant 消息中 <code>tool_calls</code> 数组长度之和的平均值。对 Terminus-2 脚手架，统计 assistant 消息 JSON content 中 <code>commands</code> 数组的长度。</p></div>'
-        '<div class="method-card"><h3>质量评分</h3>'
-        '<p><code>composite_score</code>（0-1）由五个维度加权：efficiency（效率）、style（风格）、tool_mastery（工具掌握）、completion（完成度）、precision（精确度）。</p>'
-        '<p>仅部分文件包含 <code>_score</code> 字段，无分数的文件显示 "—"。</p></div>'
-        '</div></section>'
-    )
-
-    return kpis + overview_table + quality_table + dataset_table + path_table + method_section
-
-
 def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -> str:
     updated = datetime.fromisoformat(data["ts"]).strftime("%Y-%m-%d %H:%M:%S BJT")
     next_refresh = (now_bjt() + timedelta(seconds=refresh_seconds)).strftime("%Y-%m-%d %H:%M:%S BJT")
@@ -1096,9 +856,9 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     difficulty_rows = []
     score_rows = []
     tag_sections = []
+    bug_class_sections = []
     params_rows = []
     failure_rows = []
-    traj_html = render_trajectory_html(data.get("traj", []))
 
     for lang, _, _, _ in LANGS:
         row = langs[lang]
@@ -1160,6 +920,15 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
             f"{render_tags(row['tags'], int(row['tasks_with_tags']), 20)}"
             "</section>"
         )
+        bug_classes = row.get("bug_classes", {}) or {}
+        tasks_with_bc = int(row.get("tasks_with_bug_class") or 0)
+        bug_class_sections.append(
+            '<section class="tag-card">'
+            f"<h3>{html.escape(row['display'])} <span>{lang}</span>"
+            f"<span class=\"tag-card-sub\">{fmt_int(tasks_with_bc)} tagged</span></h3>"
+            f"{render_tags(bug_classes, tasks_with_bc, 15)}"
+            "</section>"
+        )
         params_rows.append(
             "<tr>"
             f"<td><strong>{html.escape(row['display'])}</strong></td>"
@@ -1188,219 +957,400 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
 
     css = """
     :root {
-      --bg: #f5f7fb;
-      --panel: #ffffff;
-      --text: #1f2937;
-      --muted: #667085;
-      --line: #e5e7eb;
-      --blue: #2563eb;
-      --green: #16a34a;
-      --amber: #d97706;
-      --red: #dc2626;
-      --purple: #7c3aed;
-      --shadow: 0 12px 30px rgba(15, 23, 42, .08);
+      --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --c-bg: #020617;
+      --c-bg-2: #0f172a80;
+      --c-panel: #0b1226;
+      --c-border: #1e293b99;
+      --c-fg: #e2e8f0;
+      --c-fg-dim: #94a3b8;
+      --c-fg-mute: #64748b;
+      --c-fg-faint: #475569;
+      --c-accent: #6366f1;
+      --c-accent-soft: #6366f133;
+      --c-accent-border: #6366f180;
+      --c-good: #34d399;
+      --c-bad: #f87171;
+      --c-warn: #fbbf24;
+      --c-violet: #a78bfa;
+      font-size: 19px;
+    }
+    [data-theme="light"] {
+      --c-bg: #f8fafc;
+      --c-bg-2: #ffffff;
+      --c-panel: #ffffff;
+      --c-border: #e2e8f0;
+      --c-fg: #0f172a;
+      --c-fg-dim: #475569;
+      --c-fg-mute: #64748b;
+      --c-fg-faint: #94a3b8;
+      --c-accent: #4f46e5;
+      --c-accent-soft: #6366f122;
+      --c-accent-border: #6366f1;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 18px; line-height: 1.5; }
-    header { padding: 34px 40px 24px; background: linear-gradient(135deg, #172554, #1d4ed8 48%, #0891b2); color: white; }
-    header h1 { margin: 0 0 10px; font-size: 40px; letter-spacing: -.02em; }
-    header p { margin: 6px 0; color: rgba(255,255,255,.84); font-size: 17px; }
-    main { padding: 30px 40px 56px; max-width: 1780px; margin: 0 auto; }
-    .grid { display: grid; gap: 18px; }
-    .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 24px; }
-    .card, .panel, .tag-card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
-    .card { padding: 22px; }
-    .card .label { color: var(--muted); font-size: 16px; }
-    .card .value { font-size: 40px; font-weight: 780; margin-top: 10px; }
-    .card .sub { color: var(--muted); margin-top: 8px; font-size: 15px; }
-    .panel { padding: 24px; margin-top: 22px; overflow: hidden; }
-    .panel h2 { margin: 0 0 18px; font-size: 26px; }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--c-bg); color: var(--c-fg);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      height: 100vh;
+    }
+    code, pre, .mono { font-family: var(--font-mono); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: var(--c-fg-faint); border-radius: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    /* shell: sidebar + topbar + content (harbor-dashboard layout) */
+    .layout { display: flex; height: 100vh; overflow: hidden; }
+    .sidebar {
+      width: 280px; flex-shrink: 0;
+      border-right: 1px solid var(--c-border);
+      background: linear-gradient(180deg, #0a1226 0%, var(--c-bg) 100%);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    [data-theme="light"] .sidebar { background: var(--c-bg-2); }
+    .sidebar-logo { padding: 16px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: 10px; }
+    .logo-mark {
+      width: 38px; height: 32px; border-radius: 8px; background: var(--c-accent);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800; font-size: 14px; letter-spacing: -.02em;
+    }
+    .logo-title { font-size: 16px; font-weight: 600; }
+    .logo-sub { font-size: 13px; color: var(--c-fg-mute); }
+    .nav { padding: 8px; display: flex; flex-direction: column; gap: 2px; border-bottom: 1px solid var(--c-border); }
+    .nav-item {
+      background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
+      padding: 7px 10px; border-radius: 8px; text-align: left; cursor: pointer;
+      font-size: 16px; display: flex; align-items: center; gap: 8px; text-decoration: none;
+    }
+    .nav-item:hover { background: #1e293b40; color: var(--c-fg); }
+    .nav-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #c7d2fe; }
+    [data-theme="light"] .nav-item.active { color: var(--c-accent); }
+    .sidebar-section { padding: 12px 8px 8px; flex: 1; overflow: auto; }
+    .section-label { text-transform: uppercase; font-size: 13px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 600; }
+    .sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 15px; }
+    .sidebar-stat .l { color: var(--c-fg-mute); }
+    .sidebar-stat .v { color: var(--c-fg); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .sidebar-footer { padding: 10px 12px; border-top: 1px solid var(--c-border); font-size: 14px; color: var(--c-fg-mute); }
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .topbar {
+      height: 48px; flex-shrink: 0; border-bottom: 1px solid var(--c-border);
+      padding: 0 16px; display: flex; align-items: center; justify-content: space-between; background: var(--c-bg);
+    }
+    .crumbs { font-size: 16px; color: var(--c-fg-dim); display: flex; align-items: center; gap: 6px; }
+    .crumbs .sep { color: var(--c-fg-faint); }
+    .crumbs .here { color: var(--c-fg); font-family: var(--font-mono); font-size: 15px; }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+    .icon-btn {
+      background: transparent; border: 1px solid var(--c-border); border-radius: 6px;
+      width: 28px; height: 28px; color: var(--c-fg-dim); cursor: pointer;
+    }
+    .icon-btn:hover { color: var(--c-fg); border-color: var(--c-accent); }
+    .update-status {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 16px; font-weight: 600; font-family: var(--font-mono);
+      color: var(--c-accent);
+      background: var(--c-accent-soft);
+      border: 1px solid var(--c-accent-border);
+      border-radius: 999px; padding: 4px 12px;
+      letter-spacing: .01em; white-space: nowrap;
+    }
+    .update-status .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--c-good); flex-shrink: 0;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-good) 25%, transparent);
+    }
+    [data-theme="light"] .update-status { color: var(--c-accent); }
+    .content { flex: 1; overflow-y: auto; padding: 20px; }
+
+    /* sections */
+    .panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 16px; margin-bottom: 16px; overflow: hidden; }
+    .eyebrow { color: var(--c-fg-mute); font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+    .panel h2 { margin: 0 0 12px; font-size: 21px; line-height: 1.3; letter-spacing: -.01em; }
+    .panel h3 { margin: 0 0 8px; font-size: 17px; }
+    .panel p { margin: 8px 0; color: var(--c-fg-dim); font-size: 16px; }
+
+    .grid { display: grid; gap: 14px; }
+    .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
+    .card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 16px; }
+    .card .label { color: var(--c-fg-mute); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+    .card .value {
+      font-size: 32px; line-height: 1.1; font-weight: 700; margin-top: 8px;
+      font-family: var(--font-mono); letter-spacing: -.01em;
+      color: var(--c-accent);
+      background: linear-gradient(135deg, var(--c-accent), var(--c-violet));
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 24px var(--c-accent-soft);
+    }
+    [data-theme="light"] .card .value {
+      color: var(--c-accent);
+      background: linear-gradient(135deg, var(--c-accent), #7c3aed);
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: none;
+    }
+    .card .sub { color: var(--c-fg-dim); margin-top: 8px; font-size: 14px; }
+
     .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 17px; }
-    th { text-align: left; color: var(--muted); font-weight: 650; background: #f8fafc; }
-    th, td { padding: 14px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    table { width: 100%; border-collapse: collapse; font-size: 15px; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--c-border); vertical-align: middle; }
+    th { font-size: 13.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--c-fg-mute); font-weight: 600; background: #1e293b22; }
+    [data-theme="light"] th { background: #f1f5f9; }
     tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #1e293b22; }
+    [data-theme="light"] tbody tr:hover { background: #f1f5f9; }
     td:not(:first-child), th:not(:first-child) { text-align: right; }
-    .code { display: inline-block; margin-left: 8px; color: var(--muted); font-size: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .delta { color: var(--blue); font-variant-numeric: tabular-nums; }
-    .muted, .mini { color: var(--muted); font-size: 14px; }
-    .bar { position: relative; height: 28px; min-width: 132px; background: #e8eefc; border-radius: 999px; overflow: hidden; }
-    .bar-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--blue), #06b6d4); border-radius: inherit; }
-    .bar span { position: relative; z-index: 1; display: block; line-height: 28px; text-align: center; font-size: 15px; color: #0f172a; font-weight: 650; }
-    .stacked { display: flex; height: 24px; min-width: 220px; overflow: hidden; border-radius: 999px; background: #eef2f7; }
-    .stacked.empty { display: block; height: auto; background: transparent; color: var(--muted); }
-    .seg.easy { background: var(--green); }
-    .seg.medium { background: var(--amber); }
-    .seg.hard { background: var(--red); }
-    .tags-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-    .tag-card { padding: 20px; box-shadow: none; }
-    .tag-card h3 { margin: 0 0 14px; font-size: 20px; }
-    .tag-card h3 span { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; }
-    .tag-row { display: grid; grid-template-columns: 180px 1fr 132px; align-items: center; gap: 12px; margin: 10px 0; font-size: 16px; }
+    .code { display: inline-block; margin-left: 8px; color: var(--c-fg-mute); font-size: 14px; font-family: var(--font-mono); }
+    .delta { color: var(--c-accent); font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+    .muted, .mini { color: var(--c-fg-mute); font-size: 14px; }
+
+    .bar { position: relative; height: 22px; min-width: 118px; background: var(--c-accent-soft); border-radius: 999px; overflow: hidden; }
+    .bar-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--c-accent), var(--c-violet)); border-radius: inherit; }
+    .bar span { position: relative; z-index: 1; display: block; line-height: 22px; text-align: center; font-size: 15px; color: var(--c-fg); font-weight: 600; }
+    .stacked { display: flex; height: 20px; min-width: 180px; overflow: hidden; border-radius: 999px; background: #1e293b55; }
+    .stacked.empty { display: block; height: auto; background: transparent; color: var(--c-fg-mute); }
+    .seg.easy { background: var(--c-good); }
+    .seg.medium { background: var(--c-warn); }
+    .seg.hard { background: var(--c-bad); }
+    .tags-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .tag-card { padding: 16px; background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; }
+    .tag-card h3 { margin: 0 0 12px; font-size: 17px; }
+    .tag-card h3 span { color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 14px; }
+    .tag-card h3 span.tag-card-sub { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--c-bg-2); border: 1px solid var(--c-border); font-size: 12px; }
+    .small { font-size: 13px; }
+    .tag-row { display: grid; grid-template-columns: 160px 1fr 118px; align-items: center; gap: 10px; margin: 8px 0; font-size: 15px; }
     .tag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-    .tag-track { height: 12px; background: #ede9fe; border-radius: 999px; overflow: hidden; }
-    .tag-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--purple), #2563eb); border-radius: inherit; }
-    .tag-count { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
-    .method-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-    .method-card { padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #f8fafc; }
-    .method-card h3 { margin: 0 0 10px; font-size: 20px; }
-    .method-card p { margin: 8px 0; color: #374151; font-size: 16px; }
-    .method-note { margin-top: 16px; padding: 14px 18px; background: #f8fafc; border-radius: 12px; border: 1px solid var(--line); }
-    .method-note p { margin: 6px 0; color: var(--muted); font-size: 15px; }
-    code { padding: 2px 6px; border-radius: 6px; background: #e5e7eb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
-    .footer { margin-top: 22px; color: var(--muted); font-size: 14px; text-align: center; }
-    .tabs { display: flex; gap: 0; padding: 0 40px; background: #1e3a5f; }
-    .tab { padding: 14px 28px; border: none; background: transparent; color: rgba(255,255,255,.7); font-size: 17px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all .15s; }
-    .tab:hover { color: rgba(255,255,255,.9); }
-    .tab.active { color: white; border-bottom-color: #06b6d4; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-    @media (max-width: 1200px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tags-grid, .method-grid { grid-template-columns: 1fr; } }
-    @media (max-width: 760px) { main, header, .tabs { padding-left: 16px; padding-right: 16px; } .kpis { grid-template-columns: 1fr; } }
+    .tag-track { height: 10px; background: #1e293b55; border-radius: 999px; overflow: hidden; }
+    .tag-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--c-violet), var(--c-accent)); border-radius: inherit; }
+    .tag-count { color: var(--c-fg-mute); text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+    .method-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .method-card { padding: 16px; border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-bg-2); }
+    .method-card p { margin: 7px 0; font-size: 15px; color: var(--c-fg-dim); }
+    .method-note { margin-top: 14px; padding: 14px 16px; background: var(--c-bg-2); border-radius: 10px; border: 1px solid var(--c-border); }
+    .method-note p { margin: 5px 0; font-size: 15px; color: var(--c-fg-mute); }
+    .io-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .io-card { background: var(--c-bg-2); border: 1px solid var(--c-border); border-radius: 10px; padding: 14px; }
+    .io-card ul { margin: 8px 0 0; padding-left: 18px; color: var(--c-fg-dim); font-size: 15px; }
+    code { padding: 2px 5px; border-radius: 5px; background: #1e293b55; font-family: var(--font-mono); font-size: .9em; }
+    [data-theme="light"] code { background: #e2e8f0; }
+    .footer { margin-top: 8px; color: var(--c-fg-mute); font-size: 14px; text-align: center; }
+    @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .method-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) {
+      .sidebar { display: none; }
+      .tags-grid, .io-grid, .kpis { grid-template-columns: 1fr; }
+      .tag-row { grid-template-columns: 1fr; }
+      td:not(:first-child), th:not(:first-child) { text-align: left; }
+    }
     """
 
     global_tags = render_tags(totals["global_tags"], max(1, sum(int(d["tasks_with_tags"]) for d in langs.values())), 30)
+    total_bug_class_denominator = sum(int(d.get("tasks_with_bug_class") or 0) for d in langs.values())
+    global_bug_classes = render_tags(
+        totals.get("global_bug_classes", {}) or {},
+        max(1, total_bug_class_denominator),
+        30,
+    )
     total_stats = totals["difficulty_stats"]
     html_doc = f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="refresh" content="{int(refresh_seconds)}">
-  <title>SWE 任务和轨迹进度看板</title>
+  <title>SWE Task Progress Dashboard</title>
   <style>{css}</style>
 </head>
 <body>
-  <header>
-    <h1>SWE 任务和轨迹进度看板</h1>
-    <p>最后更新时间：{html.escape(updated)}　|　下次刷新：{html.escape(next_refresh)}　|　刷新间隔：{int(refresh_seconds)} 秒</p>
-  </header>
-  <nav class="tabs">
-    <button class="tab active" onclick="switchTab('instance')">Instance</button>
-    <button class="tab" onclick="switchTab('trajectory')">Trajectory</button>
-  </nav>
-  <main>
-  <div id="tab-instance" class="tab-content active">
-    <section class="grid kpis">
-      <div class="card"><div class="label">收集 PR 总数</div><div class="value">{fmt_int(totals['pr_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_pr'])} / 24h {fmt_delta(totals['delta_24h_pr'])}</div></div>
-      <div class="card"><div class="label">有效 SWE 总数</div><div class="value">{fmt_int(totals['valid_count'])}</div><div class="sub">1h {fmt_delta(totals['delta_1h_valid'])} / 24h {fmt_delta(totals['delta_24h_valid'])}</div></div>
-      <div class="card"><div class="label">整体处理成功率</div><div class="value">{fmt_float(totals['success_rate'], 1)}%</div><div class="sub">Valid SWE / 已处理 {fmt_int(totals['processed_count'])}</div></div>
-      <div class="card"><div class="label">difficulty_score 均值</div><div class="value">{fmt_float(total_stats['mean'], 2)}</div><div class="sub">median {fmt_float(total_stats['median'], 1)}，count {fmt_int(total_stats['count'])}</div></div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-mark">SWE</div>
+        <div>
+          <div class="logo-title">SWE-gen Progress</div>
+          <div class="logo-sub">Instance Dashboard</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a class="nav-item active" href="#overview">Overview</a>
+        <a class="nav-item" href="#language-progress">Language Progress</a>
+        <a class="nav-item" href="#run-parameters">Run Parameters</a>
+        <a class="nav-item" href="#failures">Failure Breakdown</a>
+        <a class="nav-item" href="#patch-complexity">fix.patch Complexity</a>
+        <a class="nav-item" href="#method-notes">Method Notes</a>
+        <a class="nav-item" href="#difficulty">Difficulty</a>
+        <a class="nav-item" href="#tags">Tags</a>
+        <a class="nav-item" href="#bug-classes">Bug Classes</a>
+      </nav>
+      <div class="sidebar-section">
+        <div class="section-label">Summary</div>
+        <div class="sidebar-stat"><span class="l">PRs collected</span><span class="v">{fmt_int(totals['pr_count'])}</span></div>
+        <div class="sidebar-stat"><span class="l">PR unique repos</span><span class="v">{fmt_int(totals['pr_repo_count'])}</span></div>
+        <div class="sidebar-stat"><span class="l">Valid SWE</span><span class="v">{fmt_int(totals['valid_count'])}</span></div>
+        <div class="sidebar-stat"><span class="l">SWE unique repos</span><span class="v">{fmt_int(totals['valid_repo_count'])}</span></div>
+        <div class="sidebar-stat"><span class="l">Success rate</span><span class="v">{fmt_float(totals['success_rate'], 1)}%</span></div>
+        <div class="sidebar-stat"><span class="l">Mean difficulty</span><span class="v">{fmt_float(total_stats['mean'], 2)}</span></div>
+      </div>
+      <div class="sidebar-footer">Auto-refreshes every {int(refresh_seconds)}s</div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="crumbs"><span>SWE-gen</span><span class="sep">/</span><span class="here">instance</span></div>
+        <div class="top-actions">
+          <span class="update-status"><span class="dot"></span>Updated {html.escape(updated)} · next {html.escape(next_refresh)}</span>
+          <button class="icon-btn" title="Reload" onclick="location.reload()">↻</button>
+          <button class="icon-btn" id="theme-toggle" title="Toggle theme">☀</button>
+        </div>
+      </header>
+      <section class="content">
+
+    <section class="panel" id="overview">
+      <div class="eyebrow">Overview</div>
+      <h2>Live Dashboard of PRs collections and SWE Tasks Generation</h2>
+      <p>This dashboard surfaces the live state of GitHub PR collection and verifiable SWE-Bench task generation across 8 programming languages: total PRs ingested with their unique repository coverage, total verified SWE tasks (NOP=0 / Oracle=1) with unique repos, the overall processing success rate, and aggregate task difficulty. Per-language tables below break down progress, run parameters (eval and completion models, concurrency, source-file bounds), failure-reason distribution, fix-patch complexity, difficulty score statistics, and tag distribution &mdash; all auto-refreshing on a fixed interval.</p>
+      <section class="grid kpis">
+        <div class="card"><div class="label">Total PRs collected</div><div class="value">{fmt_int(totals['pr_count'])}</div><div class="sub">{fmt_int(totals['pr_repo_count'])} unique repos · 1h {fmt_delta(totals['delta_1h_pr'])} / 24h {fmt_delta(totals['delta_24h_pr'])}</div></div>
+        <div class="card"><div class="label">Total valid SWE</div><div class="value">{fmt_int(totals['valid_count'])}</div><div class="sub">{fmt_int(totals['valid_repo_count'])} unique repos · 1h {fmt_delta(totals['delta_1h_valid'])} / 24h {fmt_delta(totals['delta_24h_valid'])}</div></div>
+        <div class="card"><div class="label">Overall success rate</div><div class="value">{fmt_float(totals['success_rate'], 1)}%</div><div class="sub">Valid SWE / processed {fmt_int(totals['processed_count'])}</div></div>
+        <div class="card"><div class="label">Mean difficulty_score</div><div class="value">{fmt_float(total_stats['mean'], 2)}</div><div class="sub">median {fmt_float(total_stats['median'], 1)}, count {fmt_int(total_stats['count'])}</div></div>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>语言进度</h2>
+    <section class="panel" id="language-progress">
+      <h2>Language Progress</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>收集 PR</th><th>过去 1h</th><th>过去 24h</th><th>有效 SWE</th><th>过去 1h</th><th>过去 24h</th><th>已处理</th><th>处理成功率</th></tr></thead>
+          <thead><tr><th>Language</th><th>PRs collected</th><th>Last 1h</th><th>Last 24h</th><th>Valid SWE</th><th>Last 1h</th><th>Last 24h</th><th>Processed</th><th>Success rate</th></tr></thead>
           <tbody>{''.join(progress_rows)}</tbody>
         </table>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>运行参数</h2>
+    <section class="panel" id="run-parameters">
+      <h2>Run Parameters</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>评估模型 (OPENAI)</th><th>填充模型 (ANTHROPIC)</th><th>并发数</th><th>min_source_files</th><th>max_source_files</th></tr></thead>
+          <thead><tr><th>Language</th><th>Eval model (OPENAI)</th><th>Completion model (ANTHROPIC)</th><th>Concurrency</th><th>min_source_files</th><th>max_source_files</th></tr></thead>
           <tbody>{''.join(params_rows)}</tbody>
         </table>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>失败原因统计</h2>
+    <section class="panel" id="failures">
+      <h2>Failure Reason Breakdown</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>已处理</th><th>有效 SWE</th><th>失败</th><th>trivial_pr</th><th>validation</th><th>infra_error</th><th>timeout</th><th>workflow_error</th><th>其他</th></tr></thead>
+          <thead><tr><th>Language</th><th>Processed</th><th>Valid SWE</th><th>Failed</th><th>trivial_pr</th><th>validation</th><th>infra_error</th><th>timeout</th><th>workflow_error</th><th>Other</th></tr></thead>
           <tbody>{''.join(failure_rows)}</tbody>
         </table>
       </div>
       <div class="method-note">
-        <p><strong>trivial_pr</strong>：PR 被 LLM 评估为过于简单（如仅修改配置、文档、依赖版本等），不适合作为 SWE 任务。</p>
-        <p><strong>validation</strong>：任务生成后验证失败（NOP agent 未返回 reward=0 或 ORACLE agent 未返回 reward=1）。</p>
-        <p><strong>infra_error</strong>：基础设施错误（Docker 构建失败、网络超时、磁盘空间不足等）。</p>
-        <p><strong>timeout</strong>：处理超时（单个 PR 总超时或 Claude Code session 超时）。</p>
-        <p><strong>workflow_error</strong>：工作流程错误（PR 元数据获取失败、worktree 创建失败、patch 生成失败等）。</p>
+        <p><strong>trivial_pr</strong>: the PR was judged by the LLM as too trivial (e.g. only config, docs, or dependency-version changes) and unsuitable as a SWE task.</p>
+        <p><strong>validation</strong>: validation failed after task generation (the NOP agent did not return reward=0, or the ORACLE agent did not return reward=1).</p>
+        <p><strong>infra_error</strong>: infrastructure error (Docker build failure, network timeout, insufficient disk space, etc.).</p>
+        <p><strong>timeout</strong>: processing timed out (per-PR total timeout or Claude Code session timeout).</p>
+        <p><strong>workflow_error</strong>: workflow error (PR metadata fetch failure, worktree creation failure, patch generation failure, etc.).</p>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>fix.patch 复杂度</h2>
+    <section class="panel" id="patch-complexity">
+      <h2>fix.patch Complexity</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>Valid SWE Count</th><th>Avg fix.patch lines</th><th>Avg fix.patch hunks</th><th>Avg fix.patch files</th></tr></thead>
+          <thead><tr><th>Language</th><th>Valid SWE Count</th><th>Avg fix.patch lines</th><th>Avg fix.patch hunks</th><th>Avg fix.patch files</th></tr></thead>
           <tbody>{''.join(patch_rows)}</tbody>
         </table>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>统计方法说明</h2>
+    <section class="panel" id="method-notes">
+      <div class="eyebrow">Method Notes</div>
+      <h2>Metric Definitions</h2>
       <div class="method-grid">
         <div class="method-card">
-          <h3>难度打分 difficulty_score</h3>
-          <p>读取每个有效任务目录的 <code>solution/fix.patch</code>、<code>tests/</code> 和 <code>instruction.md</code>，由 <code>src/swegen/scoring.py</code> 使用零 API 静态评分。</p>
-          <p>当前公式采用 log-scale 连续评分，避免中等规模 patch 过早变成 hard。权重为：<code>patch_scope 38%</code>、<code>logic_complexity 32%</code>、<code>context_breadth 15%</code>、<code>test_complexity 10%</code>、<code>instruction_complexity 5%</code>。</p>
-          <p>label 阈值：<code>easy &lt;= 4.0</code>，<code>medium &lt;= 7.0</code>，<code>hard &gt; 7.0</code>。</p>
+          <h3>Difficulty score (difficulty_score)</h3>
+          <p>Reads each valid task directory's <code>solution/fix.patch</code>, <code>tests/</code>, and <code>instruction.md</code>, scored statically with zero API calls by <code>src/swegen/scoring.py</code>.</p>
+          <p>The current formula uses log-scale continuous scoring to avoid mid-sized patches becoming hard too early. Weights: <code>patch_scope 38%</code>, <code>logic_complexity 32%</code>, <code>context_breadth 15%</code>, <code>test_complexity 10%</code>, <code>instruction_complexity 5%</code>.</p>
+          <p>Label thresholds: <code>easy &lt;= 4.0</code>, <code>medium &lt;= 7.0</code>, <code>hard &gt; 7.0</code>.</p>
         </div>
         <div class="method-card">
-          <h3>Tags 生成与展示</h3>
-          <p><code>tags</code> 不是看板现场计算的，而是在 swegen 构建任务时由 LLM 根据 PR 信息生成，并写入 <code>task.toml</code> 的 <code>[metadata].tags</code>。</p>
-          <p>prompt 要求 tags 按三段式生成：编程语言、项目层级/领域、框架/库名或具体主题。看板只读取已有 <code>task.toml</code> 并统计每个语言的 tag 出现次数和占比。</p>
+          <h3>Tag generation and display</h3>
+          <p><code>tags</code> are not computed live by the dashboard; they are generated by the LLM from PR information when swegen builds the task, and written to <code>[metadata].tags</code> in <code>task.toml</code>.</p>
+          <p>The prompt asks for tags in four parts: programming language, project layer/domain, framework/library or specific topic, and a domain-independent <strong>bug class</strong> (e.g. <code>missing-fallback</code>, <code>incomplete-validation</code>). The dashboard reads existing <code>task.toml</code> files, counts each language's tag occurrences and share, and treats the 4th tag as the bug class for the Bug-Class panels below.</p>
         </div>
         <div class="method-card">
-          <h3>fix.patch 统计</h3>
-          <p>patch 统计来自每个有效任务的 <code>solution/fix.patch</code>，并按语言扩展名过滤代码文件，口径与 <code>upload_march_swe_to_hf.py</code> 的 code-only 统计保持一致。</p>
-          <p><code>Avg fix.patch lines</code> 统计代码文件 diff 中新增/删除行数；<code>Avg fix.patch hunks</code> 统计 <code>@@</code> hunk 数；<code>Avg fix.patch files</code> 统计涉及的代码文件数。</p>
+          <h3>fix.patch statistics</h3>
+          <p>Patch stats come from each valid task's <code>solution/fix.patch</code>, filtering code files by language extension, consistent with the code-only stats in <code>upload_march_swe_to_hf.py</code>.</p>
+          <p><code>Avg fix.patch lines</code> counts added/removed lines in code-file diffs; <code>Avg fix.patch hunks</code> counts <code>@@</code> hunks; <code>Avg fix.patch files</code> counts the code files involved.</p>
         </div>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>difficulty_label 分布</h2>
+    <section class="panel" id="difficulty">
+      <h2>difficulty_label Distribution</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>easy / medium / hard</th><th>easy</th><th>medium</th><th>hard</th></tr></thead>
+          <thead><tr><th>Language</th><th>easy / medium / hard</th><th>easy</th><th>medium</th><th>hard</th></tr></thead>
           <tbody>{''.join(difficulty_rows)}</tbody>
         </table>
       </div>
     </section>
 
     <section class="panel">
-      <h2>difficulty_score 概览</h2>
+      <h2>difficulty_score Overview</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>语言</th><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr></thead>
+          <thead><tr><th>Language</th><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr></thead>
           <tbody>{''.join(score_rows)}</tbody>
         </table>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>全局 Top Tags</h2>
+    <section class="panel" id="tags">
+      <h2>Global Top Tags</h2>
       {global_tags}
     </section>
 
     <section class="panel">
-      <h2>每语言 Tags 分布</h2>
+      <h2>Per-Language Tag Distribution</h2>
       <div class="tags-grid">{''.join(tag_sections)}</div>
     </section>
 
-    <div class="footer">由 progress_monitor_all.py 生成。页面会自动刷新；数据来自 collected_prs、各语言输出目录、verifiable_tasks.txt、task.toml 和 solution/fix.patch。</div>
+    <section class="panel" id="bug-classes">
+      <h2>Global Top Bug Classes</h2>
+      <p class="muted small">Bug class is the 4th tag in <code>task.toml -&gt; [metadata].tags</code>: a domain-independent label describing the defect mechanism (e.g. <code>missing-fallback</code>, <code>incomplete-validation</code>, <code>off-by-one-error</code>). Generated by the LLM during <code>swegen create</code> and backfilled into legacy 3-tag tasks via <code>swegen backfill-tags</code>.</p>
+      {global_bug_classes}
+    </section>
+
+    <section class="panel">
+      <h2>Per-Language Bug-Class Distribution</h2>
+      <p class="muted small">Top bug classes per mainstream language. Counts are over tasks whose <code>task.toml</code> already carries a 4-tag entry; tasks still on the legacy 3-tag schema do not contribute until the backfill catches up.</p>
+      <div class="tags-grid">{''.join(bug_class_sections)}</div>
+    </section>
+
+      </section>
+    </main>
   </div>
-  <div id="tab-trajectory" class="tab-content">
-    {traj_html}
-    <div class="footer">轨迹数据来自 {html.escape(str(TRAJ_DIR))} 目录下的 .jsonl 文件。</div>
-  </div>
-  </main>
   <script>
-  function switchTab(name) {{
-    document.querySelectorAll('.tab-content').forEach(function(el) {{ el.classList.remove('active'); }});
-    document.querySelectorAll('.tab').forEach(function(el) {{ el.classList.remove('active'); }});
-    document.getElementById('tab-' + name).classList.add('active');
-    document.querySelector('[onclick*="' + name + '"]').classList.add('active');
-  }}
+    (function() {{
+      var KEY = "swegen.theme";
+      var btn = document.getElementById("theme-toggle");
+      function apply(theme) {{
+        document.documentElement.setAttribute("data-theme", theme);
+        if (btn) btn.textContent = theme === "dark" ? "☀" : "☾";
+      }}
+      var saved = null;
+      try {{ saved = localStorage.getItem(KEY); }} catch (e) {{}}
+      apply(saved || "dark");
+      if (btn) btn.addEventListener("click", function() {{
+        var cur = document.documentElement.getAttribute("data-theme");
+        var next = cur === "dark" ? "light" : "dark";
+        apply(next);
+        try {{ localStorage.setItem(KEY, next); }} catch (e) {{}}
+      }});
+    }})();
   </script>
 </body>
 </html>

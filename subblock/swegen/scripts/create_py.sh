@@ -17,11 +17,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
-# Read params from config.yaml (adaptive tuning)
+# Read per-language params from config.yaml
 eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang py --config-yaml "${PROJECT_ROOT}/config.yaml")
 echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 
-# Align Python with Go/JS thresholds/timeouts to avoid over-filtering and premature CC timeout.
+# Align Python with the other languages' thresholds/timeouts to avoid over-filtering
+# and premature CC timeout. min-source-files=2 matches create_{js,ts,go,...}.sh and the
+# CLAUDE.md example; lower it to 1 (e.g. via a smoke run) when you want maximum yield.
 # After Feb->March merge, the output's own verifiable_tasks.txt is the single source
 # of truth for already successful tasks; external Feb skip files are no longer needed.
 swegen create \
@@ -33,6 +35,6 @@ swegen create \
   --timeout "${TIMEOUT}" \
   --cc-timeout "${CC_TIMEOUT}" \
   --no-require-issue \
-  --min-source-files 3 \
+  --min-source-files 2 \
   --max-source-files 10 \
   2>&1 | tee "${PROJECT_ROOT}/artifacts/logs/swegen-create/cc_py_March.txt"
