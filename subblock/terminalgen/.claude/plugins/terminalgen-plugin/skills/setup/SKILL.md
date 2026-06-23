@@ -4,7 +4,7 @@ description: >
   Bootstrap the terminalgen block from a fresh clone: initialise the
   terminal-lego submodule under `repos/terminal-lego/`
   (`git submodule update --init`), create + activate the Python venv,
-  `pip install -r repos/terminal-lego/requirements.txt`, and ensure the
+  `pip install -r requirements.txt`, and ensure the
   OpenAI-compatible LLM env (`OPENAI_API_KEY`, `OPENAI_API_BASE_URL`,
   `MODEL_NAME`), the StackExchange key (`SO_API_KEY`), and `DOCKER_HOST`
   are set in the user's shell — prompting for any that are missing.
@@ -51,10 +51,11 @@ Read `meta_info.environment.venv_path` from `config.yaml` (currently
 ```bash
 python3 -m venv artifacts/envs/terminalgen-env
 source artifacts/envs/terminalgen-env/bin/activate
-pip install -r repos/terminal-lego/requirements.txt
+pip install -r requirements.txt
 ```
 
-The pipeline's only runtime dependency is `requests`.
+The pipeline needs `requests`; this block's config-parsing scripts also need
+`PyYAML` (both pinned in `requirements.txt`).
 
 ## Step 3 - Prepare runtime environment variables
 

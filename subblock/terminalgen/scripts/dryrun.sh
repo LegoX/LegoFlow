@@ -16,7 +16,8 @@ load_runtime_env
 echo "=== terminalgen dryrun ==="
 RC=0
 
-# 1) config.yaml parses and identity is correct.
+# 1) config.yaml parses and identity is correct (needs PyYAML in the active python).
+python3 -c "import yaml" 2>/dev/null || { echo "ERROR: PyYAML missing in active python — run: pip install -r requirements.txt"; echo "=== dryrun complete (rc=1) ==="; exit 1; }
 python3 - <<'PY' || RC=1
 import yaml, sys
 cfg = yaml.safe_load(open("config.yaml"))
@@ -41,7 +42,7 @@ else
 fi
 
 # 3) requests importable.
-python3 -c "import requests; print('requests: OK')" || { echo "ERROR: pip install -r repos/terminal-lego/requirements.txt"; RC=1; }
+python3 -c "import requests; print('requests: OK')" || { echo "ERROR: pip install -r requirements.txt"; RC=1; }
 
 # 4) Env vars.
 for var in OPENAI_API_KEY OPENAI_API_BASE_URL MODEL_NAME; do

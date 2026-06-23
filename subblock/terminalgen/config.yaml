@@ -15,9 +15,9 @@ meta_info:
   environment:
     venv_name: terminalgen-env
     venv_path: artifacts/envs/terminalgen-env
-    requirements: repos/terminal-lego/requirements.txt
+    requirements: requirements.txt
     python_version: "3.10+"
-    description: Virtual environment for the terminal-lego pipeline (requests) and the harbor-conversion helper
+    description: Virtual environment for the terminal-lego pipeline (requests) plus PyYAML for this block's config-parsing scripts
 
   resources:
     ip: local        # CPU-only; runs on any node with Docker available

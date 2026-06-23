@@ -46,7 +46,7 @@ builds don't burn LLM tokens.
 |---|---|---|
 | 02: `.git missing` | submodule never initialised | `git submodule update --init repos/terminal-lego` |
 | 02: `HEAD does not match commit_id` | someone fetched a different commit | `git -C repos/terminal-lego checkout <pin>` |
-| 02: `requests not importable` | venv exists but deps not installed | `pip install -r repos/terminal-lego/requirements.txt` |
+| 02: `requests not importable` | venv exists but deps not installed | `pip install -r requirements.txt` |
 | 03: HTTP non-200 | SO key expired/invalid | regenerate at stackapps.com, update `SO_API_KEY` |
 | 03: SKIP | no `SO_API_KEY` set | not a failure; scraper uses 300/day shared quota |
 | 04: HTTP 401/403 | `OPENAI_API_KEY` wrong or endpoint mismatch | verify `OPENAI_API_BASE_URL` + key |

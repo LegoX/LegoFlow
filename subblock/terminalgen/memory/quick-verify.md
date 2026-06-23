@@ -27,12 +27,12 @@ git -C repos/terminal-lego rev-parse HEAD   # expect 1a2a6048a0d568891407ed3c6a4
 
 > **Never modify `repos/terminal-lego/`** — it is a read-only upstream dependency.
 
-Install dependencies (only `requests`):
+Install dependencies (requests + PyYAML):
 
 ```bash
 python3 -m venv artifacts/envs/terminalgen-env
 source artifacts/envs/terminalgen-env/bin/activate
-pip install -r repos/terminal-lego/requirements.txt
+pip install -r requirements.txt
 ```
 
 Set the LLM / SO environment variables. Never write keys into repo files:

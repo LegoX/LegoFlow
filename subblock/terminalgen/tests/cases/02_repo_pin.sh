@@ -50,9 +50,9 @@ if [[ ! -x "$VENV_PATH/bin/python" ]]; then
   exit 77
 fi
 
-if "$VENV_PATH/bin/python" -c "import requests" >/dev/null 2>&1; then
-  echo "PASS: repos/terminal-lego pinned + entrypoints present + requests importable in venv"
+if "$VENV_PATH/bin/python" -c "import requests, yaml" >/dev/null 2>&1; then
+  echo "PASS: repos/terminal-lego pinned + entrypoints present + requests/PyYAML importable in venv"
 else
-  echo "FAIL: requests not importable in $VENV_PATH/bin/python — run pip install -r repos/terminal-lego/requirements.txt"
+  echo "FAIL: requests/PyYAML not importable in $VENV_PATH/bin/python — run pip install -r requirements.txt"
   exit 1
 fi

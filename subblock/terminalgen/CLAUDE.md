@@ -37,7 +37,7 @@ Optional: place the StackExchange key in `~/.bashrc` as `export SO_API_KEY=...`;
 
 ```bash
 python3 -m venv artifacts/envs/terminalgen-env && source artifacts/envs/terminalgen-env/bin/activate
-pip install -r repos/terminal-lego/requirements.txt
+pip install -r requirements.txt
 ```
 
 ### Verify Docker
@@ -143,8 +143,8 @@ artifacts/
 
 ## Coding Standards
 
-- Python 3.10+; the only runtime dep is `requests` (from `repos/terminal-lego/requirements.txt`)
-- Install: `pip install -r repos/terminal-lego/requirements.txt`
+- Python 3.10+; runtime deps are `requests` (terminal-lego) + `PyYAML` (this block's config scripts), both in `requirements.txt`
+- Install: `pip install -r requirements.txt`
 - Never edit files under `repos/terminal-lego/` — fork-and-pin upstream changes instead
 - Generator must always receive `--api-base "$OPENAI_API_BASE_URL"`
 

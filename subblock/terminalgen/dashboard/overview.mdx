@@ -32,7 +32,7 @@ and tunes `gen_workers`, `val_workers`, and `val_timeout` automatically.
 # 1. Init submodule + venv
 git submodule update --init repos/terminal-lego
 python -m venv artifacts/envs/terminalgen-env && source artifacts/envs/terminalgen-env/bin/activate
-pip install -r repos/terminal-lego/requirements.txt
+pip install -r requirements.txt
 # 2. Set env vars: OPENAI_API_KEY, OPENAI_API_BASE_URL, MODEL_NAME, SO_API_KEY
 # 3. Validate
 bash scripts/dryrun.sh

@@ -20,3 +20,6 @@ docs/next-env.d.ts
 dashboard/site/
 dashboard/memory/.progress_monitor_all_state.jsonl
 dashboard/memory/.progress_monitor_all_cache.json
+# terminal-lego scripts write these logs to the working dir
+task_generator.log
+validate_tasks.log
