@@ -24,6 +24,7 @@ PY
 
 echo "Starting create scripts for domains: ${DOMAINS}"
 
+pids=()
 for domain in $DOMAINS; do
     # Skip domains with no scraped questions yet.
     if [[ ! -f "artifacts/collected_questions/${domain}_so_data.json" ]]; then
@@ -32,7 +33,20 @@ for domain in $DOMAINS; do
     fi
     nohup bash "scripts/create_domain.sh" "$domain" \
         > "artifacts/logs/terminalgen-create/bg_${domain}.txt" 2>&1 &
+    pids+=("$!")
     echo "  ${domain} PID: $!"
 done
 
-echo "All create scripts started. Check artifacts/logs/terminalgen-create/tl_*.txt"
+echo "All create scripts started (${#pids[@]} domains). Logs: artifacts/logs/terminalgen-create/tl_*.txt"
+
+# Wait for all domain workers so the caller (start.sh) only archives the run as
+# completed once every domain has actually finished. Propagate failure if any
+# worker exited non-zero, so the run is archived as failed rather than completed.
+rc=0
+for pid in ${pids[@]+"${pids[@]}"}; do
+    if ! wait "$pid"; then
+        rc=1
+    fi
+done
+echo "All create scripts finished (rc=${rc})."
+exit "$rc"

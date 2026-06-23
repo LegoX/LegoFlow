@@ -46,7 +46,7 @@ def _mem_to_mb(val, default):
         return default
     num, unit = float(m.group(1)), m.group(2).upper()
     factor = {"G": 1024, "M": 1, "K": 1 / 1024, "": 1}.get(unit, 1)
-    return int(num * factor)
+    return max(1, int(round(num * factor)))
 
 
 def _toml_escape(s: str) -> str:
@@ -76,8 +76,8 @@ def convert_task_toml(v1: dict, domain: str, task_id: str, instruction_path: Pat
     tags = meta.get("tags", []) or []
     keywords = list(dict.fromkeys([domain] + tags))  # domain first, dedup
 
-    mem_mb = _mem_to_mb(env.get("memory"), 1024)
-    sto_mb = _mem_to_mb(env.get("storage"), 5120)
+    mem_mb = _mem_to_mb(env.get("memory"), env.get("memory_mb", 1024))
+    sto_mb = _mem_to_mb(env.get("storage"), env.get("storage_mb", 5120))
 
     def arr(items):
         return "[" + ", ".join(f'"{_toml_escape(str(x))}"' for x in items) + "]"

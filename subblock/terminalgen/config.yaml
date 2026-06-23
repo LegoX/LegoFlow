@@ -142,7 +142,7 @@ runtime_info:
     merged_tasks_dir:
       path: artifacts/merged_terminal_tasks
       description: Flattened directory of all verified tasks converted to harbor 1.1 schema (populated by scripts/extract_verified_tasks.py). This is what downstream trajgen/sft/eval consume.
-      structure: "artifacts/merged_terminal_tasks/{task_id}/ with harbor-1.1 task.toml, instruction.md, environment/, solution/, tests/"
+      structure: "artifacts/merged_terminal_tasks/{domain}__{task_id}/ with harbor-1.1 task.toml, instruction.md, environment/, solution/, tests/"
       extract_command: python scripts/extract_verified_tasks.py
 
     logs:

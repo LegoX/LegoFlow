@@ -45,19 +45,27 @@ def main():
         print("Error: no domains in config", file=sys.stderr)
         sys.exit(1)
 
-    # domain -> set(tags)
+    # domain -> set(tags); preserve config order so the fallback is deterministic.
     domain_tags = {d: set(v.get("tag_filter", [])) for d, v in domains.items() if v.get("enabled", True)}
+    if not domain_tags:
+        print("Error: no enabled domains in config", file=sys.stderr)
+        sys.exit(1)
+    # Fallback for questions matching no domain: core-terminal-os if enabled, else
+    # the first enabled domain (never silently drop questions).
+    fallback = FALLBACK_DOMAIN if FALLBACK_DOMAIN in domain_tags else next(iter(domain_tags))
 
     with open(raw_path) as f:
         raw = json.load(f)
     questions = raw.get("questions", [])
 
     buckets = {d: [] for d in domain_tags}
+    n_fallback = 0
     for q in questions:
         qtags = set(q.get("tags", []))
         matched = [d for d, tags in domain_tags.items() if qtags & tags]
         if not matched:
-            matched = [FALLBACK_DOMAIN] if FALLBACK_DOMAIN in buckets else []
+            matched = [fallback]
+            n_fallback += 1
         for d in matched:
             buckets[d].append(q)
 
@@ -80,7 +88,8 @@ def main():
             json.dump(payload, f, ensure_ascii=False, indent=2)
         summary[d] = len(qs)
 
-    print(f"Bucketed {len(questions)} questions into {len(buckets)} domains:")
+    print(f"Bucketed {len(questions)} questions into {len(buckets)} domains "
+          f"({n_fallback} matched no tag_filter → {fallback}):")
     for d, n in sorted(summary.items(), key=lambda kv: -kv[1]):
         print(f"  {d:24s} {n}")
 

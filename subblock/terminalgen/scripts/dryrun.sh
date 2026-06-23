@@ -1,7 +1,7 @@
 #!/bin/bash
 # Validate environment, submodule pin, and inputs before running. No side effects.
-cd "$(dirname "$0")/.."
 set -uo pipefail
+cd "$(dirname "$0")/.." || { echo "ERROR: cannot cd to block root"; exit 1; }
 
 # Activate the terminalgen venv if present (the only dep is `requests`).
 if [[ -f artifacts/envs/terminalgen-env/bin/activate ]]; then

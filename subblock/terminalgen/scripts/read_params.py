@@ -3,7 +3,7 @@
 
 Usage:
     eval $(python scripts/read_params.py --domain security-cryptography --config-yaml config.yaml)
-    echo $GEN_WORKERS $VAL_WORKERS $VAL_TIMEOUT $TAG_FILTER
+    echo $GEN_WORKERS $VAL_WORKERS $VAL_TIMEOUT
 """
 import argparse
 import sys
@@ -32,14 +32,10 @@ def main():
         print(f"Error: domain '{args.domain}' not found in {yaml_path}", file=sys.stderr)
         sys.exit(1)
 
-    domain_config = domains[args.domain]
-    params = domain_config.get("params", {})
-    tag_filter = domain_config.get("tag_filter", [])
+    params = domains[args.domain].get("params", {})
     print(f"GEN_WORKERS={params.get('gen_workers', 4)}")
     print(f"VAL_WORKERS={params.get('val_workers', 4)}")
     print(f"VAL_TIMEOUT={params.get('val_timeout', 300)}")
-    # Comma-joined tag list (used by bucketing/diagnostics).
-    print(f"TAG_FILTER={','.join(tag_filter)}")
 
 
 if __name__ == "__main__":

@@ -36,8 +36,9 @@ pip install -r requirements.txt
 # 2. Set env vars: OPENAI_API_KEY, OPENAI_API_BASE_URL, MODEL_NAME, SO_API_KEY
 # 3. Validate
 bash scripts/dryrun.sh
-# 4. Run (scrape → generate → validate → convert)
+# 4. Run (scrape → generate → Docker-validate); then convert separately
 bash scripts/start.sh
+python scripts/extract_verified_tasks.py   # v1.0 → harbor 1.1 merged export
 ```
 
 ## Key Files
