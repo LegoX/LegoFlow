@@ -61,7 +61,8 @@ def collect():
         dom_dir = TASKS_ROOT / f"{dom}-tl"
         cand_dir = dom_dir / "_candidates"
         scraped = _count_questions(QUESTIONS_ROOT / f"{dom}_so_data.json")
-        generated = len(list(cand_dir.glob("task_*"))) if cand_dir.is_dir() else 0
+        # Candidates live in per-chunk subdirs: _candidates/s<start>/task_*
+        generated = len(list(cand_dir.glob("s*/task_*"))) if cand_dir.is_dir() else 0
         verified = _count_lines(dom_dir / "verifiable_tasks.txt")
         rate = (verified / generated) if generated else 0.0
         rows.append({

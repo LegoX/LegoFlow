@@ -1,6 +1,6 @@
 #!/bin/bash
 # Start the terminalgen pipeline: scrape (if pool low) → create all enabled domains → archive.
-set -e
+set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Archive this run when start.sh exits (success, error, or signal).

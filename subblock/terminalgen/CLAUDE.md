@@ -67,29 +67,47 @@ Supported domains: `core-terminal-os`, `versioning-containers`, `networking-serv
 ### Step 2: Create Terminal Tasks
 
 ```bash
-bash scripts/create_domain.sh <domain>
-# e.g. bash scripts/create_domain.sh security-cryptography
+bash scripts/create_domain.sh <domain> [limit] [start]
+# e.g. bash scripts/create_domain.sh security-cryptography      # all questions in the bucket
+#      bash scripts/create_domain.sh security-cryptography 6 0  # cost-capped: 6 candidates from index 0
 ```
+
+`limit` caps how many bucket questions to generate this invocation (cost control);
+`start` is the 0-based bucket index (chunks never collide — task ids are `task_{start+i}`).
+Each invocation stages candidates under `{domain}-tl/_candidates/s<start>/` and
+validates only that chunk.
 
 Internally runs (with per-domain tuned params from `config.yaml`):
 
 ```bash
 python repos/terminal-lego/generator/task_generator.py \
   --input artifacts/collected_questions/{domain}_so_data.json \
-  --output artifacts/terminal_tasks/{domain}-tl/_candidates \
-  --workers $GEN_WORKERS --api-base "$OPENAI_API_BASE_URL" --model "$MODEL_NAME"
+  --output artifacts/terminal_tasks/{domain}-tl/_candidates/s{start} \
+  --workers $GEN_WORKERS --start {start} [--limit {limit}] \
+  --api-base "$OPENAI_API_BASE_URL" --model "$MODEL_NAME"
 
 python repos/terminal-lego/validator/validate_tasks.py \
-  --input artifacts/terminal_tasks/{domain}-tl/_candidates \
+  --input artifacts/terminal_tasks/{domain}-tl/_candidates/s{start} \
   --output artifacts/terminal_tasks/{domain}-tl \
   --workers $VAL_WORKERS --timeout $VAL_TIMEOUT
 ```
 
+**Batch to a verified target** (cost-controlled; generates in chunks until each
+domain reaches N verified or a per-domain candidate cap):
+
+```bash
+CHUNK=6 CAND_CAP=24 bash scripts/batch_verify.sh 5 core-terminal-os python-ecosystem
+# target 5 verified per domain; omit domain args to run all enabled domains
+```
+
+
 > **IMPORTANT**: the generator reads the endpoint from `--api-base`; always pass `"$OPENAI_API_BASE_URL"` (NOT `OPENAI_API_BASE`). The validator only discovers directories with a `task_*` prefix.
 
-Output: task directories under `artifacts/terminal_tasks/{domain}-tl/`. Verified task IDs appended to `verifiable_tasks.txt`.
+Output: task directories under `artifacts/terminal_tasks/{domain}-tl/`. Verified task IDs are recorded in `verifiable_tasks.txt` (rebuilt from the validated task dirs each run).
 
-All domains in the background: `bash scripts/start.sh`.
+All domains in the background (full run + archive): `bash scripts/start.sh`. Use
+`scripts/batch_verify.sh` instead when you want a cost-capped, target-driven run
+(sequential, stops per domain at N verified, no run archiving).
 
 ### Step 3: Extract & Convert Verified Tasks
 

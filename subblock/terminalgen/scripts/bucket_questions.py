@@ -74,6 +74,10 @@ def main():
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
     summary = {}
     for d, qs in buckets.items():
+        # Highest-scored SO questions first: they are clearer and better-specified,
+        # so the LLM generates more self-contained, verifiable tasks. create_domain's
+        # --limit then consumes the best questions first (raises pass rate per token).
+        qs.sort(key=lambda q: q.get("score", 0), reverse=True)
         out_file = out_dir / f"{d}_so_data.json"
         payload = {
             "metadata": {

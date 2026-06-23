@@ -29,14 +29,14 @@ For each domain `<domain>`:
 | Input | Path |
 | --- | --- |
 | Scraped questions | `artifacts/collected_questions/<domain>_so_data.json` (count `questions[]`) |
-| Candidate tasks | `artifacts/terminal_tasks/<domain>-tl/_candidates/task_*/` |
+| Candidate tasks | `artifacts/terminal_tasks/<domain>-tl/_candidates/s*/task_*/` (per-chunk subdirs) |
 | Verified count | `artifacts/terminal_tasks/<domain>-tl/verifiable_tasks.txt` |
 | Validation report | `artifacts/terminal_tasks/<domain>-tl/validation_report.json` |
 
 Read, without modifying:
 
 - Question count from each bucket JSON.
-- Generated candidate count from `_candidates/` directories containing `tests/test.sh`.
+- Generated candidate count from `_candidates/s*/` subdirs containing `tests/test.sh`.
 - Verified count from `<domain>-tl/verifiable_tasks.txt`.
 - Pass/fail breakdown from `validation_report.json` when present.
 - Latest create logs under `artifacts/logs/terminalgen-create/`.

@@ -56,8 +56,10 @@ mapping = {
 so = inp.get("so_api_key")
 if so and so != "human":
     mapping["SO_API_KEY"] = so
+# Treat committed placeholders as unset (real secrets come from env / .env).
+PLACEHOLDERS = {"REPLACE_ME", "human", "", None}
 for k, v in mapping.items():
-    if v and not os.environ.get(k):
+    if v and v not in PLACEHOLDERS and not os.environ.get(k):
         print(f"export {k}={shlex.quote(str(v))}")
 PY
         )"

@@ -37,7 +37,7 @@ runtime_info:
     # Smoke uses az.gptplus5.com / deepseek-v4-flash (matches production
     # terminalgen config).
     llm_api:
-      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
+      api_key: REPLACE_ME            # set via OPENAI_API_KEY env / .env (never commit it)
       api_base_url: https://az.gptplus5.com/v1
       gen_model: deepseek-v4-flash
 

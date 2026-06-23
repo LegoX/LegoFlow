@@ -59,7 +59,8 @@ Resolve the user's natural-language request into one mode:
 | Mode | Use when | Command shape |
 | --- | --- | --- |
 | `smoke` | First run, "quick verify", "smoke", "one task". | `bash tests/smoke/verify.sh` — replays the `https-nginx-cert-setup` fixture through the Docker validator (no LLM, no SO calls, deterministic). Confirms build→solve→test→reward=1 works on this host. |
-| `single-domain` | The user names one domain (e.g. `security-cryptography`). | `bash scripts/create_domain.sh <domain>` after confirming tuned params from `scripts/read_params.py` and that the domain's question bucket exists. |
+| `single-domain` | The user names one domain (e.g. `security-cryptography`). | `bash scripts/create_domain.sh <domain> [limit] [start]` after confirming tuned params from `scripts/read_params.py` and that the domain's question bucket exists. |
+| `batch` | The user wants N verified tasks per domain on a budget. | `CHUNK=6 CAND_CAP=24 bash scripts/batch_verify.sh <target> [domain ...]` — generates in chunks, stops each domain at the target or candidate cap. Cost-controlled; no run archiving. |
 | `full` | The user says all domains, pipeline, or gives no narrower scope. | `bash scripts/start.sh`, which scrapes (if pool low), runs `scripts/create_all_bg.sh`, and archives on exit. |
 
 If the request implies config changes, such as "more workers" or "longer

@@ -35,7 +35,7 @@ runtime_info:
     # NOTE: terminal-lego's generator reads OPENAI_API_BASE_URL; create_domain.sh passes
     # api_base_url below via --api-base. Keep gen_model resolvable on the endpoint.
     llm_api:
-      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
+      api_key: REPLACE_ME            # set the real key via OPENAI_API_KEY env / .env (never commit it)
       api_base_url: https://az.gptplus5.com/v1
       gen_model: deepseek-v4-flash
 
@@ -82,13 +82,13 @@ runtime_info:
         status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
       networking-services:
         enabled: true
-        tag_filter: [networking, tcp, http, https, dns, ssh, nginx, apache, iptables, firewall, curl, wget]
-        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        tag_filter: [networking, network-programming, tcp, udp, sockets, socket, raw-sockets, websocket, multicast, packet, ip, http, https, dns, ssh, nginx, apache, iptables, firewall, curl, wget]
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 900}
         status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
       file-text-processing:
         enabled: true
         tag_filter: [file-io, tar, gzip, zip, json, csv, xml, yaml, regex]
-        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 900}
         status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
       python-ecosystem:
         enabled: true
@@ -118,12 +118,12 @@ runtime_info:
       debugging-reliability:
         enabled: true
         tag_filter: [debugging, logging, exception]
-        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 900}
         status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
       algorithms-concurrency:
         enabled: true
         tag_filter: [algorithm, sorting, recursion, data-structures, multiprocessing, multithreading, asyncio]
-        params: {gen_workers: 4, val_workers: 4, val_timeout: 300}
+        params: {gen_workers: 4, val_workers: 4, val_timeout: 900}
         status: {total_success: 0, total_failed: 0, total_filtered: 0, question_pool_remaining: 0, last_round_success: 0, last_round_failed: 0, success_rate: 0.0, zero_success_streak: 0, last_checked: null}
       media-scientific:
         enabled: true
@@ -149,8 +149,8 @@ runtime_info:
       extract_command: python scripts/extract_verified_tasks.py
 
     logs:
-      - path: artifacts/logs/terminalgen-create/tl_core-terminal-os.txt
-        description: core-terminal-os domain task creation log (one log per enabled domain)
+      - path: artifacts/logs/terminalgen-create/tl_*.txt
+        description: per-domain task creation logs (one tl_<domain>.txt per enabled domain)
       - path: artifacts/logs/adaptive_decisions.jsonl
         description: Adaptive tuning decisions log (JSONL format)
 
@@ -168,4 +168,4 @@ evolving:
   tunable_params:
     gen_workers: "Per-domain parallel generation workers (1-16)"
     val_workers: "Per-domain parallel Docker validation workers (1-8)"
-    val_timeout: "Per-domain Docker per-step timeout (120-600s)"
+    val_timeout: "Per-domain Docker per-step timeout (120-1800s)"
