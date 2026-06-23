@@ -1,10 +1,10 @@
 # Curator Docs Site
 
 Fumadocs/Next.js documentation site for the Curator block. The generated
-Cloudflare Pages project is `swe-swegen-docs`, published at:
+Cloudflare Pages project is `swe-curator-docs`, published at:
 
 ```text
-https://swe-swegen-docs.pages.dev
+https://swe-curator-docs.pages.dev
 ```
 
 The live progress databoard is a separate Pages project:
@@ -58,7 +58,7 @@ Optional overrides:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PROJECT_NAME` | `swe-swegen-docs` | Cloudflare Pages project name |
+| `PROJECT_NAME` | `swe-curator-docs` | Cloudflare Pages project name |
 | `BRANCH_NAME` | `swegen` | Pages deployment branch |
 | `OUT_DIR` | `out` | Directory deployed by wrangler |
 | `WRANGLER_PKG` | `wrangler@latest` | Wrangler package used through `npx --yes` |

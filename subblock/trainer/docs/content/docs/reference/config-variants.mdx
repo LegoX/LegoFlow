@@ -54,13 +54,13 @@ npm run build     # static export to docs/out/
 
 ### Deploy to Cloudflare Pages
 
-`docs/deploy_cloudflare_pages.sh` builds and deploys to a dedicated Cloudflare Pages project (`swe-sft-docs`):
+`docs/deploy_cloudflare_pages.sh` builds and deploys to a dedicated Cloudflare Pages project (`swe-trainer-docs`):
 
 ```bash
 bash docs/deploy_cloudflare_pages.sh
 ```
 
-It activates Node 22 via nvm, runs the static build, and deploys `docs/out/` with `wrangler pages deploy`. It reuses the same Cloudflare credentials as the tracer dashboard (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or `~/.config/trajgen_progress_cloudflare.env`); set `PROJECT_NAME=swe-sft-docs` to keep the docs project independent.
+It activates Node 22 via nvm, runs the static build, and deploys `docs/out/` with `wrangler pages deploy`. It reuses the same Cloudflare credentials as the tracer dashboard (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or `~/.config/trajgen_progress_cloudflare.env`); set `PROJECT_NAME=swe-trainer-docs` to keep the docs project independent.
 
 <Callout title="Docs vs dashboard" type="info">
 This is the static **documentation** site. The live training-progress webui under `dashboard/` is a separate local server, not a Cloudflare Pages project — see [Dashboard](/docs/dashboard).
