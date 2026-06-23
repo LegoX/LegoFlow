@@ -40,7 +40,7 @@ PR_DIR = Path(os.environ.get("SWEGEN_PR_DIR", str(REPO_ROOT / "collected_prs")))
 DEFAULT_HTML = DASHBOARD_ROOT / "site" / "index.html"
 DEFAULT_STATE = DASHBOARD_ROOT / "memory" / ".progress_monitor_all_state.jsonl"
 DEFAULT_CACHE = DASHBOARD_ROOT / "memory" / ".progress_monitor_all_cache.json"
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 LANGS: list[tuple[str, str, str, str]] = [
     ("c", "C", "c-cc", "c"),
@@ -385,13 +385,13 @@ def score_bins(values: list[float]) -> dict[str, int]:
 def collect_task_stats(task_dir: Path, lang: str) -> dict[str, Any]:
     lines, hunks, files = count_patch_stats_code_only(task_dir / "solution" / "fix.patch", lang)
     meta = parse_task_toml_metadata(task_dir / "task.toml")
+    raw_tags = [str(t).strip() for t in meta.get("tags", []) if str(t).strip()]
     task_tags = sorted(
-        {
-            str(t).strip()
-            for t in meta.get("tags", [])
-            if str(t).strip() and not is_language_tag(lang, str(t))
-        }
+        {t for t in raw_tags if not is_language_tag(lang, t)}
     )
+    # 4-tag schema is [language, area, topic, bug_class]; tag #4 is the bug class.
+    # See repos/swegen/src/swegen/task_metadata.py for the canonical generator.
+    bug_class = raw_tags[3] if len(raw_tags) >= 4 else None
     return {
         "patch_lines": lines,
         "patch_hunks": hunks,
@@ -399,6 +399,7 @@ def collect_task_stats(task_dir: Path, lang: str) -> dict[str, Any]:
         "difficulty_score": float(meta["difficulty_score"]) if "difficulty_score" in meta else None,
         "difficulty_label": str(meta["difficulty_label"]) if meta.get("difficulty_label") else None,
         "tags": task_tags,
+        "bug_class": bug_class,
     }
 
 
@@ -412,6 +413,8 @@ def empty_lang_aggregate() -> dict[str, Any]:
         "difficulty_labels": {},
         "tags": {},
         "tasks_with_tags": 0,
+        "bug_classes": {},
+        "tasks_with_bug_class": 0,
     }
 
 
@@ -425,6 +428,8 @@ def copy_lang_aggregate(raw: dict[str, Any]) -> dict[str, Any]:
         "difficulty_labels": {str(k): int(v) for k, v in raw.get("difficulty_labels", {}).items()},
         "tags": {str(k): int(v) for k, v in raw.get("tags", {}).items()},
         "tasks_with_tags": int(raw.get("tasks_with_tags") or 0),
+        "bug_classes": {str(k): int(v) for k, v in raw.get("bug_classes", {}).items()},
+        "tasks_with_bug_class": int(raw.get("tasks_with_bug_class") or 0),
     }
 
 
@@ -445,6 +450,14 @@ def add_task_stats_to_aggregate(agg: dict[str, Any], stats: dict[str, Any]) -> N
         agg["tasks_with_tags"] += 1
         for tag in task_tags:
             agg["tags"][tag] = int(agg["tags"].get(tag, 0)) + 1
+
+    bug_class = stats.get("bug_class")
+    if bug_class:
+        bug_class = str(bug_class).strip()
+        if bug_class:
+            agg["tasks_with_bug_class"] = int(agg.get("tasks_with_bug_class") or 0) + 1
+            bug_classes = agg.setdefault("bug_classes", {})
+            bug_classes[bug_class] = int(bug_classes.get(bug_class, 0)) + 1
 
 
 def collect_lang(
@@ -539,6 +552,8 @@ def collect_lang(
     difficulty_labels = Counter({str(k): int(v) for k, v in aggregate["difficulty_labels"].items()})
     tags = Counter({str(k): int(v) for k, v in aggregate["tags"].items()})
     tasks_with_tags = int(aggregate["tasks_with_tags"])
+    bug_classes = Counter({str(k): int(v) for k, v in aggregate.get("bug_classes", {}).items()})
+    tasks_with_bug_class = int(aggregate.get("tasks_with_bug_class") or 0)
     return {
         "lang": lang,
         "display": display,
@@ -560,6 +575,8 @@ def collect_lang(
         "difficulty_labels": dict(difficulty_labels),
         "tags": dict(tags.most_common()),
         "tasks_with_tags": tasks_with_tags,
+        "bug_classes": dict(bug_classes.most_common()),
+        "tasks_with_bug_class": tasks_with_bug_class,
     }
 
 
@@ -719,10 +736,12 @@ def collect_dashboard(rows: list[dict[str, Any]], cache: dict[str, Any], force_f
     )
     total_scores: list[float] = []
     global_tags: Counter[str] = Counter()
+    global_bug_classes: Counter[str] = Counter()
     label_totals: Counter[str] = Counter()
     for data in langs.values():
         total_scores.extend(data["difficulty_scores"])
         global_tags.update(data["tags"])
+        global_bug_classes.update(data.get("bug_classes", {}))
         label_totals.update(data["difficulty_labels"])
 
     for lang, data in langs.items():
@@ -749,6 +768,7 @@ def collect_dashboard(rows: list[dict[str, Any]], cache: dict[str, Any], force_f
             "difficulty_stats": score_stats(total_scores),
             "difficulty_labels": dict(label_totals),
             "global_tags": dict(global_tags.most_common(30)),
+            "global_bug_classes": dict(global_bug_classes.most_common(30)),
         },
         "history_count": len(rows_with_current),
     }
@@ -836,6 +856,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     difficulty_rows = []
     score_rows = []
     tag_sections = []
+    bug_class_sections = []
     params_rows = []
     failure_rows = []
 
@@ -897,6 +918,15 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
             '<section class="tag-card">'
             f"<h3>{html.escape(row['display'])} <span>{lang}</span></h3>"
             f"{render_tags(row['tags'], int(row['tasks_with_tags']), 20)}"
+            "</section>"
+        )
+        bug_classes = row.get("bug_classes", {}) or {}
+        tasks_with_bc = int(row.get("tasks_with_bug_class") or 0)
+        bug_class_sections.append(
+            '<section class="tag-card">'
+            f"<h3>{html.escape(row['display'])} <span>{lang}</span>"
+            f"<span class=\"tag-card-sub\">{fmt_int(tasks_with_bc)} tagged</span></h3>"
+            f"{render_tags(bug_classes, tasks_with_bc, 15)}"
             "</section>"
         )
         params_rows.append(
@@ -1089,6 +1119,8 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     .tag-card { padding: 16px; background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; }
     .tag-card h3 { margin: 0 0 12px; font-size: 17px; }
     .tag-card h3 span { color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 14px; }
+    .tag-card h3 span.tag-card-sub { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--c-bg-2); border: 1px solid var(--c-border); font-size: 12px; }
+    .small { font-size: 13px; }
     .tag-row { display: grid; grid-template-columns: 160px 1fr 118px; align-items: center; gap: 10px; margin: 8px 0; font-size: 15px; }
     .tag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
     .tag-track { height: 10px; background: #1e293b55; border-radius: 999px; overflow: hidden; }
@@ -1115,6 +1147,12 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     """
 
     global_tags = render_tags(totals["global_tags"], max(1, sum(int(d["tasks_with_tags"]) for d in langs.values())), 30)
+    total_bug_class_denominator = sum(int(d.get("tasks_with_bug_class") or 0) for d in langs.values())
+    global_bug_classes = render_tags(
+        totals.get("global_bug_classes", {}) or {},
+        max(1, total_bug_class_denominator),
+        30,
+    )
     total_stats = totals["difficulty_stats"]
     html_doc = f"""<!doctype html>
 <html lang="en" data-theme="dark">
@@ -1144,6 +1182,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
         <a class="nav-item" href="#method-notes">Method Notes</a>
         <a class="nav-item" href="#difficulty">Difficulty</a>
         <a class="nav-item" href="#tags">Tags</a>
+        <a class="nav-item" href="#bug-classes">Bug Classes</a>
       </nav>
       <div class="sidebar-section">
         <div class="section-label">Summary</div>
@@ -1239,7 +1278,7 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
         <div class="method-card">
           <h3>Tag generation and display</h3>
           <p><code>tags</code> are not computed live by the dashboard; they are generated by the LLM from PR information when swegen builds the task, and written to <code>[metadata].tags</code> in <code>task.toml</code>.</p>
-          <p>The prompt asks for tags in three parts: programming language, project layer/domain, and framework/library name or specific topic. The dashboard only reads existing <code>task.toml</code> files and counts each language's tag occurrences and share.</p>
+          <p>The prompt asks for tags in four parts: programming language, project layer/domain, framework/library or specific topic, and a domain-independent <strong>bug class</strong> (e.g. <code>missing-fallback</code>, <code>incomplete-validation</code>). The dashboard reads existing <code>task.toml</code> files, counts each language's tag occurrences and share, and treats the 4th tag as the bug class for the Bug-Class panels below.</p>
         </div>
         <div class="method-card">
           <h3>fix.patch statistics</h3>
@@ -1277,6 +1316,18 @@ def render_html(data: dict[str, Any], refresh_seconds: int, output_path: Path) -
     <section class="panel">
       <h2>Per-Language Tag Distribution</h2>
       <div class="tags-grid">{''.join(tag_sections)}</div>
+    </section>
+
+    <section class="panel" id="bug-classes">
+      <h2>Global Top Bug Classes</h2>
+      <p class="muted small">Bug class is the 4th tag in <code>task.toml -&gt; [metadata].tags</code>: a domain-independent label describing the defect mechanism (e.g. <code>missing-fallback</code>, <code>incomplete-validation</code>, <code>off-by-one-error</code>). Generated by the LLM during <code>swegen create</code> and backfilled into legacy 3-tag tasks via <code>swegen backfill-tags</code>.</p>
+      {global_bug_classes}
+    </section>
+
+    <section class="panel">
+      <h2>Per-Language Bug-Class Distribution</h2>
+      <p class="muted small">Top bug classes per mainstream language. Counts are over tasks whose <code>task.toml</code> already carries a 4-tag entry; tasks still on the legacy 3-tag schema do not contribute until the backfill catches up.</p>
+      <div class="tags-grid">{''.join(bug_class_sections)}</div>
     </section>
 
       </section>
