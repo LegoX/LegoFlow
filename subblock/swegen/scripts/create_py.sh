@@ -17,7 +17,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
-# Read params from config.yaml (adaptive tuning)
+# Read per-language params from config.yaml
 eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang py --config-yaml "${PROJECT_ROOT}/config.yaml")
 echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 

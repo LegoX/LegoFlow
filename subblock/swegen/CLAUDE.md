@@ -135,6 +135,22 @@ Output: task directories under `artifacts/swe_tasks/{lang}-cc/`. Verified task I
 
 Per-language scripts with tuned parameters: `bash scripts/create_{lang}.sh` where lang = py, js, ts, go, c, cpp, java, rust.
 
+#### Launching all languages — pick by `cc_provider_mode`
+
+Two mode-specific launchers live in `scripts/`; each refuses to run if the
+config's `cc_provider_mode` does not match it, then delegates to
+`scripts/start.sh` (which calls `scripts/create_all_bg.sh` and archives on exit):
+
+```bash
+# native: real Claude or any Anthropic-format gateway (no local proxy needed)
+bash scripts/start_with_anthropic_api.sh
+
+# openai_proxy: OpenAI-only provider (Qwen / GLM / sglang / vLLM); starts the
+# local LiteLLM proxy (Anthropic -> OpenAI) on cc_proxy_port first, then runs
+# the pipeline. Fill scripts/litellm_cc_proxy.example.yaml placeholders first.
+bash scripts/start_with_openai_api.sh
+```
+
 ### Scaled parallel runs (proven recipe)
 
 To accumulate hundreds of verified tasks, run several `swegen create` shards
@@ -192,19 +208,19 @@ Each task directory contains:
 repos/swegen/         # Core Python package + tools
   src/swegen/         # Python package (CLI, task generation, validation, scoring)
   tools/              # Standalone scripts (PR collection, batch scoring)
-scripts/              # Per-language create scripts with tuned parameters
+scripts/              # Per-language create scripts and the two mode-specific launchers
 artifacts/
   collected_prs/      # PR ID lists (input to swegen create)
   swe_tasks/          # Generated SWE tasks per language ({lang}-cc/)
   merged_swe_tasks/   # Optional flat verified-task export
-  logs/               # Adaptive tuning and create logs
+  logs/               # Per-language create logs
 ```
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `config.yaml` | Single source of truth for inputs: identity, resources, runtime I/O, per-language tunable params. One-shot per run — no live state (live state lives in `artifacts/index.yaml`). |
+| `config.yaml` | Single source of truth for inputs: identity, resources, runtime I/O, per-language params (`languages.<lang>.params`). One-shot per run — no live state (live state lives in `artifacts/index.yaml`). |
 | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` | Authoritative manifest of validated task IDs per language. Consumers (e.g. trajgen) must filter by this file. |
 | `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/` | Per-batch state JSON used by `swegen create` for resume/dedup. |
 | `scripts/extract_verified_tasks.py` | Optional: merges all verified tasks into a flat `artifacts/merged_swe_tasks/` directory. |
@@ -216,44 +232,28 @@ artifacts/
 - Run tests: `pytest repos/swegen/tests/`
 - CLI entry point: `swegen` (defined in pyproject.toml)
 
-## Adaptive Parameter Tuning
+## Per-Language Parameters
 
-### Overview
+`config.yaml -> runtime_info.input.languages.<lang>.params` holds three knobs per language:
 
-You (the AI agent) monitor and tune the SWE-gen pipeline. Tunable params live in `config.yaml` under `runtime_info.input.languages.<lang>.params` and the bounds under `runtime_info.input.global`. `config.yaml` holds no live status — track per-cycle metrics in `artifacts/index.yaml` (and the decision log below).
+| Field | Meaning |
+|---|---|
+| `timeout` | per-task overall timeout (seconds) |
+| `cc_timeout` | Claude Code SDK session timeout (seconds) |
+| `n_concurrent` | concurrent task workers |
 
-### Monitoring Cycle (every 30 minutes)
-
-1. **Collect status**: Count verified tasks from `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt`. Count failures from batch state in `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/`. Record the cycle's counts/rate in `artifacts/index.yaml`.
-2. **Decide tuning**: If `success_rate < 0.15` for 2 consecutive cycles, increase `timeout` (+400) or `cc_timeout` (+300) in `languages.<lang>.params`. If `success_rate > 0.4` and `n_concurrent < 24`, increase `n_concurrent` (+4). If `success_rate >= 0.25`, do nothing.
-3. **Check PR pool**: If the remaining PR pool drops below `global.pr_pool_min_threshold`, run `python repos/swegen/tools/collect_prs_wo_image.py --languages {lang} --repo_num 100 --max_prs_per_repo 50 --output_dir ./artifacts/collected_prs`, then deduplicate against processed PRs and update the input-ids-file.
-
-### Constraints
-
-- Adjust at most 1 parameter per language per cycle
-- Wait ≥ 2 cycles (60 min) between adjustments for the same language
-- Parameter bounds (read from `runtime_info.input.global.param_bounds`): timeout [2400, 5400], cc_timeout [1800, 4200], n_concurrent [4, 32]
-- Do NOT restart running create scripts unless the zero-success streak reaches `global.restart_policy.zero_success_cycles`
-- Log every decision to `artifacts/logs/adaptive_decisions.jsonl`
-
-### Reading params from config.yaml
+`scripts/create_<lang>.sh` reads these via `scripts/read_params.py` before launching `swegen create`. Edit them in `config.yaml`; no auto-tuning is performed.
 
 ```bash
 eval $(python scripts/read_params.py --lang py --config-yaml config.yaml)
 echo $TIMEOUT $CC_TIMEOUT $N_CONCURRENT
 ```
 
-### Decision log format
-
-```json
-{"timestamp": "2026-04-22T14:30:00Z", "lang": "rust", "action": "adjust_param", "param": "timeout", "old": 3600, "new": 4000, "reason": "success_rate 0.08 for 2 consecutive cycles"}
-```
-
 ## Collaboration Rules
 
 When updating this block:
 - read `dashboard/overview.mdx` first for current state
-- read `config.yaml` for inputs: identity (`meta_info`), resources, runtime I/O (`runtime_info.input`/`output`), and per-language tunable params (`runtime_info.input.languages.<lang>` and `.global`). `config.yaml` is one-shot per run — for live state look at `artifacts/index.yaml`.
+- read `config.yaml` for inputs: identity (`meta_info`), resources, runtime I/O (`runtime_info.input`/`output`), and per-language params (`runtime_info.input.languages.<lang>`). `config.yaml` is one-shot per run — for live state look at `artifacts/index.yaml`.
 - treat `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` as the authoritative output manifest — never have downstream blocks read raw task dirs without filtering through it
 - after every run, archive params, metrics, inputs, and log into `artifacts/archives/run_NNN/` and append to `artifacts/index.yaml`
 - use `dashboard/memory.mdx` (or `memory/`) for long-form context, experiment logs, and decisions

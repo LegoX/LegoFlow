@@ -1,7 +1,7 @@
 meta_info:
   name: swegen
   label: "SWE-gen"
-  description: Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages. Runs as an adaptive agent that monitors per-language success rates and tunes pipeline parameters automatically.
+  description: Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages (Python, JavaScript, TypeScript, Go, C, C++, Java, Rust).
   parent: swe_lego_live
   subblocks: {}
 
@@ -47,11 +47,35 @@ runtime_info:
     #   native       - provider already speaks the Anthropic Messages API
     #                  (real Claude, or a gateway exposing /v1/messages).
     #                  anthropic_base_url points straight at the provider.
+    #                  Launch with: bash scripts/start_with_anthropic_api.sh
     #   openai_proxy - provider is OpenAI-only (Qwen / GLM / sglang / vLLM and
     #                  most self-hosted endpoints, which reject role:system on
     #                  /v1/messages with HTTP 400). A local LiteLLM proxy
     #                  translates Anthropic -> OpenAI. anthropic_base_url must
     #                  point at that proxy. REQUIRED for OpenAI-only providers.
+    #                  Launch with: bash scripts/start_with_openai_api.sh
+    #
+    # ----- Example A: NON-Anthropic model (e.g. local Qwen via openai_proxy) -----
+    # Tested end-to-end (NOP=0/Oracle=1) with these exact values:
+    # llm_api:
+    #   api_key: dummy-cf
+    #   api_base_url: https://llm12.jierungogogo.com/v1
+    #   pr_model: Qwen3.6-35B-A3B
+    #   task_model: claude-sonnet-4-6        # any claude-* alias; proxy maps it to pr_model
+    #   cc_provider_mode: openai_proxy
+    #   anthropic_base_url: http://127.0.0.1:4010
+    #   cc_proxy_port: 4010
+    #
+    # ----- Example B: Anthropic-format model (e.g. claude-opus-4-6 via gateway) -----
+    # Tested end-to-end (NOP=0/Oracle=1) with these exact values:
+    # llm_api:
+    #   api_key: <YOUR_KEY>
+    #   api_base_url: https://yunwu.ai/v1            # OpenAI-compatible side of the same gateway
+    #   pr_model: claude-opus-4-6
+    #   task_model: claude-opus-4-6
+    #   cc_provider_mode: native
+    #   anthropic_base_url: https://yunwu.ai         # provider Anthropic root, no /v1
+    #   # cc_proxy_port not used in native mode
     # =========================================================================
     llm_api:
       # --- OpenAI-compatible path ---
@@ -65,22 +89,7 @@ runtime_info:
       anthropic_base_url: http://127.0.0.1:4010  # native: provider URL | openai_proxy: local proxy URL
       cc_proxy_port: 4010                     # openai_proxy only: local LiteLLM proxy port
 
-    # Adaptive tuning bounds (read by the monitoring agent; see CLAUDE.md)
-    global:
-      monitor_interval_min: 30
-      pr_pool_min_threshold: 100
-      collect_pr_defaults:
-        repo_num: 100
-        max_prs_per_repo: 50
-      restart_policy:
-        allowed: true
-        zero_success_cycles: 3
-      param_bounds:
-        timeout:    { min: 2400, max: 5400, step: 400 }
-        cc_timeout: { min: 1800, max: 4200, step: 300 }
-        n_concurrent: { min: 4, max: 32, step: 4 }
-
-    # Per-language tunables consumed by scripts/read_params.py + scripts/create_<lang>.sh.
+    # Per-language parameters consumed by scripts/read_params.py + scripts/create_<lang>.sh.
     # Set enabled:false to skip a language. Live status/metrics are NOT stored here
     # (config.yaml is one-shot); look at artifacts/index.yaml for run state.
     languages:
@@ -107,7 +116,7 @@ runtime_info:
 
     logs:
       dir: artifacts/logs/swegen-create
-      description: "Per-language create logs cc_<lang>_March.txt; adaptive decisions in artifacts/logs/adaptive_decisions.jsonl"
+      description: "Per-language create logs: cc_<lang>_March.txt"
 
 status:
   phase: idle
@@ -118,10 +127,3 @@ status:
     3. Use memory/quick-verify.md for a small end-to-end check when changing the runtime.
   blockers: null
   last_updated: null
-
-evolving:
-  description: Adaptive agent that monitors per-language success rates and tunes pipeline parameters (timeout, cc_timeout, n_concurrent) automatically every 30 minutes.
-  tunable_params:
-    timeout: "Per-language task timeout (2400-5400s)"
-    cc_timeout: "Per-language Claude Code timeout (1800-4200s)"
-    n_concurrent: "Per-language concurrent tasks (4-32)"

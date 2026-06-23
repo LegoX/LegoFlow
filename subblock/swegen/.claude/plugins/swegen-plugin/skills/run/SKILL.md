@@ -58,7 +58,7 @@ Resolve the user's natural-language request into one mode:
 | --- | --- | --- |
 | `smoke` | First run, "quick verify", "smoke", "one task", or "10 PRs". | `swegen create` against the submodule sample PR file, with `--max-pr 1`, `--n-concurrent 1`, `--min-source-files 1`, and output under `artifacts/experiments/quick-verify/`. |
 | `single-language` | The user names one language: `py`, `js`, `ts`, `go`, `c`, `cpp`, `java`, or `rust`. | `bash scripts/create_<lang>.sh` after confirming tuned params from `scripts/read_params.py`. |
-| `full` | The user says all languages, pipeline, or gives no narrower scope. | `bash scripts/start.sh`, which calls `scripts/create_all_bg.sh` and archives on exit. |
+| `full` | The user says all languages, pipeline, or gives no narrower scope. | Pick by `llm_api.cc_provider_mode` in `config.yaml`: `bash scripts/start_with_anthropic_api.sh` for `native` (real Claude / Anthropic-format gateway, no proxy), `bash scripts/start_with_openai_api.sh` for `openai_proxy` (starts the local LiteLLM proxy first, then runs `start.sh`). Both delegate to `scripts/start.sh -> scripts/create_all_bg.sh` and archive on exit. |
 
 If the request implies config changes, such as "32 tasks" or "more
 concurrency", show the exact proposed config/env override and wait for
@@ -155,15 +155,22 @@ task ids to `verifiable_tasks.txt`, and logs under
 
 ### Full run
 
-Use:
+Pick the launcher that matches `llm_api.cc_provider_mode` in `config.yaml`:
 
 ```bash
-bash scripts/start.sh
+# native: real Claude or Anthropic-format gateway (no local proxy)
+bash scripts/start_with_anthropic_api.sh
+
+# openai_proxy: OpenAI-only provider (Qwen/GLM/sglang/vLLM); starts a local
+# LiteLLM proxy (Anthropic -> OpenAI) on cc_proxy_port first, then runs the pipeline
+bash scripts/start_with_openai_api.sh
 ```
 
-`start.sh` installs an EXIT trap that invokes `scripts/archive_run.sh`.
-Do not pre-write entries to `artifacts/index.yaml`; the scripts own run
-archiving.
+Both refuse to run if the config's `cc_provider_mode` does not match the
+launcher, then delegate to `scripts/start.sh` (which calls
+`scripts/create_all_bg.sh`). `start.sh` installs an EXIT trap that invokes
+`scripts/archive_run.sh`. Do not pre-write entries to `artifacts/index.yaml`;
+the scripts own run archiving.
 
 ## Step 6 - Report and monitor
 
