@@ -7,9 +7,21 @@ Training a strong coding agent is a multi-stage pipeline — curate tasks, roll 
 
 We built **SWE-Lego-Live** so the whole pipeline behaves like one project. Every stage is a self-contained **block** with the same shape — a `config.yaml`, a `scripts/start.sh`, an `artifacts/` tree — wired into a parent by name. Run one block, run the whole tree, or swap a block out; the contracts hold.
 
+![SWE-Lego-Live pipeline motivation](/figures/my-version.png)
+
+The diagram starts from **objective tasks**: generate SWE trajectory data, improve terminal-agent capability, and support longer end-to-end tasks. Those objectives enter the **root block**, which is the orchestration layer for the whole project. The root block exposes the plugin commands (`/<block>:setup`, `/<block>:check`, `/<block>:run`, and dashboard views), resolves the config tree, dispatches block runs, and archives run state.
+
+Under the root block, each pipeline stage is represented as a block with the same internal contract:
+
 ```text
 GitHub PRs ─▶ curator ─▶ tracer ─▶ trainer ─▶ rl
 ```
+
+The figure makes the handoffs explicit. **curator** collects PRs and creates SWE tasks; **tracer** rolls out task trajectories; **trainer** turns verified trajectories into checkpoints; the final evaluation/RL stage consumes checkpoints and produces reports or policy updates. The arrows between blocks are typed artifacts (`tasks`, `trajectories`, `ckpt`) rather than informal paths copied by hand.
+
+Two support layers keep the pipeline inspectable and reproducible. **dashboards** publish per-block run state, artifacts, logs, and metrics. **repositories** pin the external code each block depends on, so a run archive can explain not only what happened, but which repo versions produced it.
+
+This is why the block abstraction matters: every stage can be developed independently, but the root block can still compose them as one system. See [Block Design](/docs/block-design) for the exact block anatomy.
 
 SWE-Lego-Live provides:
 

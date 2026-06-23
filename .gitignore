@@ -34,6 +34,8 @@ subblock/*/repos/*
 node_modules/
 npm-debug.log*
 yarn-error.log*
+docs/.next/
+docs/.source/
 
 # OS artifacts
 .DS_Store
