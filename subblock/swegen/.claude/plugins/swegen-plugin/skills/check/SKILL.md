@@ -104,6 +104,26 @@ routing. When testing a replacement key, export it only for the current
 shell process and mirror it to both `OPENAI_API_KEY` and
 `ANTHROPIC_API_KEY`; never write it to `.env`, `config.yaml`, or logs.
 
+## Step 3b - Claude Code path (verification proxy)
+
+The OpenAI ping above only covers PR evaluation. The Claude Code path
+(`ANTHROPIC_BASE_URL`) is what writes `verifiable_tasks.txt`, and it fails
+*silently* when misconfigured. Read `llm_api.cc_provider_mode`:
+
+- `openai_proxy` (Qwen / GLM / sglang / vLLM and most self-hosted endpoints):
+  `ANTHROPIC_BASE_URL` must be a running local LiteLLM proxy. Verify:
+
+  ```bash
+  curl -sf "${ANTHROPIC_BASE_URL%/}/health" >/dev/null && echo "cc proxy ok" || echo "cc proxy DOWN"
+  ```
+
+  A down proxy is a **blocking failure** — generation would report success
+  while verifying nothing. Tell the user to start it (see `CLAUDE.md`
+  "LLM provider modes").
+- `native` (real Claude / Anthropic-compatible gateway): no proxy required;
+  `ANTHROPIC_BASE_URL` points straight at the provider. Note it as
+  informational.
+
 ## Step 4 - Docker and Harbor readiness
 
 Run:
@@ -134,7 +154,7 @@ task is missing, report that `/swegen:setup` must initialize the submodule.
 
 Run `bash scripts/dryrun.sh` and include its OK/WARN/FAIL lines in the
 report. This script verifies the installed package, YAML parsing, key env
-vars, and Docker availability.
+vars, the Claude Code proxy endpoint, and Docker availability.
 
 ## Step 6 - Final report
 
@@ -145,7 +165,8 @@ swegen check - <CWD>
   config          : <ok|fail>
   repos/swegen    : <sha or missing>
   github          : <N tokens ok, total remaining K>
-  llm             : <base> / <model> / <ok|fail>
+  llm (openai)    : <base> / <model> / <ok|fail>
+  cc path         : <mode> / <anthropic_base_url> / <ok|down|native>
   docker          : <server version> at <DOCKER_HOST or unset>
   languages       : <enabled list with timeout/cc_timeout/n_concurrent>
   swe tasks       : <per-language generated + verified counts>
@@ -156,8 +177,8 @@ SAFE TO RUN: <YES|NO>
 ```
 
 `SAFE TO RUN` is `NO` if config, package install, GitHub, LLM, Docker, or
-dryrun failed. A skipped smoke does not block unless the user explicitly
-requested smoke.
+dryrun failed, or if `cc_provider_mode=openai_proxy` and the CC proxy is down.
+A skipped smoke does not block unless the user explicitly requested smoke.
 
 ## Guardrails
 
