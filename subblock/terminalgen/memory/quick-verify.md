@@ -5,6 +5,10 @@ This document helps a fresh AI agent decide, in 5–10 minutes, whether the
 attribute failures to the environment, the LLM, Docker, or the terminal-lego
 pipeline itself.
 
+> **First, look at `artifacts/examples/`** (`artifacts/examples/README.md`) for
+> committed known-good verified tasks in both output formats — it shows exactly
+> what a successful task looks like before you run anything.
+
 ## Goal
 
 Verification has three layers:

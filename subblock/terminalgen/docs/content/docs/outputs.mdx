@@ -6,6 +6,11 @@ description: Files and directories produced by Terminal-gen
 Terminal-gen outputs are designed for downstream blocks to consume verified
 tasks without guessing which generated directories are complete.
 
+> **See a real example first.** `artifacts/examples/` ships a few committed,
+> known-good verified tasks in both formats (v1.0 in-place + harbor 1.1) — the
+> same task appears in both so you can diff the `task.toml` conversion. Read
+> `artifacts/examples/README.md` before running the pipeline.
+
 ## Task directories (in-place, v1.0)
 
 Per-domain task directories live under:

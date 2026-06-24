@@ -148,6 +148,10 @@ runtime_info:
       structure: "artifacts/merged_terminal_tasks/{domain}__{task_id}/ with harbor-1.1 task.toml, instruction.md, environment/, solution/, tests/"
       extract_command: python scripts/extract_verified_tasks.py
 
+    examples_dir:
+      path: artifacts/examples
+      description: Committed known-good verified task examples (v1.0 in-place + harbor 1.1), for the operating agent to reference the expected output shape without re-running the pipeline. See artifacts/examples/README.md.
+
     logs:
       - path: artifacts/logs/terminalgen-create/tl_*.txt
         description: per-domain task creation logs (one tl_<domain>.txt per enabled domain)

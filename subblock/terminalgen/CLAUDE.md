@@ -143,6 +143,7 @@ Each task directory contains:
 repos/terminal-lego/    # Pinned upstream pipeline (READ-ONLY): scraper/, generator/, validator/
 scripts/                # Per-domain scrape/create scripts + conversion + lifecycle
 artifacts/
+  examples/             # Committed known-good verified task examples (v1.0 + harbor 1.1) — reference
   collected_questions/  # Per-domain bucketed SO question JSON (input to generator)
   terminal_tasks/       # Generated terminal tasks per domain ({domain}-tl/), v1.0 schema
   merged_terminal_tasks/# Flat verified-task export converted to harbor 1.1 (downstream input)
@@ -154,6 +155,7 @@ artifacts/
 | File | Purpose |
 |------|---------|
 | `config.yaml` | Single source of truth for inputs: identity, resources, runtime I/O, per-domain tunable params. One-shot per run — no live state (live state lives in `artifacts/index.yaml`). |
+| `artifacts/examples/` | Committed known-good verified task examples (v1.0 in-place + harbor 1.1). **Read these first** to see the exact expected output shape before running the pipeline — see `artifacts/examples/README.md`. |
 | `artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt` | Authoritative manifest of validated task IDs per domain. Consumers must filter by this file. |
 | `scripts/scrape_so_questions.sh` | Wraps terminal-lego's scraper and buckets questions by domain `tag_filter`. |
 | `scripts/create_domain.sh` | Per-domain generate + Docker-validate, parameterized by `config.yaml`. |
