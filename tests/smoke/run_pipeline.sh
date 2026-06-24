@@ -310,6 +310,15 @@ PY
       fi
       sleep 30
     done
+    # The nohup'd `swegen create` is NOT bounded by this wait loop — once we've
+    # banked enough (or hit the stage budget) it keeps grinding the remaining PRs
+    # in the background. Left detached, its continuous Docker/disk writeback makes
+    # the NEXT stage's overlay() `sync` block in wb_wait_for_completion and wedge
+    # the whole pipeline (observed: trajgen overlay `sync` stuck 44+ min behind 8
+    # orphaned create workers). Stop it (and any lingering PR collector) here so
+    # `sync` can settle and the chain advances.
+    pkill -f 'swegen create --input-ids-file' 2>/dev/null || true
+    pkill -f 'collect_prs_wo_image' 2>/dev/null || true
     if gate swegen; then log "stage swegen PASS"; else
       rc=$?; [[ $rc == 77 ]] && { log "stage swegen SKIP"; CHAIN_RC=77; } || { log "stage swegen FAIL"; CHAIN_RC=1; }
     fi
