@@ -71,7 +71,7 @@ smoke/                expensive end-to-end runs (--with-smoke gates them)
   10_so_demo.sh       real generation + validation over a 2-question fixture
   config.yaml         smoke-mode config overlay
   fixtures/
-    https-nginx-cert-setup/   known-good harbor-1.1 verified task
+    https-nginx-cert-setup/   known-good verified task (terminal-lego v1.0)
     so_data_sample.json       2 sample SO questions
 run.sh                aggregator
 ```

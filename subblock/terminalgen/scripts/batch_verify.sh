@@ -14,8 +14,8 @@
 #   SCRAPE_COUNT  questions to scrape if buckets are missing (default 300)
 #
 # Verified tasks land in artifacts/terminal_tasks/<domain>-tl/ with a
-# verifiable_tasks.txt manifest. Run scripts/extract_verified_tasks.py afterwards
-# to materialize the harbor-1.1 merged export.
+# verifiable_tasks.txt manifest. Optionally run scripts/extract_verified_tasks.py
+# afterwards to flatten them into a single merged directory (same v1.0 format).
 set -euo pipefail
 
 cd "$(dirname "$0")/.." || { echo "ERROR: cannot cd to block root"; exit 1; }
@@ -109,4 +109,4 @@ for domain in $DOMAINS; do
     printf '  %-24s %s\n' "$domain" "${RESULT[$domain]:-0}"
 done
 echo "============================================================"
-echo "[batch] next: python scripts/extract_verified_tasks.py   # → harbor 1.1 merged export"
+echo "[batch] next (optional): python scripts/extract_verified_tasks.py   # flat merged dir (v1.0)"

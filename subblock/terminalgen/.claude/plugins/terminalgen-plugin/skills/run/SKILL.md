@@ -4,10 +4,10 @@ description: >
   Launch the terminalgen pipeline via `scripts/start.sh` after preflight
   passes: StackOverflow scrape + domain bucketing → LLM-driven task
   generation per domain (terminal-lego generator) → Docker round-trip
-  verification → append to `verifiable_tasks.txt` → convert verified tasks
-  to harbor 1.1 in `artifacts/merged_terminal_tasks/`. Per-domain launches
-  use `bash scripts/create_domain.sh <domain>` (tuned gen_workers,
-  val_workers, val_timeout). Long-running (minutes-to-hours per domain).
+  verification → append to `verifiable_tasks.txt` (terminal-lego v1.0; no
+  schema conversion). Per-domain launches use `bash scripts/create_domain.sh
+  <domain>` (tuned gen_workers, val_workers, val_timeout). Long-running
+  (minutes-to-hours per domain).
   For a first-time end-to-end smoke before committing to a full run, this
   skill replays the known-good `https-nginx-cert-setup` fixture to confirm
   the Docker validator works, then can drive a small single-domain flow.
@@ -98,7 +98,7 @@ terminalgen run configuration
   val_workers       : <per-domain>
   val_timeout       : <per-domain>
   validation        : Docker round-trip (build → solve → test → reward)
-  conversion        : extract_verified_tasks.py → harbor 1.1
+  merge (optional)   : extract_verified_tasks.py → flat v1.0 dir
   logs              : artifacts/logs/terminalgen-create/
   archive           : scripts/archive_run.sh -> artifacts/index.yaml
 ```
@@ -133,8 +133,9 @@ bash scripts/create_domain.sh <domain>
 
 The script generates candidates, Docker-validates them, appends verified task
 ids to `artifacts/terminal_tasks/<domain>-tl/verifiable_tasks.txt`, and logs
-under `artifacts/logs/terminalgen-create/`. Follow with
-`python scripts/extract_verified_tasks.py` to materialize harbor 1.1 output.
+under `artifacts/logs/terminalgen-create/`. Optionally follow with
+`python scripts/extract_verified_tasks.py` to flatten verified tasks into a
+single `artifacts/merged_terminal_tasks/` dir (same v1.0 format).
 
 ### Full run
 

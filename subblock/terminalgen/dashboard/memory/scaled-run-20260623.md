@@ -1,8 +1,8 @@
 # Scaled batch verification — results (2026-06-23)
 
 Cost-controlled pilot run of `scripts/batch_verify.sh` (+ targeted top-ups) to
-produce **≥3 verified tasks per domain** across 4 self-contained domains, then
-convert to harbor 1.1 via `scripts/extract_verified_tasks.py`.
+produce **≥3 verified tasks per domain** across 4 self-contained domains
+(terminal-lego v1.0; no schema conversion).
 
 ## Setup
 
@@ -11,7 +11,7 @@ convert to harbor 1.1 via `scripts/extract_verified_tasks.py`.
   (`scrape_so_questions.sh div 80 6`), bucketed by `tag_filter`, score-sorted.
 - Validator: terminal-lego Docker round-trip, `val_timeout=900`.
 
-## Result: 4/4 domains reached the target (12 verified tasks, all harbor 1.1)
+## Result: 4/4 domains reached the target (12 verified tasks, terminal-lego v1.0)
 
 | Domain | Candidates generated | Verified | Yield |
 |---|---|---|---|
@@ -22,9 +22,9 @@ convert to harbor 1.1 via `scripts/extract_verified_tasks.py`.
 | **total** | **44** | **12** | **27%** |
 
 - Total LLM spend: ~7.1M tokens (~$7–14 on a haiku-class endpoint).
-- All 12 merged `task.toml` validated as harbor 1.1 (`schema_version="1.1"`,
-  `[task]`, `memory_mb`). Merged ids in
-  `artifacts/merged_terminal_tasks/verifiable_tasks.txt`.
+- Verified tasks under `artifacts/terminal_tasks/{domain}-tl/`, gated by each
+  `verifiable_tasks.txt`. `extract_verified_tasks.py` optionally flattens them
+  into `artifacts/merged_terminal_tasks/` (same v1.0 format).
 
 ## Yield is strongly domain-dependent
 

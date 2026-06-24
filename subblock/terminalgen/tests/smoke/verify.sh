@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # CI smoke verifier for terminalgen.
 #
-# Replays the known-good fixture task (https-nginx-cert-setup, a harbor-1.1
-# verified terminal task) through terminal-lego's Docker validator and asserts
+# Replays the known-good fixture task (https-nginx-cert-setup, a terminal-lego
+# v1.0 verified terminal task) through terminal-lego's Docker validator and asserts
 # reward=1.0. This is deterministic — it spends no LLM or StackExchange quota and
 # proves that build → solve → test → reward works on this host.
 #

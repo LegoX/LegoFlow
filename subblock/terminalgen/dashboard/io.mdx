@@ -22,16 +22,16 @@ Environment variables required before running:
 
 ## Runtime Outputs (`config.yaml`)
 
-Two interfaces:
+Tasks are terminal-lego **v1.0** (no conversion). Two equivalent interfaces:
 
-1. **In-place** (terminal-lego v1.0): `artifacts/terminal_tasks/{domain}-tl/{task_id}/`,
+1. **In-place** (recommended): `artifacts/terminal_tasks/{domain}-tl/{task_id}/`,
    gated by `{domain}-tl/verifiable_tasks.txt`.
-2. **Merged** (harbor 1.1, downstream input): run `python scripts/extract_verified_tasks.py`
-   to produce `artifacts/merged_terminal_tasks/{domain}__{task_id}/`.
+2. **Merged** (optional flat root): run `python scripts/extract_verified_tasks.py`
+   to produce `artifacts/merged_terminal_tasks/{domain}__{task_id}/` (same v1.0 format).
 
 Each task contains:
 - `instruction.md` — problem description
-- `task.toml` — metadata (v1.0 in-place; harbor 1.1 in merged)
+- `task.toml` — metadata (terminal-lego v1.0)
 - `environment/Dockerfile` + `environment/task_file/` — build environment + seed files
 - `solution/solve.sh` — reference solution
 - `tests/test.sh` + `tests/test_outputs.py` — verification (writes reward to `/logs/verifier/reward.txt`)

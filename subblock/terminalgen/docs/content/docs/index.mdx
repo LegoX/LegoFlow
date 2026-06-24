@@ -27,12 +27,12 @@ pipeline and provides:
 - LLM-assisted task generation (instruction → environment → solution → tests → dockerfile)
 - Docker round-trip validation (build → solve → test → reward) before a task is exposed
 - `verifiable_tasks.txt` manifests that downstream blocks can trust
-- Dual output: terminal-lego v1.0 in-place, plus a harbor 1.1 merged export
+- Output: terminal-lego v1.0 tasks, per-domain in place plus an optional flat merged export
 
 ## Where to go next
 
 - [Getting Started](/docs/getting-started) - set up the block and run a smoke
 - [Core Concepts](/docs/core-concepts) - domains, task skeletons, validation, manifests
 - [Run Generation](/docs/run-generation) - run per-domain generation scripts safely
-- [Outputs](/docs/outputs) - task directories, manifests, the v1.0 → harbor 1.1 conversion
+- [Outputs](/docs/outputs) - task directories, manifests, and the optional flat merge
 - [Dashboard](/docs/dashboard) - monitor Terminal-gen progress

@@ -87,7 +87,7 @@ mkdir -p artifacts/collected_questions artifacts/terminal_tasks \
 If the user wants the quick verification path, confirm that the smoke fixture
 exists at:
 
-- `tests/smoke/fixtures/https-nginx-cert-setup/` (known-good harbor-1.1 task)
+- `tests/smoke/fixtures/https-nginx-cert-setup/` (known-good verified task, v1.0)
 - `tests/smoke/fixtures/so_data_sample.json` (2 sample SO questions)
 
 ## Step 5 - Hand off to `/terminalgen:check`

@@ -71,12 +71,12 @@ runtime_info:
       # prepare_tasks.sh filters by py-cc/verifiable_tasks.txt before copying into artifacts/tasks/.
     #
     # Alternative task source — verified TERMINAL tasks from the terminalgen block
-    # (parallel to swegen; harbor 1.1 schema). Select with provider: terminalgen.
+    # (parallel to swegen; terminal-lego v1.0 schema). Select with provider: terminalgen.
     # task_source:
     #   provider: terminalgen
-    #   dataset_name: ../terminalgen/artifacts/merged_terminal_tasks
-      # Filter by ../terminalgen/artifacts/merged_terminal_tasks/verifiable_tasks.txt
-      # (or per-domain ../terminalgen/artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt).
+    #   dataset_name: ../terminalgen/artifacts/terminal_tasks
+      # Filter by per-domain ../terminalgen/artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt
+      # (or the optional flat ../terminalgen/artifacts/merged_terminal_tasks/verifiable_tasks.txt).
 
     # harbor_job:
     #   jobs_dir: artifacts/jobs

@@ -16,7 +16,7 @@ Definition reference: `BLOCK_DEFINITION.md`
 
 Automated pipeline that converts StackOverflow Q&A into verified terminal-bench tasks across 13 task domains. This is the terminal-task sibling of `swegen` (which builds verified SWE tasks). It wraps the [terminal-lego](https://github.com/SWE-Lego/terminal-lego) pipeline, pinned as a read-only submodule under `repos/terminal-lego/`.
 
-**Never modify `repos/terminal-lego/`** — it is a pinned upstream dependency. All adaptation lives in this block's `scripts/`, `config.yaml`, and the conversion helper.
+**Never modify `repos/terminal-lego/`** — it is a pinned upstream dependency. All adaptation lives in this block's `scripts/` and `config.yaml`.
 
 ## Environment Setup
 
@@ -109,13 +109,16 @@ All domains in the background (full run + archive): `bash scripts/start.sh`. Use
 `scripts/batch_verify.sh` instead when you want a cost-capped, target-driven run
 (sequential, stops per domain at N verified, no run archiving).
 
-### Step 3: Extract & Convert Verified Tasks
+### Step 3 (optional): Merge Verified Tasks into a Flat Dir
 
 ```bash
 python scripts/extract_verified_tasks.py
 ```
 
-Reads `verifiable_tasks.txt` from each domain, converts each task's `task.toml` from terminal-lego **v1.0** schema to **harbor 1.1** schema, and copies into `artifacts/merged_terminal_tasks/`. This merged directory is what downstream blocks consume.
+Reads `verifiable_tasks.txt` from each domain and copies every verified task —
+**verbatim, no format change** — into a flat `artifacts/merged_terminal_tasks/`
+directory (ids prefixed `{domain}__{task_id}`). Convenience single-root for tools
+that expect one; downstream can equally read the per-domain dirs directly.
 
 ## Downstream Agent Interface
 
@@ -125,14 +128,16 @@ Downstream agents consume verified terminal tasks for trajectory inference. The 
 
 Consumers MUST filter by this manifest, not by scanning `artifacts/terminal_tasks/{domain}-tl/` directly — the latter also contains `_candidates/` (in-progress and failed skeletons).
 
-Two interfaces are supported:
+Tasks are in terminal-lego's native **v1.0** schema. No conversion is performed:
+harbor's task loader reads v1.0 directly (it renames `version`→`schema_version`
+and auto-converts `memory`/`storage`). Two equivalent ways to consume:
 
-1. **In-place** (terminal-lego v1.0 schema): consumer reads tasks directly from `artifacts/terminal_tasks/{domain}-tl/<task_id>/`, gated by entries in `verifiable_tasks.txt`.
-2. **Merged** (harbor 1.1 schema, recommended): run `python scripts/extract_verified_tasks.py` to materialize a flat `artifacts/merged_terminal_tasks/` directory with harbor-1.1 `task.toml` — directly loadable by the harbor task runner used by trajgen/sft/eval.
+1. **In-place** (recommended): read tasks from `artifacts/terminal_tasks/{domain}-tl/<task_id>/`, gated by `verifiable_tasks.txt`.
+2. **Merged**: run `python scripts/extract_verified_tasks.py` for a flat `artifacts/merged_terminal_tasks/` root (same v1.0 format).
 
 Each task directory contains:
 - `instruction.md` — problem description (input to the solving agent)
-- `task.toml` — task metadata (v1.0 in-place; harbor 1.1 in merged)
+- `task.toml` — task metadata (terminal-lego v1.0)
 - `environment/Dockerfile` + `environment/task_file/` — Docker build environment and seed files
 - `solution/solve.sh` — reference solution script
 - `tests/test.sh` + `tests/test_outputs.py` — verification (writes reward to `/logs/verifier/reward.txt`)
@@ -141,12 +146,12 @@ Each task directory contains:
 
 ```
 repos/terminal-lego/    # Pinned upstream pipeline (READ-ONLY): scraper/, generator/, validator/
-scripts/                # Per-domain scrape/create scripts + conversion + lifecycle
+scripts/                # Per-domain scrape/create scripts + merge + lifecycle
 artifacts/
-  examples/             # Committed known-good verified task examples (v1.0 + harbor 1.1) — reference
+  examples/             # Committed known-good verified task examples (v1.0) — reference
   collected_questions/  # Per-domain bucketed SO question JSON (input to generator)
   terminal_tasks/       # Generated terminal tasks per domain ({domain}-tl/), v1.0 schema
-  merged_terminal_tasks/# Flat verified-task export converted to harbor 1.1 (downstream input)
+  merged_terminal_tasks/# Optional flat verified-task export (v1.0, same format)
   logs/                 # Adaptive tuning and create logs
 ```
 
@@ -155,11 +160,11 @@ artifacts/
 | File | Purpose |
 |------|---------|
 | `config.yaml` | Single source of truth for inputs: identity, resources, runtime I/O, per-domain tunable params. One-shot per run — no live state (live state lives in `artifacts/index.yaml`). |
-| `artifacts/examples/` | Committed known-good verified task examples (v1.0 in-place + harbor 1.1). **Read these first** to see the exact expected output shape before running the pipeline — see `artifacts/examples/README.md`. |
+| `artifacts/examples/` | Committed known-good verified task examples (terminal-lego v1.0). **Read these first** to see the exact expected output shape before running the pipeline — see `artifacts/examples/README.md`. |
 | `artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt` | Authoritative manifest of validated task IDs per domain. Consumers must filter by this file. |
 | `scripts/scrape_so_questions.sh` | Wraps terminal-lego's scraper and buckets questions by domain `tag_filter`. |
 | `scripts/create_domain.sh` | Per-domain generate + Docker-validate, parameterized by `config.yaml`. |
-| `scripts/extract_verified_tasks.py` | Converts verified v1.0 tasks → harbor 1.1 and merges into `artifacts/merged_terminal_tasks/`. |
+| `scripts/extract_verified_tasks.py` | Optional: merges verified tasks into a flat `artifacts/merged_terminal_tasks/` dir (same v1.0 format, no conversion). |
 
 ## Coding Standards
 

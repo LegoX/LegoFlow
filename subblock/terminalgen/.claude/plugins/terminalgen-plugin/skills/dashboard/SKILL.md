@@ -84,7 +84,7 @@ core-terminal-os        <n>      <n>        <n>       <pct>  <n>    <n>    <n>  
 Latest run: <id/status/started/completed from artifacts/index.yaml or none>
 Outputs:
   tasks:  artifacts/terminal_tasks/<domain>-tl/
-  merged: artifacts/merged_terminal_tasks/   (harbor 1.1, downstream input)
+  merged: artifacts/merged_terminal_tasks/   (optional flat v1.0 export)
   logs:   artifacts/logs/terminalgen-create/
   html:   dashboard/site/index.html
 ```

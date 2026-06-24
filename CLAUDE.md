@@ -72,7 +72,7 @@ The root block does not consume external inputs directly. Required external valu
 
 **Outputs** (downstream-consumable artifacts):
 - `swegen.output.swe_tasks_dir`: verified SWE tasks under `subblock/swegen/artifacts/swe_tasks/{lang}-cc/`. The authoritative manifest is `{lang}-cc/verifiable_tasks.txt` — only task IDs in that file have passed NOP/Oracle validation.
-- `terminalgen.output.merged_tasks_dir`: verified **terminal** tasks under `subblock/terminalgen/artifacts/merged_terminal_tasks/` (harbor 1.1 schema), with per-domain manifests at `subblock/terminalgen/artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt`. terminalgen is a task source **parallel to swegen** — trajgen can consume either via its `task_source.provider` selector.
+- `terminalgen.output.terminal_tasks_dir`: verified **terminal** tasks (terminal-lego v1.0) under `subblock/terminalgen/artifacts/terminal_tasks/{domain}-tl/`, with per-domain manifests `verifiable_tasks.txt`. `extract_verified_tasks.py` optionally flattens them into `merged_terminal_tasks/` (same format). terminalgen is a task source **parallel to swegen** — trajgen can consume either via its `task_source.provider` selector.
 - `trajgen.output.raw_trajectories_dir`: raw agent trajectories under `subblock/trajgen/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
 - `trajgen.output.sft_data_dir`: LLaMA-Factory LF-format SFT JSON converted from those trajectories at `subblock/trajgen/artifacts/sft_data/<job>/lf.json` (produced by `subblock/trajgen/scripts/convert_trajectories.sh`, which runs the `swe_data_process` converters under their own uv env at `subblock/trajgen/artifacts/env/swe-data-process-uv`)
 

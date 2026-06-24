@@ -103,7 +103,7 @@ bash scripts/create_domain.sh security-cryptography
 test -s artifacts/terminal_tasks/security-cryptography-tl/verifiable_tasks.txt
 ```
 
-Convert to harbor 1.1:
+Optional — flatten verified tasks into one dir (same v1.0 format):
 
 ```bash
 python scripts/extract_verified_tasks.py

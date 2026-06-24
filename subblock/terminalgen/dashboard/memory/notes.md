@@ -19,9 +19,9 @@ pipeline as a `subblock/` sibling of swegen. Three stages, all from terminal-leg
    round-trip (build → solve → test → read `/logs/verifier/reward.txt`); only
    reward=1.0 tasks are kept.
 
-`scripts/extract_verified_tasks.py` then converts verified v1.0 tasks to
-**harbor 1.1** and merges into `artifacts/merged_terminal_tasks/` for downstream
-trajgen/sft/eval.
+`scripts/extract_verified_tasks.py` optionally merges verified tasks (verbatim,
+still v1.0) into a flat `artifacts/merged_terminal_tasks/`. No schema conversion
+— downstream/harbor reads terminal-lego v1.0 directly.
 
 ## Domain bucketing rationale
 
@@ -55,5 +55,5 @@ Zero-match questions fall back to `core-terminal-os`.
 ## Proof point
 
 The known-good fixture `tests/smoke/fixtures/https-nginx-cert-setup` (an HTTPS+
-Nginx task) was generated and validated end-to-end at reward=1.0, then converted
-to harbor 1.1. `tests/smoke/verify.sh` replays it deterministically (no LLM/SO).
+Nginx task, terminal-lego v1.0) was generated and validated end-to-end at
+reward=1.0. `tests/smoke/verify.sh` replays it deterministically (no LLM/SO).

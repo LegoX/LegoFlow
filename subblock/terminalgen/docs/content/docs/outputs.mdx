@@ -7,9 +7,9 @@ Terminal-gen outputs are designed for downstream blocks to consume verified
 tasks without guessing which generated directories are complete.
 
 > **See a real example first.** `artifacts/examples/` ships a few committed,
-> known-good verified tasks in both formats (v1.0 in-place + harbor 1.1) — the
-> same task appears in both so you can diff the `task.toml` conversion. Read
-> `artifacts/examples/README.md` before running the pipeline.
+> known-good verified tasks (terminal-lego v1.0) in both the in-place per-domain
+> layout and the flat merged layout. Read `artifacts/examples/README.md` before
+> running the pipeline.
 
 ## Task directories (in-place, v1.0)
 
@@ -43,54 +43,34 @@ Downstream consumers should filter through this manifest. The sibling
 `_candidates/` directory holds in-progress and failed skeletons — never consume
 those directly.
 
-## Merged verified tasks (harbor 1.1)
+## Merged verified tasks (optional flat export)
 
 ```bash
 python scripts/extract_verified_tasks.py
 ```
 
-flattens and converts every verified task to **harbor schema 1.1**:
+copies every verified task **verbatim** (no format change — still terminal-lego
+v1.0) into a flat directory with domain-prefixed ids:
 
 ```text
 artifacts/merged_terminal_tasks/<domain>__<task_id>/
 ```
 
-This is the directory downstream trajgen/sft/eval load.
+Convenience single root for tools that expect one directory. Downstream can
+equally read the per-domain `terminal_tasks/<domain>-tl/` dirs in place.
 
-### v1.0 → harbor 1.1 field mapping
+### Harbor compatibility (v1.0 loads directly)
 
-| terminal-lego v1.0 | harbor 1.1 |
-| --- | --- |
-| `version = "1.0"` | `schema_version = "1.1"` |
-| *(none)* | `[task]` block: `name`, `description` (first instruction line), `authors`, `keywords` |
-| `[metadata]` (kept) | `[metadata]` + `source_domain` added |
-| `[environment].memory = "1G"` | `[environment].memory_mb = 1024` |
-| `[environment].storage = "5G"` | `[environment].storage_mb = 5120` |
-| *(none)* | `gpus = 0`, `allow_internet = true`, `mcp_servers = []` |
-| *(none)* | empty `[verifier.env]`, `[environment.env]`, `[solution.env]` |
+No v1.0→harbor rewrite is performed. Harbor's task loader
+(`harbor.models.task.config.TaskConfig`) is backward-compatible — it renames
+`version` → `schema_version` and auto-converts the deprecated `memory`/`storage`
+strings to `memory_mb`/`storage_mb` — so terminal-lego v1.0 `task.toml` parses
+into a valid harbor task config (verified against harbor's real model).
 
-The mapping mirrors the proven conversion validated in
-`terminal-lego/data_e2e_run903/harbor_tasks/https-nginx-cert-setup/`.
-
-### Harbor compatibility (both formats load)
-
-Harbor's task loader (`harbor.models.task.config.TaskConfig`) is backward-compatible:
-it renames `version` → `schema_version` and auto-converts the deprecated
-`memory`/`storage` strings to `memory_mb`/`storage_mb`. So **both** the v1.0
-in-place `task.toml` and the harbor 1.1 merged `task.toml` parse into a valid
-harbor task config (verified against harbor's real model):
-
-- **v1.0** loads, but with deprecation warnings and `task = None` — it carries no
-  `[task]` package info (name/description/authors/keywords), so it isn't
-  registry-named or searchable in harbor.
-- **harbor 1.1** is the clean, current form: no deprecation warnings, and the
-  `[task]` package block populated. Two hard requirements harbor enforces here
-  (and that `extract_verified_tasks.py` satisfies): `[task].name` must be
-  `org/name` (exactly one slash, alphanumeric/`-`/`_`/`.`), and `authors` must be
-  a list of `{ name = ... }` objects (not bare strings).
-
-**Recommendation**: feed downstream blocks the harbor 1.1 merged export. v1.0 is
-the intermediate working format.
+The `[task]` package block (name/keywords) that harbor uses for its **registry**
+is *optional* and not required to run/verify a task (harbor's `init` even has a
+`--skip [task]` flag). If you later want these tasks as named harbor registry
+packages, add a `[task]` section then; it isn't needed for inference/training.
 
 ## Logs
 
@@ -118,8 +98,9 @@ Do not commit large runtime state to Git.
 
 The trajgen block consumes tasks after Terminal-gen writes manifests:
 
-1. Terminal-gen writes task directories and `verifiable_tasks.txt`, then
-   converts to `artifacts/merged_terminal_tasks/` (harbor 1.1).
+1. Terminal-gen writes task directories (terminal-lego v1.0) and
+   `verifiable_tasks.txt` per domain; optionally `extract_verified_tasks.py`
+   flattens them into `artifacts/merged_terminal_tasks/` (same v1.0 format).
 2. Trajgen reads only task IDs listed in the manifest (select the terminalgen
    provider — see the root docs' terminalgen page).
 3. Trajgen rolls out agents and captures trajectories.

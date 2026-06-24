@@ -77,13 +77,20 @@ This file is the authoritative downstream contract. The directory also contains
 `_candidates/` (in-progress and failed skeletons); consumers must filter by the
 manifest, never scan raw task dirs.
 
-## Dual output schema
+## Output (single v1.0 schema)
 
-- **In-place** (terminal-lego v1.0): `artifacts/terminal_tasks/<domain>-tl/<task_id>/`.
-- **Merged** (harbor 1.1): `python scripts/extract_verified_tasks.py` converts
-  each verified task's `task.toml` to harbor schema 1.1 and writes
-  `artifacts/merged_terminal_tasks/<domain>__<task_id>/`. This is what downstream
-  trajgen/sft/eval load. See [Outputs](/docs/outputs) for the field mapping.
+Tasks are produced in terminal-lego's native **v1.0** schema — no conversion.
+Two equivalent ways to consume:
+
+- **In-place** (recommended): `artifacts/terminal_tasks/<domain>-tl/<task_id>/`,
+  gated by `verifiable_tasks.txt`.
+- **Merged** (optional): `python scripts/extract_verified_tasks.py` copies every
+  verified task verbatim into a flat `artifacts/merged_terminal_tasks/<domain>__<task_id>/`
+  root (same v1.0 format) for tools that expect a single directory.
+
+Harbor's task loader reads v1.0 directly (it renames `version`→`schema_version`
+and auto-converts `memory`/`storage`), so no v1.0→harbor rewrite is needed. See
+[Outputs](/docs/outputs).
 
 ## Adaptive tuning
 

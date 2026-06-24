@@ -104,7 +104,8 @@ Or run every enabled domain in the background, with run archiving on exit:
 bash scripts/start.sh
 ```
 
-Finally, convert verified tasks to harbor 1.1 for downstream consumption:
+Verified tasks are already downstream-consumable in place. Optionally flatten
+them into one directory (same v1.0 format, no conversion):
 
 ```bash
 python scripts/extract_verified_tasks.py

@@ -90,16 +90,17 @@ Each domain has its own defaults in `config.yaml`:
 
 Update the config value; the scripts read it at launch.
 
-## Convert to harbor 1.1
+## (Optional) Merge into a flat dir
 
-Once tasks are verified, materialize the downstream-consumable export:
+Tasks are already downstream-consumable in place (v1.0). Optionally flatten all
+verified tasks into one directory:
 
 ```bash
 python scripts/extract_verified_tasks.py
 ```
 
-This converts every verified task's `task.toml` from terminal-lego v1.0 to
-harbor 1.1 and writes `artifacts/merged_terminal_tasks/<domain>__<task_id>/`.
+This copies every verified task **verbatim** (still terminal-lego v1.0) into
+`artifacts/merged_terminal_tasks/<domain>__<task_id>/`. No format conversion.
 
 ## Docker and local caches
 

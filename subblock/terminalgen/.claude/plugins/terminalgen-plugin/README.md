@@ -2,7 +2,7 @@
 
 Slash commands tailored to `subblock/terminalgen/`. They wrap the terminal-lego
 pipeline (StackOverflow scrape → LLM task generation → Docker verification) and
-the harbor-schema conversion helper.
+the optional flat-merge helper.
 
 For the generic block-system command (only `/root:create` lives there, since
 new blocks are only ever created at the root level), see

@@ -139,18 +139,18 @@ runtime_info:
   output:
     terminal_tasks_dir:
       path: artifacts/terminal_tasks
-      description: Per-domain task directories ({domain}-tl/), each with verifiable_tasks.txt listing verified task IDs (terminal-lego v1.0 schema)
+      description: Per-domain task directories ({domain}-tl/), each with verifiable_tasks.txt listing verified task IDs (terminal-lego v1.0 schema). This is the primary downstream-consumable output.
       structure: "artifacts/terminal_tasks/{domain}-tl/{task_id}/ with instruction.md, task.toml, environment/, solution/, tests/"
 
     merged_tasks_dir:
       path: artifacts/merged_terminal_tasks
-      description: Flattened directory of all verified tasks converted to harbor 1.1 schema (populated by scripts/extract_verified_tasks.py). This is what downstream trajgen/sft/eval consume.
-      structure: "artifacts/merged_terminal_tasks/{domain}__{task_id}/ with harbor-1.1 task.toml, instruction.md, environment/, solution/, tests/"
+      description: Optional flat directory of all verified tasks (terminal-lego v1.0, same format as in-place — no conversion), populated by scripts/extract_verified_tasks.py. Convenience single-root for tools that expect one; downstream can equally read the per-domain dirs directly.
+      structure: "artifacts/merged_terminal_tasks/{domain}__{task_id}/ with v1.0 task.toml, instruction.md, environment/, solution/, tests/"
       extract_command: python scripts/extract_verified_tasks.py
 
     examples_dir:
       path: artifacts/examples
-      description: Committed known-good verified task examples (v1.0 in-place + harbor 1.1), for the operating agent to reference the expected output shape without re-running the pipeline. See artifacts/examples/README.md.
+      description: Committed known-good verified task examples (terminal-lego v1.0), for the operating agent to reference the expected output shape without re-running the pipeline. See artifacts/examples/README.md.
 
     logs:
       - path: artifacts/logs/terminalgen-create/tl_*.txt
