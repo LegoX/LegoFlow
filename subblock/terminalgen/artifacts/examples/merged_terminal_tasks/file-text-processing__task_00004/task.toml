@@ -1,9 +1,9 @@
 schema_version = "1.1"
 
 [task]
-name = "terminalgen/file-text-processing/task_00004"
+name = "terminalgen/file-text-processing__task_00004"
 description = "Extract JSON Key Names with jq"
-authors = ["terminalgen"]
+authors = [{ name = "terminalgen" }]
 keywords = ["file-text-processing", "json", "shell", "unix", "key", "jq"]
 
 [metadata]

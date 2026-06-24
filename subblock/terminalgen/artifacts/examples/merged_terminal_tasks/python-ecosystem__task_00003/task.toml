@@ -1,9 +1,9 @@
 schema_version = "1.1"
 
 [task]
-name = "terminalgen/python-ecosystem/task_00003"
+name = "terminalgen/python-ecosystem__task_00003"
 description = "CSV to Multiline JSON Conversion Task"
-authors = ["terminalgen"]
+authors = [{ name = "terminalgen" }]
 keywords = ["python-ecosystem", "python", "json", "csv"]
 
 [metadata]

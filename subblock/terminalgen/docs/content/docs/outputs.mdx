@@ -72,6 +72,26 @@ This is the directory downstream trajgen/sft/eval load.
 The mapping mirrors the proven conversion validated in
 `terminal-lego/data_e2e_run903/harbor_tasks/https-nginx-cert-setup/`.
 
+### Harbor compatibility (both formats load)
+
+Harbor's task loader (`harbor.models.task.config.TaskConfig`) is backward-compatible:
+it renames `version` → `schema_version` and auto-converts the deprecated
+`memory`/`storage` strings to `memory_mb`/`storage_mb`. So **both** the v1.0
+in-place `task.toml` and the harbor 1.1 merged `task.toml` parse into a valid
+harbor task config (verified against harbor's real model):
+
+- **v1.0** loads, but with deprecation warnings and `task = None` — it carries no
+  `[task]` package info (name/description/authors/keywords), so it isn't
+  registry-named or searchable in harbor.
+- **harbor 1.1** is the clean, current form: no deprecation warnings, and the
+  `[task]` package block populated. Two hard requirements harbor enforces here
+  (and that `extract_verified_tasks.py` satisfies): `[task].name` must be
+  `org/name` (exactly one slash, alphanumeric/`-`/`_`/`.`), and `authors` must be
+  a list of `{ name = ... }` objects (not bare strings).
+
+**Recommendation**: feed downstream blocks the harbor 1.1 merged export. v1.0 is
+the intermediate working format.
+
 ## Logs
 
 Create logs live under:

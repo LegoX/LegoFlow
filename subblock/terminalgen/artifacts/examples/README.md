@@ -49,3 +49,15 @@ python repos/terminal-lego/validator/validate_tasks.py --input /tmp/ex/in --outp
 > These are illustrative references, not the authoritative output. Real runs write
 > to `artifacts/terminal_tasks/{domain}-tl/` (v1.0) and
 > `artifacts/merged_terminal_tasks/` (harbor 1.1), gated by each `verifiable_tasks.txt`.
+
+## Harbor compatibility
+
+Both formats load into harbor's task config (`harbor.models.task.config.TaskConfig`)
+— harbor renames `version`→`schema_version` and auto-converts `memory`/`storage`
+strings. v1.0 loads with deprecation warnings and no `[task]` package info; harbor
+1.1 is the clean registry-ready form. Quick check against harbor's real model:
+
+```python
+from harbor.models.task.config import TaskConfig   # from a harbor checkout (PYTHONPATH=src)
+TaskConfig.model_validate_toml(open("<task>/task.toml").read())   # raises if invalid
+```

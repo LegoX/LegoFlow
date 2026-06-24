@@ -71,7 +71,9 @@ def convert_task_toml(v1: dict, domain: str, task_id: str, instruction_path: Pat
     agent = v1.get("agent", {})
     env = v1.get("environment", {})
 
-    name = f"terminalgen/{domain}/{task_id}"
+    # harbor PackageInfo.name must be 'org/name' (exactly one slash); chars limited
+    # to alphanumeric/hyphen/underscore/dot. Use domain__task_id as the name part.
+    name = f"terminalgen/{domain}__{task_id}"
     description = _first_paragraph(instruction_path, f"Verified terminal task from {domain}.")
     tags = meta.get("tags", []) or []
     keywords = list(dict.fromkeys([domain] + tags))  # domain first, dedup
@@ -88,7 +90,8 @@ def convert_task_toml(v1: dict, domain: str, task_id: str, instruction_path: Pat
         "[task]",
         f'name = "{_toml_escape(name)}"',
         f'description = "{_toml_escape(description)}"',
-        f"authors = {arr(['terminalgen'])}",
+        # harbor authors must be Author objects ({name, email?}), not bare strings.
+        'authors = [{ name = "terminalgen" }]',
         f"keywords = {arr(keywords)}",
         "",
         "[metadata]",

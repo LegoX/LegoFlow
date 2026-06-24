@@ -1,9 +1,9 @@
 schema_version = "1.1"
 
 [task]
-name = "terminalgen/build-editor-tooling/task_00011"
+name = "terminalgen/build-editor-tooling__task_00011"
 description = "Terminal Bench Task: Fixing OpenMP Linker Errors in Makefile"
-authors = ["terminalgen"]
+authors = [{ name = "terminalgen" }]
 keywords = ["build-editor-tooling", "c++", "opencv", "makefile", "g++", "openmp"]
 
 [metadata]
