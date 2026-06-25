@@ -37,15 +37,22 @@ runtime_info:
   input:
     github_tokens: human
 
-    # deepseek-v4-flash: GLM-5-FP8 via llm10's anthropic-compatible endpoint
-    # fails categorically for swegen's Claude Code SDK task-completion step
-    # (0/46 succeeded — "error result: success"). deepseek-v4-flash drives the
-    # SDK correctly (matches PR #49's subblock revert).
+    # Reliable OpenAI-only endpoint (llm12 / Qwen3.6-35B-A3B) reached through a
+    # local LiteLLM CC proxy — the SAME setup the per-block swegen smoke verifies
+    # cleanly with (10_pr_demo.sh). History: llm10/GLM-5 native-anthropic failed
+    # categorically (0/46), and az.gptplus5/deepseek-v4-flash "drove the SDK" but
+    # was flaky — 0–3 verified between runs, and 0 verified FAILED the whole root
+    # chain at stage 1. openai_proxy + Qwen is the stable path; run_pipeline.sh's
+    # swegen stage starts the proxy on cc_proxy_port (no real key — llm12 takes
+    # the dummy-cf CF token).
     llm_api:
-      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
-      api_base_url: https://az.gptplus5.com/v1
-      pr_model: deepseek-v4-flash
-      task_model: deepseek-v4-flash
+      api_key: dummy-cf
+      api_base_url: https://llm12.jierungogogo.com/v1
+      pr_model: Qwen3.6-35B-A3B
+      task_model: claude-sonnet-4-6
+      cc_provider_mode: openai_proxy
+      anthropic_base_url: http://127.0.0.1:4010
+      cc_proxy_port: 4010
 
     languages:
       py:

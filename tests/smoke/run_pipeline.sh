@@ -291,6 +291,17 @@ PY
   if [[ "$DRY_RUN" != 1 && ! -s "$IDS_FILE" ]]; then
     echo "SKIP: no PR ids collected — cannot run swegen create"; CHAIN_RC=77
   else
+    # swegen's CC verification path (the half that writes verifiable_tasks.txt)
+    # uses cc_provider_mode: openai_proxy, so it needs a local LiteLLM proxy on
+    # cc_proxy_port translating Anthropic -> the upstream OpenAI endpoint. Unlike
+    # the per-block smoke (10_pr_demo.sh), this orchestrator builds its own
+    # swegen-create, so it must start the proxy itself — otherwise dryrun.sh's
+    # /health check fails and verification SILENTLY banks 0 tasks (the failure
+    # that sank the first root run). No-op when cc_provider_mode != openai_proxy;
+    # torn down after the swegen gate. shellcheck source=/dev/null
+    source "$SB/scripts/cc_proxy_lib.sh"
+    [[ "$DRY_RUN" == 1 ]] || cc_proxy_start "$SB" "$CFG" \
+      || log "WARN: CC LiteLLM proxy did not start — swegen dryrun/verification will fail"
     RUN="source scripts/load_runtime_env.sh && load_runtime_env >/dev/null 2>&1 ; source artifacts/envs/swegen-env/bin/activate ; nohup swegen create --input-ids-file ${IDS_FILE#$SB/} --max-pr ${MAXPR} --n-concurrent ${NCONC} --output ${BASE}/${SUB} --state-dir ${BASE}/${STATE} --timeout ${TO_} --cc-timeout ${CCTO} --no-require-issue --min-source-files ${MINSF} --max-source-files ${MAXSF} --docker-prune-batch ${DPB} --verbose >> artifacts/logs/root-smoke-swegen.log 2>&1 &"
     ( cd "$SB" && mkdir -p artifacts/logs && claude_launch swegen \
         '( test -d artifacts/envs || test -d artifacts/env ) && test -d repos && echo setup-ok' \
@@ -322,6 +333,8 @@ PY
     if gate swegen; then log "stage swegen PASS"; else
       rc=$?; [[ $rc == 77 ]] && { log "stage swegen SKIP"; CHAIN_RC=77; } || { log "stage swegen FAIL"; CHAIN_RC=1; }
     fi
+    # Tear down the swegen CC proxy before the next stage (no-op if not started).
+    [[ "$DRY_RUN" == 1 ]] || cc_proxy_stop
   fi
 fi
 
