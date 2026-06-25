@@ -218,6 +218,17 @@ PY
     echo "INFO: smoke PR list ($(wc -l <"$SMOKE_IDS_FILE") entries):"
     sed 's/^/         /' "$SMOKE_IDS_FILE"
     SMOKE_CMD="source scripts/load_runtime_env.sh && load_runtime_env >/dev/null 2>&1 ; source artifacts/envs/swegen-env/bin/activate ; nohup swegen create --input-ids-file ${SMOKE_IDS_FILE#${BLOCK_DIR}/} --max-pr ${SMOKE_MAX_PR} --n-concurrent ${SMOKE_NCONC} --output ${SMOKE_OUT#${BLOCK_DIR}/} --state-dir ${SMOKE_STATE#${BLOCK_DIR}/} --timeout ${SMOKE_TO} --cc-timeout ${SMOKE_CCTO} --no-require-issue --min-source-files ${SMOKE_MINSF} --max-source-files ${SMOKE_MAXSF} --docker-prune-batch ${SMOKE_DPB} --verbose >> artifacts/logs/smoke-launch.log 2>&1 &"
+    # swegen's openai_proxy CC verification path (the half that writes
+    # verifiable_tasks.txt) needs a local LiteLLM proxy on cc_proxy_port. This
+    # runner builds its own swegen-create, so it must start the proxy itself —
+    # otherwise PREFLIGHT_LOCAL (dryrun.sh) /health check fails and verification
+    # silently banks 0 tasks. No-op when cc_provider_mode != openai_proxy; the
+    # EXIT trap keeps it up through the WAIT phase and tears it down on exit.
+    # shellcheck source=/dev/null
+    source "$BLOCK_DIR/scripts/cc_proxy_lib.sh"
+    trap cc_proxy_stop EXIT
+    cc_proxy_start "$BLOCK_DIR" "$BLOCK_DIR/config.yaml" \
+      || { echo "FAIL: CC LiteLLM proxy did not start (openai_proxy mode)"; exit 1; }
     claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
                   "swegen create --input-ids-file" "swegen"
     LAUNCH_PID=$(pgrep -f 'swegen create --input-ids-file' | head -1)
