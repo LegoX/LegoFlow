@@ -44,7 +44,7 @@ never launches.
 
 | § | Checks |
 |---|---|
-| 1. Block files | `CLAUDE.md`, `config.yaml`, `dashboard/overview.mdx`, **`artifacts/index.yaml`** all exist. |
+| 1. Block files | `CLAUDE.md`, `config.yaml`, `memory/overview.mdx` exist. A missing `artifacts/index.yaml` is **INFO, not FAIL** (auto-created by `archive_run.sh` after the first run). |
 | 2. YAML syntax | `config.yaml` and `index.yaml` parse under PyYAML. |
 | 3. Harbor repo config | `url` / `commit` (or `ref`/`branch`) / `path` / `readonly` set; path is gitignored. |
 | 4. Local Harbor checkout | `repos/harbor/.git` present, origin URL matches, **HEAD == `commit` pin** (drift is FAIL), worktree clean. |
@@ -66,6 +66,14 @@ report:
   `curl -fsS -H "Authorization: Bearer <api_key>" <api_base_url>/models`
   — expect 200 with the configured model (basename of `llm_api.model`)
   in `data[].id`. See "Interpreting results" for the CF-gating caveat.
+  When `api_base_url` points at a **local vLLM endpoint** (custom
+  checkpoint), this probe doubles as the "is vLLM up?" gate: a
+  connection-refused/timeout here means `scripts/serve_local_model.sh`
+  isn't running on the GPU node — FAIL, not the CF-gating WARN (that
+  caveat is specific to the remote `*.jierungogogo.com` endpoints, e.g.
+  `llm10.jierungogogo.com`). Tell the user to start vLLM and re-check.
+  Note: the **active** `llm_api` in `config.yaml` is currently the local
+  vLLM (MODE B), so this is the common path; MODE A is the GLM-5 remote.
 - **A job already running**: a live `harbor run` (or a stray LiteLLM on
   the configured port) means launching now would double-book the host.
   Check for an existing `eval` tmux session and a `litellm`/`harbor`
@@ -76,10 +84,11 @@ report:
 - **Overwrite guard**: `start.sh` timestamps the job dir, so collisions
   are unlikely, but if `job_dir` is pinned in config, warn when it
   already contains results.
-- **`artifacts/index.yaml` presence**: it was removed in a recent merge,
-  so dryrun §1 currently FAILs. If absent, flag it and point the user at
-  `/eval:setup` to recreate it (`runs: []`); `scripts/archive_run.sh`
-  also writes it on first run.
+- **Job already analyzed?**: after a completed run, `start.sh`
+  auto-invokes `scripts/analyze_job.sh`, writing `<job_dir>/analysis/`.
+  This is post-run and non-fatal — not a preflight gate — but when
+  reporting on an existing/interrupted job dir, note whether `analysis/`
+  is present so the user knows the dashboard has data to read.
 
 ## Interpreting results
 
@@ -105,11 +114,13 @@ report:
 - **LiteLLM version mismatch** (§6): FAIL. The pin is `1.83.14`; other
   versions change proxy config semantics. Rebuild the venv in setup.
 - **LLM endpoint 401/403 from this shell** (contextual probe): when the
-  base URL is `qwen.jierungogogo.com` (or another CF-gated production
-  endpoint), `dummy-key` is the real production key and the 401 is a
-  network artifact specific to Claude Code's sandboxed shell — see memory
-  `project-swegen-llm-endpoint`. Treat as WARN, not FAIL, and suggest
-  re-probing from a non-sandboxed shell on `192.168.35.240`.
+  base URL is a CF-gated `*.jierungogogo.com` production endpoint (e.g.
+  `llm10.jierungogogo.com`), the `dummy-cf` key is the real production key
+  and the 401 is a network artifact specific to Claude Code's sandboxed
+  shell — see memory `project-swegen-llm-endpoint`. Treat as WARN, not
+  FAIL, and suggest re-probing from a non-sandboxed shell on
+  `192.168.35.240`. A **local vLLM** base URL (MODE B) gets no such pass:
+  connection-refused there is a real FAIL (vLLM not up).
 - **`scripts/stop.sh` missing**: WARN. The eval block currently ships no
   `stop.sh`; teardown is handled by `start.sh`'s EXIT trap
   (`cleanup_litellm` + `archive_run.sh`). Note it but do not block.
@@ -142,6 +153,7 @@ eval run config
   harbor job dir             : <harbor_job.jobs_dir>  (n_concurrent <N>, n_tasks <null|N>)
   litellm                    : port <port>, config <litellm_proxy.config_template>
   excluded tasks             : <HARBOR_EXCLUDE_TASKS or none>
+  post-eval analysis         : <job_analysis.enabled> (tag endpoint <job_analysis.tag_llm.base_url>)
 ```
 
 This is the surface the user inspects before approving `:run`.

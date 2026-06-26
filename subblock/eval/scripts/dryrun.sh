@@ -117,7 +117,7 @@ echo "=== eval dryrun: $BLOCK_DIR ==="
 echo ""
 
 echo "--- 1. Block files ---"
-for file in CLAUDE.md config.yaml dashboard/overview.mdx; do
+for file in CLAUDE.md config.yaml memory/overview.mdx; do
   if [[ -f "$BLOCK_DIR/$file" ]]; then
     ok "$file exists"
   else

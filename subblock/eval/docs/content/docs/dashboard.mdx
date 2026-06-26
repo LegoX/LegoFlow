@@ -1,0 +1,50 @@
+---
+title: Dashboard
+description: Browse jobs, analysis reports, and agent trajectories
+---
+
+eval ships a self-contained web dashboard for browsing Harbor job results, the analysis reports produced after each eval, and step-by-step agent trajectories. It is a stdlib-only Python server with a vanilla-JS frontend — no build step — styled after the LLaMA-Factory webui.
+
+Live board: **[harbor-dashboard.pages.dev](https://harbor-dashboard.pages.dev/)**
+
+## What it shows
+
+| View | Content |
+| --- | --- |
+| **Overview** | aggregate stats across all jobs — scaffolds, datasets, models, resolve rates |
+| **All jobs** | sortable table of jobs with key metrics |
+| **Single job** | analysis reports, primary failure distributions, task breakdowns, trial-level detail |
+| **Compare** | side-by-side comparison of multiple jobs (shift-click jobs to add to the compare set) |
+| **Trajectory viewer** | step-by-step agent execution — message / tool-call / observation inspection |
+
+It reads the analysis artifacts written under each `artifacts/jobs/<job>/analysis/` (see [Job Analysis](/docs/job-analysis)), so run an eval — and let analysis complete — before expecting populated reports.
+
+## Run it locally
+
+```bash
+cd dashboard
+python3 server.py --port 8092
+```
+
+Open `http://localhost:8092`. The server auto-discovers jobs under the block's jobs directory (customizable with `--jobs-dir`). All dependencies are stdlib + a Chart.js CDN.
+
+When operating through the eval plugin, `/eval:dashboard` covers launching the dashboard and surfacing per-job task counts and accuracy.
+
+## Publish to Cloudflare Pages
+
+For long-term public access, `dashboard/export_static.py` exports the dynamic dashboard into static JSON/HTML, and `dashboard/run_cloudflare_pages_sync.sh` loops the export and deploys `site/` to Cloudflare Pages. The public site stays interactive (search, sort, filter, compare, charts, trajectory browsing) but updates only after each export/deploy cycle.
+
+```bash
+cd dashboard
+bash run_cloudflare_pages_sync.sh
+```
+
+The free **chunk mode** (the default) groups trajectories into size-limited chunk files so opening a job downloads nothing until you click a trial — no Cloudflare R2 required. An optional R2 mode serves each trajectory on demand for the fastest per-trial loads. See `dashboard/README.md` for credentials, overrides, and the R2 setup.
+
+<Callout title="Token scope" type="info">
+`wrangler pages deploy` needs the account-level `Cloudflare Pages: Edit` permission. None of the built-in templates map to it exactly, so create a Custom Token with `Account` → `Cloudflare Pages` → `Edit`. The Account ID is separate from the token.
+</Callout>
+
+## Temporary sharing
+
+For quick debugging of the live dynamic server, `dashboard/share_pinggy.sh` opens an auto-reconnecting Pinggy tunnel to the locally-running dashboard. Free Pinggy URLs are temporary and can change on reconnect — prefer Cloudflare Pages for anything long-lived.

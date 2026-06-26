@@ -1,0 +1,73 @@
+---
+title: Config Variants
+description: Run experiments and build the docs site
+---
+
+## Config variants
+
+`config.yaml` is the active run profile. For experiments — a different benchmark, model, agent, concurrency, or timeout — create a separate variant file next to it instead of editing the active one:
+
+```text
+config.terminal-bench-2-glm5.yaml
+config.<dataset>.<model>.<agent>.yaml
+```
+
+Only replace `config.yaml` when you are ready to make a variant active. Each launched job receives a snapshot of the active config at:
+
+```text
+artifacts/jobs/<job>/config.yaml
+```
+
+so a run can always be reproduced from its own snapshot.
+
+## Tunable parameters
+
+The block declares the parameters safe to auto-tune under `evolving.tunable_params` in `config.yaml`. For eval, the **primary lever is benchmark selection** (`task_source.dataset_name`); the rest mirror trajgen:
+
+| Parameter | Meaning |
+| --- | --- |
+| `temperature` | Agent sampling temperature (0.0–1.0) |
+| `max_turns` | Maximum agent turns per task |
+| `n_concurrent` | Harbor concurrent tasks |
+| `timeout_multiplier` | Per-task timeout multiplier |
+| `n_tasks` | Smoke-run cap on number of tasks (`null` = full benchmark) |
+
+## Build and deploy the docs site
+
+These docs are a [fumadocs](https://fumadocs.dev/) (Next.js) site under `docs/`, statically exported and served from Cloudflare Pages.
+
+### Requirements
+
+The site needs **Node >= 20**. This host's system Node is 18 (apt-pinned), so a newer Node is installed via [`nvm`](https://github.com/nvm-sh/nvm). Activate it before building:
+
+```bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+nvm use 22
+```
+
+### Build locally
+
+```bash
+cd docs
+npm install
+npm run build     # static export to docs/out/
+```
+
+`next.config.mjs` sets `output: 'export'`, so the build emits a static `out/` directory. The root redirect (`/` → `/docs`) is expressed in `public/_redirects` rather than Next's `redirects()`, which static export disables.
+
+### Deploy to Cloudflare Pages
+
+`docs/deploy_cloudflare_pages.sh` builds and deploys to a dedicated Cloudflare Pages project (`swe-eval-docs`), separate from any dashboard project:
+
+```bash
+bash docs/deploy_cloudflare_pages.sh
+```
+
+It activates Node 22 via nvm, runs the static build, and deploys `docs/out/` with `wrangler pages deploy`. It reuses the same Cloudflare credentials as the trajgen docs/dashboard (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or `~/.config/trajgen_progress_cloudflare.env`); override the project with `PROJECT_NAME=...`.
+
+## Add or edit a page
+
+1. Add an `.mdx` file under `content/docs/` (or a subfolder) with `title` and `description` frontmatter.
+2. Add its slug to the folder's `meta.json` `pages` array to place it in the sidebar order.
+3. Link to other pages by their route, e.g. `/docs/run-jobs/select-benchmark`.

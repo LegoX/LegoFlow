@@ -1,0 +1,47 @@
+---
+title: Job Analysis
+description: Post-eval attribution, scoring, and failure breakdowns
+---
+
+A raw eval job tells you which tasks resolved and which didn't. **Job analysis** turns that into the attribution and scoring artifacts the [dashboard](/docs/dashboard) reads — failure distributions, task breakdowns, resolved-vs-unresolved metrics, and per-instance summaries.
+
+After each eval, `start.sh` runs `scripts/analyze_job.sh "$JOB_DIR"` automatically. It is **non-fatal**: a failed analysis never fails a completed eval run.
+
+## What it produces
+
+The pipeline runs Harbor's `job_analysis` over a completed job and writes results into `<job_dir>/analysis/` — the exact layout the dashboard reads:
+
+```text
+artifacts/jobs/<job>/analysis/
+├── report_failed.json / report_resolved.json
+├── report_task_analysis.json
+├── traj_analysis/score_comparison.json
+├── instance_analysis/{summary,correlations}.json
+├── instances.jsonl
+└── analysis_config.yaml
+```
+
+## Running it
+
+```bash
+# Analyze the newest job under jobs_dir (no arg), or a specific job dir
+bash scripts/analyze_job.sh
+bash scripts/analyze_job.sh artifacts/jobs/<job>
+```
+
+Safe to re-run, and safe to run on old jobs.
+
+| Aspect | Behavior |
+| --- | --- |
+| **Opt-out** | set `runtime_info.input.job_analysis.enabled: false` in `config.yaml` |
+| **Cost** | LLM judge is off by default → pure-CPU, zero token cost. Enable with `JOB_ANALYSIS_JUDGE=1` (needs `ANTHROPIC_API_KEY`) |
+| **Engine** | uses `artifacts/env/harbor-uv` (has `scipy` + `pyyaml`); the read-only Harbor repo is only `cd`-ed into for imports — all output lands in the writable job dir |
+| **Gold dependency** | needs a gold dataset; auto-generated when missing, skips cleanly if it can't be built (see [Dataset Prep](/docs/job-analysis/dataset-prep)) |
+
+<Callout title="Multilingual domain classification" type="info">
+`task_analysis` domain classification relies on Harbor's `classifier.py` repo→domain map, which is Python-SWE-bench-Verified-centric. For multilingual repos (apache/druid, lucene, …) the domain falls back to `other`. Any local tweak to that classifier is overwritten by `update_repos.sh` — keep such changes out of the read-only repo.
+</Callout>
+
+## Learn more
+
+- [Dataset Prep](/docs/job-analysis/dataset-prep) — how the gold dataset is built and tagged
