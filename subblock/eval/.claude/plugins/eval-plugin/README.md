@@ -14,7 +14,7 @@ see `.claude/plugins/root-plugin/`.
 | --- | --- |
 | `/eval:setup`     | Bootstrap: clone `repos/harbor/` at the pinned commit, build the Harbor uv env + LiteLLM venv, wire `runtime_info.input` (`llm_api`, `litellm_proxy`, `task_source`, `harbor_job`, `agent`). |
 | `/eval:check`     | Preflight: schema + Harbor repo pin + uv/venv envs + LLM endpoint `/models` + `(task_source.dataset_name, version)` resolves in `registry.json` + LiteLLM port availability. Read-only. |
-| `/eval:dashboard` | Show per-job status: tasks resolved/unresolved/in-flight, accuracy aggregate, LiteLLM trajectory counts. |
+| `/eval:dashboard` | Inspect results: quick textual per-job summary (resolved/unresolved/in-flight, accuracy, trajectory counts), drive the analysis pipeline (`analyze_job.sh` → `<job>/analysis/`, `prepare_dataset.sh` for gold), and serve the web dashboard under `dashboard/` (`bash dashboard/start.sh`, :8092). |
 | `/eval:run`       | Preflight, then `scripts/start.sh` — generate LiteLLM config, start the proxy, launch the Harbor job against the configured benchmark. |
 
 Per the block plugin guidelines, **no `/eval:create`** — new blocks are

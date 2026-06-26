@@ -22,7 +22,7 @@ meta_info:
       branch: main
       # Pinned to the latest Harbor commit so this block tracks the current
       # registry contents (independent of subblock/trajgen's older pin).
-      commit: 149e75770f8c369d6fae31c158ea761d676b4d3a
+      commit: 4c1f27dcee78bdb134bafd01a81e9c12aaaae3d2
       path: repos/harbor
       readonly: true
 
@@ -37,6 +37,19 @@ meta_info:
 
 runtime_info:
   input:
+    # The eval block only talks to an OpenAI/Anthropic-compatible HTTP endpoint
+    # (eval's per-job LiteLLM proxy wraps `api_base_url`), so it supports TWO
+    # interchangeable backends — just point `llm_api` at one of them:
+    #
+    #   MODE A — Remote API (e.g. shared GLM-5 endpoint). No local serving.
+    #   MODE B — Local checkpoint served by vLLM on a GPU node
+    #            (scripts/serve_local_model.sh + local_model_serving below).
+    #            See the "Evaluating a custom local model" section in CLAUDE.md.
+    #
+    # Only ONE `llm_api` block is active; the other is kept here commented so you
+    # can switch by swapping which block is uncommented.
+    #
+    # --- MODE A: remote GLM-5 API (ACTIVE; shared with trajgen; llm10 GLM endpoint) ---
     llm_api:
       api_key: dummy-cf
       api_base_url: "http://llm10.jierungogogo.com/v1"
@@ -46,6 +59,27 @@ runtime_info:
       served_via: per_job_litellm_proxy
       input_cost_per_token: 0.0000021
       output_cost_per_token: 0.0000084
+
+    # --- MODE B: local vLLM checkpoint ---
+    #   llm_api:
+    #     api_key: dummy-key                       # must match vLLM --api-key
+    #     api_base_url: "http://192.168.16.115:8000/v1"
+    #     model: "openai/Qwen3-8B"                 # openai/<vLLM --served-model-name>
+    #     description: Local SFT checkpoint (qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk...) served via vLLM on this GPU node; see scripts/serve_local_model.sh.
+    #     protocols: [openai_compatible, anthropic_compatible]
+    #     served_via: per_job_litellm_proxy
+    #     input_cost_per_token: 0.0
+    #     output_cost_per_token: 0.0
+
+    # Local checkpoint served by scripts/serve_local_model.sh (vLLM on the GPU
+    # node). This is the SOURCE of truth for the checkpoint path / served name;
+    # the script reads it from here (env vars MODEL_PATH / MODEL_NAME still
+    # override for one-off runs). The served name must match the basename of
+    # llm_api.model above (openai/<model_name>). Only used when benchmarking a
+    # local model; ignored when llm_api points at a remote API.
+    local_model_serving:
+      model_path: /mnt/public/storage/yuxin/SWE-Lego-Live-dev/subblock/sft/artifacts/model/qwen3_8b_glm5_swerebench_oraclesolved_oh_sdk_512_gbs64pbs1acc8_lr1e-4_epo3
+      model_name: Qwen3-8B
 
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
@@ -81,10 +115,24 @@ runtime_info:
 
     harbor_job:
       jobs_dir: artifacts/jobs
-      n_concurrent: 16
+      n_concurrent: 2
       n_tasks: null               # null = run the full benchmark; set an int for a smoke run
       max_retries: 2
       timeout_multiplier: 1
+
+    # Post-eval job analysis (scripts/analyze_job.sh, auto-run by start.sh).
+    job_analysis:
+      enabled: true               # set false to skip post-eval analysis entirely
+      # LLM endpoint used ONLY to complete task.toml [language, area, topic,
+      # bug_class] tags when auto-generating a missing gold dataset
+      # (scripts/prepare_dataset.sh). Must return CLEAN JSON. The eval model
+      # (Qwen3-8B) is a reasoning model that emits <think> into content and does
+      # NOT work here; GLM-5-FP8 keeps reasoning in a separate field. Overridable
+      # at runtime via PREP_TAG_BASE_URL / PREP_TAG_MODEL / PREP_TAG_API_KEY.
+      tag_llm:
+        base_url: "http://llm10.jierungogogo.com/v1"
+        model: "GLM-5-FP8"
+        api_key: "dummy-cf"
 
     # Supported agents — switch by editing the four fields below (name, version,
     # runtime_image, runtime_host_path) together. `max_turns` is reused as
@@ -110,7 +158,7 @@ runtime_info:
     agent:
       name: custom-openhands-sdk
       version: 1.14.0
-      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
+      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.5
       # `runtime_host_path` must be a directory that already contains the
       # extracted agent runtime tree from `runtime_image` (bind-mount source).
       # If the dir is empty, the agent falls back to an in-container install

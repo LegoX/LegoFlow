@@ -506,6 +506,13 @@ if [[ "$PRINT_COMMAND_ONLY" == "1" ]]; then
 fi
 
 echo "=== starting LiteLLM proxy ===" | tee "$LOG_FILE"
+# Default to a single proxy worker. The eval proxy is pure async I/O in front of
+# one upstream backend, so 1 worker comfortably serves n_concurrent tasks. More
+# importantly, multi-worker boot crash-loops on slow/network filesystems: each
+# worker re-imports litellm (~60s on /mnt/public), which exceeds uvicorn's
+# multiprocess boot tolerance and every child dies ("Child process [...] died"),
+# so the port never serves. Override with LITELLM_NUM_WORKERS=N if needed.
+export LITELLM_NUM_WORKERS="${LITELLM_NUM_WORKERS:-1}"
 setsid bash -c '
   cd "$1"
   PATH="$(dirname "$EVAL_LITELLM_BIN"):$PATH" \
@@ -513,8 +520,9 @@ setsid bash -c '
     LITELLM_LOG_FOLDER="$3/logs" \
     LITELLM_PORT="$4" \
     API_KEY="$5" \
+    LITELLM_NUM_WORKERS="$6" \
     bash scripts/serve_llm/serve_litellm.sh
-' bash "$HARBOR_DIR" "$LITELLM_CONFIG_PATH" "$LITELLM_ARTIFACT_DIR" "${LITELLM_PORT:-$(cfg runtime_info.input.litellm_proxy.port)}" "$EVAL_LITELLM_MASTER_KEY" >>"$LOG_FILE" 2>&1 &
+' bash "$HARBOR_DIR" "$LITELLM_CONFIG_PATH" "$LITELLM_ARTIFACT_DIR" "${LITELLM_PORT:-$(cfg runtime_info.input.litellm_proxy.port)}" "$EVAL_LITELLM_MASTER_KEY" "$LITELLM_NUM_WORKERS" >>"$LOG_FILE" 2>&1 &
 LITELLM_PID="$!"
 cleanup_litellm() {
   if kill -0 "$LITELLM_PID" >/dev/null 2>&1; then
@@ -530,7 +538,12 @@ _archive_run_on_exit() {
 }
 trap _archive_run_on_exit EXIT
 
-for _ in {1..30}; do
+# The LiteLLM proxy must be listening before Harbor launches, otherwise the
+# first task's LLM call hits a dead port. Importing litellm can take ~30-60s on
+# cold/network filesystems, so wait generously (and fail loudly if the proxy
+# never binds — never fall through to Harbor against a dead proxy).
+PROXY_READY=0
+for _ in {1..120}; do
   if "$EVAL_LITELLM_PYTHON" - "$EVAL_LITELLM_ANTHROPIC_BASE_URL" <<'PY' >/dev/null 2>&1
 import socket
 import sys
@@ -543,14 +556,22 @@ with socket.create_connection((host, port), timeout=2):
     pass
 PY
   then
+    PROXY_READY=1
     break
   fi
   if ! kill -0 "$LITELLM_PID" >/dev/null 2>&1; then
     echo "ERROR: LiteLLM proxy exited before Harbor job started" | tee -a "$LOG_FILE"
+    echo "       See proxy log under: $LITELLM_ARTIFACT_DIR/logs" | tee -a "$LOG_FILE"
     exit 1
   fi
   sleep 1
 done
+if [[ "$PROXY_READY" != "1" ]]; then
+  echo "ERROR: LiteLLM proxy did not start listening on $EVAL_LITELLM_ANTHROPIC_BASE_URL in time" | tee -a "$LOG_FILE"
+  echo "       See proxy log under: $LITELLM_ARTIFACT_DIR/logs" | tee -a "$LOG_FILE"
+  exit 1
+fi
+echo "LiteLLM proxy is listening on $EVAL_LITELLM_ANTHROPIC_BASE_URL" | tee -a "$LOG_FILE"
 
 echo "=== eval start ===" | tee -a "$LOG_FILE"
 echo "Harbor dir: $HARBOR_PATH_RAW" | tee -a "$LOG_FILE"
@@ -571,3 +592,17 @@ echo "" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 echo "eval complete. Expected job dir: $JOB_DIR_RAW" | tee -a "$LOG_FILE"
 echo "Expected trajectory files: $EVAL_TRAJECTORY_FILE_PATTERN" | tee -a "$LOG_FILE"
+
+# Post-hoc job analysis: write attribution/scoring into <job_dir>/analysis/ so the
+# dashboard can render it. Opt-out via runtime_info.input.job_analysis.enabled: false.
+# Non-fatal by design — a failed analysis must never fail a completed eval run.
+JOB_ANALYSIS_ENABLED="$(cfg runtime_info.input.job_analysis.enabled)"
+if [[ "$JOB_ANALYSIS_ENABLED" == "false" ]]; then
+  echo "" | tee -a "$LOG_FILE"
+  echo "job analysis disabled (runtime_info.input.job_analysis.enabled: false); skipping" | tee -a "$LOG_FILE"
+else
+  echo "" | tee -a "$LOG_FILE"
+  echo "=== running post-eval job analysis ===" | tee -a "$LOG_FILE"
+  bash "$BLOCK_DIR/scripts/analyze_job.sh" "$JOB_DIR" 2>&1 | tee -a "$LOG_FILE" || \
+    echo "WARNING: job analysis failed; eval results are unaffected. See log above." | tee -a "$LOG_FILE"
+fi

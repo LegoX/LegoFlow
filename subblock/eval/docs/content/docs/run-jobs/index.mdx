@@ -1,0 +1,24 @@
+---
+title: Run Jobs
+description: Select a benchmark, start the proxy, and run the eval
+---
+
+An eval **job** rolls a coding agent out across a registry-resolved benchmark inside Harbor containers, capturing one trajectory and per-task evaluation artifacts per task. This section covers the full run path: selecting a benchmark, fronting your model with a LiteLLM proxy, and inspecting the outputs.
+
+The whole flow is driven from a single [`config.yaml`](/docs/reference/io) and executed by `scripts/start.sh`:
+
+```bash
+bash scripts/update_repos.sh   # clone/update Harbor at the pinned commit (first time)
+bash scripts/dryrun.sh         # validate config, repo, envs, model API, registry entry
+bash scripts/start.sh          # generate proxy config, start proxy, run Harbor job, analyze
+```
+
+`start.sh` runs the dry-run preflight, generates a per-job LiteLLM config, starts the proxy on the configured port, builds the Harbor command (`--dataset <name> --registry-path repos/harbor/registry.json`, plus `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS`), runs the job under `artifacts/jobs/`, and then runs **post-eval job analysis** (unless disabled).
+
+- [Select Benchmark](/docs/run-jobs/select-benchmark) — the registry-driven benchmark catalog and how to switch
+- [LiteLLM Proxy](/docs/run-jobs/litellm-proxy) — the per-job proxy in front of your model API
+- [Results & Artifacts](/docs/run-jobs/results-and-artifacts) — where trajectories, results, analysis, and archives land
+
+<Callout title="Stop the proxy when done" type="warn">
+If a job's inference finishes but the LiteLLM proxy is still running, stop the proxy process started for this job. Do not kill unrelated LiteLLM processes on the host.
+</Callout>

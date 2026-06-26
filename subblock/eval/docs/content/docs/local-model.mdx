@@ -1,0 +1,76 @@
+---
+title: Local Model
+description: Benchmark a local checkpoint with vLLM
+---
+
+By default eval benchmarks a remote upstream API. To benchmark a **local checkpoint** (e.g. an SFT or RL output from the pipeline) instead, serve it with vLLM and point `llm_api` at it — no code change to `start.sh` is needed, because the block only ever talks to an OpenAI/Anthropic-compatible HTTP endpoint.
+
+## Topology
+
+The eval node is CPU-only, so vLLM must run on a GPU node:
+
+```text
+eval node (CPU)                                  GPU node
+  agent container → eval LiteLLM :4101  ─────────▶ vLLM :8000/v1  (local ckpt)
+                    (start.sh, trajectory_logger)   api_base_url
+```
+
+<Callout title="vLLM only — no second proxy" type="warn">
+The model-serving layer is vLLM only. `start.sh` already runs the per-job LiteLLM proxy (with `trajectory_logger`, sticky routing, and Anthropic-format support). Do not start a second LiteLLM next to vLLM — it would collide on the port and bypass that logging.
+</Callout>
+
+## 0. One-time: create the vLLM env (GPU node)
+
+The eval node's `/eval:setup` does **not** build this — it only builds the CPU-side Harbor uv env + LiteLLM venv. For a standard bf16/fp16 checkpoint a plain pip install is enough:
+
+```bash
+conda create -y -n vllm_0.18.1 python=3.12
+conda activate vllm_0.18.1
+pip install vllm==0.18.1
+```
+
+Only FP8 models with custom kernels (e.g. GLM-5.1-FP8) need the heavy source build in `repos/harbor/scripts/serve_llm/install_vllm_32b717_cu128.sh`. `serve_local_model.sh` activates `$VLLM_CONDA_ENV` (default `vllm_0.18.1`) and errors with this exact recipe if `vllm` isn't found.
+
+## 1. Serve the checkpoint (GPU node)
+
+```bash
+bash scripts/serve_local_model.sh   # runs in foreground; use tmux
+```
+
+The checkpoint path and served name are read from `config.yaml → runtime_info.input.local_model_serving` (`model_path` / `model_name`) — that is the source of truth, not a hardcoded script default. Everything else is env-overridable (`MODEL_PATH`, `MODEL_NAME`, `VLLM_PORT`, `TENSOR_PARALLEL_SIZE`, `API_KEY`, `VLLM_CONDA_ENV`, …); it serves on `:8000` by default. When ready it prints the exact `llm_api` block to paste.
+
+```yaml
+local_model_serving:
+  model_path: /mnt/.../sft/artifacts/model/qwen3_8b_glm5_...
+  model_name: Qwen3-8B
+```
+
+## 2. Point `llm_api` at it (eval node)
+
+Edit `config.yaml → runtime_info.input.llm_api` to the local-vLLM recipe (commented at the top of `runtime_info.input`):
+
+```yaml
+llm_api:
+  api_key: dummy-key                       # must match vLLM --api-key
+  api_base_url: "http://<GPU_NODE_IP>:8000/v1"
+  model: "openai/Qwen3-8B"                 # openai/<served-model-name>
+  protocols: [openai_compatible, anthropic_compatible]
+  served_via: per_job_litellm_proxy
+  input_cost_per_token: 0.0
+  output_cost_per_token: 0.0
+```
+
+The served name must match the basename of `llm_api.model` (`openai/<model_name>`).
+
+## 3. Validate and run
+
+```bash
+bash scripts/dryrun.sh   # probe_llm_completion.sh sends a real completion to verify the endpoint
+bash scripts/start.sh
+```
+
+`dryrun.sh` sends a real completion to the configured endpoint, so a live vLLM server is verified before the job launches.
+
+<Callout title="Tagging endpoint stays separate" type="info">
+If the local checkpoint is a reasoning model (emits `<think>…`), keep `job_analysis.tag_llm` pointed at a JSON-clean endpoint — gold-dataset tagging needs clean JSON. See [Dataset Prep](/docs/job-analysis/dataset-prep).
+</Callout>

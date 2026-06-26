@@ -24,3 +24,6 @@ __pycache__/
 venv/
 *.log
 .DS_Store
+
+# Editor/sync backup artifacts (e.g. .efc_<hashes>_<name>).
+.efc_*

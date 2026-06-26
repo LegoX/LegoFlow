@@ -65,6 +65,15 @@ block** — no subblocks — so this skill runs `scripts/start.sh` directly
    with per-agent flags, `--retry-exclude AgentTimeoutError`, and one
    `--exclude-task-name` per entry in `HARBOR_EXCLUDE_TASKS`, then runs
    it inside `repos/harbor`, teeing to `artifacts/logs/eval_<ts>.log`.
+6. **Post-eval job analysis** (unless
+   `runtime_info.input.job_analysis.enabled: false`): calls
+   `scripts/analyze_job.sh "$JOB_DIR"` to write `<job_dir>/analysis/` —
+   the attribution/scoring artifacts the dashboard reads. **Non-fatal**: a
+   failed analysis never fails a completed eval. Pure-CPU by default (LLM
+   judge off → zero token cost). If the gold dataset is missing it
+   auto-runs `scripts/prepare_dataset.sh <dataset_name>` first (adapter →
+   tagger); the tagger uses `job_analysis.tag_llm` and needs a JSON-clean
+   endpoint. See `/eval:dashboard` for browsing the results.
 
 Use `bash scripts/start.sh --dry-run-command` to print the generated
 LiteLLM config path and Harbor command **without** launching — useful in
@@ -99,6 +108,13 @@ the confirm step.
   `--retry-exclude AgentTimeoutError`; a task that times out will time
   out again and only burns budget. If a task repeatedly times out, add it
   to `HARBOR_EXCLUDE_TASKS`.
+- **Custom local model: vLLM must be up first.** When `llm_api.api_base_url`
+  points at a local vLLM endpoint (a custom checkpoint, not a remote API),
+  that vLLM must already be serving on the GPU node — start it with
+  `scripts/serve_local_model.sh` in its own tmux session **before** `:run`,
+  and keep it alive for the whole job. `start.sh` does not launch vLLM; it
+  only starts the LiteLLM proxy in front of it. `/eval:check`'s endpoint
+  probe will FAIL if vLLM isn't reachable, so this is caught in preflight.
 
 ## Resume on interrupt
 

@@ -1,0 +1,59 @@
+---
+title: Results & Artifacts
+description: Where trajectories, evaluation results, analysis, and archives live
+---
+
+Everything a job produces lands under this block's `artifacts/` directory. This page maps out what is written and where.
+
+## Per-job outputs
+
+```text
+artifacts/jobs/<job>/
+├── results.json                             # aggregate job stats (rewards, errors)
+├── config.yaml                              # snapshot of the active config at launch
+├── analysis/                                # post-eval job analysis (see below)
+└── <task>/
+    ├── agent/litellm-trajectory.jsonl       # one raw trajectory per task
+    └── evaluation/                          # per-task verdict, scoring, test logs
+```
+
+- **`litellm-trajectory.jsonl`** is the replayable log of one trial, written by the LiteLLM logger.
+- **`evaluation/`** holds the per-task grading output — verdict, scoring, and test logs that determine the reward.
+- **`results.json`** aggregates rewards and error stats across all trials.
+
+This directory is the block's `eval_results_dir` output (declared in `config.yaml → runtime_info.output`). eval is a terminal block, so there is no downstream consumer.
+
+## Analysis outputs
+
+When job analysis runs (automatically after each eval, or manually via `scripts/analyze_job.sh`), it writes the files the dashboard reads:
+
+```text
+artifacts/jobs/<job>/analysis/
+├── report_failed.json / report_resolved.json   # primary/axis failure & resolve distributions
+├── report_task_analysis.json                    # task difficulty tiers, domain/bug-type breakdowns
+├── traj_analysis/score_comparison.json          # resolved vs unresolved metrics
+├── instance_analysis/{summary,correlations}.json
+├── instances.jsonl
+└── analysis_config.yaml                         # self-contained config snapshot
+```
+
+See [Job Analysis](/docs/job-analysis) for the pipeline and its gold-dataset dependency.
+
+## Run archives
+
+After each run, a snapshot is archived under:
+
+```text
+artifacts/archives/run_NNN/
+├── metadata.yaml   # run id, timestamps, results, repo commit ids, copy of inputs
+├── config.yaml     # config as it was at run time
+├── scripts/        # copy of executed scripts
+├── session.log     # session record
+└── monitor.md      # monitor output
+```
+
+and one entry is appended to `artifacts/index.yaml`. Use `artifacts/index.yaml` for archived run history — its newest entry is the current/last run's status (see [Status](/docs/reference/status)).
+
+## Cleaning up
+
+`scripts/clean.sh` removes everything under `artifacts/` **except** `env/`/`envs/`, `index.yaml`, and `archives/` (so environments and archived runs are preserved). Pass `-n`/`--dry-run` to preview what would be removed. It does not touch `repos/`.
