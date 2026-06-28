@@ -1,0 +1,109 @@
+---
+title: Outputs
+description: Files and directories produced by Terminal-gen
+---
+
+Terminal-gen outputs are designed for downstream blocks to consume verified
+tasks without guessing which generated directories are complete.
+
+> **See a real example first.** `artifacts/examples/` ships a few committed,
+> known-good verified tasks (terminal-lego v1.0) in both the in-place per-domain
+> layout and the flat merged layout. Read `artifacts/examples/README.md` before
+> running the pipeline.
+
+## Task directories (in-place, v1.0)
+
+Per-domain task directories live under:
+
+```text
+artifacts/terminal_tasks/<domain>-tl/
+```
+
+Each verified task directory contains:
+
+| File | Purpose |
+| --- | --- |
+| `instruction.md` | Natural-language problem statement |
+| `task.toml` | Metadata (terminal-lego v1.0 schema) |
+| `environment/Dockerfile` | Reproducible build environment |
+| `environment/task_file/` | Seed input files |
+| `solution/solve.sh` | Reference solution script |
+| `tests/test.sh` | Verification entrypoint (writes reward to `/logs/verifier/reward.txt`) |
+| `tests/test_outputs.py` | pytest assertions on final state |
+
+## Verified manifest
+
+The most important output is:
+
+```text
+artifacts/terminal_tasks/<domain>-tl/verifiable_tasks.txt
+```
+
+Downstream consumers should filter through this manifest. The sibling
+`_candidates/` directory holds in-progress and failed skeletons — never consume
+those directly.
+
+## Merged verified tasks (optional flat export)
+
+```bash
+python scripts/extract_verified_tasks.py
+```
+
+copies every verified task **verbatim** (no format change — still terminal-lego
+v1.0) into a flat directory with domain-prefixed ids:
+
+```text
+artifacts/merged_terminal_tasks/<domain>__<task_id>/
+```
+
+Convenience single root for tools that expect one directory. Downstream can
+equally read the per-domain `terminal_tasks/<domain>-tl/` dirs in place.
+
+### Harbor compatibility (v1.0 loads directly)
+
+No v1.0→harbor rewrite is performed. Harbor's task loader
+(`harbor.models.task.config.TaskConfig`) is backward-compatible — it renames
+`version` → `schema_version` and auto-converts the deprecated `memory`/`storage`
+strings to `memory_mb`/`storage_mb` — so terminal-lego v1.0 `task.toml` parses
+into a valid harbor task config (verified against harbor's real model).
+
+The `[task]` package block (name/keywords) that harbor uses for its **registry**
+is *optional* and not required to run/verify a task (harbor's `init` even has a
+`--skip [task]` flag). If you later want these tasks as named harbor registry
+packages, add a `[task]` section then; it isn't needed for inference/training.
+
+## Logs
+
+Create logs live under:
+
+```text
+artifacts/logs/terminalgen-create/
+```
+
+Plus `artifacts/logs/adaptive_decisions.jsonl` for tuning decisions. These are
+audit artifacts rather than source files (gitignored).
+
+## State packages
+
+When moving to another node, package runtime state separately from source code:
+
+- `artifacts/collected_questions/<domain>_so_data.json`
+- `artifacts/terminal_tasks/<domain>-tl/` + `verifiable_tasks.txt`
+- `artifacts/merged_terminal_tasks/`
+- optional logs for audit
+
+Do not commit large runtime state to Git.
+
+## Dataset handoff
+
+The trajgen block consumes tasks after Terminal-gen writes manifests:
+
+1. Terminal-gen writes task directories (terminal-lego v1.0) and
+   `verifiable_tasks.txt` per domain; optionally `extract_verified_tasks.py`
+   flattens them into `artifacts/merged_terminal_tasks/` (same v1.0 format).
+2. Trajgen reads only task IDs listed in the manifest (select the terminalgen
+   provider — see the root docs' terminalgen page).
+3. Trajgen rolls out agents and captures trajectories.
+
+This keeps incomplete, failed, or partially generated task skeletons out of
+training data.
