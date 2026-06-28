@@ -4,7 +4,7 @@ User-facing documentation for the [rl](../README.md) block, built as a
 [fumadocs](https://fumadocs.dev/) (Next.js) site and deployed to Cloudflare
 Pages as a static export.
 
-Live site: **<https://swe-rl-docs.pages.dev>**
+Live site: **<https://swe-lego-rl-docs.pages.dev>**
 
 The prose lives in `content/docs/`; everything else is the minimal app shell
 needed to render and deploy it.
@@ -41,8 +41,8 @@ npx serve out      # preview the exported site
 bash deploy_cloudflare_pages.sh
 ```
 
-Builds and deploys `out/` to the `swe-rl-docs` Cloudflare Pages project
-(published at <https://swe-rl-docs.pages.dev>, separate from the training
+Builds and deploys `out/` to the `swe-lego-rl-docs` Cloudflare Pages project
+(published at <https://swe-lego-rl-docs.pages.dev>, separate from the training
 dashboard's `swe-lego-rl-dashboard`). It activates Node 22 via nvm, asserts
 Node >= 20, and reuses the dashboard's Cloudflare credentials
 (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or
