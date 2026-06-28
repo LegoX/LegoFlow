@@ -3,6 +3,10 @@
 @import "fumadocs-ui/css/preset.css";
 @import "tw-animate-css";
 
+:root {
+  --swe-live-accent: #b3431f;
+}
+
 /* ── Warm "paper" palette — match the project-page landing site.
    Light mode only (:root:not(.dark)); the dark theme stays fumadocs neutral. ── */
 :root:not(.dark) {
@@ -24,4 +28,45 @@
 /* Remove shadow from code blocks */
 figure.shiki {
   box-shadow: none;
+}
+
+.docs-brand-title {
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+  font-size: 1.18rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.docs-live-word {
+  position: relative;
+  display: inline-flex;
+  color: var(--swe-live-accent);
+}
+
+.docs-live-pulse-dot {
+  position: absolute;
+  top: -0.08em;
+  right: -0.46em;
+  width: 0.32em;
+  height: 0.32em;
+  border-radius: 999px;
+  background: var(--swe-live-accent);
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--swe-live-accent) 45%, transparent);
+  animation: docs-live-dot-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes docs-live-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.38;
+    transform: scale(0.82);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--swe-live-accent) 22%, transparent);
+  }
+
+  45% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0.34em color-mix(in oklab, var(--swe-live-accent) 0%, transparent);
+  }
 }

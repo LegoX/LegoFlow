@@ -1,37 +1,50 @@
 ---
-title: Motivation
-description: Why we built SWE-Lego-Live
+title: Introduction
+description: Key ideas behind SWE-Lego-Live
 ---
 
-Training a strong coding agent is a multi-stage pipeline — curate tasks, roll out trajectories, do SFT, then RL. Each stage needs its own data, its own environment, and its own GPUs, and the handoffs between them quietly break every time someone runs them by hand.
+Training a strong coding agent is not a single training job. A realistic SWE pipeline has to mine useful GitHub changes, turn them into verifiable tasks, roll agents out in isolated environments, filter and convert trajectories, train with SFT or RL, and evaluate the resulting model again. Each stage tends to grow its own scripts, storage layout, runtime assumptions, GPU requirements, and failure modes. The hard part is not only running the stages; it is keeping their handoffs reproducible as the data, repos, models, and infrastructure keep changing.
 
-We built **SWE-Lego-Live** so the whole pipeline behaves like one project. Every stage is a self-contained **block** with the same shape — a `config.yaml`, a `scripts/start.sh`, an `artifacts/` tree — wired into a parent by name. Run one block, run the whole tree, or swap a block out; the contracts hold.
+**SWE-Lego-Live** turns that loop into one agentic workflow. Instead of treating data construction, rollout, training, and evaluation as disconnected jobs, it keeps them in a live pipeline where each stage can be checked, rerun, inspected, and extended by agents.
 
-![SWE-Lego-Live pipeline motivation](/figures/my-version.png)
+## What Can We Do with SWE-Lego-Live?
 
-The diagram starts from **objective tasks**: generate SWE trajectory data, improve terminal-agent capability, and support longer end-to-end tasks. Those objectives enter the **root block**, which is the orchestration layer for the whole project. The root block exposes the plugin commands (`/<block>:setup`, `/<block>:check`, `/<block>:run`, and dashboard views), resolves the config tree, dispatches block runs, and archives run state.
+SWE-Lego-Live supports three core workflows:
 
-Under the root block, each pipeline stage is represented as a block with the same internal contract:
+- **Task generation** — curate high-quality SWE tasks from real GitHub pull requests, with consistent rubrics for task quality and bi-weekly dataset updates that keep the task pool aligned with live repository activity.
+- **Trajectory rollout** — run multiple coding scaffolds, including Claude Code, OpenCode, OpenHands, and Terminus, to produce diverse SWE trajectories under a shared tracing and validation workflow.
+- **Trajectory conversion, training, and evaluation** — convert rollout traces into training-ready formats, launch end-to-end SFT or RL workflows, and evaluate checkpoints with dashboards that support inspection, comparison, and follow-up analysis.
+
+![SWE-Lego-Live pipeline introduction](/figures/my-version.png)
+
+## Pipeline Roles
+
+A **block** is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, and dashboard, while exposing the same user-facing commands: `/<block>:setup`, `/<block>:check`, and `/<block>:run`. This means the full workflow can be started and inspected through plugin skills instead of hand-written orchestration scripts.
+
+The diagram starts from **objective tasks**: generate SWE trajectory data, improve terminal-agent capability, and support longer end-to-end tasks. Those objectives enter the **root block**, which resolves the config tree, dispatches block runs, and archives run state.
+
+Under the root block, the main stages are:
+
+- **curator** turns GitHub pull requests into verified SWE tasks.
+- **tracer** runs coding agents in isolated environments and records task trajectories.
+- **trainer** converts verified trajectories into SFT or RL training runs.
+- **evaluator** measures checkpoints on SWE benchmarks and reports model progress.
+
+Their handoffs are intentionally explicit:
 
 ```text
-GitHub PRs ─▶ curator ─▶ tracer ─▶ trainer ─▶ rl
+curator ─▶ tracer ─▶ trainer ─▶ evaluator
 ```
 
-The figure makes the handoffs explicit. **curator** collects PRs and creates SWE tasks; **tracer** rolls out task trajectories; **trainer** turns verified trajectories into checkpoints; the final evaluation/RL stage consumes checkpoints and produces reports or policy updates. The arrows between blocks are typed artifacts (`tasks`, `trajectories`, `ckpt`) rather than informal paths copied by hand.
+The arrows are typed artifacts (`tasks`, `trajectories`, `ckpt`, and reports), not informal paths copied by hand. **Dashboards** expose run state, logs, and metrics; **repositories** pin the external code each block depends on.
 
-Two support layers keep the pipeline inspectable and reproducible. **dashboards** publish per-block run state, artifacts, logs, and metrics. **repositories** pin the external code each block depends on, so a run archive can explain not only what happened, but which repo versions produced it.
+## Why Blocks?
 
-This is why the block abstraction matters: every stage can be developed independently, but the root block can still compose them as one system. See [Block Design](/docs/block-design) for the exact block anatomy.
+Blocks make the pipeline easier to use and easier to change. Because every stage follows the same contract, users can run the whole system through plugin skills, restart a failed stage from its archived state, swap one block without breaking the others, and inspect artifacts through a consistent dashboard interface.
 
-SWE-Lego-Live provides:
+This is especially useful for SWE workflows because different stages need different resources: curation may run locally, tracing may need containerized sandboxes, training may need remote GPUs, and evaluation may depend on model-serving endpoints. Blocks hide those operational differences behind the same setup-check-run lifecycle.
 
-- A **block abstraction** that makes every pipeline stage swappable, restartable, and replayable
-- **curator** — curated SWE tasks generated and NOP/Oracle-verified directly from GitHub PRs
-- **tracer** — containerized agent rollouts at scale on Harbor, with pluggable agent scaffolds
-- **trainer** — supervised fine-tuning on the resulting trajectories (LLaMA-Factory + DeepSpeed ZeRO-3)
-- **rl** — online RL on SWE-bench through Harbor + vLLM + verl
-- **Per-run archives** with config, scripts, and repo SHAs frozen for every execution
-- **A Claude Code plugin** (`/root:check`, `/root:run`, `/root:create`) that drives the tree end-to-end
+See [Block Design](/docs/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
 
 ## Where to go next
 
@@ -39,3 +52,7 @@ SWE-Lego-Live provides:
 - [Block Design](/docs/block-design) — the abstraction the whole pipeline is built on
 - Blocks: [curator](/docs/sub-block/curator) · [tracer](/docs/sub-block/tracer) · [trainer](/docs/sub-block/trainer) · [rl](/docs/sub-block/rl) — each links out to that block's full docs site
 - [Reference](/docs/reference) — `config.yaml` schema and the archive format
+
+## From SWE-Lego to SWE-Lego-Live
+
+SWE-Lego-Live builds on our earlier project, [SWE-Lego](https://swe-lego.github.io/), which focused on constructing software-engineering data from real repository changes. The live version keeps that data-centric foundation, then adds an agent-operated pipeline around it: blocks for curation, rollout, training, and evaluation; dashboards for run state; and archives that preserve the exact configs, scripts, and repo SHAs behind each run.
