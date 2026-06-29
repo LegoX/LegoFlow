@@ -32,7 +32,7 @@ meta_info:
     harbor:
       url: git@github.com:SWE-Lego/harbor.git
       branch: main
-      commit: 149e75770f8c369d6fae31c158ea761d676b4d3a
+      commit: 4c1f27dcee78bdb134bafd01a81e9c12aaaae3d2
       path: repos/harbor
       readonly: true
 
