@@ -1,9 +1,6 @@
 {
     "title": "Blocks",
     "pages": [
-        "curator",
-        "tracer",
-        "trainer",
-        "rl"
+        "evaluator"
     ]
 }

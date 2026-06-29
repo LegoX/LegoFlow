@@ -8,7 +8,7 @@ export default function HomePage() {
       <h1 className="text-2xl font-semibold">SWE-Lego-Live</h1>
       <p className="text-fd-muted-foreground max-w-md">
         A self-evolving LLM development pipeline. Curate SWE tasks, roll out
-        agent trajectories, and train models with SFT and RL — one block at a
+        agent trajectories, train models, and measure them with an evaluator — one block at a
         time.
       </p>
       <Link

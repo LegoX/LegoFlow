@@ -9,6 +9,22 @@ import { notFound } from 'next/navigation';
 import { getMDXComponents } from '@/mdx-components';
 import type { Metadata } from 'next';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
+import type { ComponentProps } from 'react';
+
+const blockDocsPrefix = '/docs/sub-block/';
+
+function rewriteBlockDocsHref(currentUrl: string, href?: string) {
+  if (!href?.startsWith('/docs/') || href.startsWith(blockDocsPrefix)) {
+    return href;
+  }
+
+  const [, block] = currentUrl.slice(blockDocsPrefix.length).split('/');
+  if (currentUrl.startsWith(blockDocsPrefix) && block !== 'evaluator') {
+    return `${blockDocsPrefix}${block}${href.slice('/docs'.length)}`;
+  }
+
+  return href;
+}
 
 export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
   const params = await props.params;
@@ -16,6 +32,13 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
   if (!page) notFound();
 
   const MDX = page.data.body;
+  const RelativeLink = createRelativeLink(source as any, page as any);
+  const BlockAwareLink = (props: ComponentProps<'a'>) => (
+    <RelativeLink
+      {...props}
+      href={rewriteBlockDocsHref(page.url, props.href)}
+    />
+  );
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
@@ -24,7 +47,7 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
       <DocsBody>
         <MDX
           components={getMDXComponents({
-            a: createRelativeLink(source, page),
+            a: BlockAwareLink,
           })}
         />
       </DocsBody>

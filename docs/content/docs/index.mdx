@@ -1,58 +1,44 @@
 ---
 title: Introduction
-description: Key ideas behind SWE-Lego-Live
+description: An end-to-end agentic workflow for intelligence
 ---
 
-Training a strong coding agent is not a single training job. A realistic SWE pipeline has to mine useful GitHub changes, turn them into verifiable tasks, roll agents out in isolated environments, filter and convert trajectories, train with SFT or RL, and evaluate the resulting model again. Each stage tends to grow its own scripts, storage layout, runtime assumptions, GPU requirements, and failure modes. The hard part is not only running the stages; it is keeping their handoffs reproducible as the data, repos, models, and infrastructure keep changing.
+Training a strong coding agent is not a single training job. A realistic SWE pipeline has to mine useful GitHub changes, turn them into verifiable tasks, roll agents out in isolated environments, filter and convert trajectories, train models, and measure them with an evaluator. Each stage tends to grow its own scripts, storage layout, runtime assumptions, GPU requirements, and failure modes. The hard part is not only running the stages; it is keeping their handoffs reproducible as the data, repos, models, and infrastructure keep changing.
 
-**SWE-Lego-Live** turns that loop into one agentic workflow. Instead of treating data construction, rollout, training, and evaluation as disconnected jobs, it keeps them in a live pipeline where each stage can be checked, rerun, inspected, and extended by agents.
+**SWE-Lego-Live** turns that loop into one agentic workflow. Instead of treating data construction, rollout, training, and evaluator measurement as disconnected jobs, it keeps them in a live pipeline where each stage can be checked, rerun, inspected, and extended by agents.
 
-## What Can We Do with SWE-Lego-Live?
 
-SWE-Lego-Live supports three core workflows:
+## Highlights
 
-- **Task generation** — curate high-quality SWE tasks from real GitHub pull requests, with consistent rubrics for task quality and bi-weekly dataset updates that keep the task pool aligned with live repository activity.
-- **Trajectory rollout** — run multiple coding scaffolds, including Claude Code, OpenCode, OpenHands, and Terminus, to produce diverse SWE trajectories under a shared tracing and validation workflow.
-- **Trajectory conversion, training, and evaluation** — convert rollout traces into training-ready formats, launch end-to-end SFT or RL workflows, and evaluate checkpoints with dashboards that support inspection, comparison, and follow-up analysis.
+- **Live, growing dataset**: download the SWE-Lego-Live dataset from <a href="https://huggingface.co/datasets/SWE-Lego/SWE-Lego-Live" className="docs-hf-link"><img src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" alt="" aria-hidden="true" className="docs-hf-logo" />Hugging Face</a>, with **bi-weekly** updates that keep tasks and trajectories aligned with real repository activity.
+- **Fully agentic data pipeline**: curate high-quality SWE and coding tasks across **8+** programming languages and **20+** task tags, then roll out trajectories with **4+** coding agents, including Claude Code, OpenCode, OpenHands, and Terminus.
+- **Unified, block-wise design**: use agent plugin skills to interact with, customize, and extend each stage through a consistent block interface.
 
-![SWE-Lego-Live pipeline introduction](/figures/my-version.png)
 
-## Pipeline Roles
+## Project Design
 
-A **block** is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, and dashboard, while exposing the same user-facing commands: `/<block>:setup`, `/<block>:check`, and `/<block>:run`. This means the full workflow can be started and inspected through plugin skills instead of hand-written orchestration scripts.
+![SWE-Lego-Live pipeline introduction](/figures/my-version-coding-repos-expandable.png)
 
-The diagram starts from **objective tasks**: generate SWE trajectory data, improve terminal-agent capability, and support longer end-to-end tasks. Those objectives enter the **root block**, which resolves the config tree, dispatches block runs, and archives run state.
 
-Under the root block, the main stages are:
+The project is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. Users can operate the workflow through the same plugin-skill lifecycle across blocks: `:setup`, `:check`, and `:run`.
 
-- **curator** turns GitHub pull requests into verified SWE tasks.
-- **tracer** runs coding agents in isolated environments and records task trajectories.
-- **trainer** converts verified trajectories into SFT or RL training runs.
-- **evaluator** measures checkpoints on SWE benchmarks and reports model progress.
+The **root** block orchestrates four subblocks: **curator** builds verified SWE tasks, **tracer** rolls out agent trajectories, **trainer** turns trajectories into model checkpoints, and **evaluator** measures those checkpoints with shared rubrics.
 
-Their handoffs are intentionally explicit:
+- **curator**: curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums such as Stack Overflow. Carefully designed filtering requirements preserve high-quality instances across **8+** programming languages and **20+** task tags.
+- **tracer**: collects high-quality trajectories with verified rewards, supporting rollouts across multiple coding scaffolds such as Claude Code, OpenCode, OpenHands, and Terminus.
+- **trainer**: converts rollout traces into training-ready formats and launches end-to-end training workflows.
+- **evaluator**: measures checkpoints on coding benchmarks and supports detailed analysis with carefully designed rubrics and tags.
+- **live dashboard**: displays live statistics across tasks, trajectories, training status, and evaluator results. It also supports experiment comparison and deeper analysis over curated rubrics and tags.
 
-```text
-curator ─▶ tracer ─▶ trainer ─▶ evaluator
-```
 
-The arrows are typed artifacts (`tasks`, `trajectories`, `ckpt`, and reports), not informal paths copied by hand. **Dashboards** expose run state, logs, and metrics; **repositories** pin the external code each block depends on.
+### Why Blocks?
 
-## Why Blocks?
+Blocks make the pipeline easier to use and easier to change. Because every stage follows the same contract, users can run the whole system through plugin skills, restart a failed stage from its archived state, swap one block without breaking the others, and inspect artifacts through a consistent dashboard interface. See [Block Design](/docs/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
 
-Blocks make the pipeline easier to use and easier to change. Because every stage follows the same contract, users can run the whole system through plugin skills, restart a failed stage from its archived state, swap one block without breaking the others, and inspect artifacts through a consistent dashboard interface.
-
-This is especially useful for SWE workflows because different stages need different resources: curation may run locally, tracing may need containerized sandboxes, training may need remote GPUs, and evaluation may depend on model-serving endpoints. Blocks hide those operational differences behind the same setup-check-run lifecycle.
-
-See [Block Design](/docs/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
 
 ## Where to go next
 
 - [Getting Started](/docs/getting-started) — the three skills (`:setup`, `:check`, `:run`) used to drive every block
 - [Block Design](/docs/block-design) — the abstraction the whole pipeline is built on
-- Blocks: [curator](/docs/sub-block/curator) · [tracer](/docs/sub-block/tracer) · [trainer](/docs/sub-block/trainer) · [rl](/docs/sub-block/rl) — each links out to that block's full docs site
+- Block docs: [curator](/docs/sub-block/curator) · [tracer](/docs/sub-block/tracer) · [trainer](/docs/sub-block/trainer) · [evaluator](/docs/sub-block/evaluator)
 - [Reference](/docs/reference) — `config.yaml` schema and the archive format
-
-## From SWE-Lego to SWE-Lego-Live
-
-SWE-Lego-Live builds on our earlier project, [SWE-Lego](https://swe-lego.github.io/), which focused on constructing software-engineering data from real repository changes. The live version keeps that data-centric foundation, then adds an agent-operated pipeline around it: blocks for curation, rollout, training, and evaluation; dashboards for run state; and archives that preserve the exact configs, scripts, and repo SHAs behind each run.
