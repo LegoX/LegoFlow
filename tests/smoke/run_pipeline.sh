@@ -212,6 +212,22 @@ want() {  # want <stage> -> 0 if in [FROM..TO] window
 
 [[ -n "$BUDGET_OVERRIDE" ]] && for s in "${STAGES[@]}"; do BUDGET[$s]="$BUDGET_OVERRIDE"; done
 
+# --- HARD RESOURCE GATE ------------------------------------------------------
+# Before launching ANY stage, confirm the hardware/network we are about to lean
+# on has headroom right now: runner disk/memory/Docker, the GPU pod's free GPUs/
+# disk/memory (scope-aware — only when sft/eval are in-window), and upstream LLM
+# reachability. This is the failure class that has actually bitten this smoke
+# (pod GPUs held by someone else -> OOM; disk full; endpoint down -> 0 verified).
+# Set SKIP_PREFLIGHT=1 only to deliberately bypass (not recommended).
+if [[ "$DRY_RUN" != 1 && "${SKIP_PREFLIGHT:-0}" != 1 ]]; then
+  if ! bash "$ROOT_DIR/tests/smoke/preflight.sh" "$FROM" "$TO"; then
+    echo "ROOT SMOKE CHAIN: ABORTED at preflight — resources not ready (see above). Nothing launched."
+    exit 1
+  fi
+elif [[ "${SKIP_PREFLIGHT:-0}" == 1 ]]; then
+  log "WARNING: SKIP_PREFLIGHT=1 — skipping the resource gate (GPU/disk/memory/API not checked)"
+fi
+
 CHAIN_RC=0
 hr; log "ROOT SMOKE CHAIN  from=$FROM to=$TO  claude_sdk=$CLAUDE_SDK  dry_run=$DRY_RUN"; hr
 [[ "$DRY_RUN" == 1 ]] && log "NOTE: dry-run skips the config overlay, so smoke-only launch params (max_pr, collect.*, ...) render blank below — they populate from tests/smoke/<block>/config.yaml in a real run."
