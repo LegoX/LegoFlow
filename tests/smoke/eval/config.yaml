@@ -46,13 +46,14 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      # ROOT: api_base_url is rewritten by run_pipeline.sh to the LiteLLM
-      # wrapper in front of the remote vLLM server (placeholder until then).
+      # ROOT (MODE B): api_base_url is rewritten by run_pipeline.sh to the RAW
+      # vLLM /v1 on the pod (serve_checkpoint.sh, vLLM-only). eval's own per-job
+      # LiteLLM (:4101) wraps it, so the model uses the openai/ provider prefix.
       api_key: dummy-key-root-smoke
       api_base_url: "PENDING_SET_BY_run_pipeline.sh"
-      model: "hosted_vllm/root-smoke-sft"   # the served sft checkpoint
-      description: The freshly-trained sft checkpoint, served via vLLM + LiteLLM on the sft GPU pod.
-      served_via: remote_vllm_of_sft_checkpoint   # ROOT: was per_job_litellm_proxy
+      model: "openai/root-smoke-sft"   # openai/<vLLM --served-model-name>
+      description: The freshly-trained sft checkpoint, served vLLM-only (MODE B) on the sft GPU pod; eval's LiteLLM wraps the raw endpoint.
+      served_via: remote_vllm_of_sft_checkpoint
       protocols: [openai_compatible]
       input_cost_per_token: 0.0
       output_cost_per_token: 0.0
@@ -70,7 +71,7 @@ runtime_info:
       vllm:
         port: 8000
         served_model_name: root-smoke-sft
-        tensor_parallel_size: 8
+        tensor_parallel_size: 1   # 8B fits on 1 GPU; matches the validated MODE B standalone run
         max_model_len: 32768
         gpu_memory_utilization: 0.90
         dtype: bfloat16
