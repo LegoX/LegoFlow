@@ -72,8 +72,14 @@ runtime_info:
         port: 8000
         served_model_name: root-smoke-sft
         tensor_parallel_size: 1   # 8B fits on 1 GPU; matches the validated MODE B standalone run
-        max_model_len: 32768
-        gpu_memory_utilization: 0.90
+        # The OpenHands agent requests max_tokens up to the model's full context
+        # (131072) because eval's generated LiteLLM model_list carries no
+        # model_info cap. vLLM 400s if max_tokens + prompt > max_model_len, which
+        # errored every trial in run 28371626594 at 32768. Serve the model's full
+        # native window (config max_position_embeddings=163840, rope_theta=1e6, no
+        # rope_scaling needed) so a 131072 completion + a ~32K trajectory prompt fit.
+        max_model_len: 163840
+        gpu_memory_utilization: 0.92
         dtype: bfloat16
       litellm:
         port: 4110
