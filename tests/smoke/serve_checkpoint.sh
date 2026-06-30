@@ -73,6 +73,12 @@ TP="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.tensor_parallel_size)";   
 MAXLEN="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.max_model_len)";      MAXLEN="${MAXLEN:-32768}"
 GPUUTIL="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.gpu_memory_utilization)"; GPUUTIL="${GPUUTIL:-0.90}"
 DTYPE="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.dtype)";               DTYPE="${DTYPE:-bfloat16}"
+# vLLM's --api-key MUST equal the key eval's per-job LiteLLM forwards upstream
+# (runtime_info.input.llm_api.api_key) or EVERY request 401s and vLLM returns
+# empty choices -> all eval trials error -> eval FAIL. Derive it from the SAME
+# config field eval reads so the two can never drift. (Root smoke 28371626594
+# served 'dummy-key' while eval sent 'dummy-key-root-smoke' -> 199x HTTP 401.)
+VLLM_API_KEY="$(cfg "$EVAL_CFG" runtime_info.input.llm_api.api_key)";           VLLM_API_KEY="${VLLM_API_KEY:-dummy-key}"
 
 if [[ -z "$R_IP" || "$R_IP" == "local" || "$R_IP" == "null" ]]; then
   echo "SKIP: sft block has no remote pod (ip=$R_IP) — nowhere to serve the checkpoint"
@@ -117,7 +123,7 @@ case "$ACTION" in
     echo "      pod        : $R_USER@$R_IP:$R_PORT"
     echo "      checkpoint : $CKPT_REMOTE"
     echo "      vLLM       : :$VLLM_PORT  tp=$TP  max_len=$MAXLEN  served_name=$SERVED_NAME  (conda $VLLM_CONDA_ENV)"
-    echo "      base_url   : $BASE_URL"
+    echo "      base_url   : $BASE_URL   api_key=$VLLM_API_KEY (matches eval llm_api.api_key)"
 
     if ! remote "test -f '$CKPT_REMOTE/config.json'"; then
       echo "SKIP: no checkpoint at $CKPT_REMOTE on the pod (sft stage didn't persist a model)"
@@ -135,7 +141,7 @@ case "$ACTION" in
       # it would always think vLLM is already up and never start it.
       if ! curl -fsS http://127.0.0.1:${VLLM_PORT}/health >/dev/null 2>&1; then
         nohup vllm serve '$CKPT_REMOTE' --host 0.0.0.0 --port ${VLLM_PORT} \
-          --api-key dummy-key --served-model-name '$SERVED_NAME' \
+          --api-key '$VLLM_API_KEY' --served-model-name '$SERVED_NAME' \
           --tensor-parallel-size ${TP} --max-model-len ${MAXLEN} \
           --gpu-memory-utilization ${GPUUTIL} --dtype ${DTYPE} \
           --trust-remote-code --enable-auto-tool-choice --tool-call-parser hermes \
@@ -162,7 +168,7 @@ case "$ACTION" in
     echo "INFO: confirming $BASE_URL reachable from CI host ..."
     ok=0
     for _ in $(seq 1 18); do
-      if curl -fsS "${BASE_URL}/models" -H "Authorization: Bearer dummy-key" >/dev/null 2>&1; then ok=1; break; fi
+      if curl -fsS "${BASE_URL}/models" -H "Authorization: Bearer ${VLLM_API_KEY}" >/dev/null 2>&1; then ok=1; break; fi
       sleep 5
     done
     if [[ "$ok" != 1 ]]; then
