@@ -183,7 +183,11 @@ wait_job() {  # wait_job <pgrep_pattern> <budget> <progress_glob>
       return 0
     else
       absent=$((absent + 1))
-      (( absent >= 6 )) && { log "  harbor job never started (3 min) — proceeding to verify"; return 0; }
+      # Grace before concluding "never started": the eval/trajgen start.sh runs
+      # its OWN dryrun (litellm import off a shared FS is ~2-3 min) + starts the
+      # LiteLLM proxy BEFORE `harbor run` ever appears — a 3-min grace raced that
+      # and false-SKIP'd eval. 10 min comfortably covers the double-dryrun startup.
+      (( absent >= 20 )) && { log "  harbor job never started (10 min) — proceeding to verify"; return 0; }
     fi
     sleep 30
   done
@@ -344,8 +348,11 @@ PY
     # the whole pipeline (observed: trajgen overlay `sync` stuck 44+ min behind 8
     # orphaned create workers). Stop it (and any lingering PR collector) here so
     # `sync` can settle and the chain advances.
-    pkill -f 'swegen create --input-ids-file' 2>/dev/null || true
-    pkill -f 'collect_prs_wo_image' 2>/dev/null || true
+    # Bracket-trick the patterns ('[c]reate') so pkill can never match its own
+    # command line — a `pkill -f '<pat>'` whose cmdline contains <pat> SIGKILLs
+    # the wrapper shell (instant exit, empty log). Convention for all smoke pkills.
+    pkill -f 'swegen [c]reate --input-ids-file' 2>/dev/null || true
+    pkill -f 'collect_[p]rs_wo_image' 2>/dev/null || true
     if gate swegen; then log "stage swegen PASS"; else
       rc=$?; [[ $rc == 77 ]] && { log "stage swegen SKIP"; CHAIN_RC=77; } || { log "stage swegen FAIL"; CHAIN_RC=1; }
     fi
@@ -543,7 +550,16 @@ PY
     JOBS="$(cfg "$CFG" runtime_info.input.harbor_job.jobs_dir)"
     # Clear stale job dirs so policy=first doesn't match a prior run's result.json.
     [[ "$DRY_RUN" != 1 ]] && rm -rf "$EB/$JOBS"
-    RUN="nohup bash scripts/start.sh >> artifacts/logs/root-smoke-eval.log 2>&1 &"
+    # #1 fix: Harbor hardcodes ~/.cache/harbor (repo/task cache) and docker buildx
+    # uses ~/.docker; docker build scratch uses TMPDIR — all default to the ROOT
+    # partition, which ENOSPC'd the first root-smoke (59/100 build failures on a
+    # near-full /). Redirect HOME/TMPDIR to a BIG disk (defaults to the workspace
+    # fs, which preflight already verified has headroom; override EVAL_CACHE_ROOT
+    # if the workspace itself is on the small root fs). Docker image LAYERS still
+    # go to the daemon's data-root — this only moves the client-side caches.
+    EVAL_CACHE_ROOT="${EVAL_CACHE_ROOT:-$ROOT_DIR/.eval_home}"
+    [[ "$DRY_RUN" != 1 ]] && mkdir -p "$EVAL_CACHE_ROOT/.cache" "$EVAL_CACHE_ROOT/.docker" "$EVAL_CACHE_ROOT/tmp"
+    RUN="nohup env HOME='$EVAL_CACHE_ROOT' XDG_CACHE_HOME='$EVAL_CACHE_ROOT/.cache' TMPDIR='$EVAL_CACHE_ROOT/tmp' bash scripts/start.sh >> artifacts/logs/root-smoke-eval.log 2>&1 &"
     ( cd "$EB" && mkdir -p artifacts/logs && \
       { [[ -x artifacts/env/harbor-uv/bin/harbor ]] && artifacts/env/harbor-uv/bin/harbor --help >/dev/null 2>&1 || true; } && \
       claude_launch eval \

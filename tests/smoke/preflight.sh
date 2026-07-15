@@ -35,6 +35,8 @@ TO="${2:-eval}"
 # --- thresholds (override via env if a host legitimately needs different) ----
 CI_DISK_MIN_GB="${CI_DISK_MIN_GB:-15}"      # hard floor on the runner workspace fs
 CI_DISK_WARN_GB="${CI_DISK_WARN_GB:-40}"
+ROOT_DISK_MIN_GB="${ROOT_DISK_MIN_GB:-10}"  # floor on the / (tmp) fs — docker buildkit + /tmp spill here
+ROOT_DISK_WARN_GB="${ROOT_DISK_WARN_GB:-25}"
 CI_MEM_MIN_GB="${CI_MEM_MIN_GB:-2}"         # hard floor on available RAM
 CI_MEM_WARN_GB="${CI_MEM_WARN_GB:-6}"
 POD_DISK_MIN_GB="${POD_DISK_MIN_GB:-20}"    # checkpoints + datasets land here
@@ -101,8 +103,31 @@ fi
 if in_window swegen || in_window trajgen || in_window eval; then
   if docker info >/dev/null 2>&1; then
     ok "docker daemon reachable"
+    # `docker info` passing does NOT mean containers can RUN: the GPU pod's
+    # rootless/cgroup-ro docker passes info but every `docker run` dies on
+    # `mkdir /sys/fs/cgroup/... read-only`. Actually try to start a container
+    # (prefer an already-present image so this never depends on a pull).
+    RUN_IMG="$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -v '<none>' | head -1)"
+    RUN_IMG="${RUN_IMG:-hello-world:latest}"
+    if timeout 60 docker run --rm --entrypoint true "$RUN_IMG" >/dev/null 2>&1 \
+       || timeout 60 docker run --rm "$RUN_IMG" true >/dev/null 2>&1; then
+      ok "docker can run containers ($RUN_IMG)"
+    else
+      fail "docker daemon up but CANNOT run containers (cgroup/rootless restriction?) — Harbor agent containers will fail here; run eval on a Docker-capable host"
+    fi
   else
     fail "docker daemon NOT reachable (\`docker info\` failed) — swegen/trajgen/eval cannot run containers"
+  fi
+
+  # docker buildkit + /tmp build scratch live on the ROOT partition, NOT the
+  # (often big/shared) workspace fs — this is what ENOSPC'd the first root-smoke
+  # (harbor cache + buildx + /tmp filled a near-full /). Check it separately.
+  TMP_AVAIL_KB="$(df -Pk /tmp 2>/dev/null | awk 'NR==2{print $4}')"
+  if [[ "$TMP_AVAIL_KB" =~ ^[0-9]+$ ]]; then
+    TMP_GB=$(( TMP_AVAIL_KB / 1024 / 1024 ))
+    if   (( TMP_GB < ROOT_DISK_MIN_GB ));  then fail "/tmp (root fs): ${TMP_GB}GB free < ${ROOT_DISK_MIN_GB}GB — docker buildkit spills here; free space or point HOME/TMPDIR at a big disk"
+    elif (( TMP_GB < ROOT_DISK_WARN_GB )); then warn "/tmp (root fs): ${TMP_GB}GB free (< ${ROOT_DISK_WARN_GB}GB) — concurrent builds may ENOSPC; run_pipeline redirects HOME/TMPDIR to the big disk"
+    else ok "/tmp (root fs): ${TMP_GB}GB free"; fi
   fi
 fi
 
@@ -150,7 +175,12 @@ if in_window sft || in_window eval; then
     if in_window sft; then
       N="$(cfg "$SFT_CFG" runtime_info.input.training.n_gpus_per_node)"; REQ_GPUS="${N:-8}"
     elif in_window eval; then
-      N="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.tensor_parallel_size)"; REQ_GPUS="${N:-1}"
+      # serving uses data_parallel_size x tensor_parallel_size GPUs. With DP
+      # auto/null, serve_checkpoint.sh scales to whatever is FREE, so we only
+      # need >=1 free here; with an explicit DP we need DP*TP.
+      TP="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.tensor_parallel_size)"; TP="${TP:-1}"
+      DP="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.data_parallel_size)"
+      if [[ -z "$DP" || "$DP" == "auto" || "$DP" == "null" ]]; then REQ_GPUS=1; else REQ_GPUS=$(( DP * TP )); fi
     fi
 
     if ! remote "echo ok" >/dev/null 2>&1; then

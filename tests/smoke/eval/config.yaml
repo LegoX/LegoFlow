@@ -30,7 +30,7 @@ meta_info:
 
   repositories:
     harbor:
-      url: git@github.com:SWE-Lego/harbor.git
+      url: https://github.com/SWE-Lego/harbor.git
       branch: main
       commit: 4c1f27dcee78bdb134bafd01a81e9c12aaaae3d2
       path: repos/harbor
@@ -71,7 +71,12 @@ runtime_info:
       vllm:
         port: 8000
         served_model_name: root-smoke-sft
-        tensor_parallel_size: 1   # 8B fits on 1 GPU; matches the validated MODE B standalone run
+        tensor_parallel_size: 1   # 8B fits on 1 GPU
+        # data_parallel_size: N replicas (1/GPU) behind one endpoint for ~Nx eval
+        # throughput. null/"auto" => serve_checkpoint.sh uses all FREE GPUs on the
+        # (shared) pod. An 8B model should data-parallel, not tensor-parallel —
+        # the first smoke served TP=1 on 1 of 8 GPUs and was throughput-bound.
+        data_parallel_size: null
         # The OpenHands agent requests max_tokens up to the model's full context
         # (131072) because eval's generated LiteLLM model_list carries no
         # model_info cap. vLLM 400s if max_tokens + prompt > max_model_len, which
