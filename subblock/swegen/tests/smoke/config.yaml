@@ -40,10 +40,10 @@ runtime_info:
     # az.gptplus5/deepseek-v4-flash had real PASSes but was flaky AND needed a
     # committed real key; GLM-5-FP8 gave 0 verified, opus/sonnet returned empty
     # for swegen's verdict-shaped prompt. openai_proxy + Qwen sidesteps all of
-    # it — no real key (llm12 takes the dummy-cf CF token).
+    # it — no real key (the llm endpoint takes the dummy-cf CF token).
     llm_api:
       api_key: dummy-cf
-      api_base_url: https://llm12.jierungogogo.com/v1
+      api_base_url: https://llm.jierungogogo.com/v1
       pr_model: Qwen3.6-35B-A3B
       task_model: claude-sonnet-4-6
       cc_provider_mode: openai_proxy

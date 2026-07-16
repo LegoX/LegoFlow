@@ -47,7 +47,7 @@ runtime_info:
     # the dummy-cf CF token).
     llm_api:
       api_key: dummy-cf
-      api_base_url: https://llm12.jierungogogo.com/v1
+      api_base_url: https://llm.jierungogogo.com/v1
       pr_model: Qwen3.6-35B-A3B
       task_model: claude-sonnet-4-6
       cc_provider_mode: openai_proxy

@@ -19,6 +19,14 @@ print("" if cur is None else cur)
 PY
 }
 
+# CI's actions/checkout clones over HTTPS while config may pin the SSH form of
+# the same repo — compare host + owner/repo, not the raw URL string.
+norm_url() {
+  local u="$1"
+  u="${u%.git}"; u="${u#ssh://}"; u="${u#git@}"; u="${u#https://}"; u="${u#http://}"
+  echo "${u/://}"
+}
+
 check_repo() {
   local name="$1" url commit path abs
   url="$(cfg "meta_info.repositories.$name.url")"
@@ -30,7 +38,7 @@ check_repo() {
 
   local origin head
   origin="$(git -C "$abs" remote get-url origin 2>/dev/null || true)"
-  if [[ "$origin" != "$url" ]]; then
+  if [[ "$(norm_url "$origin")" != "$(norm_url "$url")" ]]; then
     echo "FAIL: $path origin=$origin does not match config url=$url"; return 1
   fi
   head="$(git -C "$abs" rev-parse HEAD 2>/dev/null || true)"

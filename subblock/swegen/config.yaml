@@ -59,7 +59,7 @@ runtime_info:
     # Tested end-to-end (NOP=0/Oracle=1) with these exact values:
     # llm_api:
     #   api_key: dummy-cf
-    #   api_base_url: https://llm12.jierungogogo.com/v1
+    #   api_base_url: https://llm.jierungogogo.com/v1
     #   pr_model: Qwen3.6-35B-A3B
     #   task_model: claude-sonnet-4-6        # any claude-* alias; proxy maps it to pr_model
     #   cc_provider_mode: openai_proxy

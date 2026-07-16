@@ -53,8 +53,8 @@ runtime_info:
   input:
     llm_api:
       api_key: dummy-cf
-      api_base_url: "http://llm10.jierungogogo.com/v1"
-      model: "openai/GLM-5-FP8"
+      api_base_url: "https://llm.jierungogogo.com/v1"
+      model: "openai/Qwen3.6-35B-A3B"
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
@@ -89,7 +89,7 @@ runtime_info:
 
     harbor_job:
       jobs_dir: artifacts/jobs/root-smoke   # ROOT: isolate from prod + the subblock smoke
-      # ROOT: 1 = one agent at a time. The shared GLM-5/llm10 endpoint was
+      # ROOT: 1 = one agent at a time. The shared upstream endpoint was
       # overloaded (429/500/timeout/overloaded) under concurrent agent load and
       # contended by another job; one-at-a-time spares it.
       n_concurrent: 1
