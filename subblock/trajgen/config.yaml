@@ -64,25 +64,16 @@ runtime_info:
       port: 4003   # 4001 squatted by an unowned stale LiteLLM; 4002 reserved for the host-wide root-owned LiteLLM
       master_key: dummy-key-cf
 
-    # task_source: wired from swegen.output.swe_tasks_dir (dependency declared in meta_info.dependencies)
-    # task_source:
-    #   provider: local
-    #   dataset_name: ../swegen/artifacts/swe_tasks/py-cc
-      # prepare_tasks.sh filters by py-cc/verifiable_tasks.txt before copying into artifacts/tasks/.
-
-    # harbor_job:
-    #   jobs_dir: artifacts/jobs
-    #   dataset_path: artifacts/tasks/py-cc   # points to verified py-cc tasks only
-    #   n_concurrent: 1
-    #   n_tasks: null
-    #   max_retries: 2
-    #   timeout_multiplier: 5
-
-
-    # TESTRUN (disabled): HuggingFace dataset path, do not delete — used for smoke tests.
+    # Production task source: swegen's verified tasks, wired from
+    # swegen.output.swe_tasks_dir (dependency declared in meta_info.dependencies).
+    # prepare_tasks.sh filters the source dir through its verifiable_tasks.txt
+    # manifest before copying into artifacts/tasks/.
+    # Test/smoke runs use their own task_source (an HF slice) in the overlay
+    # configs — tests/smoke/config.yaml (per-block) and tests/smoke/trajgen/
+    # config.yaml (root chain) — never this one.
     task_source:
-      provider: huggingface
-      dataset_name: SWE-Lego/swerebenchv2-200-260429
+      provider: local
+      dataset_name: ../swegen/artifacts/swe_tasks/py-cc
       split: train
 
     harbor_job:
@@ -91,7 +82,7 @@ runtime_info:
       # scripts/start.sh exports this as TRAJGEN_HARBOR_JOBS_DIR.
       jobs_dir: artifacts/jobs
       n_concurrent: 8
-      n_tasks: 40                     # cap per swegen→trajgen run target (set to 1 for smoke tests, null for all manifest tasks)
+      n_tasks: 40                     # cap per swegen→trajgen run (null = all manifest tasks)
       max_retries: 2
       timeout_multiplier: 5
 
