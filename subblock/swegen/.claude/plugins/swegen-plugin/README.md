@@ -13,6 +13,7 @@ new blocks are only ever created at the root level), see
 | --- | --- |
 | `/swegen:setup`     | Bootstrap: install `repos/swegen/` editable, verify env vars (GITHUB_TOKENS, OPENAI_API_*), prepare `gh_token.txt`. |
 | `/swegen:check`     | Preflight: schema + env vars + GitHub API reachability + LLM endpoint `/models` + docker daemon + dryrun. Read-only. |
+| `/swegen:collect-prs` | Collect GitHub PRs per `config.yaml -> runtime_info.input.pr_collection` into `artifacts/collected_prs/{lang}_pr_ids.txt`. |
 | `/swegen:dashboard` | Show progress per language: PRs collected, tasks generated, verifiable rate. |
 | `/swegen:run`       | Launch the full pipeline (`scripts/start.sh`) — PR fetch → task generation → NOP/Oracle verification. |
 
@@ -31,6 +32,7 @@ swegen-plugin/
 └── skills/
     ├── setup/SKILL.md          # /swegen:setup
     ├── check/SKILL.md          # /swegen:check
+    ├── collect-prs/SKILL.md    # /swegen:collect-prs
     ├── dashboard/SKILL.md      # /swegen:dashboard
     └── run/SKILL.md            # /swegen:run
 ```

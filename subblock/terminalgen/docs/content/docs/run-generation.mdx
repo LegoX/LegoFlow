@@ -1,0 +1,124 @@
+---
+title: Run Generation
+description: Scrape question buckets, run per-domain generation, and monitor progress
+---
+
+Terminal-gen generation is driven by shell scripts in
+`subblock/terminalgen/scripts/`. They activate the environment, load runtime
+variables, and call into the pinned `repos/terminal-lego` pipeline.
+
+## Scrape question buckets
+
+Scrape a round of StackOverflow questions and bucket them by domain:
+
+```bash
+bash scripts/scrape_so_questions.sh 1 200
+```
+
+This wraps `repos/terminal-lego/scraper/so_scraper.py` (writing raw output under
+`artifacts/collected_questions/_raw_r1/`), then `scripts/bucket_questions.py`
+splits it into per-domain files:
+
+```text
+artifacts/collected_questions/{domain}_so_data.json
+```
+
+With `SO_API_KEY` set you get 10000 req/day; without it, 300/day shared by IP
+(the scraper will sleep 60s on a 429 and may stall on small samples).
+
+## Run one domain
+
+```bash
+bash scripts/create_domain.sh security-cryptography          # all questions in the bucket
+bash scripts/create_domain.sh security-cryptography 6 0      # cost-capped: 6 candidates from index 0
+```
+
+`create_domain.sh <domain> [limit] [start]` — `limit` caps how many bucket
+questions to generate this invocation (cost control); `start` is the 0-based
+bucket index for chunked runs (task ids are `task_{start+i}`, so chunks never
+collide). The script reads tuned params from `config.yaml` via
+`scripts/read_params.py`, generates candidates with terminal-lego's generator,
+then Docker-validates that chunk. It writes:
+
+```text
+artifacts/terminal_tasks/security-cryptography-tl/_candidates/s<start>/  # generated chunk
+artifacts/terminal_tasks/security-cryptography-tl/<task_id>/             # verified (reward=1.0)
+artifacts/terminal_tasks/security-cryptography-tl/verifiable_tasks.txt
+```
+
+Logs go to `artifacts/logs/terminalgen-create/tl_security-cryptography.txt`.
+
+## Batch to a verified target (cost-controlled)
+
+`batch_verify.sh` drives `create_domain.sh` per domain in fixed-size chunks and
+stops as soon as each domain reaches a target verified count (or a per-domain
+candidate cap), so you don't over-spend on domains that already have enough:
+
+```bash
+CHUNK=6 CAND_CAP=24 bash scripts/batch_verify.sh 5 core-terminal-os python-ecosystem
+# target 5 verified/domain; omit domain args to run all enabled domains
+# CHUNK = candidates per round (default 6); CAND_CAP = max candidates/domain (default 24)
+```
+
+This is the right tool for "give me N verified tasks per domain on a budget".
+Use `start.sh` (below) instead when you want a full, fire-and-forget run of every
+domain with run archiving.
+
+> **Endpoint note**: the generator receives the LLM base URL via `--api-base`,
+> which the script sets to `$OPENAI_API_BASE_URL`. Setting only
+> `OPENAI_API_BASE` will not reach the generator.
+
+## Run all domains
+
+After a smoke test is healthy:
+
+```bash
+bash scripts/start.sh
+```
+
+`start.sh` scrapes a round if no buckets exist, launches `create_all_bg.sh` for
+every enabled domain in the background, and archives the run on exit
+(`scripts/archive_run.sh` → `artifacts/index.yaml`). Use `tmux` for long runs.
+
+## Tuned parameters
+
+Each domain has its own defaults in `config.yaml`:
+
+- `gen_workers` — parallel generation workers (bounds [1, 16])
+- `val_workers` — parallel Docker validation workers (bounds [1, 8])
+- `val_timeout` — per Docker step timeout in seconds (bounds [120, 1800]; keep ≥900 on throttled networks because the task's test.sh bootstraps uv over the network)
+
+Update the config value; the scripts read it at launch.
+
+## (Optional) Merge into a flat dir
+
+Tasks are already downstream-consumable in place (v1.0). Optionally flatten all
+verified tasks into one directory:
+
+```bash
+python scripts/extract_verified_tasks.py
+```
+
+This copies every verified task **verbatim** (still terminal-lego v1.0) into
+`artifacts/merged_terminal_tasks/<domain>__<task_id>/`. No format conversion.
+
+## Docker and local caches
+
+Validation builds and runs one container per task. Build caches are performance
+state, not dataset state — they need not be committed or copied between nodes.
+
+## Resume behavior
+
+Re-running a domain regenerates candidates under `_candidates/` and re-validates;
+the authoritative `verifiable_tasks.txt` is rebuilt from the validated (copied)
+task directories. There is no cross-node state hash to relocate.
+
+## Operational loop
+
+1. Keep question buckets full (`scrape_so_questions.sh`).
+2. Run per-domain generation (`create_domain.sh` / `start.sh`).
+3. Monitor `verifiable_tasks.txt` growth and `validation_report.json` failures.
+4. Tune `gen_workers` / `val_workers` / `val_timeout`.
+5. Run `extract_verified_tasks.py` or let downstream read the merged dir directly.
+
+Open the [Dashboard](/docs/dashboard) for the live progress view.

@@ -1,0 +1,123 @@
+---
+title: Getting Started
+description: Set up the Terminal-gen block and run the first task generation pass
+---
+
+Terminal-gen wraps the pinned `repos/terminal-lego` checkout in the
+SWE-Lego-Live block layout. The pinned repository is recorded as a git submodule
+under `subblock/terminalgen/repos/terminal-lego` and should match commit
+`1a2a604`.
+
+## Prerequisites
+
+- Docker - task validation runs a build → solve → test round-trip per task.
+- Python 3.10+ - the only runtime dependency is `requests`.
+- OpenAI-compatible LLM endpoint - used by the generator.
+- StackExchange API key (`SO_API_KEY`) - 10000 req/day with a key, 300 without.
+
+## 1. Enter the block
+
+Run commands from the block root:
+
+```bash
+cd subblock/terminalgen
+```
+
+Confirm the pinned submodule exists and matches:
+
+```bash
+git submodule update --init repos/terminal-lego
+git -C repos/terminal-lego rev-parse HEAD
+```
+
+The expected pin is:
+
+```text
+1a2a6048a0d568891407ed3c6a441c995f4491b0
+```
+
+**Never modify files under `repos/terminal-lego/`** — it is a read-only upstream
+dependency. All adaptation lives in this block's `scripts/` and `config.yaml`.
+
+## 2. Install the environment
+
+```bash
+python3 -m venv artifacts/envs/terminalgen-env
+source artifacts/envs/terminalgen-env/bin/activate
+pip install -U pip
+pip install -r requirements.txt
+```
+
+## 3. Configure credentials
+
+Set runtime inputs in the shell or in a local `.env` that is not committed:
+
+```bash
+export OPENAI_API_KEY="..."
+export OPENAI_API_BASE_URL="https://your-openai-compatible-endpoint/v1"
+export MODEL_NAME="deepseek-v4-flash"
+export SO_API_KEY="rl_xxx"
+```
+
+> **Important**: terminal-lego's generator reads the LLM endpoint from its
+> `--api-base` flag, which `scripts/create_domain.sh` sets to
+> `$OPENAI_API_BASE_URL` — **not** `OPENAI_API_BASE`. Set the `_URL` form.
+
+Do not commit tokens or local env files.
+
+## 4. Run a dry run
+
+```bash
+bash scripts/dryrun.sh
+```
+
+This validates config schema, the submodule pin, `requests`, env vars, and
+Docker. Fix dry-run failures before launching generation.
+
+## 5. Run a smoke
+
+The cheapest, deterministic first check replays the committed fixture task
+through the validator (no LLM, no SO quota):
+
+```bash
+bash tests/smoke/verify.sh   # expects reward=1.0 on https-nginx-cert-setup
+```
+
+For a real generation smoke on a tiny sample:
+
+```bash
+TESTS_WITH_SMOKE=1 bash tests/run.sh   # generates + validates the 2-question fixture
+```
+
+## 6. Run a real batch
+
+Scrape a round, then generate + validate one domain:
+
+```bash
+bash scripts/scrape_so_questions.sh 1 200
+bash scripts/create_domain.sh security-cryptography
+```
+
+Or run every enabled domain in the background, with run archiving on exit:
+
+```bash
+bash scripts/start.sh
+```
+
+Verified tasks are already downstream-consumable in place. Optionally flatten
+them into one directory (same v1.0 format, no conversion):
+
+```bash
+python scripts/extract_verified_tasks.py
+```
+
+## 7. Resume / re-run
+
+Per-domain progress is captured by each `artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt`.
+The generator writes candidates under `{domain}-tl/_candidates/`; re-running a
+domain regenerates candidates and re-validates. Keep these together when moving
+nodes:
+
+- `artifacts/collected_questions/{domain}_so_data.json`
+- `artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt`
+- `artifacts/terminal_tasks/{domain}-tl/<task_id>/`

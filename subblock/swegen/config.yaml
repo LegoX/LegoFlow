@@ -31,6 +31,39 @@ runtime_info:
     github_tokens: human              # Comma-separated GitHub API tokens, or place them in gh_token.txt
 
     # =========================================================================
+    # PR collection - the first stage of the pipeline. `swegen create` consumes
+    # the PR-id files this stage produces. Collection is run by
+    # tools/collect_prs_wo_image.py (in repos/swegen); the values below are the
+    # user-facing knobs. scripts/load_runtime_env.sh exports them as SWEGEN_PR_*
+    # / COLLECT_* env vars, which the collector reads (empty -> its built-in
+    # default). Per-language threshold overrides still live in the collector's
+    # LANGUAGE_OVERRIDES and are intentionally NOT surfaced here.
+    #
+    # GitHub tokens for collection come from gh_token.txt (one per line), NOT
+    # from github_tokens above - keep real tokens out of this file.
+    # =========================================================================
+    pr_collection:
+      enabled: true
+      # Languages to collect PRs for. Comma-joined into --languages.
+      languages: [c, cpp, go, java, javascript, typescript, python, rust]
+      repo_num: 100                   # repos WITH qualifying PRs to collect per language
+      max_prs_per_repo: 50            # max qualifying PRs kept per repository
+      output_dir: artifacts/collected_prs   # {language}_pr_ids.txt written here
+      token_limit: 32                 # first N tokens from gh_token.txt (0 = use all)
+      # Global filtering thresholds. Each maps to a SWEGEN_PR_* env var; leave a
+      # value null/absent to keep the collector's built-in default. Per-language
+      # overrides in the collector take precedence over these globals.
+      filters:
+        min_stars: 30                 # min repo stars
+        min_merged_prs: 5             # min merged PRs in repo
+        min_language_percentage: 0.4  # target language must be > this fraction of the codebase
+        max_days_since_push: 1095     # skip repos not pushed within this many days
+        min_issue_body_length: 10     # min linked-issue description length
+        min_files_changed: 1          # min files changed in the PR
+        max_files_changed: 25         # max files changed in the PR
+        max_lines_changed: 1500       # max (additions + deletions) in the PR
+
+    # =========================================================================
     # LLM configuration - the main thing a user edits before a run.
     #
     # swegen calls the LLM over TWO different API paths. Set both correctly or

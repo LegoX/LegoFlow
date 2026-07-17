@@ -1,0 +1,2 @@
+# Wrangler local deploy cache (Cloudflare Pages). Machine-local, never commit.
+.wrangler/

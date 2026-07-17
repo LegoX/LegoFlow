@@ -72,6 +72,7 @@ The root block does not consume external inputs directly. Required external valu
 
 **Outputs** (downstream-consumable artifacts):
 - `swegen.output.swe_tasks_dir`: verified SWE tasks under `subblock/swegen/artifacts/swe_tasks/{lang}-cc/`. The authoritative manifest is `{lang}-cc/verifiable_tasks.txt` — only task IDs in that file have passed NOP/Oracle validation.
+- `terminalgen.output.terminal_tasks_dir`: verified **terminal** tasks (terminal-lego v1.0) under `subblock/terminalgen/artifacts/terminal_tasks/{domain}-tl/`, with per-domain manifests `verifiable_tasks.txt`. `extract_verified_tasks.py` optionally flattens them into `merged_terminal_tasks/` (same format). terminalgen is a task source **parallel to swegen** — trajgen can consume either via its `task_source.provider` selector.
 - `trajgen.output.raw_trajectories_dir`: raw agent trajectories under `subblock/trajgen/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
 - `trajgen.output.sft_data_dir`: LLaMA-Factory LF-format SFT JSON converted from those trajectories at `subblock/trajgen/artifacts/sft_data/<job>/lf.json` (produced by `subblock/trajgen/scripts/convert_trajectories.sh`, which runs the `swe_data_process` converters under their own uv env at `subblock/trajgen/artifacts/env/swe-data-process-uv`)
 
@@ -98,6 +99,7 @@ All subblocks run **locally** by default (`meta_info.resources.ip: local`). Over
 | Block | Execution | Key tool | Status |
 |---|---|---|---|
 | `subblock/swegen/` | Local (CPU + Docker) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
+| `subblock/terminalgen/` | Local (CPU + Docker) | `terminal-lego` pipeline + StackExchange API | Adaptive per-domain terminal task generation (parallel to swegen) |
 | `subblock/trajgen/` | Local (CPU + Docker) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
 | `subblock/sft/` | Local (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
 | `subblock/rl/` | Local (needs 8× GPU) | Harbor + vLLM + verl | Online RL on Qwen3-30B |

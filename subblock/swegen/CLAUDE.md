@@ -97,18 +97,59 @@ docker run --rm hello-world
 
 ## Core Workflow
 
+The recommended way to operate this block is through its Claude plugin
+(`swegen-plugin`). Launch Claude from inside `subblock/swegen/` and use the
+slash commands; each performs preflight, confirmation, and archiving for you:
+
+| Command | Wraps | Purpose |
+|---|---|---|
+| `/swegen:setup` | submodule init, venv, `pip install -e`, dryrun | Bootstrap the block |
+| `/swegen:check` | `scripts/dryrun.sh` + token/LLM/docker probes | Read-only preflight |
+| `/swegen:collect-prs` | `scripts/collect_all_bg.sh` / collector | PR collection (Step 1 below) |
+| `/swegen:run` | `scripts/start_with_*.sh` → `create_all_bg.sh` | Task generation + verification (Step 2) |
+| `/swegen:dashboard` | `dashboard/` generator + Cloudflare sync | Progress monitoring |
+
+The knobs each command reads live in `config.yaml`: LLM under
+`runtime_info.input.llm_api`, PR collection under
+`runtime_info.input.pr_collection`, per-language generation under
+`runtime_info.input.languages`. Edit `config.yaml`, not the scripts. The steps
+below document the underlying commands for manual operation.
+
 ### Quick Verification
 
 Before running a large batch, a new AI agent should run the short verification flow in [`memory/quick-verify.md`](memory/quick-verify.md). It checks GitHub/LLM/Docker preflight, validates a known task, and runs a small Python smoke test with `--min-source-files 1`.
 
 ### Step 1: Collect PRs
 
+PR collection is configured in `config.yaml -> runtime_info.input.pr_collection`
+(`languages`, `repo_num`, `max_prs_per_repo`, `output_dir`, `token_limit`, and
+global `filters`). `scripts/load_runtime_env.sh` exports these as
+`SWEGEN_COLLECT_*` / `SWEGEN_PR_*` / `COLLECT_TOKEN_LIMIT`; the collector reads
+them, falling back to its built-in defaults. Per-language threshold overrides
+live in the collector's `LANGUAGE_OVERRIDES` and win over the global `filters`.
+Collection tokens come from `gh_token.txt` (one per line), **not** from
+`config.yaml`.
+
+Config-driven wrapper (reads `pr_collection` via `load_runtime_env.sh`):
+
 ```bash
+# full: languages from config
+bash scripts/collect_all_bg.sh
+
+# single language, other knobs from config
+LANGUAGES=python bash scripts/collect_all_bg.sh
+```
+
+Or call the collector directly (small smoke; filters still from config/defaults):
+
+```bash
+source scripts/load_runtime_env.sh && load_runtime_env
 python repos/swegen/tools/collect_prs_wo_image.py \
   --languages python \
-  --repo_num 100 \
-  --max_prs_per_repo 50 \
-  --output_dir ./artifacts/collected_prs
+  --repo_num 2 \
+  --max_prs_per_repo 10 \
+  --output_dir ./artifacts/collected_prs \
+  --disable_progress_bar
 ```
 
 Output: `artifacts/collected_prs/{language}_pr_ids.txt` (format: `owner/repo:pr-NUMBER`)
@@ -248,6 +289,35 @@ artifacts/
 eval $(python scripts/read_params.py --lang py --config-yaml config.yaml)
 echo $TIMEOUT $CC_TIMEOUT $N_CONCURRENT
 ```
+
+## PR collection configuration
+
+`config.yaml -> runtime_info.input.pr_collection` controls Step 1 (PR
+collection). `scripts/load_runtime_env.sh` exports each key as an env var that
+`repos/swegen/tools/collect_prs_wo_image.py` and `scripts/collect_all_bg.sh`
+read; unset/empty values fall back to the collector's built-in defaults.
+Priority stays **env > `.env` > `config.yaml`**.
+
+| config key | env var | Meaning |
+|---|---|---|
+| `languages` | `SWEGEN_COLLECT_LANGUAGES` | comma-joined `--languages` list |
+| `repo_num` | `SWEGEN_COLLECT_REPO_NUM` | repos with qualifying PRs per language |
+| `max_prs_per_repo` | `SWEGEN_COLLECT_MAX_PRS_PER_REPO` | max qualifying PRs kept per repo |
+| `output_dir` | `SWEGEN_COLLECT_OUTPUT_DIR` | where `{lang}_pr_ids.txt` is written |
+| `token_limit` | `COLLECT_TOKEN_LIMIT` | first N tokens from `gh_token.txt` (0 = all) |
+| `filters.min_stars` | `SWEGEN_PR_MIN_STARS` | min repo stars |
+| `filters.min_merged_prs` | `SWEGEN_PR_MIN_MERGED_PRS` | min merged PRs in repo |
+| `filters.min_language_percentage` | `SWEGEN_PR_MIN_LANGUAGE_PERCENTAGE` | min fraction of codebase in target language |
+| `filters.max_days_since_push` | `SWEGEN_PR_MAX_DAYS_SINCE_PUSH` | skip repos idle longer than this |
+| `filters.min_issue_body_length` | `SWEGEN_PR_MIN_ISSUE_BODY_LENGTH` | min linked-issue body length |
+| `filters.min_files_changed` | `SWEGEN_PR_MIN_FILES_CHANGED` | min files changed in the PR |
+| `filters.max_files_changed` | `SWEGEN_PR_MAX_FILES_CHANGED` | max files changed in the PR |
+| `filters.max_lines_changed` | `SWEGEN_PR_MAX_LINES_CHANGED` | max (additions + deletions) in the PR |
+
+The `filters` are **global** thresholds. Per-language overrides remain in the
+collector's `LANGUAGE_OVERRIDES` dict and take precedence over these globals —
+they are intentionally not surfaced in `config.yaml`. GitHub collection tokens
+come from `gh_token.txt`, never `config.yaml`.
 
 ## Collaboration Rules
 

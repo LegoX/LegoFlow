@@ -21,6 +21,11 @@ Preflight and launch SWE task generation. SWEgen is a leaf block: this
 skill runs commands inside `subblock/swegen/` and does not dispatch to
 child blocks.
 
+This skill consumes the `{lang}_pr_ids.txt` pools produced by
+`/swegen:collect-prs`. If no PR pools exist yet under the configured
+`output_dir` (default `artifacts/collected_prs/`), run `/swegen:collect-prs`
+first (or use the smoke mode below, which uses the submodule's sample PR file).
+
 ## Step 0 - Orient
 
 Validate:

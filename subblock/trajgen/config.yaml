@@ -71,6 +71,23 @@ runtime_info:
     # Test/smoke runs use their own task_source (an HF slice) in the overlay
     # configs — tests/smoke/config.yaml (per-block) and tests/smoke/trajgen/
     # config.yaml (root chain) — never this one.
+    #
+    # Alternative task source — verified TERMINAL tasks from the terminalgen block
+    # (parallel to swegen; terminal-lego v1.0 schema). Select with provider: terminalgen.
+    # task_source:
+    #   provider: terminalgen
+    #   dataset_name: ../terminalgen/artifacts/terminal_tasks
+      # Filter by per-domain ../terminalgen/artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt
+      # (or the optional flat ../terminalgen/artifacts/merged_terminal_tasks/verifiable_tasks.txt).
+
+    # harbor_job:
+    #   jobs_dir: artifacts/jobs
+    #   dataset_path: artifacts/tasks/py-cc   # points to verified py-cc tasks only
+    #   n_concurrent: 1
+    #   n_tasks: null
+    #   max_retries: 2
+    #   timeout_multiplier: 5
+
     task_source:
       provider: local
       dataset_name: ../swegen/artifacts/swe_tasks/py-cc
