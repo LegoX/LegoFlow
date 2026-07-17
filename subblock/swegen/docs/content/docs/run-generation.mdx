@@ -3,32 +3,77 @@ title: Run Generation
 description: Prepare PR pools, run create scripts, and monitor generation
 ---
 
-SWE-gen generation is driven by language-specific shell scripts in
-`subblock/swegen/scripts/`. Each script activates the environment, loads local
-runtime variables, configures Docker cache paths, and calls `swegen create`.
+SWE-gen generation is driven by the block's Claude plugin, which wraps the
+language-specific shell scripts in `subblock/swegen/scripts/`. Each script
+activates the environment, loads runtime variables from `config.yaml`,
+configures Docker cache paths, and calls `swegen create`.
+
+## Plugin lifecycle (recommended)
+
+From a Claude session started inside `subblock/swegen/`:
+
+```text
+/swegen:collect-prs   # collect PRs per config.yaml -> runtime_info.input.pr_collection
+/swegen:run           # generate + verify tasks per runtime_info.input.languages
+/swegen:dashboard     # monitor progress
+```
+
+`/swegen:collect-prs` reads its scope and filters from
+`config.yaml -> runtime_info.input.pr_collection`; `/swegen:run` reads
+per-language `timeout` / `cc_timeout` / `n_concurrent` from
+`runtime_info.input.languages`. Edit `config.yaml`, then re-run the command.
+The sections below document the raw commands those skills run.
 
 ## Collect PRs
 
-For a quick validation run, collect a small Python pool first:
+PR collection is configured under `config.yaml -> runtime_info.input.pr_collection`:
+
+```yaml
+pr_collection:
+  enabled: true
+  languages: [c, cpp, go, java, javascript, typescript, python, rust]
+  repo_num: 100
+  max_prs_per_repo: 50
+  output_dir: artifacts/collected_prs
+  token_limit: 32
+  filters:
+    min_stars: 30
+    min_merged_prs: 5
+    min_language_percentage: 0.4
+    max_days_since_push: 1095
+    min_issue_body_length: 10
+    min_files_changed: 1
+    max_files_changed: 25
+    max_lines_changed: 1500
+```
+
+`scripts/load_runtime_env.sh` exports these as `SWEGEN_COLLECT_*` /
+`SWEGEN_PR_*` / `COLLECT_TOKEN_LIMIT`, which the collector reads. GitHub
+collection tokens come from `gh_token.txt` (one per line), never from
+`config.yaml`. Per-language threshold overrides live in the collector's
+`LANGUAGE_OVERRIDES` and take precedence over the global `filters` above.
+
+The config-driven wrapper runs the full or single-language collection:
 
 ```bash
+# full: languages from config
+bash scripts/collect_all_bg.sh
+
+# single language, other knobs from config
+LANGUAGES=python bash scripts/collect_all_bg.sh
+```
+
+For a quick smoke, call the collector directly with small overrides (filters
+still come from config/defaults):
+
+```bash
+source scripts/load_runtime_env.sh && load_runtime_env
 python repos/swegen/tools/collect_prs_wo_image.py \
   --languages python \
   --repo_num 2 \
   --max_prs_per_repo 10 \
-  --max-candidate-repos 60 \
   --output_dir ./artifacts/collected_prs \
   --disable_progress_bar
-```
-
-For a production refresh, increase the collection target:
-
-```bash
-python repos/swegen/tools/collect_prs_wo_image.py \
-  --languages python \
-  --repo_num 100 \
-  --max_prs_per_repo 50 \
-  --output_dir ./artifacts/collected_prs
 ```
 
 The output file is:
@@ -37,9 +82,8 @@ The output file is:
 artifacts/collected_prs/python_pr_ids.txt
 ```
 
-The production command can take a long time before writing the final PR ID file.
-Use the smaller command above for smoke tests and node validation. Repeat or
-schedule collection for all enabled languages when preparing production pools.
+A full multi-language pass takes a long time and consumes GitHub API quota.
+Use the smaller command above for smoke tests and node validation.
 
 ## Run one language
 

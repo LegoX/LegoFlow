@@ -5,7 +5,31 @@ description: Set up the SWE-gen block and run the first task generation pass
 
 SWE-gen wraps the pinned `repos/swegen` checkout in the SWE-Lego-Live block
 layout. The pinned repository is recorded as a gitlink under
-`subblock/swegen/repos/swegen` and should match commit `e804af9`.
+`subblock/swegen/repos/swegen`.
+
+## Recommended: operate via the Claude plugin
+
+The block ships a Claude Code plugin (`swegen-plugin`) that drives the whole
+lifecycle through slash commands. This is the recommended way to run swegen —
+each command performs the preflight, confirmation, and bookkeeping steps for
+you. Launch Claude from inside `subblock/swegen/` so the block-local plugin
+loads, then:
+
+```text
+/swegen:setup        # init submodule, build venv, install swegen, dryrun
+/swegen:check        # preflight: config, GitHub tokens, LLM endpoint, docker
+/swegen:collect-prs  # collect GitHub PRs -> artifacts/collected_prs/{lang}_pr_ids.txt
+/swegen:run          # generate + verify tasks -> verifiable_tasks.txt
+/swegen:dashboard    # local preview or Cloudflare Pages sync
+```
+
+The knobs these commands read live in `config.yaml` — LLM endpoint under
+`runtime_info.input.llm_api`, PR collection under
+`runtime_info.input.pr_collection`, and per-language generation params under
+`runtime_info.input.languages`. Edit `config.yaml`, not the scripts.
+
+The rest of this page documents the underlying commands the plugin runs, for
+manual operation or debugging.
 
 ## Prerequisites
 
@@ -23,17 +47,14 @@ Run commands from the block root:
 cd subblock/swegen
 ```
 
-Confirm the pinned repo exists:
+Confirm the pinned repo is checked out:
 
 ```bash
 git rev-parse HEAD:repos/swegen
 ```
 
-The expected pin for this docs site is:
-
-```text
-e804af92aad81f42928453959e24e3f5dc666c44
-```
+This prints the gitlink commit recorded for the submodule. `/swegen:setup`
+initializes it if the `repos/swegen/` working tree is empty.
 
 ## 2. Install the environment
 
