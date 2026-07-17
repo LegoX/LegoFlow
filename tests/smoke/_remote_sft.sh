@@ -60,9 +60,15 @@ fi
 REMOTE_OWNER="$(SSH "stat -c %U '$R_DIR' 2>/dev/null" | tr -d '\r')"; REMOTE_OWNER="${REMOTE_OWNER:-root}"
 
 echo "INFO: staging data + config onto $R_USER@$R_IP:$REMOTE_SFT (run-as uid: $REMOTE_OWNER)"
-SSH "mkdir -p '$REMOTE_SFT/$(dirname "$MERGED_REL")' '$REMOTE_SFT/artifacts/logs' '$REMOTE_SFT/artifacts/model'"
-SCP_TO "$FB/$MERGED_REL" "$REMOTE_SFT/$MERGED_REL"
-SCP_TO "$CFG" "$REMOTE_SFT/config.yaml"
+# Staging must be fatal: this script is `set -u` without `set -e`, so an
+# unchecked scp/mkdir failure would fall through to the rm + remote launch below
+# and train on a stale config/dataset left on the pod from an earlier run.
+SSH "mkdir -p '$REMOTE_SFT/$(dirname "$MERGED_REL")' '$REMOTE_SFT/artifacts/logs' '$REMOTE_SFT/artifacts/model'" \
+  || { echo "FAIL: could not create remote staging dirs on $R_IP"; exit 1; }
+SCP_TO "$FB/$MERGED_REL" "$REMOTE_SFT/$MERGED_REL" \
+  || { echo "FAIL: could not stage merged LF dataset to the pod"; exit 1; }
+SCP_TO "$CFG" "$REMOTE_SFT/config.yaml" \
+  || { echo "FAIL: could not stage sft config to the pod"; exit 1; }
 # Drop any stale run dir; give the staged inputs + artifact dirs to the run uid
 # (SCP left them root-owned) so the non-root run can read config + write outputs.
 # Hand ALL run-written artifact dirs to the run uid — not just model/logs: dataset

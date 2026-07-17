@@ -765,12 +765,21 @@ jobs:
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
           LITELLM_NUM_WORKERS: "1"
+          # Pass the dispatch input through the environment (not string-spliced
+          # into the script) so a crafted value like $(...) cannot execute — and
+          # validate it is digits before use. See PR #54 P1 review.
+          ROOT_BUDGET: ${{ inputs.root_budget }}
         # HOME=/home/haoli so the in-chain `claude -p` launcher finds its auth
         # (mirrors .github/scripts/smoke_run.sh); CLAUDE_SDK=1 uses that launcher.
         run: |
           set -uo pipefail
           BUDGET_ARG=""
-          [ -n "${{ inputs.root_budget }}" ] && BUDGET_ARG="--budget ${{ inputs.root_budget }}"
+          if [ -n "$ROOT_BUDGET" ]; then
+            case "$ROOT_BUDGET" in
+              *[!0-9]*) echo "ERROR: root_budget must be digits, got: $ROOT_BUDGET" >&2; exit 2 ;;
+            esac
+            BUDGET_ARG="--budget $ROOT_BUDGET"
+          fi
           HOME=/home/haoli CLAUDE_SDK=1 bash tests/smoke/run_pipeline.sh $BUDGET_ARG
       - name: Upload logs
         if: always()

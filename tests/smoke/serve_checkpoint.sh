@@ -184,7 +184,18 @@ source '$CONDA_SH' 2>/dev/null && conda activate '$VLLM_CONDA_ENV' \
   || { echo 'NO_CONDA: cannot source $CONDA_SH / activate $VLLM_CONDA_ENV'; exit 3; }
 command -v vllm >/dev/null 2>&1 || { echo 'NO_VLLM: vllm not on PATH in $VLLM_CONDA_ENV'; exit 3; }
 if curl -fsS http://127.0.0.1:${VLLM_PORT}/health >/dev/null 2>&1; then
-  echo 'vLLM already healthy on :${VLLM_PORT}'; exit 0
+  # Only REUSE the running server if it is serving the checkpoint we intend to
+  # evaluate. A prior smoke (cancelled after serving, or --keep-serving) may hold
+  # the port with an OLDER checkpoint; reusing it would silently score the wrong
+  # model. If the running vllm cmdline does not reference this checkpoint, kill it
+  # and relaunch for '$CKPT_REMOTE'.
+  if pgrep -af 'vllm [s]erve' 2>/dev/null | grep -qF -- '$CKPT_REMOTE'; then
+    echo 'vLLM already healthy on :${VLLM_PORT} serving the current checkpoint'; exit 0
+  fi
+  echo 'vLLM on :${VLLM_PORT} serves a different/older checkpoint — restarting for $CKPT_REMOTE'
+  pkill -f 'vllm [s]erve.*--port ${VLLM_PORT}' 2>/dev/null || true
+  pkill -f 'api_[s]erver.*--port ${VLLM_PORT}' 2>/dev/null || true
+  sleep 3
 fi
 tmux kill-session -t smoke-vllm 2>/dev/null || true
 tmux new-session -d -s smoke-vllm "vllm serve '$CKPT_REMOTE' --host 0.0.0.0 --port ${VLLM_PORT} \

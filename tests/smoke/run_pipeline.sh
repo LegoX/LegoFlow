@@ -257,6 +257,14 @@ if want swegen; then
   C_TARGET="$(cfg "$CFG" runtime_info.input.smoke.collect.target_prs)"
   C_OUT="$(cfg "$CFG" runtime_info.input.smoke.collect.output_dir)"
   C_BUDGET="$(cfg "$CFG" runtime_info.input.smoke.collect.time_budget_s)"; C_BUDGET="${C_BUDGET:-1200}"
+  # Never let PR collection outlast the swegen stage budget: when the run is
+  # dispatched with --budget (e.g. root_budget=1800), the collector must honor it
+  # too, or stage 1 alone could burn the config's time_budget_s (hours) before the
+  # stage budget even starts and blow past the CI job cap.
+  if [[ -n "$BUDGET_OVERRIDE" ]] && (( C_BUDGET > BUDGET[swegen] )); then
+    log "capping PR-collection budget ${C_BUDGET}s -> swegen stage budget ${BUDGET[swegen]}s (--budget override)"
+    C_BUDGET="${BUDGET[swegen]}"
+  fi
   C_MINIDS="$(cfg "$CFG" runtime_info.input.smoke.collect.min_ids)"; C_MINIDS="${C_MINIDS:-8}"
   IDS_FILE="$SB/$C_OUT/${C_LANG}_pr_ids.txt"
 
@@ -415,9 +423,13 @@ PY
   JOBS="$(cfg "$CFG" runtime_info.input.harbor_job.jobs_dir)"
   # Clear stale job dirs + prepared-task cache from any prior smoke run, else
   # policy=first would match an old result.json instantly and verify the wrong
-  # job. jobs_dir is smoke-isolated (artifacts/jobs/root-smoke).
+  # job. jobs_dir is smoke-isolated (artifacts/jobs/root-smoke). ALSO clear the
+  # sft_data out_dir: stage 3 merges every `*/lf.json` under it, so a prior run's
+  # converted LF would otherwise be trained on even when THIS trajgen resolves
+  # zero — masking a broken swegen→trajgen handoff.
+  TRAJ_OUT="$(cfg "$CFG" runtime_info.input.sft_conversion.out_dir)"; TRAJ_OUT="${TRAJ_OUT:-artifacts/sft_data}"
   if [[ "$DRY_RUN" != 1 ]]; then
-    rm -rf "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")"
+    rm -rf "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" "$TB/$TRAJ_OUT"
   fi
   RUN="nohup bash scripts/start.sh >> artifacts/logs/root-smoke-trajgen.log 2>&1 &"
   ( cd "$TB" && mkdir -p artifacts/logs && \
@@ -533,13 +545,16 @@ if want eval && [[ "$CHAIN_RC" == 0 ]]; then
       log "serve FAIL — could not stand up the checkpoint endpoint"
       CHAIN_RC=1
     else
-      LKEY="$(cfg "$CFG" runtime_info.input.serving.litellm.master_key)"
-      BASE_URL="$BASE_URL" LKEY="$LKEY" python3 - "$CFG" <<'PY'
+      # Only rewrite api_base_url. Do NOT touch api_key: serve_checkpoint.sh
+      # started vLLM with --api-key = llm_api.api_key (derived from THIS field so
+      # the two can't drift), so eval's LiteLLM must keep forwarding that same key
+      # upstream. Overwriting it with serving.litellm.master_key would 401 every
+      # eval request against vLLM (they only happen to match today).
+      BASE_URL="$BASE_URL" python3 - "$CFG" <<'PY'
 import sys, os, yaml
 p = sys.argv[1]; d = yaml.safe_load(open(p)) or {}
 api = d["runtime_info"]["input"]["llm_api"]
 api["api_base_url"] = os.environ["BASE_URL"]
-api["api_key"] = os.environ.get("LKEY") or api.get("api_key")
 yaml.safe_dump(d, open(p, "w"), sort_keys=False, allow_unicode=True)
 print(f"wired eval llm_api.api_base_url -> {os.environ['BASE_URL']}")
 PY
