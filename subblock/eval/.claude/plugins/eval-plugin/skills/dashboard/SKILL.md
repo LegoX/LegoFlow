@@ -23,9 +23,10 @@ asked for.
 
 ## Where the data lives
 
-- **Raw job output**: `artifacts/jobs/<job>/<task>/{agent,evaluation}/`,
-  with per-task trajectories at `<task>/agent/litellm-trajectory.jsonl`
-  and a job roll-up at `artifacts/jobs/<job>/results.json`.
+- **Raw job output**: `artifacts/jobs/<job>/<task>/{agent,verifier}/`,
+  with each trial's status in `<task>/result.json`, trajectories at
+  `<task>/agent/litellm-trajectory.jsonl`, and the job roll-up at
+  `artifacts/jobs/<job>/result.json`.
 - **Analysis artifacts**: `artifacts/jobs/<job>/analysis/` — written by
   `scripts/analyze_job.sh` (auto-run by `start.sh` after each eval). This
   is exactly what the web dashboard reads:
@@ -45,10 +46,12 @@ For each `artifacts/jobs/<job>/`, print a row with:
   from the denominator and say so,
 - trajectories produced (count of `<task>/agent/litellm-trajectory.jsonl`).
 
-Derive resolved/unresolved from `results.json` (the Harbor job roll-up)
-when present; fall back to per-task `evaluation/` outputs otherwise. For
-the same `(dataset_name, version, agent)` triple, optionally roll up
-across matching entries in `artifacts/index.yaml`.
+Derive resolved/unresolved from the job-level `result.json`
+(`stats.evals` / `reward_stats`) when present; otherwise scan per-task
+`result.json` (`verifier_result.rewards.reward` / `exception_info`) and
+`verifier/report.json`. For the same `(dataset_name, version, agent)`
+triple, optionally roll up across matching entries in
+`artifacts/index.yaml`.
 
 ## 2. Analysis pipeline (when a job lacks `analysis/`)
 
@@ -72,7 +75,7 @@ step). It auto-discovers jobs under `artifacts/jobs/` and renders the
 `analysis/` artifacts.
 
 ```bash
-bash dashboard/start.sh                 # serves on :8092, --jobs-dir ../jobs
+bash dashboard/start.sh                 # serves on :8092, defaults to artifacts/jobs
 # or: python3 dashboard/server.py --jobs-dir artifacts/jobs --port 8092
 ```
 
@@ -97,7 +100,8 @@ step-by-step **Trajectory viewer**. API: `GET /api/{jobs,overview}`,
 - **Read-only over results**: this skill summarizes, analyzes, and serves;
   it never launches an eval (`/eval:run`) or edits `config.yaml`.
 - **Host**: results live on the node in `meta_info.resources.ip`
-  (`192.168.35.240`). SSH there to read job dirs / serve the webui; a
-  dashboard served on a host that holds no jobs shows nothing.
+  (the checked-in default is `local`). For a configured remote host,
+  connect there to read job dirs / serve the webui; a dashboard served
+  on a host that holds no jobs shows nothing.
 - The analysis pipeline is also run automatically by `start.sh`; invoking
   it here is for old/interrupted jobs or a forced re-analysis.

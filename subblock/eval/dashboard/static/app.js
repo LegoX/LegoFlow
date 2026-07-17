@@ -1420,6 +1420,10 @@ function renderJobDetail(d) {
   const allLimits = trialLimitCounts(allTrials);
   const resolvedLimits = trialLimitCounts(resolvedTrials);
   const failedLimits = trialLimitCounts(failedTrials);
+  const resolvedCount = a.resolved_total ?? resolvedTrials.length;
+  const failedCount = a.failed_total ?? failedTrials.length;
+  const terminalCount = resolvedCount + failedCount;
+  const resolveRate = a.resolve_rate ?? (terminalCount > 0 ? (100 * resolvedCount) / terminalCount : null);
   const metricCards = [
     el("div", { class: "card" }, [
       el("div", { class: "metric" }, [
@@ -1430,21 +1434,21 @@ function renderJobDetail(d) {
     ]),
     el("div", { class: "card" }, [
       el("div", { class: "metric" }, [
-        el("div", { class: "v good" }, [a ? fmtNum(a.resolved_total) : "—"]),
+        el("div", { class: "v good" }, [fmtNum(resolvedCount)]),
         el("div", { class: "l" }, ["Resolved"]),
       ]),
       renderTrialSummaryMetrics(resolvedAverages, resolvedLimits),
     ]),
     el("div", { class: "card" }, [
       el("div", { class: "metric" }, [
-        el("div", { class: "v bad" }, [a ? fmtNum(a.failed_total) : "—"]),
+        el("div", { class: "v bad" }, [fmtNum(failedCount)]),
         el("div", { class: "l" }, ["Failed"]),
       ]),
       renderTrialSummaryMetrics(failedAverages, failedLimits),
     ]),
     el("div", { class: "card" }, [
       el("div", { class: "metric" }, [
-        el("div", { class: "v" + (a && a.resolve_rate >= 50 ? " good" : " bad") }, [a ? fmtPct(a.resolve_rate) : "—"]),
+        el("div", { class: "v" + (resolveRate == null ? "" : resolveRate >= 50 ? " good" : " bad") }, [resolveRate == null ? "—" : fmtPct(resolveRate)]),
         el("div", { class: "l" }, ["Rate"]),
       ]),
     ]),

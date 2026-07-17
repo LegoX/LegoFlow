@@ -25,11 +25,12 @@ because eval does not convert trajectories.
 
 ## Where to run
 
-`meta_info.resources.ip` is currently `192.168.35.240` (a real remote
-IP), `user: root`, working dir `/gpufs/haoli/code/`. If the current shell
-is on a different host, SSH there first and run setup from the eval block
-dir under that path. Envs and the Harbor checkout are host-local — never
-build them on a host the run won't use.
+Read `meta_info.resources.ip` and `directory` from the user's private run
+profile. For `local` / null, use the current host. For a remote hostname
+or IP, connect through SSH keys or `~/.ssh/config` and run setup from the
+configured block directory. Envs and the Harbor checkout are host-local
+— never build them on a host the run won't use. Never add SSH passwords
+to `config.yaml`.
 
 ## Procedure
 
@@ -67,9 +68,9 @@ For `meta_info.repositories.harbor`:
 - `update_repos.sh` refuses to update a worktree with local
   modifications. Stop and ask the user when that happens.
 - Confirm `git -C repos/harbor rev-parse HEAD` equals the configured
-  `commit` (`a869672175096df88467ab755cab2002350ec626`). Read the live value
-  from `config.yaml → meta_info.repositories.harbor.commit` rather than
-  trusting this slug — the pin moves as the block tracks newer registry
+  `commit`. Always read the live value from `config.yaml →
+  meta_info.repositories.harbor.commit`; never hard-code the SHA in this
+  skill because the pin moves as the block tracks newer registry
   contents.
 
 ### 3. Environments
@@ -94,14 +95,14 @@ Walk `runtime_info.input` and prompt only for unset fields:
 - `llm_api.{api_key, api_base_url, model}` — the upstream served via the
   per-job LiteLLM proxy. `config.yaml` keeps two interchangeable recipes,
   only one uncommented at a time (read the active block, don't assume):
-  - **MODE A — remote API** (e.g. the shared GLM-5 endpoint
-    `http://llm10.jierungogogo.com/v1` with `openai/GLM-5-FP8`,
-    `api_key: dummy-cf`). `dummy-*` keys are intentional for CF-gated
-    production endpoints (see step 6).
-  - **MODE B — local vLLM checkpoint** (currently active:
-    `http://192.168.16.115:8000/v1`, `openai/Qwen3-8B`, `api_key:
-    dummy-key` matching vLLM's `--api-key`, costs `0.0`). Paired with the
-    `local_model_serving` block (checkpoint path / served name).
+  - **MODE A — remote API** (commented example:
+    `https://api.example.com/v1`, `openai/<served-model-name>`, and a key
+    supplied in the user's private profile). Do not commit real API keys.
+  - **MODE B — local vLLM checkpoint** (checked-in example:
+    `http://127.0.0.1:8000/v1`, `openai/Qwen3.5-35B-A3B`,
+    `api_key: dummy-key` matching vLLM's `--api-key`, costs `0.0`).
+    Paired with the `local_model_serving` block (checkpoint path / served
+    name).
   - **Custom local checkpoint (vLLM)**: to benchmark a local model
     (e.g. an SFT/RL output) instead of a remote API, serve it with vLLM
     on a **GPU node** via `scripts/serve_local_model.sh` (vLLM-only — the
@@ -112,6 +113,15 @@ Walk `runtime_info.input` and prompt only for unset fields:
     `model: openai/<served-model-name>`, and costs `0.0`. The serving step
     is run by the user, not this skill. See the "Evaluating a custom local
     model" section in `CLAUDE.md`.
+    The current serving profile is tuned for the active
+    Qwen3.5-35B-A3B checkpoint: its defaults include
+    `TOOL_CALL_PARSER=qwen3_coder`, `MAX_MODEL_LEN=262144`,
+    `GPU_MEMORY_UTILIZATION=0.90`, `MAX_NUM_SEQS=32`,
+    `LANGUAGE_MODEL_ONLY=1`, and `GDN_PREFILL_BACKEND=triton`. For
+    another model architecture, override those parser/model-specific
+    settings before launch. The
+    script refuses to kill an existing listener; stop its owner
+    explicitly or choose another `VLLM_PORT`.
   - **The vLLM env is out of this skill's scope.** `/eval:setup` builds
     only the CPU-side Harbor uv env + LiteLLM venv on the eval node; it
     does **not** install vLLM. The vLLM conda env lives on the GPU node and
@@ -144,7 +154,7 @@ Walk `runtime_info.input` and prompt only for unset fields:
   `tag_llm.{base_url, model, api_key}` is used **only** when a missing gold
   dataset must be auto-generated (`scripts/prepare_dataset.sh`), to tag
   `task.toml` metadata; it must point at a **JSON-clean** endpoint
-  (a reasoning model that emits `<think>` breaks tagging — Qwen3-8B served
+  (a reasoning model that emits `<think>` breaks tagging — Qwen3.5-35B-A3B served
   with thinking on does **not** work; GLM-5-FP8 does). Set `enabled: false`
   to skip analysis entirely.
 
@@ -175,13 +185,16 @@ preflight.
 
 ### 6. Credentials
 
-- **LLM endpoint**: a live `GET <api_base_url>/models` probe belongs to
-  `/eval:check`, not setup (eval's `dryrun.sh` does not probe). Note: from
-  Claude Code's sandboxed shell the CF-gated `*.jierungogogo.com`
-  endpoints (e.g. `llm10.jierungogogo.com`) return 401 with the `dummy-cf`
-  production key — a network artifact, not a credential failure. See memory
-  `project-swegen-llm-endpoint`. A **local vLLM** `api_base_url` (MODE B)
-  has no such caveat — there a connection failure is real.
+- **LLM endpoint**: the live
+  `bash scripts/probe_llm_completion.sh` launch-gate belongs to
+  `/eval:check`, not setup (eval's `dryrun.sh` does not probe). It sends a
+  minimal real completion; do not replace it with `GET /models`, which
+  can succeed while the upstream origin is down. If a remote gateway's
+  edge can mask origin authentication, set `EVAL_GATEWAY_HOST_SUFFIX`
+  in the private runtime environment; matching 401/403 responses become
+  WARNs that must be re-probed on the configured eval host. A **local
+  vLLM** `api_base_url` (MODE B) has no such caveat — there a connection
+  failure is real.
 - **No HuggingFace token needed**: eval is registry-driven; Harbor
   fetches task data via `registry.json`, so there is no gated-dataset
   prompt (unlike trajgen).
@@ -203,5 +216,5 @@ the structured preflight report). Do not re-run `dryrun.sh` here. If
 ## Notes
 
 - This skill never runs Harbor and never starts the LiteLLM proxy.
-- Setup must run on the host declared in `meta_info.resources.ip`
-  (`192.168.35.240`). If your shell is elsewhere, SSH there first.
+- Setup must run on the host declared in `meta_info.resources.ip`. If
+  your shell is elsewhere, connect there first.

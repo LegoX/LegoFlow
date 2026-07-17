@@ -17,7 +17,7 @@ A **task** is a single evaluation instance: an instruction, a container environm
 
 ## Job
 
-A **job** is a full benchmark run driven by a single `config.yaml`. Harbor runs up to `n_concurrent` trials in parallel and writes per-task results plus a `results.json` summary under `artifacts/jobs/<job>/`. Set `n_tasks` to a small integer for a smoke run, or leave it `null` to run the full benchmark.
+A **job** is a full benchmark run driven by a single `config.yaml`. Harbor runs up to `n_concurrent` trials in parallel and writes per-task results plus a `result.json` summary under `artifacts/jobs/<job>/`. Set `n_tasks` to a small integer for a smoke run, or leave it `null` to run the full benchmark.
 
 ## LiteLLM proxy
 

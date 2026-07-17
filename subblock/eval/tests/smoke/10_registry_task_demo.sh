@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # CI smoke 10: eval end-to-end on a tiny slice of the configured benchmark.
 #
-# Strategy: swap config.yaml for a smoke variant (jobs_dir=artifacts/jobs/smoke,
-# n_tasks=10, n_concurrent=5, max_retries=0, agent.max_turns=50), then run
-# scripts/start.sh. eval is registry-driven, so there is NO prepare_tasks step
+# Strategy: render an isolated smoke variant and pass it through EVAL_CONFIG
+# (jobs_dir=artifacts/jobs/smoke, n_tasks=10, n_concurrent=5, max_retries=0,
+# agent.max_turns=50), then run scripts/start.sh. The tracked config is never
+# rewritten. eval is registry-driven, so there is NO prepare_tasks step
 # — Harbor resolves the configured dataset from registry.json and caps it to
 # n_tasks (so this smoke runs the first 10 tasks of whatever task_source.
 # dataset_name is set to — e.g. swebench-verified).
@@ -33,41 +34,59 @@
 set -uo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
-BACKUP="$BLOCK_DIR/tests/smoke/.config.yaml.backup.$$"
+SOURCE_CONFIG="${EVAL_CONFIG:-$BLOCK_DIR/config.yaml}"
+SMOKE_TMP_DIR=""
+SMOKE_CONFIG=""
 SMOKE_JOBS_DIR_REL="artifacts/jobs/smoke"
 SMOKE_JOBS_DIR="$BLOCK_DIR/$SMOKE_JOBS_DIR_REL"
+SMOKE_LITELLM_PORT="${SMOKE_LITELLM_PORT:-4102}"
 
-[[ -f "$CONFIG" ]] || { echo "FAIL: $CONFIG missing"; exit 1; }
+[[ -f "$SOURCE_CONFIG" ]] || { echo "FAIL: $SOURCE_CONFIG missing"; exit 1; }
+command -v flock >/dev/null 2>&1 || { echo "FAIL: flock is required for smoke isolation"; exit 1; }
+mkdir -p "$BLOCK_DIR/artifacts"
+exec 9>"$BLOCK_DIR/artifacts/.smoke.lock"
+flock -n 9 || { echo "FAIL: another eval smoke is already running"; exit 1; }
 
 cleanup() {
   local rc=$?
-  # Kill any Harbor smoke containers that survived the internal timeout — GNU
-  # timeout's SIGTERM doesn't always propagate into Docker children.
+  trap - EXIT INT TERM
+  # Kill only Harbor containers whose mounts point into this smoke jobs dir.
+  # A broad `name=harbor-trial-` kill can interrupt an unrelated eval sharing
+  # the same Docker daemon.
   if command -v docker >/dev/null 2>&1; then
-    docker ps --filter "name=harbor-trial-" --format '{{.ID}}' 2>/dev/null \
-      | head -50 | xargs -r docker kill >/dev/null 2>&1 || true
+    while IFS= read -r cid; do
+      [[ -n "$cid" ]] || continue
+      mounts="$(docker inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' "$cid" 2>/dev/null || true)"
+      if grep -Fq "$SMOKE_JOBS_DIR" <<<"$mounts"; then
+        docker kill "$cid" >/dev/null 2>&1 || true
+      fi
+    done < <(docker ps --format '{{.ID}}' 2>/dev/null)
     # Trial containers run as root and drop files under <trial>/agent with
     # mode 700; reclaim ownership so the runner user (and upload-artifact) can
     # walk the tree.
     if [ -d "$SMOKE_JOBS_DIR" ]; then
+      host_uid="$(id -u)"
+      host_gid="$(id -g)"
       docker run --rm -v "$SMOKE_JOBS_DIR:/x:rw" alpine:3 \
-        sh -c "chown -R 1000:1000 /x 2>/dev/null; chmod -R u+rwX /x 2>/dev/null" || true
+        sh -c "chown -R $host_uid:$host_gid /x 2>/dev/null; chmod -R u+rwX /x 2>/dev/null" || true
     fi
   fi
-  if [[ -f "$BACKUP" ]]; then
-    mv -f "$BACKUP" "$CONFIG"
-    echo "INFO: restored config.yaml from backup"
+  if [[ -n "$SMOKE_TMP_DIR" && -d "$SMOKE_TMP_DIR" ]]; then
+    rm -rf "$SMOKE_TMP_DIR"
   fi
-  exit "$rc"
+  return "$rc"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-cp -f "$CONFIG" "$BACKUP"
+SMOKE_TMP_DIR="$(mktemp -d "$BLOCK_DIR/artifacts/.smoke-config.XXXXXX")"
+SMOKE_CONFIG="$SMOKE_TMP_DIR/config.yaml"
+cp -f "$SOURCE_CONFIG" "$SMOKE_CONFIG"
 
-# Write the smoke config in place. Mutates only the fields needed; preserves
-# repo pin, env paths, llm_api, task_source (benchmark), agent identity, etc.
-SMOKE_JOBS_DIR_REL="$SMOKE_JOBS_DIR_REL" CONFIG="$CONFIG" python3 - <<'PY' || exit 1
+# Write an isolated smoke config. The tracked config is never rewritten, so
+# comments and concurrent production runs cannot be affected.
+SMOKE_JOBS_DIR_REL="$SMOKE_JOBS_DIR_REL" SMOKE_LITELLM_PORT="$SMOKE_LITELLM_PORT" CONFIG="$SMOKE_CONFIG" python3 - <<'PY' || exit 1
 import os, sys
 try:
     import yaml
@@ -76,29 +95,40 @@ except ImportError:
 path = os.environ["CONFIG"]
 with open(path, encoding="utf-8") as fh:
     cfg = yaml.safe_load(fh) or {}
-hj = cfg.setdefault("runtime_info", {}).setdefault("input", {}).setdefault("harbor_job", {})
+runtime = cfg.setdefault("runtime_info", {})
+inputs = runtime.setdefault("input", {})
+hj = inputs.setdefault("harbor_job", {})
 hj["jobs_dir"] = os.environ["SMOKE_JOBS_DIR_REL"]
 hj["n_concurrent"] = 5
 hj["n_tasks"] = 10
 hj["max_retries"] = 0
-ag = cfg["runtime_info"]["input"].setdefault("agent", {})
+inputs.setdefault("job_analysis", {})["enabled"] = False
+inputs.setdefault("litellm_proxy", {})["port"] = int(os.environ["SMOKE_LITELLM_PORT"])
+ag = inputs.setdefault("agent", {})
 ag["max_turns"] = 50
+out = runtime.setdefault("output", {}).setdefault("eval_results_dir", {})
+root = os.environ["SMOKE_JOBS_DIR_REL"]
+out["path"] = root
+out["job_layout"] = f"{root}/<job>/<task>/{{agent,verifier}}/"
+out["trajectory_format"] = f"{root}/<job>/<task>/agent/litellm-trajectory.jsonl"
+out["results_summary_format"] = f"{root}/<job>/result.json"
 with open(path, "w", encoding="utf-8") as fh:
     yaml.safe_dump(cfg, fh, sort_keys=False)
-print(f"INFO: smoke config written (n_tasks=10, n_concurrent=5, max_turns=50, jobs_dir={hj['jobs_dir']})")
+print(f"INFO: smoke config written (n_tasks=10, n_concurrent=5, max_turns=50, port={inputs['litellm_proxy']['port']}, jobs_dir={hj['jobs_dir']})")
 PY
 
 # Fresh jobs dir for the smoke
 rm -rf "$SMOKE_JOBS_DIR"
 mkdir -p "$SMOKE_JOBS_DIR"
+date +%s >"$SMOKE_JOBS_DIR/.run-start"
 
 LOG="$BLOCK_DIR/artifacts/logs/smoke-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p "$(dirname "$LOG")"
 echo "INFO: smoke log -> $LOG"
 
 # Warm cpfs/networked-FS cache: the first `harbor --help` import takes ~20 s on a
-# cold gpufs mount (lots of pydantic/asyncio modules to page in), which trips
-# dryrun.sh's hardcoded `timeout 15`. Second run is ~9 s. Cheap to do.
+# cold gpufs mount (lots of pydantic/asyncio modules to page in). Warming it here
+# keeps the preflight and smoke startup latency predictable.
 echo "INFO: warming harbor CLI cache"
 "$BLOCK_DIR/artifacts/env/harbor-uv/bin/harbor" --help >/dev/null 2>&1 || true
 
@@ -115,7 +145,8 @@ export LITELLM_NUM_WORKERS=1
 set +e
 # 2400 s budget for 10 trials + --kill-after 60 s so SIGKILL fires if start.sh
 # ignores SIGTERM (Harbor pipes the signal up the bash chain unreliably).
-timeout --foreground --kill-after=60s 2400 bash "$BLOCK_DIR/scripts/start.sh" >>"$LOG" 2>&1
+EVAL_CONFIG="$SMOKE_CONFIG" \
+  timeout --foreground --kill-after=60s 2400 bash "$BLOCK_DIR/scripts/start.sh" >>"$LOG" 2>&1
 rc=$?
 set -e
 
@@ -177,7 +208,7 @@ if [[ "$clean" -ge 1 ]]; then
 fi
 
 if [[ "$rc" == 124 ]]; then
-  echo "FAIL: 30-minute wall-clock budget exceeded; no clean scored trial ($SCAN)"
+  echo "FAIL: 40-minute wall-clock budget exceeded; no clean scored trial ($SCAN)"
 else
   echo "FAIL: start.sh finished (rc=$rc) with 0 clean scored trials — every trial errored or none completed ($SCAN). Inspect stats.evals[*].exception_stats in the newest artifacts/jobs/smoke/<job>/result.json"
 fi

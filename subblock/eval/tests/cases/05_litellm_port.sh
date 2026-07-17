@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CI test 05: LiteLLM proxy port either free or held by current uid.
+# CI test 05: LiteLLM proxy port must be free before a new launch.
 
 set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -14,12 +14,7 @@ if command -v ss >/dev/null 2>&1; then
   if [[ -z "$HOLDER" ]]; then
     echo "PASS: LiteLLM port $PORT is free"; exit 0
   fi
-  # `users:` only resolves for processes the running uid owns.
-  if [[ "$HOLDER" == *"users:"* ]]; then
-    echo "PASS: LiteLLM port $PORT held by current uid (process-info visible): $HOLDER"
-    exit 0
-  fi
-  echo "FAIL: LiteLLM port $PORT held by another uid — start.sh would fail to bind"
+  echo "FAIL: LiteLLM port $PORT already has a listener — start.sh would fail to bind"
   echo "       $HOLDER"
   exit 1
 fi

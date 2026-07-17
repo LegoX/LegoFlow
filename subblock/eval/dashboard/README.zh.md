@@ -15,7 +15,7 @@ Harbor 任务 Dashboard 的 Web UI，用于浏览 Harbor job 结果、分析报�
 ## 快速开始
 
 ```bash
-cd webui
+cd subblock/eval/dashboard
 python3 server.py --port 8092
 ```
 
@@ -25,20 +25,21 @@ python3 server.py --port 8092
 http://localhost:8092
 ```
 
-服务默认自动发现 `../jobs/` 下的 job。也可以通过 `--jobs-dir` 自定义 jobs 目录。
+服务默认自动发现 `../artifacts/jobs/` 下的 job。也可以通过
+`HARBOR_JOBS_DIR` 或 `--jobs-dir` 自定义 jobs 目录。
 
 ## 使用 Cloudflare Pages 长期公开
 
 如果需要长期公网访问，推荐把 dashboard 的动态数据导出成静态 JSON/HTML，然后部署到 Cloudflare Pages。
 
-公网版本仍然是交互式的：可以搜索、排序、筛选、对比、看图表、点进 job、查看 trajectory。区别是公网数据只会在每次导出/部署后更新，而不是每次请求都实时读取本机 `jobs/`。
+公网版本仍然是交互式的：可以搜索、排序、筛选、对比、看图表、点进 job、查看 trajectory。区别是公网数据只会在每次导出/部署后更新，而不是每次请求都实时读取本机 `artifacts/jobs/`。
 
 ### 免费无 R2 trajectory 模式
 
 如果不想启用 Cloudflare R2，可以使用静态 trajectory 分块。导出器会把多条 trajectory 打包成有大小上限的 chunk JSON，并生成 manifest。打开首页或点进 job 时不会下载 trajectory；只有点击某个 trial 时，浏览器才会下载包含这条 trajectory 的 chunk，同一个 chunk 里的其他 trial 会复用浏览器缓存。
 
 ```bash
-cd /home/ywxzml3j/ywxzml3juser57/code/harbor-dev/webui
+cd /path/to/SWE-Lego-Live/subblock/eval/dashboard
 python3 export_static.py --output-dir site --trajectory-target chunks --trajectory-chunk-mb 8
 python3 -m http.server 8093 --bind 127.0.0.1 --directory site
 ```
@@ -53,9 +54,9 @@ python3 export_static.py --output-dir site --trajectory-target chunks --trajecto
 部署生成的 `site/` 到 Cloudflare Pages：
 
 ```bash
-cd /home/ywxzml3j/ywxzml3juser57/code/harbor-dev/webui
+cd /path/to/SWE-Lego-Live/subblock/eval/dashboard
 set -a
-. /home/ywxzml3j/ywxzml3juser57/.config/harbor_webui_cloudflare.env
+. "$HOME/.config/harbor_webui_cloudflare.env"
 set +a
 npx --yes wrangler pages project create "$PROJECT_NAME" --production-branch "$BRANCH_NAME" || true
 npx --yes wrangler pages deploy site \
@@ -68,7 +69,7 @@ npx --yes wrangler pages deploy site \
 长期同步脚本默认使用这个免费 chunk 模式：
 
 ```bash
-cd /home/ywxzml3j/ywxzml3juser57/code/harbor-dev/webui
+cd /path/to/SWE-Lego-Live/subblock/eval/dashboard
 bash run_cloudflare_pages_sync.sh
 ```
 
@@ -100,29 +101,36 @@ CLOUDFLARE_ACCOUNT_ID="..."
 PROJECT_NAME="harbor-dashboard"
 BRANCH_NAME="harbor-webui"
 LOOP_SECONDS="3600"
-HARBOR_JOBS_DIR="/home/ywxzml3j/ywxzml3juser57/code/harbor-dev/jobs"
+HARBOR_JOBS_DIR="/path/to/SWE-Lego-Live/subblock/eval/artifacts/jobs"
+TRAJECTORY_TARGET="none"
 R2_BUCKET_NAME="harbor-trajectories"
 R2_UPLOAD_WORKERS="8"
 ```
 
+R2 同步必须设置 `TRAJECTORY_TARGET=none`。同步脚本默认使用
+`chunks`，该模式会有意跳过 R2 上传。
+
 ### 一次性创建 R2 bucket
 
 ```bash
-cd /home/ywxzml3j/ywxzml3juser57/code/harbor-dev/webui
+cd /path/to/SWE-Lego-Live/subblock/eval/dashboard
 set -a
-. /home/ywxzml3j/ywxzml3juser57/.config/harbor_webui_cloudflare.env
+. "$HOME/.config/harbor_webui_cloudflare.env"
 set +a
 npx --yes wrangler r2 bucket create "$R2_BUCKET_NAME"
 ```
 
 如果 bucket 已存在，可以忽略创建失败。
+还需要在 Cloudflare Pages 项目中添加名称必须为 `TRAJECTORIES` 的
+R2 binding，并让它指向该 bucket；生成的 `_worker.js` 通过这个
+binding 按需读取 trajectory。
 
 ### 生成轻量静态站点
 
 不把 trajectory 写入 `site/`，只生成 Pages 需要的轻量文件：
 
 ```bash
-cd /home/ywxzml3j/ywxzml3juser57/code/harbor-dev/webui
+cd /path/to/SWE-Lego-Live/subblock/eval/dashboard
 python3 export_static.py --output-dir site --trajectory-target none
 python3 -m http.server 8093 --bind 127.0.0.1 --directory site
 ```
@@ -138,9 +146,9 @@ http://127.0.0.1:8093
 ### 上传 trajectory 到 R2
 
 ```bash
-cd /home/ywxzml3j/ywxzml3juser57/code/harbor-dev/webui
+cd /path/to/SWE-Lego-Live/subblock/eval/dashboard
 set -a
-. /home/ywxzml3j/ywxzml3juser57/.config/harbor_webui_cloudflare.env
+. "$HOME/.config/harbor_webui_cloudflare.env"
 set +a
 python3 upload_trajectories_r2.py \
   --jobs-dir "$HARBOR_JOBS_DIR" \
@@ -157,9 +165,9 @@ R2 中的 trajectory object key 格式为：
 ### 部署到 Cloudflare Pages
 
 ```bash
-cd /home/ywxzml3j/ywxzml3juser57/code/harbor-dev/webui
+cd /path/to/SWE-Lego-Live/subblock/eval/dashboard
 set -a
-. /home/ywxzml3j/ywxzml3juser57/.config/harbor_webui_cloudflare.env
+. "$HOME/.config/harbor_webui_cloudflare.env"
 set +a
 npx --yes wrangler pages project create "$PROJECT_NAME" --production-branch "$BRANCH_NAME" || true
 npx --yes wrangler pages deploy site \
@@ -176,7 +184,7 @@ npx --yes wrangler pages deploy site \
 启动长期同步：
 
 ```bash
-cd /home/ywxzml3j/ywxzml3juser57/code/harbor-dev/webui
+cd /path/to/SWE-Lego-Live/subblock/eval/dashboard
 bash run_cloudflare_pages_sync.sh
 ```
 
@@ -210,14 +218,14 @@ Pinggy 仍然适合调试本地动态 Python API，但免费 tunnel 是临时的
 先启动本地 dashboard：
 
 ```bash
-cd /home/ywxzml3j/ywxzml3juser57/code/harbor-dev/webui
+cd /path/to/SWE-Lego-Live/subblock/eval/dashboard
 ./start.sh
 ```
 
 再在另一个终端启动 Pinggy tunnel：
 
 ```bash
-cd /home/ywxzml3j/ywxzml3juser57/code/harbor-dev/webui
+cd /path/to/SWE-Lego-Live/subblock/eval/dashboard
 bash share_pinggy.sh
 ```
 
@@ -266,8 +274,10 @@ PINGGY_HOST=a.pinggy.io bash share_pinggy.sh
 - `GET /api/jobs`：列出所有 job 和概要统计。
 - `GET /api/overview`：聚合概览，例如 job 数、scaffold、dataset、model、resolve rate。
 - `GET /api/jobs/<name>`：单个 job 详情，包括配置、分析报告、trials。
+- `GET /api/jobs/<name>/trials`：列出 trial 概要。
 - `GET /api/jobs/<name>/trials/<trial>`：单个 trial 详情。
 - `GET /api/jobs/<name>/trials/<trial>/trajectory?kind=agent`：trajectory JSON。
+- `GET /api/jobs/<name>/rule_score_instances?kind=resolved&limit=50`：评分 instance 详情。
 - `GET /api/compare?name=<job1>&name=<job2>`：多个 job 的并排比较。
 
 ## 使用技巧
@@ -289,12 +299,12 @@ PINGGY_HOST=a.pinggy.io bash share_pinggy.sh
 3. 实现对应的 `render<PanelName>()` 函数。
 4. 如果 route 需要参数，更新 `applyHash()`。
 
-分析数据 schema 主要来自 `src/harbor/analysis/` 输出：
+分析数据 schema 来自 job 级 `analysis/` 输出：
 
 - `report_failed.json` / `report_resolved.json`：primary/axis 分布。
-- `score_comparison.json`：resolved 与 unresolved 指标对比。
-- `task_analysis.json`：任务难度层级、domain/bug-type breakdown。
-- `rule_score/`：每个 instance 的 composite scoring。
-- `tag_analysis/`：相关性分析。
+- `score_comparison.json`：resolved 与 unresolved 的确定性特征对比。
+- `report_task_analysis.json`：任务难度层级、domain/bug-type breakdown。
+- `traj_analysis/score_comparison.json`：rule-based composite scoring。
+- `instance_analysis/{summary,correlations}.json`：tag breakdown 和相关性分析。
 
 trajectory schema：ATIF v1.5，即 `agent/trajectory.json`。

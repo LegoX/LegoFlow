@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Clone or update local-only repos used by eval.
+# Initialize or update the pinned Harbor submodule used by eval.
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG="${EVAL_CONFIG:-$BLOCK_DIR/config.yaml}"
 
 usage() {
   cat <<'EOF'
@@ -76,6 +76,27 @@ abspath() {
   fi
 }
 
+normalize_git_url() {
+  local url="${1%/}"
+  url="${url%.git}"
+  case "$url" in
+    git@*:* )
+      url="${url#git@}"
+      url="${url/:/\/}"
+      ;;
+    ssh://git@* )
+      url="${url#ssh://git@}"
+      ;;
+    https://* )
+      url="${url#https://}"
+      ;;
+    http://* )
+      url="${url#http://}"
+      ;;
+  esac
+  printf '%s\n' "$url"
+}
+
 set_tree_writable() {
   local root="$1"
   [[ -d "$root" ]] || return 0
@@ -146,10 +167,12 @@ HARBOR_REF="$(cfg meta_info.repositories.harbor.ref)"
 if [[ -z "$HARBOR_REF" ]]; then
   HARBOR_REF="$HARBOR_BRANCH"
 fi
+HARBOR_COMMIT="$(cfg meta_info.repositories.harbor.commit)"
 if [[ -n "$REF_OVERRIDE" ]]; then
   HARBOR_REF="$REF_OVERRIDE"
+  # An explicit --ref is a one-off override of the configured commit pin.
+  HARBOR_COMMIT=""
 fi
-HARBOR_COMMIT="$(cfg meta_info.repositories.harbor.commit)"
 HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
 READONLY="$(cfg meta_info.repositories.harbor.readonly)"
 
@@ -159,6 +182,13 @@ READONLY="$(cfg meta_info.repositories.harbor.readonly)"
 
 HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
 mkdir -p "$(dirname "$HARBOR_DIR")"
+RESTORE_READONLY=0
+restore_readonly_on_exit() {
+  if [[ "$RESTORE_READONLY" == "1" ]]; then
+    set_tree_readonly "$HARBOR_DIR"
+  fi
+}
+trap restore_readonly_on_exit EXIT
 
 echo "=== eval repo update ==="
 echo "Harbor URL:  $HARBOR_URL"
@@ -168,9 +198,11 @@ echo "Harbor path: $HARBOR_PATH_RAW"
 
 if git -C "$HARBOR_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   set_tree_writable "$HARBOR_DIR"
+  [[ "$READONLY" == "true" ]] && RESTORE_READONLY=1
 
   CURRENT_URL="$(git -C "$HARBOR_DIR" remote get-url origin)"
-  if [[ "$CURRENT_URL" != "$HARBOR_URL" ]]; then
+  if [[ "$CURRENT_URL" != "$HARBOR_URL" \
+      && "$(normalize_git_url "$CURRENT_URL")" != "$(normalize_git_url "$HARBOR_URL")" ]]; then
     echo "ERROR: repos/harbor origin is '$CURRENT_URL', expected '$HARBOR_URL'" >&2
     exit 1
   fi
@@ -183,7 +215,7 @@ if git -C "$HARBOR_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 
   git -C "$HARBOR_DIR" fetch --prune origin
 else
-  if [[ -e "$HARBOR_DIR" ]]; then
+  if [[ -e "$HARBOR_DIR" && ! ( -d "$HARBOR_DIR" && -z "$(ls -A "$HARBOR_DIR" 2>/dev/null)" ) ]]; then
     echo "ERROR: $HARBOR_PATH_RAW exists but is not a git repo" >&2
     exit 1
   fi
@@ -192,7 +224,6 @@ else
 fi
 
 TARGET="$HARBOR_COMMIT"
-OUTPUT_REF="$HARBOR_REF"
 if [[ -z "$TARGET" ]]; then
   TARGET="$HARBOR_REF"
   if git -C "$HARBOR_DIR" rev-parse --verify --quiet "${HARBOR_REF}^{commit}" >/dev/null; then
@@ -200,8 +231,6 @@ if [[ -z "$TARGET" ]]; then
   elif git -C "$HARBOR_DIR" rev-parse --verify --quiet "origin/${HARBOR_REF}^{commit}" >/dev/null; then
     TARGET="origin/$HARBOR_REF"
   fi
-else
-  OUTPUT_REF="${HARBOR_REF:-$HARBOR_COMMIT}"
 fi
 
 git -C "$HARBOR_DIR" checkout --detach "$TARGET"
@@ -211,6 +240,7 @@ COMMIT="$(git -C "$HARBOR_DIR" rev-parse HEAD)"
 
 if [[ "$READONLY" == "true" ]]; then
   set_tree_readonly "$HARBOR_DIR"
+  RESTORE_READONLY=0
   echo "Set Harbor working tree read-only (excluding .git)."
 fi
 

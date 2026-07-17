@@ -17,9 +17,11 @@ inputs.
 | repositories | Git remote/ref/path/read-only policy for Harbor | external | yes |
 | environment | Harbor uv env and LiteLLM runtime versions | external | yes |
 | llm_api | Raw upstream model API used by LiteLLM | external | yes |
+| local_model_serving | GPU-node checkpoint path and served model name for local vLLM mode | external | when using local mode |
 | litellm_proxy | LiteLLM template, port, and master key | external | yes |
 | task_source | Benchmark selection: provider=harbor_registry, dataset_name, version, registry_path | external | yes |
 | harbor_job | jobs_dir, concurrency, retries, timeout, smoke cap | external | yes |
+| job_analysis | Post-eval analysis toggle and metadata-tagging endpoint | external | no |
 | agent | Harbor agent, version, runtime image, sampling controls | external | yes |
 
 ## Active Runtime Values
@@ -30,9 +32,9 @@ launching a job.
 ```yaml
 repositories:
   harbor:
-    url: git@github.com:SWE-Lego/harbor.git
+    url: https://github.com/SWE-Lego/harbor.git
     branch: main
-    commit: 149e75770f8c369d6fae31c158ea761d676b4d3a   # latest harbor commit
+    commit: 0bdee0a6943afa8839e79038acb19a9016e27fb2
     path: repos/harbor
     readonly: true
 environment:
@@ -42,9 +44,14 @@ environment:
     python_version: "3.13"
     litellm_version: "1.83.14"
 llm_api:
-  model: "openai/MiniMax-M2.7"
-  api_base_url: "http://llm10.jierungogogo.com/v1"
+  model: "openai/Qwen3.5-35B-A3B"
+  api_base_url: "http://127.0.0.1:8000/v1"
   api_key: "dummy-key"
+  input_cost_per_token: 0.0
+  output_cost_per_token: 0.0
+local_model_serving:
+  model_path: artifacts/models/Qwen3.5-35B-A3B
+  model_name: Qwen3.5-35B-A3B
 litellm_proxy:
   config_template: scripts/serve_llm/litellm_config.example.yaml
   port: 4101
@@ -57,23 +64,31 @@ task_source:
   registry_path: repos/harbor/registry.json
 harbor_job:
   jobs_dir: artifacts/jobs
-  n_concurrent: 6
+  n_concurrent: 4
   n_tasks: null        # null = full benchmark
   max_retries: 2
   timeout_multiplier: 1
+job_analysis:
+  enabled: true
+  tag_llm:
+    base_url: ""
+    model: ""
+    api_key: ""
 agent:
-  name: custom-claude-code
-  version: 2.1.118
-  runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
+  name: custom-openhands-sdk
+  version: 1.14.0
+  runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.5
+  runtime_host_path: artifacts/runtime/openhands-sdk
   max_turns: 200
-  temperature: 0.7
+  temperature: 1.0
 ```
 
 `scripts/start.sh` derives stable defaults: `producer_block=eval`,
-`output_format=litellm_logger_v0.1`, the custom Claude Code import path, runtime
-mount paths, and LiteLLM trajectory header. It also writes a per-job LiteLLM
-config under `artifacts/litellm/<job>/` and passes it to Harbor's LiteLLM serve
-script through `LITELLM_CONFIG` before launching the job.
+`output_format=litellm_logger_v0.1`, the selected agent's import path and API
+protocol, runtime mount paths, and LiteLLM trajectory header. It also writes a
+per-job LiteLLM config under `artifacts/litellm/<job>/` and passes it to
+Harbor's LiteLLM serve script through `LITELLM_CONFIG` before launching the
+job.
 
 ## Outputs
 
@@ -83,8 +98,12 @@ declared in `config.yaml`:
 - `harbor_job.jobs_dir`: Harbor job output root under this block's artifacts
 - generated LiteLLM config: `artifacts/litellm/<job>/litellm_config_eval.yaml`
 - `harbor_job.jobs_dir/<job>`: generated Harbor job directory
+- `{job_dir}/config.yaml`: snapshot of the active eval profile
+- `{job_dir}/result.json`: job-level Harbor roll-up
+- `{job_dir}/<task-id>/result.json`: per-trial status and reward
 - `{job_dir}/<task-id>/agent/litellm-trajectory.jsonl`: LiteLLM logger trajectory
-- `{job_dir}/<task-id>/evaluation/`: per-task verdict, scoring, test logs
+- `{job_dir}/<task-id>/verifier/`: per-task verdict, scoring, and test logs
+- `{job_dir}/analysis/`: post-eval attribution and scoring reports
 
 ## Config Variants
 

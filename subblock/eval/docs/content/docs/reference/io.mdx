@@ -28,13 +28,13 @@ Excerpted from `config.yaml`:
 
 ```yaml
 llm_api:
-  api_key: dummy-cf
-  api_base_url: "http://llm10.jierungogogo.com/v1"
-  model: "openai/GLM-5-FP8"
+  api_key: dummy-key
+  api_base_url: "http://127.0.0.1:8000/v1"
+  model: "openai/Qwen3.5-35B-A3B"
   protocols: [openai_compatible, anthropic_compatible]
   served_via: per_job_litellm_proxy
-  input_cost_per_token: 0.0000021
-  output_cost_per_token: 0.0000084
+  input_cost_per_token: 0.0
+  output_cost_per_token: 0.0
 litellm_proxy:
   config_template: scripts/serve_llm/litellm_config.example.yaml
   port: 4101
@@ -53,9 +53,9 @@ harbor_job:
 job_analysis:
   enabled: true
   tag_llm:
-    base_url: "http://llm10.jierungogogo.com/v1"
-    model: "GLM-5-FP8"
-    api_key: "dummy-cf"
+    base_url: ""
+    model: ""
+    api_key: ""
 agent:
   name: custom-openhands-sdk
   version: 1.14.0
@@ -73,6 +73,6 @@ eval declares its handoff contract in `config.yaml → runtime_info.output`:
 
 | Output | Path | Format | Consumer |
 | --- | --- | --- | --- |
-| `eval_results_dir` | `artifacts/jobs/` | `artifacts/jobs/<job>/<task>/{agent,evaluation}/` | none (terminal block) |
+| `eval_results_dir` | `artifacts/jobs/` | `artifacts/jobs/<job>/<task>/{agent,verifier}/` | none (terminal block) |
 
-The per-task trajectory is `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`, the aggregate summary is `artifacts/jobs/<job>/results.json`, and post-eval analysis lands under `artifacts/jobs/<job>/analysis/`. See [Results & Artifacts](/docs/run-jobs/results-and-artifacts) for the full layout.
+The per-task trajectory is `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`, the aggregate summary is `artifacts/jobs/<job>/result.json`, and post-eval analysis lands under `artifacts/jobs/<job>/analysis/`. See [Results & Artifacts](/docs/run-jobs/results-and-artifacts) for the full layout.

@@ -446,7 +446,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # --- eval: end-to-end registry-task smoke (~30 min) ------------------------
+  # --- eval: end-to-end registry-task smoke (~40 min) ------------------------
   eval-smoke:
     name: eval tests (smoke)
     needs: [detect-changes, eval-cases]
@@ -504,12 +504,7 @@ jobs:
         run: bash .github/scripts/smoke_run.sh eval 2400
       - name: Verify smoke
         if: always()
-        shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
-        run: |
-          bash subblock/eval/tests/smoke/verify.sh
-          rc=$?
-          if [[ $rc -eq 77 ]]; then echo "::warning::eval smoke SKIPped"; exit 0; fi
-          exit $rc
+        run: bash subblock/eval/tests/smoke/verify.sh
       - name: Upload logs
         if: always()
         continue-on-error: true   # harbor's root-owned agent/sessions can survive cleanup → upload EACCES, don't fail the job

@@ -3,7 +3,7 @@ title: Local Model
 description: Benchmark a local checkpoint with vLLM
 ---
 
-By default eval benchmarks a remote upstream API. To benchmark a **local checkpoint** (e.g. an SFT or RL output from the pipeline) instead, serve it with vLLM and point `llm_api` at it — no code change to `start.sh` is needed, because the block only ever talks to an OpenAI/Anthropic-compatible HTTP endpoint.
+The current eval profile benchmarks a **local checkpoint** (an SFT output from the pipeline). Serve it with vLLM and keep `llm_api` pointed at that endpoint — no code change to `start.sh` is needed, because the block only ever talks to an OpenAI/Anthropic-compatible HTTP endpoint.
 
 ## Topology
 
@@ -41,19 +41,23 @@ The checkpoint path and served name are read from `config.yaml → runtime_info.
 
 ```yaml
 local_model_serving:
-  model_path: /mnt/.../sft/artifacts/model/qwen3_8b_glm5_...
-  model_name: Qwen3-8B
+  model_path: artifacts/models/Qwen3.5-35B-A3B
+  model_name: Qwen3.5-35B-A3B
 ```
+
+Use a private profile or the `MODEL_PATH` environment override when the
+checkpoint lives outside the repository; do not commit machine-specific
+absolute paths.
 
 ## 2. Point `llm_api` at it (eval node)
 
-Edit `config.yaml → runtime_info.input.llm_api` to the local-vLLM recipe (commented at the top of `runtime_info.input`):
+Confirm that the active `config.yaml → runtime_info.input.llm_api` matches the local-vLLM recipe:
 
 ```yaml
 llm_api:
   api_key: dummy-key                       # must match vLLM --api-key
   api_base_url: "http://<GPU_NODE_IP>:8000/v1"
-  model: "openai/Qwen3-8B"                 # openai/<served-model-name>
+  model: "openai/Qwen3.5-35B-A3B"          # openai/<served-model-name>
   protocols: [openai_compatible, anthropic_compatible]
   served_via: per_job_litellm_proxy
   input_cost_per_token: 0.0
@@ -65,11 +69,14 @@ The served name must match the basename of `llm_api.model` (`openai/<model_name>
 ## 3. Validate and run
 
 ```bash
-bash scripts/dryrun.sh   # probe_llm_completion.sh sends a real completion to verify the endpoint
+bash scripts/dryrun.sh
+bash scripts/probe_llm_completion.sh
 bash scripts/start.sh
 ```
 
-`dryrun.sh` sends a real completion to the configured endpoint, so a live vLLM server is verified before the job launches.
+`dryrun.sh` validates static configuration and environments; the separate
+completion probe verifies the live vLLM endpoint. `start.sh` repeats both gates
+before launching Harbor.
 
 <Callout title="Tagging endpoint stays separate" type="info">
 If the local checkpoint is a reasoning model (emits `<think>…`), keep `job_analysis.tag_llm` pointed at a JSON-clean endpoint — gold-dataset tagging needs clean JSON. See [Dataset Prep](/docs/job-analysis/dataset-prep).

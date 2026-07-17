@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
 # CI test 04: eval upstream LLM endpoint — best-effort reachability + model check.
 #
-# eval's upstream (qwen.jierungogogo.com) is a Cloudflare-gated production
-# endpoint whose real key is the literal `dummy-key`. A direct `GET /models`
-# from a sandboxed / off-node shell can return 401/403/502/52x (CF gating) or
-# fail to connect — none of which mean the endpoint is misconfigured, because
-# real traffic is proxy-mediated by the per-job LiteLLM proxy and exercised by
-# the smoke. So CF-class HTTP codes and network errors downgrade to SKIP.
+# A proxy-mediated gateway can be identified with EVAL_GATEWAY_HOST_SUFFIX;
+# its edge/gating errors downgrade to SKIP. The infrastructure-neutral checked-in
+# config also SKIPs an unavailable loopback endpoint unless
+# EVAL_REQUIRE_LLM_ENDPOINT=1.
 # The one deterministic failure we DO catch: a clean 200 whose /models catalog
 # does not contain the configured model (the endpoint serves something else).
-# See memory project-eval-llm-endpoint.
 
 set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -25,6 +22,12 @@ PY
 MODEL_API_BASE_URL="$(read_key api_base_url)"
 MODEL_API_KEY="$(read_key api_key)"
 MODEL_API_MODEL="$(read_key model)"
+MODEL_API_HOST="$(MODEL_API_BASE_URL="$MODEL_API_BASE_URL" python3 - <<'PY'
+import os
+from urllib.parse import urlparse
+print((urlparse(os.environ["MODEL_API_BASE_URL"]).hostname or "").lower())
+PY
+)"
 
 [[ -n "$MODEL_API_BASE_URL" && -n "$MODEL_API_MODEL" ]] || { echo "FAIL: api_base_url or model not configured"; exit 1; }
 
@@ -49,8 +52,14 @@ print(f"OK:{len(ids)}:{int(want in ids)}")
 PY
 )"
 
-# Cloudflare-gating / proxy-mediated codes that are not eval misconfigurations.
-is_cf_code() { case "$1" in 401|403|429|502|503|521|522|523|525|530) return 0 ;; *) return 1 ;; esac; }
+# Gateway/proxy-mediated codes that are not necessarily eval misconfigurations.
+is_gateway_code() { case "$1" in 401|403|429|502|503|521|522|523|525|530) return 0 ;; *) return 1 ;; esac; }
+is_gateway_host() {
+  local suffix="${EVAL_GATEWAY_HOST_SUFFIX:-}"
+  suffix="${suffix#.}"
+  [[ -n "$suffix" ]] && [[ "$MODEL_API_HOST" == "$suffix" || "$MODEL_API_HOST" == *."$suffix" ]]
+}
+is_loopback_host() { [[ "$MODEL_API_HOST" == "127.0.0.1" || "$MODEL_API_HOST" == "localhost" || "$MODEL_API_HOST" == "::1" ]]; }
 
 case "$RESULT" in
   OK:*)
@@ -64,12 +73,19 @@ case "$RESULT" in
     ;;
   HTTP:*)
     code="${RESULT#HTTP:}"
-    if is_cf_code "$code"; then
-      echo "SKIP: LLM endpoint returned $code — Cloudflare-gating/proxy-mediated artifact, not a misconfig (see memory project-eval-llm-endpoint)"
+    if is_gateway_host && is_gateway_code "$code"; then
+      echo "SKIP: configured gateway $MODEL_API_HOST returned $code from this shell"
       exit 77
     fi
     echo "FAIL: LLM endpoint returned HTTP $code"; exit 1 ;;
   NET:*)
-    echo "SKIP: LLM endpoint not directly reachable from this host (${RESULT#NET:}); real reachability is proxy-mediated and covered by the smoke"
-    exit 77 ;;
+    if is_gateway_host; then
+      echo "SKIP: configured gateway is not directly reachable from this host (${RESULT#NET:})"
+      exit 77
+    fi
+    if is_loopback_host && [[ "${EVAL_REQUIRE_LLM_ENDPOINT:-0}" != "1" ]]; then
+      echo "SKIP: example loopback endpoint is not running (${RESULT#NET:})"
+      exit 77
+    fi
+    echo "FAIL: local model endpoint is not reachable (${RESULT#NET:})"; exit 1 ;;
 esac

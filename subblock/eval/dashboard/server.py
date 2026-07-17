@@ -1,12 +1,13 @@
 """Harbor Job Dashboard server.
 
 Stdlib-only HTTP server that surfaces job artifacts under
-``$HARBOR_ROOT/jobs/<job_name>/`` (and per-trial ``analysis/``) as a JSON API,
-plus a single-page UI styled after LLaMA-Factory/webui (slate-950 + indigo,
-sidebar + tabs).
+``<eval-block>/artifacts/jobs/<job_name>/`` (including job-level
+``analysis/`` and per-trial ``result.json`` / ``agent/`` / ``verifier/``)
+as a JSON API, plus a single-page UI styled after LLaMA-Factory/webui
+(slate-950 + indigo, sidebar + tabs).
 
 Run:
-    python webui/server.py --port 8092
+    python3 dashboard/server.py --port 8092
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ LOG = logging.getLogger("harbor.webui")
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_REPO = HERE.parent
-DEFAULT_JOBS = DEFAULT_REPO / "jobs"
+DEFAULT_JOBS = DEFAULT_REPO / "artifacts" / "jobs"
 STATIC_DIR = HERE / "static"
 
 
@@ -122,11 +123,51 @@ def duration_secs(start: str | None, end: str | None) -> float | None:
 def is_trial_dir(p: Path) -> bool:
     if not p.is_dir():
         return False
-    return (p / "result.json").exists() or (p / "config.json").exists() or (p / "agent").is_dir()
+    return (
+        (p / "result.json").exists()
+        or (p / "config.json").exists()
+        or (p / "agent").is_dir()
+        or (p / "verifier").is_dir()
+    )
 
 
 def percent(n: int, total: int) -> float:
     return round(100 * n / total, 2) if total else 0.0
+
+
+def _stat_count(value: Any) -> int:
+    if isinstance(value, (list, tuple, set, frozenset, dict)):
+        return len(value)
+    if isinstance(value, str):
+        return 1
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return max(0, int(value))
+    return 0
+
+
+def _stat_names(value: Any) -> set[str] | None:
+    if isinstance(value, dict):
+        return {str(name) for name in value}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return {str(name) for name in value}
+    if isinstance(value, str):
+        return {value}
+    return None
+
+
+def _job_cache_signature(job_dir: Path) -> tuple[int, int, int, int] | None:
+    try:
+        job_stat = job_dir.stat()
+    except OSError:
+        return None
+    try:
+        result_stat = (job_dir / "result.json").stat()
+        result_mtime_ns = result_stat.st_mtime_ns
+        result_size = result_stat.st_size
+    except OSError:
+        result_mtime_ns = 0
+        result_size = 0
+    return (job_stat.st_mtime_ns, job_stat.st_size, result_mtime_ns, result_size)
 
 
 DEFAULT_RULE_SCORE_COMPONENTS = (
@@ -154,10 +195,11 @@ class JobsRepo:
     def __init__(self, jobs_dir: Path) -> None:
         self.jobs_dir = jobs_dir
         self._extracted_trace_cache: dict[Path, dict[str, Any]] = {}
-        # per-job trial listing cache keyed by job dir signature (immutable
-        # once a job finishes); avoids re-reading hundreds of trial files.
-        self._trials_cache: dict[str, tuple[tuple[int, int], list[dict]]] = {}
-        self._exc_cache: dict[str, tuple[tuple[int, int], dict[str, int]]] = {}
+        # Per-job caches include the job-level result.json signature, so live
+        # jobs refresh as Harbor updates their roll-up while completed jobs
+        # avoid re-reading hundreds of trial files.
+        self._trials_cache: dict[str, tuple[tuple[int, int, int, int], list[dict]]] = {}
+        self._exc_cache: dict[str, tuple[tuple[int, int, int, int], dict[str, int]]] = {}
 
     def list_job_dirs(self) -> list[Path]:
         if not self.jobs_dir.exists():
@@ -200,6 +242,7 @@ class JobsRepo:
         datasets = cfg.get("datasets") or []
         dataset = datasets[0] if datasets else {}
         analysis = self.analysis_summary(p) if include_analysis else None
+        has_analysis = self._has_analysis_artifacts(p)
         trial_count = self._count_trials(p) if include_trial_count else None
         mtime = None
         try:
@@ -217,7 +260,7 @@ class JobsRepo:
             "trial_count": trial_count,
             "exception_stats": self.exception_stats(p) if include_analysis else {},
             "analysis": analysis,
-            "has_analysis": analysis is not None if include_analysis else self._has_analysis_artifacts(p),
+            "has_analysis": has_analysis,
         }
 
     def _count_trials(self, p: Path) -> int:
@@ -246,17 +289,113 @@ class JobsRepo:
             )
         )
 
+    def _result_summary(self, p: Path) -> dict | None:
+        job_result = safe_load_json(p / "result.json") or {}
+        stats = job_result.get("stats") or {}
+        evals = stats.get("evals") or {}
+        resolved_names: set[tuple[str, str]] = set()
+        failed_names: set[tuple[str, str]] = set()
+        exception_names: set[tuple[str, str]] = set()
+        anonymous_resolved = 0
+        anonymous_failed = 0
+        anonymous_exceptions = 0
+        found = False
+
+        if isinstance(evals, dict):
+            for eval_key, eval_stats in evals.items():
+                if not isinstance(eval_stats, dict):
+                    continue
+                reward_counts = (
+                    ((eval_stats.get("reward_stats") or {}).get("reward") or {})
+                )
+                if isinstance(reward_counts, dict):
+                    for raw_reward, entries in reward_counts.items():
+                        count = _stat_count(entries)
+                        if count == 0:
+                            continue
+                        try:
+                            reward = float(raw_reward)
+                        except (TypeError, ValueError):
+                            continue
+                        found = True
+                        names = _stat_names(entries)
+                        if reward >= 1:
+                            if names is None:
+                                anonymous_resolved += count
+                            else:
+                                resolved_names.update((str(eval_key), name) for name in names)
+                        else:
+                            if names is None:
+                                anonymous_failed += count
+                            else:
+                                failed_names.update((str(eval_key), name) for name in names)
+
+                exception_stats = eval_stats.get("exception_stats") or {}
+                if isinstance(exception_stats, dict):
+                    for entries in exception_stats.values():
+                        count = _stat_count(entries)
+                        if not count:
+                            continue
+                        found = True
+                        names = _stat_names(entries)
+                        if names is None:
+                            anonymous_exceptions += count
+                        else:
+                            exception_names.update((str(eval_key), name) for name in names)
+
+        # A Harbor trial can appear in both reward_stats and exception_stats.
+        # Exception/failed status takes precedence, and each named trial counts once.
+        resolved_total = len(resolved_names - failed_names - exception_names) + anonymous_resolved
+        failed_total = len(failed_names | exception_names) + anonymous_failed + anonymous_exceptions
+        counted_exceptions = len(exception_names) + anonymous_exceptions
+        declared_errors = _stat_count(stats.get("n_errors"))
+        if declared_errors > counted_exceptions:
+            found = True
+            failed_total += declared_errors - counted_exceptions
+
+        if not found:
+            for child in p.iterdir():
+                if child.name == "analysis" or not is_trial_dir(child):
+                    continue
+                result = safe_load_json(child / "result.json") or {}
+                reward = (
+                    ((result.get("verifier_result") or {}).get("rewards") or {}).get("reward")
+                )
+                if reward is not None:
+                    found = True
+                    try:
+                        is_resolved = float(reward) >= 1
+                    except (TypeError, ValueError):
+                        is_resolved = False
+                    if is_resolved:
+                        resolved_total += 1
+                    else:
+                        failed_total += 1
+                elif result.get("exception_info"):
+                    found = True
+                    failed_total += 1
+
+        if not found:
+            return None
+        total = resolved_total + failed_total
+        return {
+            "resolved_total": resolved_total,
+            "failed_total": failed_total,
+            "total": total,
+            "resolve_rate": percent(resolved_total, total),
+            "has_score_comparison": False,
+            "has_task_analysis": False,
+            "has_rule_score": False,
+            "source": "result.json",
+        }
+
     @staticmethod
     def _trial_exception_type(child: Path) -> str | None:
         res = safe_load_json(child / "result.json") or {}
         return _exception_type(res.get("exception_info"))
 
     def exception_stats(self, p: Path) -> dict[str, int]:
-        try:
-            st = p.stat()
-            sig = (st.st_mtime_ns, st.st_size)
-        except OSError:
-            sig = None
+        sig = _job_cache_signature(p)
         cached = self._exc_cache.get(str(p))
         if sig is not None and cached is not None and cached[0] == sig:
             return cached[1]
@@ -280,7 +419,7 @@ class JobsRepo:
     def analysis_summary(self, p: Path) -> dict | None:
         a = p / "analysis"
         if not a.is_dir():
-            return None
+            return self._result_summary(p)
         score_comp = safe_load_json(a / "score_comparison.json")
         task_analysis = safe_load_json(a / "report_task_analysis.json")
         rule_score = safe_load_json(a / "traj_analysis" / "score_comparison.json")
@@ -293,7 +432,7 @@ class JobsRepo:
             (a / "report_failed.json").exists(),
             (a / "report_resolved.json").exists(),
         ]):
-            return None
+            return self._result_summary(p)
         resolved_total = (score_comp or {}).get("resolved_total") if score_comp else None
         failed_total = (score_comp or {}).get("failed_total") if score_comp else None
         if resolved_total is None and task_analysis:
@@ -356,6 +495,12 @@ class JobsRepo:
         duration = duration_secs(res.get("started_at"), res.get("finished_at"))
         agent_result = res.get("agent_result") or {}
         exception_info = res.get("exception_info")
+        if reward is not None:
+            resolved = bool(reward and reward >= 1)
+        elif exception_info:
+            resolved = False
+        else:
+            resolved = None
         token_summary = _trial_token_summary(child)
         hit_max_turn = _hit_max_turn(child)
         hit_context_window = (
@@ -365,7 +510,7 @@ class JobsRepo:
         return {
             "trial_name": child.name,
             "task_name": res.get("task_name"),
-            "resolved": bool(reward and reward >= 1) if reward is not None else None,
+            "resolved": resolved,
             "reward": reward,
             "duration_sec": duration,
             "n_input_tokens": agent_result.get("n_input_tokens"),
@@ -387,11 +532,7 @@ class JobsRepo:
 
     def list_trials(self, job_name: str) -> list[dict]:
         p = self.job_dir(job_name)
-        try:
-            st = p.stat()
-            sig = (st.st_mtime_ns, st.st_size)
-        except OSError:
-            sig = None
+        sig = _job_cache_signature(p)
         cached = self._trials_cache.get(str(p))
         if sig is not None and cached is not None and cached[0] == sig:
             return cached[1]
@@ -842,7 +983,6 @@ def _exception_type(exception_info: Any) -> str | None:
     return type(exception_info).__name__
 
 
-MAX_LENGTH_TOTAL_TOKENS = 131_072
 MAX_TURN_RE = re.compile(
     r"MaxIterationsReached|Agent reached maximum.*?iterations limit \(\d+\)|maximum.*?iterations limit",
     re.IGNORECASE | re.DOTALL,
@@ -975,7 +1115,7 @@ def _trial_token_summary(trial_dir: Path) -> dict[str, Any]:
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
         "finish_reason": finish_reason,
-        "hit_max_length": total_tokens == MAX_LENGTH_TOTAL_TOKENS and finish_reason == "length",
+        "hit_max_length": finish_reason == "length",
     }
 
 
@@ -1696,6 +1836,7 @@ class Handler(BaseHTTPRequestHandler):
             an = j.get("analysis") or {}
             if j.get("has_analysis"):
                 analyzed += 1
+            if an:
                 total_resolved += an.get("resolved_total") or 0
                 total_failed += an.get("failed_total") or 0
         return {

@@ -28,9 +28,11 @@
 #   bash scripts/serve_local_model.sh
 #   MODEL_PATH=/path/to/ckpt MODEL_NAME=my-model bash scripts/serve_local_model.sh
 #
-# All settings are env-overridable. After it reports "ready", copy the printed
-# llm_api block into config.yaml -> runtime_info.input.llm_api and run the eval
-# block as usual (scripts/dryrun.sh then scripts/start.sh) on the eval node.
+# The defaults are tuned for the active Qwen3.5 checkpoint. Parser/model-specific
+# settings are env-overridable; for another architecture, review
+# TOOL_CALL_PARSER, LANGUAGE_MODEL_ONLY, GDN_PREFILL_BACKEND, and DTYPE. After
+# it reports "ready", copy the printed llm_api block into config.yaml and run the
+# eval preflight on the eval node.
 set -euo pipefail
 
 # ------------------------------------------------------------------------------
@@ -62,9 +64,15 @@ print("" if value is None else value)
 PY
 }
 
-MODEL_PATH="${MODEL_PATH:-$(cfg runtime_info.input.local_model_serving.model_path)}"
+if [[ -z "${MODEL_PATH:-}" ]]; then
+  MODEL_PATH="$(cfg runtime_info.input.local_model_serving.model_path)"
+  if [[ -n "$MODEL_PATH" && "$MODEL_PATH" != /* ]]; then
+    MODEL_PATH="$BLOCK_DIR/$MODEL_PATH"
+  fi
+fi
 MODEL_NAME="${MODEL_NAME:-$(cfg runtime_info.input.local_model_serving.model_name)}"
-TOOL_CALL_PARSER="${TOOL_CALL_PARSER:-hermes}"
+TOOL_CALL_PARSER="${TOOL_CALL_PARSER-qwen3_coder}"
+REASONING_PARSER="${REASONING_PARSER:-}"
 
 [[ -n "$MODEL_PATH" ]] || { echo "ERROR: model path not set. Add it to config.yaml -> runtime_info.input.local_model_serving.model_path, or pass MODEL_PATH=..." >&2; exit 1; }
 [[ -n "$MODEL_NAME" ]] || { echo "ERROR: model name not set. Add it to config.yaml -> runtime_info.input.local_model_serving.model_name, or pass MODEL_NAME=..." >&2; exit 1; }
@@ -72,7 +80,7 @@ TOOL_CALL_PARSER="${TOOL_CALL_PARSER:-hermes}"
 # ------------------------------------------------------------------------------
 # Conda env that has vLLM installed (created ONCE on the GPU node, not here).
 #
-# For a standard bf16/fp16 checkpoint (e.g. Qwen3-8B) a plain pip install is
+# For this bf16 Qwen3.5-35B-A3B checkpoint, a plain pip install is
 # enough — no source build:
 #   conda create -y -n vllm_0.18.1 python=3.12
 #   conda activate vllm_0.18.1
@@ -83,7 +91,7 @@ TOOL_CALL_PARSER="${TOOL_CALL_PARSER:-hermes}"
 #
 # Set VLLM_CONDA_ENV="" to skip conda activation if vllm is already on PATH.
 # ------------------------------------------------------------------------------
-VLLM_CONDA_ENV="${VLLM_CONDA_ENV:-vllm_0.18.1}"
+VLLM_CONDA_ENV="${VLLM_CONDA_ENV-vllm_0.18.1}"
 # Auto-detect conda.sh across common install layouts (miniconda3, anaconda3 under
 # $HOME, /opt, or /anaconda3) and fall back to `conda info --base`. Override with
 # CONDA_SH=... if your install lives elsewhere.
@@ -108,16 +116,20 @@ fi
 HOST="${HOST:-0.0.0.0}"
 VLLM_PORT="${VLLM_PORT:-8000}"
 API_KEY="${API_KEY:-dummy-key}"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 
 # ------------------------------------------------------------------------------
 # vLLM settings
 # ------------------------------------------------------------------------------
 TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-$(cfg runtime_info.input.local_model_serving.tensor_parallel_size)}"
 TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-8}"
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-131072}"
-GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.95}"
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-48}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-32}"
 VLLM_TIMEOUT="${VLLM_TIMEOUT:-600}"
+LANGUAGE_MODEL_ONLY="${LANGUAGE_MODEL_ONLY:-1}"
+GDN_PREFILL_BACKEND="${GDN_PREFILL_BACKEND-triton}"
+DTYPE="${DTYPE:-bfloat16}"
 
 [[ -d "$MODEL_PATH" ]] || { echo "ERROR: MODEL_PATH does not exist: $MODEL_PATH" >&2; exit 1; }
 
@@ -140,32 +152,40 @@ EOF
 fi
 
 # ------------------------------------------------------------------------------
-# Free the target port if something is squatting on it
+# Refuse to replace an existing listener on the target port. On shared GPU
+# nodes, automatically killing an arbitrary process can interrupt another job.
 # ------------------------------------------------------------------------------
 # Match the Local Address:Port column ($4) ending in exactly :PORT, so :8000
-# does not also match :18000 / :28000 and kill an unrelated process.
-existing_pid="$(ss -tlnp 2>/dev/null | awk -v p=":${VLLM_PORT}\$" '$4 ~ p {print}' | grep -oP 'pid=\K[0-9]+' | head -1 || true)"
-if [[ -n "$existing_pid" ]]; then
-  echo "Port ${VLLM_PORT} occupied by PID ${existing_pid}, killing it..."
-  kill "$existing_pid" 2>/dev/null || true
-  sleep 2
-  kill -0 "$existing_pid" 2>/dev/null && { kill -9 "$existing_pid" 2>/dev/null || true; sleep 1; }
-  echo "Port ${VLLM_PORT} freed."
+# does not also match :18000 / :28000.
+existing_listener="$(ss -tlnp 2>/dev/null | awk -v p=":${VLLM_PORT}\$" '$4 ~ p {print; exit}' || true)"
+if [[ -n "$existing_listener" ]]; then
+  echo "ERROR: port ${VLLM_PORT} is already in use; refusing to kill the existing listener." >&2
+  echo "       ${existing_listener}" >&2
+  echo "       Stop the owning service explicitly or choose another VLLM_PORT." >&2
+  exit 1
 fi
 
 cleanup() {
-  echo ""
-  echo "Stopping vLLM..."
-  [[ -n "${VLLM_PID:-}" ]] && kill "${VLLM_PID}" 2>/dev/null || true
-  wait 2>/dev/null || true
-  echo "Stopped."
+  if [[ "${CLEANED_UP:-0}" == "1" ]]; then
+    return
+  fi
+  CLEANED_UP=1
+  if [[ -n "${VLLM_PID:-}" ]]; then
+    echo ""
+    echo "Stopping vLLM..."
+    kill "${VLLM_PID}" 2>/dev/null || true
+    wait "${VLLM_PID}" 2>/dev/null || true
+    echo "Stopped."
+  fi
 }
 # Include EXIT so the half-started vLLM child is reaped even when the script
 # aborts via one of the set -e error paths below (not just on INT/TERM).
-trap cleanup INT TERM EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap cleanup EXIT
 
-HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-[[ -n "$HOST_IP" ]] || HOST_IP="127.0.0.1"
+HOST_IP="${ADVERTISE_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
+[[ -n "$HOST_IP" ]] || { echo "ERROR: could not determine advertised GPU-node IP; set ADVERTISE_HOST" >&2; exit 1; }
 
 echo "=========================================="
 echo "Starting vLLM for ${MODEL_NAME}"
@@ -176,6 +196,20 @@ echo "Endpoint:     http://${HOST_IP}:${VLLM_PORT}/v1   (OpenAI format)"
 echo "TP size:      ${TENSOR_PARALLEL_SIZE}    max-model-len: ${MAX_MODEL_LEN}"
 echo "=========================================="
 echo ""
+
+VLLM_EXTRA_ARGS=()
+if [[ -n "${REASONING_PARSER}" ]]; then
+  VLLM_EXTRA_ARGS+=(--reasoning-parser "${REASONING_PARSER}")
+fi
+if [[ -n "${TOOL_CALL_PARSER}" ]]; then
+  VLLM_EXTRA_ARGS+=(--enable-auto-tool-choice --tool-call-parser "${TOOL_CALL_PARSER}")
+fi
+if [[ "${LANGUAGE_MODEL_ONLY}" == "1" ]]; then
+  VLLM_EXTRA_ARGS+=(--language-model-only)
+fi
+if [[ -n "${GDN_PREFILL_BACKEND}" ]]; then
+  VLLM_EXTRA_ARGS+=(--gdn-prefill-backend "${GDN_PREFILL_BACKEND}")
+fi
 
 vllm serve "${MODEL_PATH}" \
     --host "${HOST}" \
@@ -188,10 +222,9 @@ vllm serve "${MODEL_PATH}" \
     --trust-remote-code \
     --enable-prefix-caching \
     --enable-chunked-prefill \
-    --enable-auto-tool-choice \
     --max-num-seqs "${MAX_NUM_SEQS}" \
-    --tool-call-parser "${TOOL_CALL_PARSER}" \
-    --dtype bfloat16 &
+    "${VLLM_EXTRA_ARGS[@]}" \
+    --dtype "${DTYPE}" &
 VLLM_PID=$!
 
 echo "Waiting for vLLM on port ${VLLM_PORT} (timeout: ${VLLM_TIMEOUT}s)..."
@@ -206,7 +239,7 @@ done
 curl -s --connect-timeout 2 "http://localhost:${VLLM_PORT}/health" >/dev/null 2>&1 \
   || { echo "ERROR: vLLM did not become ready within ${VLLM_TIMEOUT}s." >&2; exit 1; }
 
-MODELS="$(curl -s --connect-timeout 5 -H "Authorization: Bearer ${API_KEY}" "http://localhost:${VLLM_PORT}/v1/models")"
+MODELS="$(curl -s --connect-timeout 5 -H "Authorization: Bearer ${API_KEY}" "http://localhost:${VLLM_PORT}/v1/models" || true)"
 if echo "${MODELS}" | grep -Fq "${MODEL_NAME}"; then
   echo "[PASS] /v1/models returns ${MODEL_NAME}"
 else
@@ -225,7 +258,10 @@ vLLM is serving ${MODEL_NAME}. Now point the eval block at it:
     input_cost_per_token: 0.0
     output_cost_per_token: 0.0
 
-Then on the eval node: scripts/dryrun.sh  (probe should PASS) -> scripts/start.sh
+Then on the eval node:
+  bash scripts/dryrun.sh
+  bash scripts/probe_llm_completion.sh
+  bash scripts/start.sh
 Keep this process running (use tmux) for the whole eval job.
 ==========================================================================
 

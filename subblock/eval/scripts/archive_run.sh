@@ -11,7 +11,8 @@
 set -u
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ARTIFACTS_DIR="$BLOCK_DIR/artifacts"
+ARTIFACTS_DIR="${EVAL_ARTIFACTS_DIR:-$BLOCK_DIR/artifacts}"
+CONFIG="${EVAL_CONFIG:-$BLOCK_DIR/config.yaml}"
 ARCHIVES_DIR="$ARTIFACTS_DIR/archives"
 INDEX_FILE="$ARTIFACTS_DIR/index.yaml"
 
@@ -19,6 +20,10 @@ EXIT_CODE="${1:-0}"
 STARTED_AT="${2:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 NOTES="${3:-}"
 COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+JOB_DIR="${EVAL_JOB_DIR:-}"
+if [[ -n "$JOB_DIR" && "$JOB_DIR" == "$BLOCK_DIR"/* ]]; then
+    JOB_DIR="${JOB_DIR#"$BLOCK_DIR"/}"
+fi
 
 # Map exit code → status label.
 case "$EXIT_CODE" in
@@ -27,7 +32,16 @@ case "$EXIT_CODE" in
     *)        STATUS="failed" ;;
 esac
 
-mkdir -p "$ARCHIVES_DIR"
+mkdir -p "$ARTIFACTS_DIR" "$ARCHIVES_DIR"
+if ! command -v flock >/dev/null 2>&1; then
+    echo "WARNING: flock is required for collision-free run archiving; archive skipped." >&2
+    exit 0
+fi
+exec 9>"$ARTIFACTS_DIR/.archive.lock"
+if ! flock -x 9; then
+    echo "WARNING: could not acquire archive lock; archive skipped." >&2
+    exit 0
+fi
 
 # Next run id = max(existing archives/run_NNN/, existing index.yaml run ids) + 1.
 next_id=1
@@ -55,7 +69,7 @@ mkdir -p "$RUN_DIR"
 
 # Snapshot config.yaml and scripts/ (top-level files + non-hidden subdirs only —
 # skip hidden state dirs like .swegen-py that some blocks stash inside scripts/).
-[[ -f "$BLOCK_DIR/config.yaml" ]] && cp -p "$BLOCK_DIR/config.yaml" "$RUN_DIR/config.yaml"
+[[ -f "$CONFIG" ]] && cp -p "$CONFIG" "$RUN_DIR/config.yaml"
 if [[ -d "$BLOCK_DIR/scripts" ]]; then
     mkdir -p "$RUN_DIR/scripts"
     shopt -s nullglob
@@ -86,6 +100,11 @@ fi
     echo "completed_at: \"$COMPLETED_AT\""
     echo "status: $STATUS"
     echo "exit_code: $EXIT_CODE"
+    if [[ -n "$JOB_DIR" ]]; then
+        job_dir_escaped="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$JOB_DIR" 2>/dev/null)"
+        [[ -z "$job_dir_escaped" ]] && job_dir_escaped="\"\""
+        echo "job_dir: $job_dir_escaped"
+    fi
     if [[ -n "$REPOS_LINES" ]]; then
         echo "repos:"
         printf '%s' "$REPOS_LINES"
@@ -109,6 +128,7 @@ ARCHIVE_STARTED_AT="$STARTED_AT" \
 ARCHIVE_COMPLETED_AT="$COMPLETED_AT" \
 ARCHIVE_STATUS="$STATUS" \
 ARCHIVE_NOTES="$NOTES" \
+ARCHIVE_JOB_DIR="$JOB_DIR" \
 python3 - <<'PY' 2>/dev/null
 import os, sys
 from pathlib import Path
@@ -132,22 +152,43 @@ runs.append({
     "status":       os.environ["ARCHIVE_STATUS"],
     "archive":      f"artifacts/archives/{os.environ['ARCHIVE_RUN_ID']}/",
     "notes":        os.environ["ARCHIVE_NOTES"],
+    **({"job_dir": os.environ["ARCHIVE_JOB_DIR"]} if os.environ.get("ARCHIVE_JOB_DIR") else {}),
 })
 data["runs"] = runs
-path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+path.parent.mkdir(parents=True, exist_ok=True)
+tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+try:
+    tmp.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    os.replace(tmp, path)
+finally:
+    try:
+        tmp.unlink()
+    except FileNotFoundError:
+        pass
 PY
 
 if [[ "$?" -ne 0 ]]; then
-    # PyYAML unavailable — append a plain block. May not be valid YAML if the
-    # existing file has an unusual structure, but at least the run is recorded.
+    # PyYAML unavailable — preserve a valid simple `runs:` list rather than
+    # appending an indented item to an empty file.
+    if [[ ! -s "$INDEX_FILE" ]]; then
+        echo "runs:" >"$INDEX_FILE"
+    elif ! grep -qE '^runs:[[:space:]]*$' "$INDEX_FILE"; then
+        echo "WARNING: cannot safely append archive entry without PyYAML: $INDEX_FILE has no top-level runs list" >&2
+        echo "Archived snapshot exists at $RUN_DIR, but index.yaml was not changed." >&2
+        exit 0
+    fi
+    notes_escaped="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$NOTES" 2>/dev/null)"
+    [[ -z "$notes_escaped" ]] && notes_escaped="\"\""
+    job_dir_escaped="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$JOB_DIR" 2>/dev/null)"
+    [[ -z "$job_dir_escaped" ]] && job_dir_escaped="\"\""
     {
-        echo ""
         echo "  - id: $RUN_ID"
         echo "    started_at: \"$STARTED_AT\""
         echo "    completed_at: \"$COMPLETED_AT\""
         echo "    status: $STATUS"
         echo "    archive: artifacts/archives/$RUN_ID/"
-        echo "    notes: \"$NOTES\""
+        echo "    notes: $notes_escaped"
+        [[ -n "$JOB_DIR" ]] && echo "    job_dir: $job_dir_escaped"
     } >>"$INDEX_FILE"
 fi
 

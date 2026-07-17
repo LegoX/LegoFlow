@@ -31,7 +31,7 @@ It is idempotent (skips populated datasets unless `PREP_FORCE=1`). Tagging is be
 `tag_task_metadata.py` POSTs to `<base_url>/chat/completions` and parses a JSON object, so it needs a model that returns **clean JSON**.
 
 <Callout title="Reasoning models break tagging" type="warn">
-A reasoning model that emits `<think>…` into the content field (e.g. `Qwen3-8B` served with thinking on) produces unparseable output, and tags fail. `GLM-5-FP8` keeps reasoning in a separate field and works. Point tagging at a JSON-clean / instruct endpoint via `PREP_TAG_BASE_URL` / `PREP_TAG_MODEL` / `PREP_TAG_API_KEY`.
+A reasoning model that emits `<think>…` into the content field (e.g. `Qwen3.5-35B-A3B` served with thinking on) produces unparseable output, and tags fail. `GLM-5-FP8` keeps reasoning in a separate field and works. Point tagging at a JSON-clean / instruct endpoint via `PREP_TAG_BASE_URL` / `PREP_TAG_MODEL` / `PREP_TAG_API_KEY`.
 </Callout>
 
 The default tagging endpoint is `config.yaml → runtime_info.input.job_analysis.tag_llm`:
@@ -40,9 +40,11 @@ The default tagging endpoint is `config.yaml → runtime_info.input.job_analysis
 job_analysis:
   enabled: true
   tag_llm:
-    base_url: "http://llm10.jierungogogo.com/v1"
-    model: "GLM-5-FP8"
-    api_key: "dummy-cf"
+    base_url: ""  # empty values fall back to llm_api
+    model: ""
+    api_key: ""
 ```
 
 This is deliberately separate from the eval `llm_api`: the model under evaluation may be a reasoning model unsuitable for tagging, so the gold-tagging step gets its own JSON-clean endpoint.
+Supply a separate endpoint through `PREP_TAG_BASE_URL`, `PREP_TAG_MODEL`, and
+`PREP_TAG_API_KEY`, or use a private config profile; never commit its key.

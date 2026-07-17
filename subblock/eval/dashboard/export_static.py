@@ -40,12 +40,12 @@ WORKER_JS = r'''export default {
 
     if (trajectory) {
       if (!env.TRAJECTORIES) {
-        return jsonResponse({ error: "R2 binding TRAJECTORIES is not configured" }, 500);
+        return env.ASSETS.fetch(request);
       }
       const key = `${trajectory.job}/${trajectory.trial}/trajectory_${trajectory.kind}.json`;
       const object = await env.TRAJECTORIES.get(key);
       if (!object) {
-        return jsonResponse({ error: "trajectory not found", key }, 404);
+        return env.ASSETS.fetch(request);
       }
       const headers = new Headers(object.httpMetadata || {});
       headers.set("Content-Type", "application/json; charset=utf-8");
@@ -129,6 +129,7 @@ def build_overview(repo: JobsRepo) -> dict:
         analysis = job.get("analysis") or {}
         if job.get("has_analysis"):
             analyzed += 1
+        if analysis:
             total_resolved += analysis.get("resolved_total") or 0
             total_failed += analysis.get("failed_total") or 0
     return {
@@ -212,6 +213,12 @@ def compute_job_fingerprint(job_dir: Path) -> dict[str, Any]:
     return {
         "job_dir_mtime": stat_mtime(job_dir),
         "config_mtime": stat_mtime(job_dir / "config.json"),
+        "result_mtime": stat_mtime(job_dir / "result.json"),
+        "result_size": (
+            (job_dir / "result.json").stat().st_size
+            if (job_dir / "result.json").is_file()
+            else None
+        ),
         "extracted_trace_mtime": stat_mtime(trace_path) if trace_path else None,
         "extracted_trace_size": trace_path.stat().st_size if trace_path else None,
         "extracted_report_mtime": stat_mtime(report_path) if report_path else None,
@@ -630,7 +637,12 @@ def main() -> None:
         "--trajectory-target",
         choices=("none", "pages", "chunks"),
         default="none",
-        help="Where to export trajectory JSON. Use 'chunks' for a no-R2 Pages deployment, 'none' for R2-backed Pages, or 'pages' only for local/full debugging.",
+        help=(
+            "Where to export trajectory JSON. Direct invocation defaults to "
+            "'none' for R2-backed Pages; run_cloudflare_pages_sync.sh defaults "
+            "to 'chunks' for no-R2 deployment. Use 'pages' only for local/full "
+            "debugging."
+        ),
     )
     parser.add_argument(
         "--trajectory-chunk-mb",

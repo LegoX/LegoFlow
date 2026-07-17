@@ -6,5 +6,6 @@ Long-form context for the eval block.
 - `overview.mdx` — stable workflow, pipeline, and quick-start prompts
 - `io.mdx` — inputs/outputs, active runtime config, and produced paths
 
-Live job status, blockers, and next steps live in `config.yaml → status`;
-archived run records live in `artifacts/index.yaml`.
+`config.yaml` is the active run profile. Live progress comes from the running
+processes and `artifacts/jobs/<job>/result.json`; archived run records live in
+`artifacts/index.yaml`.

@@ -19,11 +19,37 @@
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
-JA_DIR="$BLOCK_DIR/repos/harbor/scripts/job_analysis"
+CONFIG="${EVAL_CONFIG:-$BLOCK_DIR/config.yaml}"
+
+cfg() {
+  python3 - "$CONFIG" "$1" <<'PY'
+import sys
+import yaml
+
+data = yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}
+value = data
+for part in sys.argv[2].split("."):
+    value = value.get(part) if isinstance(value, dict) else None
+print("" if value is None else value)
+PY
+}
+
+abspath() {
+  if [[ "$1" = /* ]]; then
+    printf '%s\n' "$1"
+  else
+    printf '%s\n' "$BLOCK_DIR/$1"
+  fi
+}
+
+HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
+[[ -n "$HARBOR_PATH_RAW" ]] || HARBOR_PATH_RAW="repos/harbor"
+JA_DIR="$(abspath "$HARBOR_PATH_RAW")/scripts/job_analysis"
 
 # Prefer the Harbor uv env (has scipy + pyyaml); fall back to system python3.
-PY="$BLOCK_DIR/artifacts/env/harbor-uv/bin/python"
+HARBOR_UV_RAW="$(cfg meta_info.environment.harbor_uv)"
+[[ -n "$HARBOR_UV_RAW" ]] || HARBOR_UV_RAW="artifacts/env/harbor-uv"
+PY="$(abspath "$HARBOR_UV_RAW")/bin/python"
 [[ -x "$PY" ]] || PY="python3"
 
 [[ -d "$JA_DIR" ]] || { echo "ERROR: job_analysis not found at $JA_DIR; run scripts/update_repos.sh" >&2; exit 1; }
@@ -90,6 +116,7 @@ rin = ((data.get("runtime_info") or {}).get("input") or {})
 
 dataset_name = (rin.get("task_source") or {}).get("dataset_name") or ""
 agent_name = (rin.get("agent") or {}).get("name") or ""
+max_iterations = (rin.get("agent") or {}).get("max_turns") or 200
 model = (rin.get("llm_api") or {}).get("model") \
     or (rin.get("agent") or {}).get("model_name") \
     or "unknown"
@@ -120,7 +147,7 @@ cfg = {
         "trajectory_subpath": "agent/litellm-trajectory.jsonl",
         "trial_result_file": "result.json",
         "trial_report_subpath": "verifier/report.json",
-        "max_iterations_default": 200,
+        "max_iterations_default": max_iterations,
     },
     "output": {
         "dir": str(Path(job_dir) / "analysis"),
@@ -162,7 +189,9 @@ with open(gen_config, "w", encoding="utf-8") as fh:
     fh.write(header)
     yaml.safe_dump(cfg, fh, sort_keys=False)
 
-status = "GOLD_OK" if Path(dataset_dir).is_dir() else "GOLD_MISSING"
+dataset_path = Path(dataset_dir)
+has_gold = dataset_path.is_dir() and any(dataset_path.rglob("tests/config.json"))
+status = "GOLD_OK" if has_gold else "GOLD_MISSING"
 print(f"{status}|{dataset_name}|{dataset_dir}")
 PY
 )"; then
@@ -182,9 +211,12 @@ DATASET_DIR="${GOLD_REST#*|}"
 echo "=== job analysis ==="
 echo "Job dir:   $JOB_DIR"
 echo "Python:    $PY"
-# The pipeline requires the gold dataset (gold_source: harbor_dataset) and aborts
-# hard if its dir is absent. When it's missing, auto-generate it (adapter + tagger)
-# via prepare_dataset.sh, then re-check; skip cleanly only if it still isn't there.
+has_gold_dataset() {
+  [[ -d "$1" && -n "$(find "$1" -path '*/tests/config.json' -print -quit 2>/dev/null)" ]]
+}
+# The pipeline requires a populated gold dataset (gold_source: harbor_dataset)
+# and aborts hard if no tests/config.json files exist. When it is missing or
+# empty, auto-generate it (adapter + tagger), then re-check.
 if [[ "$GOLD_STATE" == "GOLD_MISSING" ]]; then
   if [[ "${JOB_ANALYSIS_PREPARE_DATASET:-1}" == "1" ]]; then
     echo ""
@@ -192,7 +224,7 @@ if [[ "$GOLD_STATE" == "GOLD_MISSING" ]]; then
     bash "$BLOCK_DIR/scripts/prepare_dataset.sh" "$DATASET_NAME" || \
       echo "WARNING: dataset preparation failed; see log above."
   fi
-  if [[ ! -d "$DATASET_DIR" ]]; then
+  if ! has_gold_dataset "$DATASET_DIR"; then
     rm -f "$TMP_CONFIG"
     echo ""
     echo "SKIP: gold dataset still not present at $DATASET_DIR"
