@@ -25,11 +25,12 @@ because evaluator does not convert trajectories.
 
 ## Where to run
 
-`meta_info.resources.ip` is currently `192.168.35.240` (a real remote
-IP), `user: root`, working dir `/gpufs/haoli/code/`. If the current shell
-is on a different host, SSH there first and run setup from the evaluator block
-dir under that path. Envs and the Harbor checkout are host-local — never
-build them on a host the run won't use.
+Read `meta_info.resources.ip` and `directory` from the user's private run
+profile. For `local` / null, use the current host. For a remote hostname
+or IP, connect through SSH keys or `~/.ssh/config` and run setup from the
+configured block directory. Envs and the Harbor checkout are host-local
+— never build them on a host the run won't use. Never add SSH passwords
+to `config.yaml`.
 
 ## Procedure
 
@@ -67,7 +68,10 @@ For `meta_info.repositories.harbor`:
 - `update_repos.sh` refuses to update a worktree with local
   modifications. Stop and ask the user when that happens.
 - Confirm `git -C repos/harbor rev-parse HEAD` equals the configured
-  `commit` (`149e75770f8c369d6fae31c158ea761d676b4d3a`).
+  `commit`. Always read the live value from `config.yaml →
+  meta_info.repositories.harbor.commit`; never hard-code the SHA in this
+  skill because the pin moves as the block tracks newer registry
+  contents.
 
 ### 3. Environments
 
@@ -89,9 +93,42 @@ satisfies this. `UV_PROJECT_ENVIRONMENT` must be an absolute path.
 Walk `runtime_info.input` and prompt only for unset fields:
 
 - `llm_api.{api_key, api_base_url, model}` — the upstream served via the
-  per-job LiteLLM proxy (currently `https://qwen.jierungogogo.com/v1`
-  with `openai/Qwen3.5-35B-A3B`). `api_key: dummy-key` is intentional
-  for CF-gated production endpoints (see step 6).
+  per-job LiteLLM proxy. `config.yaml` keeps two interchangeable recipes,
+  only one uncommented at a time (read the active block, don't assume):
+  - **MODE A — remote API** (commented example:
+    `https://api.example.com/v1`, `openai/<served-model-name>`, and a key
+    supplied in the user's private profile). Do not commit real API keys.
+  - **MODE B — local vLLM checkpoint** (checked-in example:
+    `http://127.0.0.1:8000/v1`, `openai/Qwen3.5-35B-A3B`,
+    `api_key: dummy-key` matching vLLM's `--api-key`, costs `0.0`).
+    Paired with the `local_model_serving` block (checkpoint path / served
+    name).
+  - **Custom local checkpoint (vLLM)**: to benchmark a local model
+    (e.g. an SFT/RL output) instead of a remote API, serve it with vLLM
+    on a **GPU node** via `scripts/serve_local_model.sh` (vLLM-only — the
+    block's own LiteLLM still wraps it; do not start a second proxy), then
+    set `llm_api` to the local recipe documented at the top of
+    `runtime_info.input` in `config.yaml`: `api_key` matching vLLM's
+    `--api-key`, `api_base_url: http://<GPU_NODE_IP>:<port>/v1`,
+    `model: openai/<served-model-name>`, and costs `0.0`. The serving step
+    is run by the user, not this skill. See the "Evaluating a custom local
+    model" section in `CLAUDE.md`.
+    The current serving profile is tuned for the active
+    Qwen3.5-35B-A3B checkpoint: its defaults include
+    `TOOL_CALL_PARSER=qwen3_coder`, `MAX_MODEL_LEN=262144`,
+    `GPU_MEMORY_UTILIZATION=0.90`, `MAX_NUM_SEQS=32`,
+    `LANGUAGE_MODEL_ONLY=1`, and `GDN_PREFILL_BACKEND=triton`. For
+    another model architecture, override those parser/model-specific
+    settings before launch. The
+    script refuses to kill an existing listener; stop its owner
+    explicitly or choose another `VLLM_PORT`.
+  - **The vLLM env is out of this skill's scope.** `/evaluator:setup` builds
+    only the CPU-side Harbor uv env + LiteLLM venv on the evaluator node; it
+    does **not** install vLLM. The vLLM conda env lives on the GPU node and
+    is a one-time manual step (`conda create … && pip install vllm==0.18.1`
+    for bf16/fp16; the Harbor source-build script for FP8). If asked to
+    "set up the local model", point the user at the GPU node + the CLAUDE.md
+    recipe rather than installing anything on the evaluator node.
 - `litellm_proxy.{config_template, port, master_key}` — defaults
   (`scripts/serve_llm/litellm_config.example.yaml`, port `4101`) are
   usually fine; the template path is resolved relative to `repos/harbor`.
@@ -110,6 +147,16 @@ Walk `runtime_info.input` and prompt only for unset fields:
   `custom-openhands-sdk`, `custom-opencode`) are switched by editing
   `name`/`version`/`runtime_image`/`runtime_host_path` **together** — see
   the commented block in `config.yaml`.
+- `job_analysis.{enabled, tag_llm}` — controls the post-eval analysis
+  pipeline `start.sh` runs automatically (see `/evaluator:run`). Defaults are
+  fine: `enabled: true`, LLM judge off (pure-CPU, zero token cost). It
+  needs **no extra env** — the pipeline reuses `artifacts/env/harbor-uv`.
+  `tag_llm.{base_url, model, api_key}` is used **only** when a missing gold
+  dataset must be auto-generated (`scripts/prepare_dataset.sh`), to tag
+  `task.toml` metadata; it must point at a **JSON-clean** endpoint
+  (a reasoning model that emits `<think>` breaks tagging — Qwen3.5-35B-A3B served
+  with thinking on does **not** work; GLM-5-FP8 does). Set `enabled: false`
+  to skip analysis entirely.
 
 ### 5. Agent runtime extraction (evaluator-specific)
 
@@ -138,26 +185,27 @@ preflight.
 
 ### 6. Credentials
 
-- **LLM endpoint**: a live `GET <api_base_url>/models` probe belongs to
-  `/evaluator:check`, not setup (evaluator's `dryrun.sh` does not probe). Note: from
-  Claude Code's sandboxed shell some endpoints (e.g.
-  `qwen.jierungogogo.com`) return 401 due to CF gating with `dummy-key`
-  as the real production key — not a credential failure. See memory
-  `project-swegen-llm-endpoint`.
+- **LLM endpoint**: the live
+  `bash scripts/probe_llm_completion.sh` launch-gate belongs to
+  `/evaluator:check`, not setup (evaluator's `dryrun.sh` does not probe). It sends a
+  minimal real completion; do not replace it with `GET /models`, which
+  can succeed while the upstream origin is down. If a remote gateway's
+  edge can mask origin authentication, set `EVAL_GATEWAY_HOST_SUFFIX`
+  in the private runtime environment; matching 401/403 responses become
+  WARNs that must be re-probed on the configured evaluator host. A **local
+  vLLM** `api_base_url` (MODE B) has no such caveat — there a connection
+  failure is real.
 - **No HuggingFace token needed**: evaluator is registry-driven; Harbor
   fetches task data via `registry.json`, so there is no gated-dataset
   prompt (unlike tracer).
 
 ### 7. Artifacts
 
-If `artifacts/index.yaml` is missing (it was removed in a recent merge),
-create it so `dryrun.sh` §1 passes:
-
-```yaml
-runs: []
-```
-
-`scripts/archive_run.sh` appends real entries here after each run.
+`artifacts/index.yaml` is a runtime artifact written by
+`scripts/archive_run.sh` after the first run. Its absence is **not** a
+setup failure — `dryrun.sh` §1 treats a missing `index.yaml` as INFO
+(auto-created later), so there is nothing to seed here. If you want a
+placeholder anyway, `runs: []` is valid, but it is optional.
 
 ### 8. Final check
 
@@ -168,5 +216,5 @@ the structured preflight report). Do not re-run `dryrun.sh` here. If
 ## Notes
 
 - This skill never runs Harbor and never starts the LiteLLM proxy.
-- Setup must run on the host declared in `meta_info.resources.ip`
-  (`192.168.35.240`). If your shell is elsewhere, SSH there first.
+- Setup must run on the host declared in `meta_info.resources.ip`. If
+  your shell is elsewhere, connect there first.

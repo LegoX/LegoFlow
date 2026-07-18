@@ -83,6 +83,17 @@ remote() {
 
 # ---------- PREP ----------
 case "$BLOCK" in
+  evaluator)
+    # The verifier requires a run-scoped start marker and must never accept a
+    # result left by an earlier workspace. Fail immediately if root-owned
+    # residue cannot be removed instead of polling stale output for 40 minutes.
+    if ! rm -rf artifacts/jobs/smoke; then
+      echo "FAIL: could not clear stale evaluator smoke results" >&2
+      exit 1
+    fi
+    mkdir -p artifacts/jobs/smoke
+    date +%s > artifacts/jobs/smoke/.run-start
+    ;;
   trainer)
     if [[ -n "$REMOTE_IP" ]]; then
       echo "INFO: trainer remote mode → $REMOTE_USER@$REMOTE_IP:$REMOTE_PORT$REMOTE_DIR"
@@ -116,8 +127,8 @@ esac
 case "$BLOCK" in
   tracer|evaluator)
     # Warm the cpfs/aliyun-alinas-efc cache for harbor's CLI: the first import
-    # takes ~20s (pydantic/asyncio cold pages), which trips dryrun.sh's
-    # `timeout 120` and turns the smoke into a SKIP. Second invocation is ~9s.
+    # takes ~20s (pydantic/asyncio cold pages). Warming keeps preflight and
+    # launch latency predictable; the second invocation is ~9s.
     # Done AFTER prepare_tasks (which reads 200 task dirs and can evict
     # harbor's pages from the page cache) so the warm sticks until start.sh.
     if [[ -x artifacts/env/harbor-uv/bin/harbor ]]; then
@@ -218,6 +229,17 @@ PY
     echo "INFO: smoke PR list ($(wc -l <"$SMOKE_IDS_FILE") entries):"
     sed 's/^/         /' "$SMOKE_IDS_FILE"
     SMOKE_CMD="source scripts/load_runtime_env.sh && load_runtime_env >/dev/null 2>&1 ; source artifacts/envs/swegen-env/bin/activate ; nohup swegen create --input-ids-file ${SMOKE_IDS_FILE#${BLOCK_DIR}/} --max-pr ${SMOKE_MAX_PR} --n-concurrent ${SMOKE_NCONC} --output ${SMOKE_OUT#${BLOCK_DIR}/} --state-dir ${SMOKE_STATE#${BLOCK_DIR}/} --timeout ${SMOKE_TO} --cc-timeout ${SMOKE_CCTO} --no-require-issue --min-source-files ${SMOKE_MINSF} --max-source-files ${SMOKE_MAXSF} --docker-prune-batch ${SMOKE_DPB} --verbose >> artifacts/logs/smoke-launch.log 2>&1 &"
+    # curator's (swegen CLI) openai_proxy CC verification path (the half that writes
+    # verifiable_tasks.txt) needs a local LiteLLM proxy on cc_proxy_port. This
+    # runner builds its own swegen-create, so it must start the proxy itself —
+    # otherwise PREFLIGHT_LOCAL (dryrun.sh) /health check fails and verification
+    # silently banks 0 tasks. No-op when cc_provider_mode != openai_proxy; the
+    # EXIT trap keeps it up through the WAIT phase and tears it down on exit.
+    # shellcheck source=/dev/null
+    source "$BLOCK_DIR/scripts/cc_proxy_lib.sh"
+    trap cc_proxy_stop EXIT
+    cc_proxy_start "$BLOCK_DIR" "$BLOCK_DIR/config.yaml" \
+      || { echo "FAIL: CC LiteLLM proxy did not start (openai_proxy mode)"; exit 1; }
     claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
                   "swegen create --input-ids-file" "curator"
     LAUNCH_PID=$(pgrep -f 'swegen create --input-ids-file' | head -1)

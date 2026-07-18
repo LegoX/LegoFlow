@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+.env
+.env.*
+
+.wrangler/
+site/
+
+.DS_Store
+*.log

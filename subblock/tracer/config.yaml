@@ -44,8 +44,8 @@ runtime_info:
   input:
     llm_api:
       api_key: dummy-cf
-      api_base_url: "http://llm10.jierungogogo.com/v1"
-      model: "openai/GLM-5-FP8"
+      api_base_url: "https://llm.jierungogogo.com/v1"
+      model: "openai/Qwen3.6-35B-A3B"
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
@@ -64,11 +64,21 @@ runtime_info:
       port: 4003   # 4001 squatted by an unowned stale LiteLLM; 4002 reserved for the host-wide root-owned LiteLLM
       master_key: dummy-key-cf
 
-    # task_source: wired from curator.output.swe_tasks_dir (dependency declared in meta_info.dependencies)
+    # Production task source: curator's verified tasks, wired from
+    # curator.output.swe_tasks_dir (dependency declared in meta_info.dependencies).
+    # prepare_tasks.sh filters the source dir through its verifiable_tasks.txt
+    # manifest before copying into artifacts/tasks/.
+    # Test/smoke runs use their own task_source (an HF slice) in the overlay
+    # configs — tests/smoke/config.yaml (per-block) and tests/smoke/tracer/
+    # config.yaml (root chain) — never this one.
+    #
+    # Alternative task source — verified TERMINAL tasks from the terminalgen block
+    # (parallel to curator; terminal-lego v1.0 schema). Select with provider: terminalgen.
     # task_source:
-    #   provider: local
-    #   dataset_name: ../curator/artifacts/swe_tasks/py-cc
-      # prepare_tasks.sh filters by py-cc/verifiable_tasks.txt before copying into artifacts/tasks/.
+    #   provider: terminalgen
+    #   dataset_name: ../terminalgen/artifacts/terminal_tasks
+      # Filter by per-domain ../terminalgen/artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt
+      # (or the optional flat ../terminalgen/artifacts/merged_terminal_tasks/verifiable_tasks.txt).
 
     # harbor_job:
     #   jobs_dir: artifacts/jobs
@@ -78,11 +88,9 @@ runtime_info:
     #   max_retries: 2
     #   timeout_multiplier: 5
 
-
-    # TESTRUN (disabled): HuggingFace dataset path, do not delete — used for smoke tests.
     task_source:
-      provider: huggingface
-      dataset_name: SWE-Lego/swerebenchv2-200-260429
+      provider: local
+      dataset_name: ../swegen/artifacts/swe_tasks/py-cc
       split: train
 
     harbor_job:
@@ -91,7 +99,7 @@ runtime_info:
       # scripts/start.sh exports this as TRAJGEN_HARBOR_JOBS_DIR.
       jobs_dir: artifacts/jobs
       n_concurrent: 8
-      n_tasks: 40                     # cap per curator→tracer run target (set to 1 for smoke tests, null for all manifest tasks)
+      n_tasks: 40                     # cap per curator→tracer run (null = all manifest tasks)
       max_retries: 2
       timeout_multiplier: 5
 

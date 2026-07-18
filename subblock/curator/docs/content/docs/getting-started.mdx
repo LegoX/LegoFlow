@@ -5,7 +5,31 @@ description: Set up the Curator block and run the first task generation pass
 
 Curator wraps the pinned `repos/swegen` checkout in the SWE-Lego-Live block
 layout. The pinned repository is recorded as a gitlink under
-`subblock/curator/repos/swegen` and should match commit `e804af9`.
+`subblock/curator/repos/swegen`.
+
+## Recommended: operate via the Claude plugin
+
+The block ships a Claude Code plugin (`curator-plugin`) that drives the whole
+lifecycle through slash commands. This is the recommended way to run curator —
+each command performs the preflight, confirmation, and bookkeeping steps for
+you. Launch Claude from inside `subblock/curator/` so the block-local plugin
+loads, then:
+
+```text
+/curator:setup        # init submodule, build venv, install swegen, dryrun
+/curator:check        # preflight: config, GitHub tokens, LLM endpoint, docker
+/curator:collect-prs  # collect GitHub PRs -> artifacts/collected_prs/{lang}_pr_ids.txt
+/curator:run          # generate + verify tasks -> verifiable_tasks.txt
+/curator:dashboard    # local preview or Cloudflare Pages sync
+```
+
+The knobs these commands read live in `config.yaml` — LLM endpoint under
+`runtime_info.input.llm_api`, PR collection under
+`runtime_info.input.pr_collection`, and per-language generation params under
+`runtime_info.input.languages`. Edit `config.yaml`, not the scripts.
+
+The rest of this page documents the underlying commands the plugin runs, for
+manual operation or debugging.
 
 ## Prerequisites
 
@@ -23,17 +47,14 @@ Run commands from the block root:
 cd subblock/curator
 ```
 
-Confirm the pinned repo exists:
+Confirm the pinned repo is checked out:
 
 ```bash
 git rev-parse HEAD:repos/swegen
 ```
 
-The expected pin for this docs site is:
-
-```text
-e804af92aad81f42928453959e24e3f5dc666c44
-```
+This prints the gitlink commit recorded for the submodule. `/curator:setup`
+initializes it if the `repos/swegen/` working tree is empty.
 
 ## 2. Install the environment
 
@@ -71,6 +92,16 @@ to use for the run. If your shell already contains old `ANTHROPIC_API_KEY` or
 `ANTHROPIC_BASE_URL` values, overwrite or unset them before launching
 generation; stale Anthropic-compatible variables can make the Claude SDK stage
 use the wrong endpoint or key.
+
+> **Important — the `ANTHROPIC_BASE_URL` path also drives verification.**
+> It runs task completion *and* the step that writes `verifiable_tasks.txt`.
+> If your provider is OpenAI-only (Qwen, GLM, sglang, vLLM, most self-hosted
+> endpoints), it rejects `role:system` on `/v1/messages` and verification fails
+> silently. Set `llm_api.cc_provider_mode: openai_proxy` in `config.yaml` and
+> point `ANTHROPIC_BASE_URL` at a local LiteLLM proxy rather than the raw
+> provider URL. Use `native` only when the provider already speaks the
+> Anthropic Messages API. See the "LLM provider modes" section of the block
+> `CLAUDE.md`.
 
 For reproducible runs on shared machines, use a clean Claude Code config
 directory so user-level hooks and plugins do not affect task completion:

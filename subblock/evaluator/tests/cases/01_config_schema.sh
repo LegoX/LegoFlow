@@ -3,12 +3,13 @@
 
 set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIGS=("$BLOCK_DIR/config.yaml" "$BLOCK_DIR/tests/smoke/config.yaml")
 
+for CONFIG in "${CONFIGS[@]}"; do
 [[ -f "$CONFIG" ]] || { echo "FAIL: $CONFIG missing"; exit 1; }
-
 python3 - "$CONFIG" <<'PY' || exit 1
 import sys
+from pathlib import Path
 try:
     import yaml
 except ImportError:
@@ -52,6 +53,10 @@ REQUIRED = [
     "runtime_info.input.agent.runtime_host_path",
     "runtime_info.input.agent.max_turns",
     "runtime_info.input.agent.temperature",
+    "runtime_info.output.eval_results_dir.path",
+    "runtime_info.output.eval_results_dir.job_layout",
+    "runtime_info.output.eval_results_dir.trajectory_format",
+    "runtime_info.output.eval_results_dir.results_summary_format",
 ]
 missing = [k for k in REQUIRED if get(cfg, k) in (None, "")]
 if missing:
@@ -71,7 +76,11 @@ if prov != "harbor_registry":
 def under(p, prefix):
     if p is None:
         return True
-    return p == prefix or p.startswith(prefix + "/") or (p.startswith("/") and ("/" + prefix in p))
+    p = str(p).rstrip("/")
+    if p.startswith("/"):
+        marker = "/" + prefix
+        return p.endswith(marker) or marker + "/" in p
+    return p == prefix or p.startswith(prefix + "/")
 jobs_dir = get(cfg, "runtime_info.input.harbor_job.jobs_dir")
 if jobs_dir and not under(jobs_dir, "artifacts/jobs"):
     print(f"FAIL: harbor_job.jobs_dir must be artifacts/jobs or under it (got {jobs_dir!r})", file=sys.stderr)
@@ -83,5 +92,41 @@ if n_tasks is not None and (not isinstance(n_tasks, int) or n_tasks <= 0):
     print(f"FAIL: harbor_job.n_tasks must be null or a positive int (got {n_tasks!r})", file=sys.stderr)
     sys.exit(1)
 
-print("PASS: config.yaml schema")
+n_concurrent = get(cfg, "runtime_info.input.harbor_job.n_concurrent")
+if not isinstance(n_concurrent, int) or n_concurrent <= 0:
+    print(f"FAIL: harbor_job.n_concurrent must be a positive int (got {n_concurrent!r})", file=sys.stderr)
+    sys.exit(1)
+
+max_retries = get(cfg, "runtime_info.input.harbor_job.max_retries")
+if not isinstance(max_retries, int) or max_retries < 0:
+    print(f"FAIL: harbor_job.max_retries must be a non-negative int (got {max_retries!r})", file=sys.stderr)
+    sys.exit(1)
+
+port = get(cfg, "runtime_info.input.litellm_proxy.port")
+if not isinstance(port, int) or not 1 <= port <= 65535:
+    print(f"FAIL: litellm_proxy.port must be an integer in 1..65535 (got {port!r})", file=sys.stderr)
+    sys.exit(1)
+
+max_turns = get(cfg, "runtime_info.input.agent.max_turns")
+if not isinstance(max_turns, int) or max_turns <= 0:
+    print(f"FAIL: agent.max_turns must be a positive int (got {max_turns!r})", file=sys.stderr)
+    sys.exit(1)
+
+temperature = get(cfg, "runtime_info.input.agent.temperature")
+if not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or not 0 <= temperature <= 1:
+    print(f"FAIL: agent.temperature must be numeric in 0..1 (got {temperature!r})", file=sys.stderr)
+    sys.exit(1)
+
+job_layout = get(cfg, "runtime_info.output.eval_results_dir.job_layout")
+if not isinstance(job_layout, str) or "{agent,verifier}" not in job_layout or "evaluation" in job_layout:
+    print(f"FAIL: output job_layout must use {{agent,verifier}} (got {job_layout!r})", file=sys.stderr)
+    sys.exit(1)
+
+summary_format = get(cfg, "runtime_info.output.eval_results_dir.results_summary_format")
+if not isinstance(summary_format, str) or not summary_format.endswith("/result.json"):
+    print(f"FAIL: results_summary_format must end in /result.json (got {summary_format!r})", file=sys.stderr)
+    sys.exit(1)
+
+print(f"PASS: {Path(sys.argv[1]).name} schema ({sys.argv[1]})")
 PY
+done

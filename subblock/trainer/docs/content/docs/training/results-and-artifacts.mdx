@@ -10,7 +10,7 @@ A training run writes checkpoints, metrics, and logs under `artifacts/`, and rec
 ```text
 artifacts/
 ├── model/<run>/                    # one directory per run (training.output_dir)
-│   ├── checkpoint-<step>/          #   saved every save_steps
+│   ├── checkpoint-<step>/          #   cadence follows save_strategy
 │   ├── trainer_log.jsonl           #   live per-step metrics (primary live source)
 │   ├── trainer_state.json          #   full log_history incl. eval points
 │   ├── train_results.json          #   final-loss / runtime summary

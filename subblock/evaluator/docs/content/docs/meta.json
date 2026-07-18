@@ -1,0 +1,12 @@
+{
+    "pages": [
+        "index",
+        "getting-started",
+        "core-concepts",
+        "run-jobs",
+        "job-analysis",
+        "local-model",
+        "dashboard",
+        "reference"
+    ]
+}

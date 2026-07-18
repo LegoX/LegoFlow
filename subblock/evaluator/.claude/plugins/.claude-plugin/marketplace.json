@@ -1,6 +1,6 @@
 {
   "name": "evaluator-block",
-  "owner": { "name": "haoli" },
+  "owner": { "name": "SWE-Lego" },
   "plugins": [
     {
       "name": "evaluator",

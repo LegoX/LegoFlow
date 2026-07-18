@@ -47,11 +47,11 @@ submodule pin unless the user explicitly asks.
 ## Step 2 - Build or refresh the Python environment
 
 Read `meta_info.environment.venv_path` from `config.yaml` (currently
-`artifacts/envs/swegen-env2`) and create it if missing:
+`artifacts/envs/swegen-env`) and create it if missing:
 
 ```bash
-python3 -m venv artifacts/envs/swegen-env2
-source artifacts/envs/swegen-env2/bin/activate
+python3 -m venv artifacts/envs/swegen-env
+source artifacts/envs/swegen-env/bin/activate
 pip install -e repos/swegen/
 ```
 
@@ -72,12 +72,15 @@ secrets into `config.yaml`.
 | `OPENAI_API_BASE_URL` | OpenAI-compatible base URL. |
 | `OPENAI_MODEL` | Model for PR evaluation, instruction generation, and analysis calls. |
 | `ANTHROPIC_API_KEY` | Usually the same value as `OPENAI_API_KEY` for the cross-provider shim. |
-| `ANTHROPIC_BASE_URL` | Endpoint used by Claude Code SDK task completion. |
+| `ANTHROPIC_BASE_URL` | Endpoint for the Claude Code path. For OpenAI-only providers (`cc_provider_mode: openai_proxy`) this must be the local LiteLLM proxy, not the raw provider URL — see `CLAUDE.md` "LLM provider modes". |
 | `ANTHROPIC_MODEL` | Model used by Claude Code SDK task completion. |
 | `DOCKER_HOST` | Prefer `unix:///var/run/docker.sock` so Harbor does not probe stale Podman sockets. |
 | `CLAUDE_CONFIG_DIR` | Per-run Claude config dir, for example `$PWD/artifacts/claude-config/swegen-clean`. |
 
 If a required value is missing, ask once and show the exact `export` line.
+Most of these are hydrated from `config.yaml -> runtime_info.input.llm_api` by
+`scripts/load_runtime_env.sh`; confirm `cc_provider_mode` matches the provider
+(use `openai_proxy` + a running LiteLLM proxy for Qwen/GLM/sglang/vLLM).
 For GitHub collection, `repos/swegen/tools/collect_prs_wo_image.py` reads
 tokens from `repos/swegen/gh_token.txt` by default; set
 `COLLECT_GITHUB_TOKEN_FILE` when using a different token file.

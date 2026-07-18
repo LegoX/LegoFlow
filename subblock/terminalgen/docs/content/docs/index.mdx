@@ -1,0 +1,38 @@
+---
+title: Motivation
+description: Why we built Terminal-gen
+---
+
+Terminal-gen turns real StackOverflow Q&A into verified terminal-style coding
+tasks. It is a task-curation stage of the SWE-Lego-Live pipeline, sitting
+parallel to [swegen](../../swegen) (which builds verified SWE tasks) and feeding
+the same downstream chain.
+
+```text
+StackOverflow Q&A -> terminalgen ┐
+GitHub PRs        -> swegen       ├-> tracer -> sft -> eval
+```
+
+Terminal-gen exists because terminal-agent training data needs more than a
+question and an accepted answer. Each task must have a reproducible container,
+a clear instruction, a reference solution script, and a test script that
+separates solved from unsolved attempts.
+
+It wraps the pinned, read-only [terminal-lego](https://github.com/SWE-Lego/terminal-lego)
+pipeline and provides:
+
+- Multi-domain question collection across 13 task domains (terminal/OS,
+  containers, networking, file/text, Python, ML/data, databases, web/APIs,
+  security, debugging, algorithms, media/scientific, build/editor tooling)
+- LLM-assisted task generation (instruction → environment → solution → tests → dockerfile)
+- Docker round-trip validation (build → solve → test → reward) before a task is exposed
+- `verifiable_tasks.txt` manifests that downstream blocks can trust
+- Output: terminal-lego v1.0 tasks, per-domain in place plus an optional flat merged export
+
+## Where to go next
+
+- [Getting Started](/docs/getting-started) - set up the block and run a smoke
+- [Core Concepts](/docs/core-concepts) - domains, task skeletons, validation, manifests
+- [Run Generation](/docs/run-generation) - run per-domain generation scripts safely
+- [Outputs](/docs/outputs) - task directories, manifests, and the optional flat merge
+- [Dashboard](/docs/dashboard) - monitor Terminal-gen progress

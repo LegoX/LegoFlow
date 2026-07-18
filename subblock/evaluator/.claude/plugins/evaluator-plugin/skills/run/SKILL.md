@@ -5,7 +5,7 @@ description: >
   passes: generate the per-job LiteLLM config from
   `runtime_info.input.litellm_proxy`, start the LiteLLM proxy on the
   configured port, then run the Harbor job with
-  `--dataset <name> --registry-path repos/harbor/registry.json` and any
+  `--dataset <name>@<version> --registry-path repos/harbor/registry.json` and any
   `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS`. Long-running.
   Stamps live state into `artifacts/index.yaml` via
   `scripts/archive_run.sh`. Triggers on phrases like "run evaluator",
@@ -35,9 +35,8 @@ block** — no subblocks — so this skill runs `scripts/start.sh` directly
    `meta_info.resources.ip`:
    - `local` / null / absent → run on the current host inside a tmux
      session named `evaluator`.
-   - real remote IP (currently `192.168.35.240`) → open a local tmux
-     window, SSH to the remote, attach to (or create) a remote tmux
-     session named `evaluator`, and run `start.sh` inside it from
+   - configured remote hostname/IP → connect with the user's SSH-key
+     configuration, attach to (or create) a remote tmux session named `evaluator`, and run `start.sh` inside it from
      `meta_info.resources.directory` (per BLOCK_DEFINITION.md §2.3).
      Confirm with the user whether the code is already in sync at that
      path or needs rsync first. A tmux session keeps the run alive across
@@ -52,19 +51,32 @@ block** — no subblocks — so this skill runs `scripts/start.sh` directly
 
 1. Optional `update_repos.sh` (only with `--update-repos` /
    `EVAL_UPDATE_REPOS=1`).
-2. Re-runs `scripts/dryrun.sh` as its own preflight (exits on FAIL).
+2. Re-runs `scripts/dryrun.sh`, then
+   `scripts/probe_llm_completion.sh`, as its own launch gate. Probe FAIL
+   aborts. Probe WARN also aborts unless the user explicitly accepted
+   the warning and the launch sets `EVAL_ALLOW_PROBE_WARN=1`.
 3. Generates a per-job LiteLLM config from
    `runtime_info.input.{llm_api, litellm_proxy}` + the Harbor template
    into `artifacts/litellm/<job>/`, copying Harbor's
    `trajectory_logger.py` alongside it.
 4. Starts the LiteLLM proxy (`serve_litellm.sh`) on
-   `litellm_proxy.port`, waits up to 30 s for it to accept connections,
-   and aborts if it exits early.
-5. Builds the default Harbor command (`uv run harbor run --dataset …
+   `litellm_proxy.port`, waits up to 120 s for it to accept connections
+   (cold/network-filesystem imports can take 30–60 s), and aborts if it
+   exits early.
+5. Builds the default Harbor command (`uv run harbor run --dataset <name>@<version> …
    --registry-path … --agent-import-path … --mounts-json … --model …`)
    with per-agent flags, `--retry-exclude AgentTimeoutError`, and one
    `--exclude-task-name` per entry in `HARBOR_EXCLUDE_TASKS`, then runs
    it inside `repos/harbor`, teeing to `artifacts/logs/evaluator_<ts>.log`.
+6. **Post-eval job analysis** (unless
+   `runtime_info.input.job_analysis.enabled: false`): calls
+   `scripts/analyze_job.sh "$JOB_DIR"` to write `<job_dir>/analysis/` —
+   the attribution/scoring artifacts the dashboard reads. **Non-fatal**: a
+   failed analysis never fails a completed eval. Pure-CPU by default (LLM
+   judge off → zero token cost). If the gold dataset is missing it
+   auto-runs `scripts/prepare_dataset.sh <dataset_name>` first (adapter →
+   tagger); the tagger uses `job_analysis.tag_llm` and needs a JSON-clean
+   endpoint. See `/evaluator:dashboard` for browsing the results.
 
 Use `bash scripts/start.sh --dry-run-command` to print the generated
 LiteLLM config path and Harbor command **without** launching — useful in
@@ -99,6 +111,15 @@ the confirm step.
   `--retry-exclude AgentTimeoutError`; a task that times out will time
   out again and only burns budget. If a task repeatedly times out, add it
   to `HARBOR_EXCLUDE_TASKS`.
+- **Custom local model: vLLM must be up first.** When `llm_api.api_base_url`
+  points at a local vLLM endpoint (a custom checkpoint, not a remote API),
+  that vLLM must already be serving on the GPU node — start it with
+  `scripts/serve_local_model.sh` in its own tmux session **before** `:run`,
+  and keep it alive for the whole job. `start.sh` does not launch vLLM; it
+  only starts the LiteLLM proxy in front of it. `/evaluator:check`'s endpoint
+  probe runs `scripts/probe_llm_completion.sh` against the raw upstream;
+  connection errors and 5xx responses FAIL if vLLM isn't healthy, so
+  this is caught in preflight.
 
 ## Resume on interrupt
 

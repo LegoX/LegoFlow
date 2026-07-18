@@ -1,0 +1,22 @@
+version = "1.0"
+
+[metadata]
+author_name = "StackOverflow Community"
+author_email = "community@stackoverflow.com"
+difficulty = "medium"
+category = "system-administration"
+tags = ["ssl", "https", "certificate", "nginx", "certbot"]
+source_url = "https://stackoverflow.com/questions/42946920/https-certificate-ssl"
+source_score = 0
+
+[verifier]
+timeout_sec = 300.0
+
+[agent]
+timeout_sec = 600.0
+
+[environment]
+build_timeout_sec = 300.0
+cpus = 1
+memory = "1G"
+storage = "5G"

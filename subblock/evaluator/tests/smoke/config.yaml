@@ -1,7 +1,7 @@
 # SMOKE CI CONFIG — copied over subblock/evaluator/config.yaml by
 # .github/workflows/ci.yml before invoking `claude -p "/evaluator:run"`.
-# Production config lives at subblock/evaluator/config.yaml on dev.
-# Delta from production is documented in comments tagged "# SMOKE:".
+# The checked-in fixture is infrastructure-neutral. Configure a reachable LLM
+# endpoint in a private copy before running the end-to-end smoke.
 meta_info:
   name: evaluator
   label: "Evaluator"
@@ -11,18 +11,18 @@ meta_info:
   dependencies: {}
 
   resources:
-    ip: local                          # SMOKE: was 192.168.35.240 (production remote)
+    ip: local
     user: null
     pwd: null
-    directory: /gpufs/haoli/code/
-    description: local execution on the swe-lego-ci runner
-    public_storage: /gpufs/haoli/swedata
+    directory: .
+    description: local smoke execution
+    public_storage: ./artifacts
 
   repositories:
     harbor:
-      url: git@github.com:SWE-Lego/harbor.git
+      url: https://github.com/SWE-Lego/harbor.git
       branch: main
-      commit: 149e75770f8c369d6fae31c158ea761d676b4d3a
+      commit: 0bdee0a6943afa8839e79038acb19a9016e27fb2
       path: repos/harbor
       readonly: true
 
@@ -36,18 +36,19 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      api_key: dummy-cf
-      api_base_url: "http://llm10.jierungogogo.com/v1"
-      model: "openai/GLM-5-FP8"
+      # Replace these example values in a private CI overlay.
+      api_key: dummy-key
+      api_base_url: "http://127.0.0.1:8000/v1"
+      model: "openai/Qwen3.5-35B-A3B"
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
-      input_cost_per_token: 0.0000021
-      output_cost_per_token: 0.0000084
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
 
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
-      port: 4101
+      port: 4102                          # SMOKE: isolate from production 4101
       master_key: dummy-key-cf
 
     task_source:
@@ -58,26 +59,29 @@ runtime_info:
 
     harbor_job:
       jobs_dir: artifacts/jobs/smoke    # SMOKE: was artifacts/jobs
-      n_concurrent: 5                   # SMOKE: was 16
+      n_concurrent: 5                   # SMOKE: production uses 4
       n_tasks: 10                       # SMOKE: was null (full 500)
       max_retries: 0                    # SMOKE: was 2
       timeout_multiplier: 1
 
+    job_analysis:
+      enabled: false                    # SMOKE: rollout gate only; skip post-hoc reports
+
     agent:
       name: custom-openhands-sdk
       version: 1.14.0
-      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
+      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.5
       runtime_host_path: artifacts/runtime/openhands-sdk
       max_turns: 50                     # SMOKE: was 200
-      temperature: 0.7
+      temperature: 1.0
 
   output:
     eval_results_dir:
       description: Harbor job directories containing per-task evaluation results and LiteLLM trajectory logs
-      path: artifacts/jobs
-      job_layout: "artifacts/jobs/<job>/<task>/{agent,evaluation}/"
-      trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
-      results_summary_format: "artifacts/jobs/<job>/results.json"
+      path: artifacts/jobs/smoke
+      job_layout: "artifacts/jobs/smoke/<job>/<task>/{agent,verifier}/"
+      trajectory_format: "artifacts/jobs/smoke/<job>/<task>/agent/litellm-trajectory.jsonl"
+      results_summary_format: "artifacts/jobs/smoke/<job>/result.json"
       consumer_block: null
 
 environment:

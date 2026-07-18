@@ -9,20 +9,20 @@ meta_info:
   dependencies: {}
 
   resources:
-    ip: 192.168.35.240        # CPU-only; runs on any node with Docker available
-    user: root
-    pwd: k9#mP2$vL7@nQ4!xZ8
-    directory: /gpufs/haoli/code/
-    description: cpu node server for k8s cluster. By default you should work at ${directory}
-    public_storage: /gpufs/haoli/swedata
+    ip: local                 # Set a remote hostname/IP only when the run host differs
+    user: null                # For remote execution, prefer ~/.ssh/config + SSH keys
+    pwd: null                 # Never commit passwords
+    directory: .
+    description: Local execution; set host-specific values in your private run profile
+    public_storage: ./artifacts
 
   repositories:
     harbor:
-      url: git@github.com:SWE-Lego/harbor.git
+      url: https://github.com/SWE-Lego/harbor.git
       branch: main
       # Pinned to the latest Harbor commit so this block tracks the current
       # registry contents (independent of subblock/tracer's older pin).
-      commit: 149e75770f8c369d6fae31c158ea761d676b4d3a
+      commit: 0bdee0a6943afa8839e79038acb19a9016e27fb2
       path: repos/harbor
       readonly: true
 
@@ -37,15 +37,49 @@ meta_info:
 
 runtime_info:
   input:
+    # The eval block only talks to an OpenAI/Anthropic-compatible HTTP endpoint
+    # (eval's per-job LiteLLM proxy wraps `api_base_url`), so it supports TWO
+    # interchangeable backends — just point `llm_api` at one of them:
+    #
+    #   MODE A — Remote API. No local serving.
+    #   MODE B — Local checkpoint served by vLLM on a GPU node
+    #            (scripts/serve_local_model.sh + local_model_serving below).
+    #            See the "Evaluating a custom local model" section in CLAUDE.md.
+    #
+    # Only ONE `llm_api` block is active; the other is kept here commented so you
+    # can switch by swapping which block is uncommented.
+    #
+    # --- MODE A: remote API (commented example) ---
+    # llm_api:
+    #   api_key: "<your-api-key>"
+    #   api_base_url: "https://api.example.com/v1"
+    #   model: "openai/<served-model-name>"
+    #   description: Remote OpenAI-compatible API used by the per-job LiteLLM proxy.
+    #   protocols: [openai_compatible, anthropic_compatible]
+    #   served_via: per_job_litellm_proxy
+    #   input_cost_per_token: 0.0
+    #   output_cost_per_token: 0.0
+
+    # --- MODE B: local vLLM checkpoint (ACTIVE) ---
     llm_api:
-      api_key: dummy-cf
-      api_base_url: "http://llm10.jierungogogo.com/v1"
-      model: "openai/GLM-5-FP8"
-      description: Raw upstream model API used to configure per-job LiteLLM proxy startup. Shared with tracer (llm10 GLM endpoint).
+      api_key: dummy-key                       # must match vLLM --api-key
+      api_base_url: "http://127.0.0.1:8000/v1"
+      model: "openai/Qwen3.5-35B-A3B"          # openai/<vLLM --served-model-name>
+      description: Example local checkpoint served via vLLM; see scripts/serve_local_model.sh.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
-      input_cost_per_token: 0.0000021
-      output_cost_per_token: 0.0000084
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+
+    # Local checkpoint served by scripts/serve_local_model.sh (vLLM on the GPU
+    # node). This is the SOURCE of truth for the checkpoint path / served name;
+    # the script reads it from here (env vars MODEL_PATH / MODEL_NAME still
+    # override for one-off runs). The served name must match the basename of
+    # llm_api.model above (openai/<model_name>). Only used when benchmarking a
+    # local model; ignored when llm_api points at a remote API.
+    local_model_serving:
+      model_path: artifacts/models/Qwen3.5-35B-A3B
+      model_name: Qwen3.5-35B-A3B
 
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
@@ -81,10 +115,25 @@ runtime_info:
 
     harbor_job:
       jobs_dir: artifacts/jobs
-      n_concurrent: 16
+      n_concurrent: 4
       n_tasks: null               # null = run the full benchmark; set an int for a smoke run
       max_retries: 2
       timeout_multiplier: 1
+
+    # Post-eval job analysis (scripts/analyze_job.sh, auto-run by start.sh).
+    job_analysis:
+      enabled: true               # set false to skip post-eval analysis entirely
+      # LLM endpoint used ONLY to complete task.toml [language, area, topic,
+      # bug_class] tags when auto-generating a missing gold dataset
+      # (scripts/prepare_dataset.sh). Must return CLEAN JSON. The eval model
+      # (Qwen3.5-35B-A3B) is a reasoning model that emits <think> into content and does
+      # NOT work here. Overridable at runtime via
+      # PREP_TAG_BASE_URL / PREP_TAG_MODEL / PREP_TAG_API_KEY.
+      # Empty values fall back to llm_api.
+      tag_llm:
+        base_url: ""
+        model: ""
+        api_key: ""
 
     # Supported agents — switch by editing the four fields below (name, version,
     # runtime_image, runtime_host_path) together. `max_turns` is reused as
@@ -99,18 +148,18 @@ runtime_info:
     #   custom-openhands-sdk (OpenAI protocol):
     #     name: custom-openhands-sdk
     #     version: 1.14.0
-    #     runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
+    #     runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.5
     #     runtime_host_path: artifacts/runtime/openhands-sdk
     #
     #   custom-opencode (OpenAI-compatible via @ai-sdk/openai-compatible):
     #     name: custom-opencode
     #     version: 1.14.22
-    #     runtime_image: docker.io/yjiangcm/c-oc-1.14.22:v0.2
+    #     runtime_image: docker.io/jierun/c-oc-1.14.22:v0.1
     #     runtime_host_path: artifacts/runtime/opencode
     agent:
       name: custom-openhands-sdk
       version: 1.14.0
-      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
+      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.5
       # `runtime_host_path` must be a directory that already contains the
       # extracted agent runtime tree from `runtime_image` (bind-mount source).
       # If the dir is empty, the agent falls back to an in-container install
@@ -131,15 +180,15 @@ runtime_info:
       #   docker rm "$CID"
       runtime_host_path: artifacts/runtime/openhands-sdk
       max_turns: 200
-      temperature: 0.7
+      temperature: 1.0
 
   output:
     eval_results_dir:
       description: Harbor job directories containing per-task evaluation results and LiteLLM trajectory logs
       path: artifacts/jobs
-      job_layout: "artifacts/jobs/<job>/<task>/{agent,evaluation}/"
+      job_layout: "artifacts/jobs/<job>/<task>/{agent,verifier}/"
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
-      results_summary_format: "artifacts/jobs/<job>/results.json"
+      results_summary_format: "artifacts/jobs/<job>/result.json"
       consumer_block: null        # evaluator is a terminal block; no downstream consumer
 
 environment:

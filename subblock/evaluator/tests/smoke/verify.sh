@@ -2,24 +2,35 @@
 # CI smoke verifier for evaluator.
 # Pass: at least one trial reached a "clean scored" state — verifier ran AND
 # recorded a reward (0 or 1) AND that trial did NOT raise an agent exception.
-# Exit 0 = PASS, 77 = SKIP (no result.json), 1 = FAIL.
+# Exit 0 = PASS, 1 = FAIL. A requested smoke that produced no result is a
+# launch failure, not a skip.
 
 set -uo pipefail
 
 BLOCK_DIR="${BLOCK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 SMOKE_JOBS_DIR="$BLOCK_DIR/artifacts/jobs/smoke"
+RUN_START_FILE="$SMOKE_JOBS_DIR/.run-start"
 
 if [[ ! -d "$SMOKE_JOBS_DIR" ]]; then
-  echo "SKIP: no $SMOKE_JOBS_DIR — claude /evaluator:run likely SKIP'd before launching"
-  exit 77
+  echo "FAIL: no $SMOKE_JOBS_DIR — smoke launch produced no jobs directory"
+  exit 1
+fi
+if [[ ! -s "$RUN_START_FILE" ]] || ! [[ "$(cat "$RUN_START_FILE")" =~ ^[0-9]+$ ]]; then
+  echo "FAIL: no valid $RUN_START_FILE — cannot distinguish this run from stale results"
+  exit 1
 fi
 
-SCAN="$(SMOKE_JOBS_DIR="$SMOKE_JOBS_DIR" python3 - <<'PY'
+SCAN="$(SMOKE_JOBS_DIR="$SMOKE_JOBS_DIR" SMOKE_RUN_STARTED_AT="$(cat "$RUN_START_FILE")" python3 - <<'PY'
 import json, os, glob
 root = os.environ["SMOKE_JOBS_DIR"]
-results = sorted(glob.glob(os.path.join(root, "*", "result.json")), key=os.path.getmtime)
+started_at = int(os.environ["SMOKE_RUN_STARTED_AT"])
+results = [
+    path for path in glob.glob(os.path.join(root, "*", "result.json"))
+    if os.path.getmtime(path) >= started_at
+]
+results.sort(key=os.path.getmtime)
 if not results:
-    print("CLEAN:0 EVAL:0 RESOLVED:0 ERRORED:0 TOTAL:0 (no result.json)")
+    print("CLEAN:0 EVAL:0 RESOLVED:0 ERRORED:0 TOTAL:0 (no current result.json)")
     raise SystemExit
 try:
     with open(results[-1], encoding="utf-8") as fh:
@@ -53,9 +64,9 @@ PY
 )"
 echo "INFO: result.json scan: $SCAN"
 
-if grep -q "no result.json" <<<"$SCAN"; then
-  echo "SKIP: no result.json under $SMOKE_JOBS_DIR"
-  exit 77
+if grep -q "no current result.json" <<<"$SCAN"; then
+  echo "FAIL: no result.json newer than this smoke's start marker under $SMOKE_JOBS_DIR"
+  exit 1
 fi
 
 clean="$(sed -n 's/.*CLEAN:\([0-9]*\).*/\1/p' <<<"$SCAN")"

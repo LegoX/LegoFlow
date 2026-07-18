@@ -16,7 +16,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 ## What To Read First
 
 1. `config.yaml` — block identity, Harbor config, runtime values (one-shot per run; live state in `artifacts/index.yaml`)
-2. `dashboard/overview.mdx` — current state narrative
+2. `memory/overview.mdx` — current state narrative
 
 ## Input/Output Contract
 
@@ -31,7 +31,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 - `environment.extra.HARBOR_EXCLUDE_TASKS`: space-separated list of task IDs Harbor must skip (prior timeouts/OOMs)
 
 **Outputs** (written to `config.yaml` → `runtime_info.output`):
-- `eval_results_dir`: Harbor job directories with per-task evaluation outputs at `artifacts/jobs/<job>/<task>/{agent,evaluation}/`, plus LiteLLM trajectory logs at `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
+- `eval_results_dir`: Harbor job directories with per-task evaluation outputs at `artifacts/jobs/<job>/<task>/{agent,verifier}/`, plus LiteLLM trajectory logs at `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
 
 ## Benchmark Selection
 
@@ -77,18 +77,116 @@ of them as `dataset_name` without code changes, but two caveats apply:
 - **List the full set with:**
   `python3 -c 'import json; [print(e["name"]+"@"+e["version"]) for e in json.load(open("repos/harbor/registry.json"))]'`
 
+## Evaluating a custom local model (vLLM + LiteLLM)
+
+By default this block evaluates a remote upstream API (`runtime_info.input.llm_api.api_base_url`).
+To benchmark a **local checkpoint** (e.g. an SFT/RL output) instead, serve it with
+vLLM and point `llm_api` at it — no code change to `start.sh` is needed, because
+the block only ever talks to an OpenAI/Anthropic-compatible HTTP endpoint.
+
+Topology (the evaluator node is CPU-only, so vLLM must run elsewhere):
+
+```
+eval node (CPU)                                  GPU node
+  agent container → eval LiteLLM :4101  ─────────▶ vLLM :8000/v1  (local ckpt)
+                    (start.sh, trajectory_logger)   api_base_url
+```
+
+The model-serving layer is **vLLM only**. Do not start a second LiteLLM next to
+vLLM — `start.sh` already runs the per-job LiteLLM proxy (with `trajectory_logger`,
+sticky routing, Anthropic-format support); a second proxy would collide on the
+port and bypass that logging.
+
+Steps:
+
+0. **One-time, on the GPU node**, create the vLLM conda env (the evaluator node's
+   `/evaluator:setup` does *not* build this — it only builds the CPU-side Harbor uv
+   env + LiteLLM venv). For a standard bf16/fp16 checkpoint a plain pip install
+   is enough:
+   ```bash
+   conda create -y -n vllm_0.18.1 python=3.12
+   conda activate vllm_0.18.1
+   pip install vllm==0.18.1
+   ```
+   Only FP8 models with custom kernels (e.g. GLM-5.1-FP8) need the heavy
+   source build in `repos/harbor/scripts/serve_llm/install_vllm_32b717_cu128.sh`.
+   `serve_local_model.sh` activates `$VLLM_CONDA_ENV` (default `vllm_0.18.1`)
+   and errors with this exact recipe if `vllm` isn't found.
+
+1. **On a GPU node**, serve the checkpoint:
+   ```bash
+   bash scripts/serve_local_model.sh   # runs in foreground; use tmux
+   ```
+   The checkpoint path and served name are read from `config.yaml →
+   runtime_info.input.local_model_serving` (`model_path` / `model_name`) — that
+   is the source of truth, not a hardcoded script default. Key settings are
+   env-overridable (`MODEL_PATH`, `MODEL_NAME`, `VLLM_PORT`,
+   `TENSOR_PARALLEL_SIZE`, `API_KEY`, `VLLM_CONDA_ENV`,
+   `TOOL_CALL_PARSER`, `LANGUAGE_MODEL_ONLY`, `GDN_PREFILL_BACKEND`, …);
+   it serves on `:8000` by default. When ready it prints the exact `llm_api`
+   block to paste.
+2. **On the evaluator node**, confirm the active `config.yaml →
+   runtime_info.input.llm_api` matches the local-vLLM recipe: set
+   `api_base_url: http://<GPU_NODE_IP>:8000/v1`, `model: openai/<MODEL_NAME>`,
+   `api_key` matching vLLM's `--api-key`, and costs to `0.0`.
+3. Run `scripts/dryrun.sh`, then `scripts/probe_llm_completion.sh` to send a
+   real completion and verify the endpoint. `scripts/start.sh` repeats both
+   launch gates before starting Harbor.
+
 ## Repos
 
-- `repos/harbor/`: Harbor runtime (managed local-only dependency, not committed to Live repo). The block reads `registry.json` from this checkout.
+- `repos/harbor/`: pinned tracked submodule containing the Harbor runtime and `registry.json`; never edit its managed worktree in place.
 
 ## How To Run
 
 - `scripts/update_repos.sh`: clone or update repos/harbor at the pinned commit.
 - `scripts/dryrun.sh`: validate config, Harbor repo state, environments, model API, and confirm the configured `(dataset_name, version)` exists in `registry.json`.
-- `scripts/start.sh`: run dryrun preflight → generate LiteLLM config → start proxy on `runtime_info.input.litellm_proxy.port` → run Harbor job with `--dataset <name> --registry-path repos/harbor/registry.json` and any `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS`.
-- `scripts/clean.sh`: remove gitignored runtime outputs (jobs/, litellm/, logs/). Pass `--repos` to also drop `repos/`.
+- `scripts/start.sh`: run dryrun + real-completion preflight → generate LiteLLM config → start proxy on `runtime_info.input.litellm_proxy.port` → run Harbor job with `--dataset <name>@<version> --registry-path repos/harbor/registry.json` and any `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS` → **post-eval job analysis** (unless disabled).
+- `scripts/analyze_job.sh [<job_dir>]`: run the Harbor `job_analysis` pipeline on a completed job and write results into `<job_dir>/analysis/` (the layout the dashboard reads). No arg → newest job under `jobs_dir`. Safe to re-run and to run on old jobs. `start.sh` calls this automatically after each eval (non-fatal). If the gold dataset is missing it auto-invokes `prepare_dataset.sh` first (disable with `JOB_ANALYSIS_PREPARE_DATASET=0`).
+- `scripts/prepare_dataset.sh [<dataset_name>]`: generate a Harbor gold dataset under `artifacts/datasets/<gold_base>/` for analysis — step 1 runs the matching `repos/harbor/adapters/<name>` adapter (from HuggingFace) to produce `tests/config.json` gold; step 2 runs `repos/harbor/scripts/task_analysis/tag_task_metadata.py` to complete each `task.toml`'s `[language, area, topic, bug_class]` + difficulty tags via an LLM. Idempotent (skips populated datasets unless `PREP_FORCE=1`). Tagging is best-effort: gold is still produced if it fails.
+- `scripts/clean.sh`: remove disposable logs and generated proxy state while preserving jobs, prepared datasets, runtime extractions, environments, archives, and `index.yaml`.
 
 Evaluator scripts need PyYAML in the runtime Python (used by inline `python3 -` config readers). If you see `ERROR: PyYAML is required`, `pip install pyyaml` into the active interpreter.
+
+## Job Analysis
+
+After each eval, `start.sh` runs `scripts/analyze_job.sh "$JOB_DIR"` to produce
+attribution/scoring artifacts under `<job_dir>/analysis/` — the exact files the
+dashboard (`dashboard/server.py`) reads: `report_failed/resolved.json`,
+`report_task_analysis.json`, `traj_analysis/score_comparison.json`,
+`instance_analysis/{summary,correlations}.json`, `instances.jsonl`, and a
+self-contained `analysis_config.yaml`.
+
+- **Opt-out**: set `runtime_info.input.job_analysis.enabled: false` in `config.yaml`.
+- **Non-fatal**: a failed analysis never fails a completed eval run.
+- **Cost**: LLM judge is off by default → pure-CPU, zero token cost. Enable with
+  `JOB_ANALYSIS_JUDGE=1` (needs `ANTHROPIC_API_KEY`).
+- **Engine**: uses `artifacts/env/harbor-uv` (has `scipy`+`pyyaml`); the read-only
+  Harbor repo is only `cd`-ed into for `from src...` imports — all output lands in
+  the writable job dir.
+- **Gold dependency / auto-generation**: the pipeline needs the gold dataset at
+  `artifacts/datasets/<gold_base>/` (per-instance `<id>/tests/config.json`). When
+  absent, `analyze_job.sh` auto-runs `scripts/prepare_dataset.sh <dataset_name>`
+  (adapter → tagger) to build it, then proceeds; if it still can't be produced it
+  **skips cleanly** instead of crashing. Supported datasets:
+  `swebench-verified` (adapter `swebench`, HF `princeton-nlp/SWE-bench_Verified`),
+  `swebench_multilingual` (HF `SWE-bench/SWE-bench_Multilingual`),
+  `swebenchpro` (HF `ScaleAI/SWE-bench_Pro`); `-100` subsets map to the same base.
+  Generation needs network (HuggingFace) and the `harbor-uv` env (has `datasets` +
+  `swebench`). No Docker — only the gold metadata files are written.
+- **Tagging model**: `tag_task_metadata.py` POSTs to `<base_url>/chat/completions`
+  and parses a JSON object — it needs a model that returns **clean JSON**. The
+  default endpoint is the block's `llm_api`. A reasoning model that emits
+  `<think>…` (e.g. `Qwen3.5-35B-A3B` served with thinking on) produces unparseable output
+  and tags fail; point tagging at a JSON-clean / instruct endpoint via
+  `PREP_TAG_BASE_URL` / `PREP_TAG_MODEL` / `PREP_TAG_API_KEY`. Tagging failure does
+  not lose the gold — analysis still runs, only Language/Area breakdown is limited.
+- **Caveat (Harbor-managed)**: `task_analysis` domain classification relies on
+  `repos/harbor/scripts/job_analysis/src/task_analysis/classifier.py`'s repo→domain
+  map, which is Python-SWE-bench-Verified-centric. For multilingual repos
+  (apache/druid, lucene, …) domain falls back to `other`. Any local customization
+  of that classifier is overwritten by `update_repos.sh` — keep such tweaks out of
+  the read-only repo.
 
 ## Repository Policy
 
@@ -100,13 +198,17 @@ After each run, create `artifacts/archives/run_NNN/` containing metadata.yaml, c
 
 ## Memory
 
-Long-form notes, repo policy, and operational decisions are kept in `dashboard/memory/`.
+Long-form notes, repo policy, and operational decisions are kept in `memory/`.
 
 ## Remote Execution
 
-This block runs on the node declared in `config.yaml` → `meta_info.resources.ip` (currently `192.168.35.240`).
+This block runs on the node declared in `config.yaml` → `meta_info.resources.ip`
+(the checked-in developer default is `local`).
 
-- If your shell is on a **different** host: SSH into `192.168.35.240` and operate inside a tmux session there — never invoke this block's scripts from a different node.
-- If your shell is **already on** `192.168.35.240`: skip the SSH step and run scripts directly in a local tmux session (`tmux new-session -d -s evaluator …`).
+- For `local` / null: run scripts directly in a local tmux session
+  (`tmux new-session -d -s evaluator …`).
+- For a configured remote hostname/IP: connect using SSH keys or
+  `~/.ssh/config` and operate inside a tmux session there — never commit
+  host credentials or passwords to this repository.
 
 Either way, all execution must happen on the configured IP, in a named tmux session (e.g. `evaluator`), so the run survives shell disconnects.

@@ -6,6 +6,9 @@
     "curator-block": {
       "source": { "source": "directory", "path": "subblock/curator/.claude/plugins" }
     },
+    "terminalgen-block": {
+      "source": { "source": "directory", "path": "subblock/terminalgen/.claude/plugins" }
+    },
     "tracer-block": {
       "source": { "source": "directory", "path": "subblock/tracer/.claude/plugins" }
     },
@@ -22,6 +25,7 @@
   "enabledPlugins": {
     "root@root-block": true,
     "curator@curator-block": true,
+    "terminalgen@terminalgen-block": true,
     "tracer@tracer-block": true,
     "trainer@trainer-block": true,
     "rl@rl-block": true,

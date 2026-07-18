@@ -55,6 +55,12 @@ mapping = {
     # `Authorization: Bearer <key>` in addition to its default `x-api-key`.
     # Required by third-party endpoints like llm10 that reject x-api-key but accept Bearer.
     "ANTHROPIC_AUTH_TOKEN": llm.get("api_key"),
+    # Claude Code (Anthropic /v1/messages) path. For openai_proxy this must be the
+    # local LiteLLM proxy URL; for native it is the provider's Anthropic endpoint.
+    "ANTHROPIC_BASE_URL":   llm.get("anthropic_base_url"),
+    # Informational: surfaced so dryrun/skills can warn when the proxy is required.
+    "SWEGEN_CC_PROVIDER_MODE": llm.get("cc_provider_mode"),
+    "SWEGEN_CC_PROXY_PORT":    llm.get("cc_proxy_port"),
 }
 for k, v in mapping.items():
     if v and not os.environ.get(k):
@@ -63,6 +69,64 @@ PY
         )"
         if [[ -n "$hydrate_exports" ]]; then
             eval "$hydrate_exports"
+        fi
+
+        # PR-collection knobs from config.yaml.runtime_info.input.pr_collection.
+        # Exported as SWEGEN_PR_* / COLLECT_* / SWEGEN_COLLECT_* so
+        # tools/collect_prs_wo_image.py and scripts/collect_all_bg.sh pick them
+        # up. Same priority rule: only fills vars still unset after env + .env.
+        local pr_exports
+        pr_exports="$(
+            "$hydrate_py" - "${block_root}/config.yaml" <<'PY' 2>/dev/null || true
+import os, sys, shlex
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)
+try:
+    with open(sys.argv[1]) as f:
+        cfg = yaml.safe_load(f) or {}
+except Exception:
+    sys.exit(0)
+pc = (((cfg.get("runtime_info") or {}).get("input") or {}).get("pr_collection") or {})
+if not pc:
+    sys.exit(0)
+out = {}
+langs = pc.get("languages")
+if isinstance(langs, list) and langs:
+    out["SWEGEN_COLLECT_LANGUAGES"] = ",".join(str(x) for x in langs)
+elif isinstance(langs, str) and langs.strip():
+    out["SWEGEN_COLLECT_LANGUAGES"] = langs.strip()
+if pc.get("repo_num") is not None:
+    out["SWEGEN_COLLECT_REPO_NUM"] = str(pc["repo_num"])
+if pc.get("max_prs_per_repo") is not None:
+    out["SWEGEN_COLLECT_MAX_PRS_PER_REPO"] = str(pc["max_prs_per_repo"])
+if pc.get("output_dir"):
+    out["SWEGEN_COLLECT_OUTPUT_DIR"] = str(pc["output_dir"])
+if pc.get("token_limit") is not None:
+    out["COLLECT_TOKEN_LIMIT"] = str(pc["token_limit"])
+filt = pc.get("filters") or {}
+fmap = {
+    "min_stars":               "SWEGEN_PR_MIN_STARS",
+    "min_merged_prs":          "SWEGEN_PR_MIN_MERGED_PRS",
+    "min_language_percentage": "SWEGEN_PR_MIN_LANGUAGE_PERCENTAGE",
+    "max_days_since_push":     "SWEGEN_PR_MAX_DAYS_SINCE_PUSH",
+    "min_issue_body_length":   "SWEGEN_PR_MIN_ISSUE_BODY_LENGTH",
+    "min_files_changed":       "SWEGEN_PR_MIN_FILES_CHANGED",
+    "max_files_changed":       "SWEGEN_PR_MAX_FILES_CHANGED",
+    "max_lines_changed":       "SWEGEN_PR_MAX_LINES_CHANGED",
+}
+for k, env_name in fmap.items():
+    v = filt.get(k)
+    if v is not None:
+        out[env_name] = str(v)
+for k, v in out.items():
+    if v and not os.environ.get(k):
+        print(f"export {k}={shlex.quote(str(v))}")
+PY
+        )"
+        if [[ -n "$pr_exports" ]]; then
+            eval "$pr_exports"
         fi
     fi
 

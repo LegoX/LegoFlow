@@ -1,17 +1,19 @@
 ---
 title: Inputs & Outputs
 block: trainer
-updated_at: "2026-04-24T16:16:45Z"
+updated_at: "2026-07-16T20:40:00+08:00"
 ---
 
 # Inputs & Outputs
 
 ## Current Inputs (`config.yaml` → `runtime_info.input`)
 
-`config.yaml` is the source of truth for the active scaffold, job directory,
-dataset name, model path, training hyperparameters, output directory, WandB mode,
-and uv environment path. Run `bash scripts/dryrun.sh` to validate those values
-against the current machine before training.
+`config.yaml` is the source of truth for the one-shot dataset source, model,
+training hyperparameters, output directory, WandB mode, and uv environment path.
+The current profile selects one exact JSON through `hf_lf` + `hf_file_name`,
+uses `Qwen/Qwen3.5-35B-A3B-Base` with the `qwen3_5` template, and trains with
+DeepSpeed ZeRO-3 on eight GPUs. Run `bash scripts/dryrun.sh` to validate those
+values against the current machine before training.
 
 ## Current Outputs (`config.yaml` → `runtime_info.output`)
 

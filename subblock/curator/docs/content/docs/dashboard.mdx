@@ -35,14 +35,20 @@ The Live repository also contains a Curator dashboard generator at:
 subblock/curator/dashboard/progress_monitor_all.py
 ```
 
-It can generate a local HTML view:
+From a Claude session in the block, `/curator:dashboard` drives it — local
+preview or Cloudflare Pages sync. To run it manually, generate a local HTML
+view:
 
 ```bash
 python3 subblock/curator/dashboard/progress_monitor_all.py --serve
 ```
 
-and the accompanying Cloudflare sync script deploys it to the `swe-databoard`
-Pages project.
+The generator reads its data source from `SWEGEN_DATA_ROOT` /
+`SWEGEN_TASK_ROOT` / `SWEGEN_PR_DIR` (defaulting to `~/SWE-gen`). The
+accompanying sync script `dashboard/run_cloudflare_pages_sync.sh` regenerates
+the page on a loop and deploys it to the `swe-databoard` Pages project. It
+reads Cloudflare credentials and the data-source paths from
+`~/.config/swegen_progress_cloudflare.env` (never commit that file).
 
 ## Docs versus databoard
 

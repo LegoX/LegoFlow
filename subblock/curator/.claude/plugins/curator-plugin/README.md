@@ -13,6 +13,7 @@ new blocks are only ever created at the root level), see
 | --- | --- |
 | `/curator:setup`     | Bootstrap: install `repos/swegen/` editable, verify env vars (GITHUB_TOKENS, OPENAI_API_*), prepare `gh_token.txt`. |
 | `/curator:check`     | Preflight: schema + env vars + GitHub API reachability + LLM endpoint `/models` + docker daemon + dryrun. Read-only. |
+| `/curator:collect-prs` | Collect GitHub PRs per `config.yaml -> runtime_info.input.pr_collection` into `artifacts/collected_prs/{lang}_pr_ids.txt`. |
 | `/curator:dashboard` | Show progress per language: PRs collected, tasks generated, verifiable rate. |
 | `/curator:run`       | Launch the full pipeline (`scripts/start.sh`) — PR fetch → task generation → NOP/Oracle verification. |
 
@@ -31,6 +32,7 @@ curator-plugin/
 └── skills/
     ├── setup/SKILL.md          # /curator:setup
     ├── check/SKILL.md          # /curator:check
+    ├── collect-prs/SKILL.md    # /curator:collect-prs
     ├── dashboard/SKILL.md      # /curator:dashboard
     └── run/SKILL.md            # /curator:run
 ```

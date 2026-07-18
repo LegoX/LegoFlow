@@ -1,0 +1,10 @@
+{
+  "pages": [
+    "index",
+    "getting-started",
+    "core-concepts",
+    "run-generation",
+    "outputs",
+    "dashboard"
+  ]
+}

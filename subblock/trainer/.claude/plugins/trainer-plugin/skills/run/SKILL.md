@@ -4,8 +4,8 @@ description: >
   Preflight and launch the trainer block in the current working directory.
   Runs /trainer:check internally (rejects on any failure), shows the run
   configuration and waits for explicit confirmation, then launches
-  scripts/start.sh — which runs dryrun.sh, then train.sh (trajectory→IM→LF
-  conversion, dataset registration, LLaMA-Factory + DeepSpeed ZeRO-3
+  scripts/start.sh — which runs dryrun.sh, then train.sh (obtain/convert LF
+  data, dataset registration, LLaMA-Factory + DeepSpeed ZeRO-3
   training on 8× GPU, WandB tracking), and on exit archives the run via
   scripts/archive_run.sh. Background by default — training is long-running.
   train.sh itself writes runtime_info.output; archive_run.sh appends to
@@ -68,12 +68,12 @@ and ask them to fix it. Inputs are user-owned; this skill is a launcher.
 
 After preflight passes, present a compact summary and ask for explicit
 confirmation. **Never skip this** — a full SFT run occupies 8 GPUs for
-many minutes to hours and overwrites `output_dir` (`overwrite_output_dir:
-true`).
+many minutes to hours and can write tens of GiB. Preflight must confirm that
+`output_dir` is new or that a valid resume/explicit overwrite was requested.
 
 ```
 ┌─ trainer Run Configuration ─────────────────────────────
-│ Scaffold:   <source.scaffold>   job_dir=<...basename>
+│ Source:     <source.type>  <harbor scaffold+job_dir | hf repo[/file] | local path>
 │ Data:       <conversion.data_name>  (max_instances=<N>)
 │ Dataset:    <dataset.name or "auto = data_name">
 │ Model:      <model.model_name_or_path>
@@ -165,7 +165,7 @@ Launched (background)
   train log:    artifacts/logs/<run_name>_<...>.log   (appears once STEP 2 starts)
   output dir:   artifacts/model/<basename of output_dir>
   parent pid:   <pid>
-  status:       running (STEP 0 conversion → STEP 1 register → STEP 2 train)
+  status:       running (STEP 0 obtain/convert data → STEP 1 register → STEP 2 train)
 
 Monitor:
   tail -F artifacts/logs/launch_<TS>.log

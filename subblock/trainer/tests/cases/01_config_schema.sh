@@ -11,6 +11,7 @@ CONFIG="$BLOCK_DIR/config.yaml"
 [[ -f "$CONFIG" ]] || { echo "FAIL: $CONFIG missing"; exit 1; }
 
 python3 - "$CONFIG" <<'PY' || exit 1
+import os
 import sys
 try:
     import yaml
@@ -29,6 +30,7 @@ REQUIRED = [
     "meta_info.repositories.llama_factory.commit",
     "meta_info.repositories.swe_data_process.path",
     "meta_info.repositories.swe_data_process.commit",
+    "runtime_info.input.source.type",
     "runtime_info.input.source.scaffold",
     # `source.job_dir` is validated in cases/05 with source.type-aware logic
     # (only required when source.type == "harbor_job"). Don't gate the schema
@@ -67,6 +69,18 @@ if name != "trainer":
     sys.exit(1)
 
 # Enumerated fields must hold a value train.sh knows how to map.
+VALID_SOURCES = {"harbor_job", "hf_lf", "local_lf"}
+source_type = get(cfg, "runtime_info.input.source.type")
+if source_type not in VALID_SOURCES:
+    print(f"FAIL: source.type == {source_type!r}, expected one of {sorted(VALID_SOURCES)}", file=sys.stderr)
+    sys.exit(1)
+if source_type == "hf_lf" and not get(cfg, "runtime_info.input.source.hf_hub_url"):
+    print("FAIL: source.type=hf_lf requires source.hf_hub_url", file=sys.stderr)
+    sys.exit(1)
+if source_type == "local_lf" and not get(cfg, "runtime_info.input.source.lf_path"):
+    print("FAIL: source.type=local_lf requires source.lf_path", file=sys.stderr)
+    sys.exit(1)
+
 VALID_SCAFFOLDS = {"openhands-sdk", "claude-code", "open-code", "terminus2"}
 scaffold = get(cfg, "runtime_info.input.source.scaffold")
 if scaffold not in VALID_SCAFFOLDS:
@@ -79,10 +93,14 @@ if wandb_mode not in VALID_WANDB:
     print(f"FAIL: experiment.wandb_mode == {wandb_mode!r}, expected one of {sorted(VALID_WANDB)}", file=sys.stderr)
     sys.exit(1)
 
-# online WandB requires the key in config.yaml (train.sh reads it from there,
-# not from the env) — catch the misconfiguration here, not at launch.
-if wandb_mode == "online" and not get(cfg, "runtime_info.input.credentials.wandb_api_key"):
-    print("FAIL: wandb_mode=online but credentials.wandb_api_key is empty", file=sys.stderr)
+# Online WandB credentials belong in the private runtime environment; a local
+# ignored config value remains supported for backward compatibility.
+if (
+    wandb_mode == "online"
+    and not os.environ.get("WANDB_API_KEY")
+    and not get(cfg, "runtime_info.input.credentials.wandb_api_key")
+):
+    print("FAIL: wandb_mode=online but WANDB_API_KEY is unavailable", file=sys.stderr)
     sys.exit(1)
 
 n_gpus = get(cfg, "runtime_info.input.infrastructure.n_gpus_per_node")

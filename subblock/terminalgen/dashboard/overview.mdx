@@ -1,0 +1,52 @@
+# Terminal-gen — Overview
+
+**Block**: `terminalgen` | **Type**: data | **Parent**: `swe_lego_live`
+
+## What This Block Does
+
+Converts StackOverflow Q&A into verified terminal-bench tasks across 13 task
+domains (core-terminal-os, versioning-containers, networking-services,
+file-text-processing, python-ecosystem, ml-data, databases-storage,
+web-automation-apis, security-cryptography, debugging-reliability,
+algorithms-concurrency, media-scientific, build-editor-tooling).
+
+It is the terminal-task sibling of `swegen` (which builds verified SWE tasks),
+feeding the same downstream chain (tracer → sft → eval). It wraps the pinned,
+read-only [terminal-lego](https://github.com/SWE-Lego/terminal-lego) pipeline
+(scrape → generate → validate).
+
+Runs as an adaptive agent: monitors per-domain success rates every 30 minutes
+and tunes `gen_workers`, `val_workers`, and `val_timeout` automatically.
+
+## Current State
+
+| Field | Value |
+|-------|-------|
+| Phase | idle |
+| Stage | data_generation |
+| Total verified | 0 |
+
+## Quick Start
+
+```bash
+# 1. Init submodule + venv
+git submodule update --init repos/terminal-lego
+python -m venv artifacts/envs/terminalgen-env && source artifacts/envs/terminalgen-env/bin/activate
+pip install -r requirements.txt
+# 2. Set env vars: OPENAI_API_KEY, OPENAI_API_BASE_URL, MODEL_NAME, SO_API_KEY
+# 3. Validate
+bash scripts/dryrun.sh
+# 4. Run (scrape → generate → Docker-validate); optionally flatten
+bash scripts/start.sh
+python scripts/extract_verified_tasks.py   # optional: flat merged dir (same v1.0)
+```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `config.yaml` | Adaptive tuning params + per-domain status + tag_filter buckets |
+| `artifacts/merged_terminal_tasks/` | Optional flat export of verified tasks (v1.0, same format) |
+| `artifacts/terminal_tasks/` | Per-domain task directories (terminal-lego v1.0) |
+| `artifacts/collected_questions/` | Per-domain bucketed SO question JSON |
+| `artifacts/logs/adaptive_decisions.jsonl` | Adaptive tuning decision log |

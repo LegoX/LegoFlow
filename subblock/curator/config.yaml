@@ -1,7 +1,7 @@
 meta_info:
   name: curator
   label: "Curator"
-  description: Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages. Runs as an adaptive agent that monitors per-language success rates and tunes pipeline parameters automatically.
+  description: Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages (Python, JavaScript, TypeScript, Go, C, C++, Java, Rust).
   parent: swe_lego_live
   subblocks: {}
 
@@ -9,7 +9,7 @@ meta_info:
     swegen:
       name: swegen
       commit_id: null # latest
-      role: core pipeline — CLI, task generation, validation, scoring
+      role: core pipeline - CLI, task generation, validation, scoring
 
   environment:
     venv_name: swegen-env
@@ -28,174 +28,112 @@ meta_info:
 
 runtime_info:
   input:
-    github_tokens: human              # Comma-separated GitHub API tokens for PR collection
+    github_tokens: human              # Comma-separated GitHub API tokens, or place them in gh_token.txt
 
+    # =========================================================================
+    # PR collection - the first stage of the pipeline. `swegen create` consumes
+    # the PR-id files this stage produces. Collection is run by
+    # tools/collect_prs_wo_image.py (in repos/swegen); the values below are the
+    # user-facing knobs. scripts/load_runtime_env.sh exports them as SWEGEN_PR_*
+    # / COLLECT_* env vars, which the collector reads (empty -> its built-in
+    # default). Per-language threshold overrides still live in the collector's
+    # LANGUAGE_OVERRIDES and are intentionally NOT surfaced here.
+    #
+    # GitHub tokens for collection come from gh_token.txt (one per line), NOT
+    # from github_tokens above - keep real tokens out of this file.
+    # =========================================================================
+    pr_collection:
+      enabled: true
+      # Languages to collect PRs for. Comma-joined into --languages.
+      languages: [c, cpp, go, java, javascript, typescript, python, rust]
+      repo_num: 100                   # repos WITH qualifying PRs to collect per language
+      max_prs_per_repo: 50            # max qualifying PRs kept per repository
+      output_dir: artifacts/collected_prs   # {language}_pr_ids.txt written here
+      token_limit: 32                 # first N tokens from gh_token.txt (0 = use all)
+      # Global filtering thresholds. Each maps to a SWEGEN_PR_* env var; leave a
+      # value null/absent to keep the collector's built-in default. Per-language
+      # overrides in the collector take precedence over these globals.
+      filters:
+        min_stars: 30                 # min repo stars
+        min_merged_prs: 5             # min merged PRs in repo
+        min_language_percentage: 0.4  # target language must be > this fraction of the codebase
+        max_days_since_push: 1095     # skip repos not pushed within this many days
+        min_issue_body_length: 10     # min linked-issue description length
+        min_files_changed: 1          # min files changed in the PR
+        max_files_changed: 25         # max files changed in the PR
+        max_lines_changed: 1500       # max (additions + deletions) in the PR
+
+    # =========================================================================
+    # LLM configuration - the main thing a user edits before a run.
+    #
+    # swegen calls the LLM over TWO different API paths. Set both correctly or
+    # task verification fails SILENTLY (no verifiable_tasks.txt is written, yet
+    # batch state still shows success - see CLAUDE.md "LLM provider modes").
+    #
+    #   1. OpenAI-compatible path (api_base_url + pr_model):
+    #        PR evaluation and task-instruction generation.
+    #   2. Claude Code path (Anthropic /v1/messages, task_model):
+    #        task completion AND the verification step that writes
+    #        verifiable_tasks.txt.
+    #
+    # cc_provider_mode selects how the Claude Code path reaches your provider:
+    #   native       - provider already speaks the Anthropic Messages API
+    #                  (real Claude, or a gateway exposing /v1/messages).
+    #                  anthropic_base_url points straight at the provider.
+    #                  Launch with: bash scripts/start_with_anthropic_api.sh
+    #   openai_proxy - provider is OpenAI-only (Qwen / GLM / sglang / vLLM and
+    #                  most self-hosted endpoints, which reject role:system on
+    #                  /v1/messages with HTTP 400). A local LiteLLM proxy
+    #                  translates Anthropic -> OpenAI. anthropic_base_url must
+    #                  point at that proxy. REQUIRED for OpenAI-only providers.
+    #                  Launch with: bash scripts/start_with_openai_api.sh
+    #
+    # ----- Example A: NON-Anthropic model (e.g. local Qwen via openai_proxy) -----
+    # Tested end-to-end (NOP=0/Oracle=1) with these exact values:
     # llm_api:
     #   api_key: dummy-cf
-    #   api_base_url: "http://llm10.jierungogogo.com/v1"
-    #   pr_model: "GLM-5-FP8"
-    #   task_model: "GLM-5-FP8"
-
-    # Backup provider (uncomment block and comment the one above to switch):
+    #   api_base_url: https://llm.jierungogogo.com/v1
+    #   pr_model: Qwen3.6-35B-A3B
+    #   task_model: claude-sonnet-4-6        # any claude-* alias; proxy maps it to pr_model
+    #   cc_provider_mode: openai_proxy
+    #   anthropic_base_url: http://127.0.0.1:4010
+    #   cc_proxy_port: 4010
+    #
+    # ----- Example B: Anthropic-format model (e.g. claude-opus-4-6 via gateway) -----
+    # Tested end-to-end (NOP=0/Oracle=1) with these exact values:
+    # llm_api:
+    #   api_key: <YOUR_KEY>
+    #   api_base_url: https://yunwu.ai/v1            # OpenAI-compatible side of the same gateway
+    #   pr_model: claude-opus-4-6
+    #   task_model: claude-opus-4-6
+    #   cc_provider_mode: native
+    #   anthropic_base_url: https://yunwu.ai         # provider Anthropic root, no /v1
+    #   # cc_proxy_port not used in native mode
+    # =========================================================================
     llm_api:
-      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
-      api_base_url: https://az.gptplus5.com/v1
-      pr_model: deepseek-v4-flash
-      task_model: deepseek-v4-flash
+      # --- OpenAI-compatible path ---
+      api_key: <YOUR_API_KEY>                 # never commit a real key; prefer env/.env
+      api_base_url: https://your-endpoint/v1
+      pr_model: Qwen3.6-35B-A3B
 
-    # Adaptive tuning configuration
-    global:
-      monitor_interval_min: 30
-      pr_pool_min_threshold: 100
-      collect_pr_defaults:
-        repo_num: 100
-        max_prs_per_repo: 50
-      restart_policy:
-        allowed: true
-        zero_success_cycles: 3
-      param_bounds:
-        timeout:
-          min: 2400
-          max: 5400
-          step: 400
-        cc_timeout:
-          min: 1800
-          max: 4200
-          step: 300
-        n_concurrent:
-          min: 4
-          max: 32
-          step: 4
+      # --- Claude Code path (task completion + verification) ---
+      task_model: claude-sonnet-4-6           # for openai_proxy this is just the proxy alias
+      cc_provider_mode: openai_proxy          # native | openai_proxy
+      anthropic_base_url: http://127.0.0.1:4010  # native: provider URL | openai_proxy: local proxy URL
+      cc_proxy_port: 4010                     # openai_proxy only: local LiteLLM proxy port
 
+    # Per-language parameters consumed by scripts/read_params.py + scripts/create_<lang>.sh.
+    # Set enabled:false to skip a language. Live status/metrics are NOT stored here
+    # (config.yaml is one-shot); look at artifacts/index.yaml for run state.
     languages:
-      py:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 20
-        status:
-          total_success: 3
-          total_failed: 1
-          total_filtered: 1
-          pr_pool_remaining: 10
-          last_round_success: 1
-          last_round_failed: 1
-          success_rate: 0.5
-          zero_success_streak: 0
-          last_checked: '2026-04-22T12:00:06.085014+00:00'
-      js:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 16
-        status:
-          total_success: 0
-          total_failed: 0
-          total_filtered: 0
-          pr_pool_remaining: 0
-          last_round_success: 0
-          last_round_failed: 0
-          success_rate: 0.0
-          zero_success_streak: 0
-          last_checked: null
-      ts:
-        enabled: true
-        params:
-          timeout: 3600
-          cc_timeout: 3000
-          n_concurrent: 16
-        status:
-          total_success: 0
-          total_failed: 0
-          total_filtered: 0
-          pr_pool_remaining: 0
-          last_round_success: 0
-          last_round_failed: 0
-          success_rate: 0.0
-          zero_success_streak: 0
-          last_checked: null
-      go:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 16
-        status:
-          total_success: 0
-          total_failed: 0
-          total_filtered: 0
-          pr_pool_remaining: 0
-          last_round_success: 0
-          last_round_failed: 0
-          success_rate: 0.0
-          zero_success_streak: 0
-          last_checked: null
-      c:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 16
-        status:
-          total_success: 0
-          total_failed: 0
-          total_filtered: 0
-          pr_pool_remaining: 0
-          last_round_success: 0
-          last_round_failed: 0
-          success_rate: 0.0
-          zero_success_streak: 0
-          last_checked: null
-      cpp:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 16
-        status:
-          total_success: 0
-          total_failed: 0
-          total_filtered: 0
-          pr_pool_remaining: 0
-          last_round_success: 0
-          last_round_failed: 0
-          success_rate: 0.0
-          zero_success_streak: 0
-          last_checked: null
-      java:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 16
-        status:
-          total_success: 0
-          total_failed: 0
-          total_filtered: 0
-          pr_pool_remaining: 0
-          last_round_success: 0
-          last_round_failed: 0
-          success_rate: 0.0
-          zero_success_streak: 0
-          last_checked: null
-      rust:
-        enabled: true
-        params:
-          timeout: 3600
-          cc_timeout: 3000
-          n_concurrent: 16
-        status:
-          total_success: 0
-          total_failed: 0
-          total_filtered: 0
-          pr_pool_remaining: 0
-          last_round_success: 0
-          last_round_failed: 0
-          success_rate: 0.0
-          zero_success_streak: 0
-          last_checked: null
+      py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 20 } }
+      js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
+      ts:   { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }
+      go:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
+      c:    { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
+      cpp:  { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
+      java: { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
+      rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }
 
   output:
     swe_tasks_dir:
@@ -210,37 +148,15 @@ runtime_info:
       extract_command: python scripts/extract_verified_tasks.py
 
     logs:
-      - path: artifacts/logs/swegen-create/cc_py_March.txt
-        description: Python task creation log
-      - path: artifacts/logs/swegen-create/cc_js_March.txt
-        description: JavaScript task creation log
-      - path: artifacts/logs/swegen-create/cc_ts_March.txt
-        description: TypeScript task creation log
-      - path: artifacts/logs/swegen-create/cc_go_March.txt
-        description: Go task creation log
-      - path: artifacts/logs/swegen-create/cc_c_March.txt
-        description: C task creation log
-      - path: artifacts/logs/swegen-create/cc_cpp_March.txt
-        description: C++ task creation log
-      - path: artifacts/logs/swegen-create/cc_java_March.txt
-        description: Java task creation log
-      - path: artifacts/logs/swegen-create/cc_rust_March.txt
-        description: Rust task creation log
-      - path: artifacts/logs/adaptive_decisions.jsonl
-        description: Adaptive tuning decisions log (JSONL format)
+      dir: artifacts/logs/swegen-create
+      description: "Per-language create logs: cc_<lang>_March.txt"
 
 status:
   phase: idle
   progress: "Ready for the next SWE task generation run."
   next_steps: |
-    1. Run scripts/dryrun.sh before starting a new Curator batch.
-    2. Use quick-verify.md for a small preflight when changing the Curator runtime.
+    1. Set runtime_info.input.llm_api (especially cc_provider_mode) before a run.
+    2. Run scripts/dryrun.sh to preflight env, package, Docker, and the CC proxy.
+    3. Use memory/quick-verify.md for a small end-to-end check when changing the runtime.
   blockers: null
   last_updated: null
-
-evolving:
-  description: Adaptive agent that monitors per-language success rates and tunes pipeline parameters (timeout, cc_timeout, n_concurrent) automatically every 30 minutes.
-  tunable_params:
-    timeout: "Per-language task timeout (2400-5400s)"
-    cc_timeout: "Per-language Claude Code timeout (1800-4200s)"
-    n_concurrent: "Per-language concurrent tasks (4-32)"

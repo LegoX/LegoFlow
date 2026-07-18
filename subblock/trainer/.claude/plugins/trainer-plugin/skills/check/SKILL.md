@@ -3,7 +3,7 @@ name: check
 description: >
   Preflight the trainer block: answer "is it safe to launch training right
   now?" Runs every deterministic check through scripts/dryrun.sh (config
-  schema, uv env, repos, converter module, source job_dir, dataset
+  schema, uv env, repos, source-specific data fields, converter module, dataset
   registration, base-model path, WandB mode, GPU count), adds the few live
   checks a script can't judge (is a training job already running? are the
   GPUs held by a foreign process? will an existing checkpoint be
@@ -40,7 +40,7 @@ Every check lives in **exactly one** layer:
 
 | Layer | Run by | Covers |
 |---|---|---|
-| **Deterministic** | `scripts/dryrun.sh` | config schema · uv env + python · repos (LLaMA-Factory, swe_data_process) · `swe_data_process` import · scaffold + `job_dir` · converter module · conversion IM/LF paths + exclude-repos file · dataset registration · base-model dir · `output_dir` + train-YAML target · WandB mode/key · GPU count |
+| **Deterministic** | `scripts/dryrun.sh` | config schema · uv env + python · repos · source-specific Harbor/HF/local fields · converter when applicable · data paths · dataset registration (including exact `hf_file_name`) · base model · `output_dir` + train-YAML target · WandB mode/key · GPU count |
 | **Live (judgment)** | this skill | is a training process already alive? · are the GPUs idle / ours / foreign? · will training overwrite an existing checkpoint? |
 
 ---
@@ -82,7 +82,7 @@ probe or overrule an `[OK]`. The bracketed prefix is the status:
 The final summary line is `PASS: <n>   WARN: <n>   FAIL: <n>`; `dryrun.sh`
 exits non-zero iff `FAIL > 0`. Two lines need follow-up:
 
-- any `[WARN] source.job_dir not found ...` → note it for Step 2 (the data
+- for `source.type=harbor_job`, any `[WARN] source.job_dir not found ...` → note it for Step 2 (the data
   source may live on another node; conversion fails later if it's truly
   absent and no IM/LF output is cached).
 - any `[WARN] nvidia-smi found <N> GPU(s), config expects <N_GPUS>` → hand
@@ -137,8 +137,8 @@ PID + memory, and let the user decide whether to wait or stop it. If
 
 ### 2c — Will training overwrite an existing checkpoint?
 
-`training.overwrite_output_dir: true` means a re-run silently clobbers the
-resolved checkpoint dir. Check it:
+The scripts reject a non-empty output directory unless a checkpoint resume is
+configured or destructive overwrite is explicitly acknowledged. Check it:
 
 ```bash
 ls -d <resolved_output_dir>/checkpoint-* 2>/dev/null
@@ -147,12 +147,14 @@ ls -d <resolved_output_dir>/checkpoint-* 2>/dev/null
 | Observation | Name | Status |
 |---|---|:---:|
 | dir absent or empty | `ckpt:clean` | ✓ |
-| checkpoints present (will be overwritten) | `ckpt:clobber` | ⚠ |
+| checkpoints present without resume | `ckpt:clobber` | ✗ blocks |
 
-Advisory only — surface it so the user can rename `output_dir` or set
-`resume_from_checkpoint` if the existing run matters. Note that STEP 0/1 of
-`train.sh` are idempotent: if the IM **and** LF conversion outputs already
-exist, conversion is skipped and the registered dataset is reused.
+Block and ask the user to rename `output_dir` or set a valid
+`resume_from_checkpoint`. Only an explicit destructive request may combine
+`overwrite_output_dir: true` with `SFT_ALLOW_OVERWRITE_OUTPUT=1`. Note that STEP 0/1 of
+`train.sh` are idempotent: existing Harbor conversion outputs are reused,
+exact Hub files use the Hugging Face cache, and dataset registration is updated
+only when its desired entry differs.
 
 ---
 
@@ -180,8 +182,8 @@ rows.
 
 **Run configuration**
 ```
-scaffold:   <source.scaffold>
-job_dir:    <source.job_dir>
+source:     <source.type>
+source_ref: <harbor scaffold+job_dir | hf_hub_url[/hf_file_name] | local lf_path>
 data_name:  <conversion.data_name>   dataset: <dataset.name or auto>
 model:      <model.model_name_or_path>
 training:   template=<t> epochs=<e> lr=<lr> gbs=<pbs×accum×gpus> cutoff=<cutoff_len>

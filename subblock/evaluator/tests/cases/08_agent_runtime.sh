@@ -29,10 +29,10 @@ RUNTIME_HOST_PATH_RAW="$(cfg runtime_info.input.agent.runtime_host_path)"
 [[ -n "$RUNTIME_HOST_PATH_RAW" ]] || { echo "FAIL: agent.runtime_host_path is empty (bind-mount source required)"; exit 1; }
 
 case "$AGENT_NAME" in
-  custom-claude-code)   MARKER="bin/claude" ;;
-  custom-openhands-sdk) MARKER="runtime-env.sh" ;;
-  custom-opencode)      MARKER="bin/opencode" ;;
-  *)                    MARKER="" ;;
+  custom-claude-code)   MARKER="bin/claude"; EXECUTABLE="bin/claude" ;;
+  custom-openhands-sdk) MARKER="runtime-env.sh"; EXECUTABLE="bin/python" ;;
+  custom-opencode)      MARKER="bin/opencode"; EXECUTABLE="bin/opencode" ;;
+  *)                    MARKER=""; EXECUTABLE="" ;;
 esac
 
 if [[ "$RUNTIME_HOST_PATH_RAW" = /* ]]; then ABS="$RUNTIME_HOST_PATH_RAW"; else ABS="$BLOCK_DIR/$RUNTIME_HOST_PATH_RAW"; fi
@@ -49,4 +49,7 @@ fi
 if [[ ! -e "$ABS/$MARKER" ]]; then
   echo "FAIL: agent.runtime_host_path missing marker $MARKER: $RUNTIME_HOST_PATH_RAW (re-extract via /evaluator:setup)"; exit 1
 fi
-echo "PASS: agent.runtime_host_path populated for $AGENT_NAME ($MARKER present)"
+if [[ -n "$EXECUTABLE" && ! -x "$ABS/$EXECUTABLE" ]]; then
+  echo "FAIL: agent.runtime_host_path executable missing or not executable: $EXECUTABLE"; exit 1
+fi
+echo "PASS: agent.runtime_host_path populated for $AGENT_NAME ($MARKER present, $EXECUTABLE executable)"

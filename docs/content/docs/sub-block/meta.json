@@ -2,6 +2,7 @@
     "title": "Blocks",
     "pages": [
         "curator",
+        "terminalgen",
         "tracer",
         "trainer",
         "rl"

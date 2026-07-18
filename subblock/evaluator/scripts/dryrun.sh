@@ -6,7 +6,7 @@
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG="${EVAL_CONFIG:-$BLOCK_DIR/config.yaml}"
 
 PASS=0
 FAIL=0
@@ -54,6 +54,27 @@ abspath() {
   else
     echo "$BLOCK_DIR/$p"
   fi
+}
+
+normalize_git_url() {
+  local url="${1%/}"
+  url="${url%.git}"
+  case "$url" in
+    git@*:* )
+      url="${url#git@}"
+      url="${url/:/\/}"
+      ;;
+    ssh://git@* )
+      url="${url#ssh://git@}"
+      ;;
+    https://* )
+      url="${url#https://}"
+      ;;
+    http://* )
+      url="${url#http://}"
+      ;;
+  esac
+  printf '%s\n' "$url"
 }
 
 run_in_harbor_env() {
@@ -117,7 +138,7 @@ echo "=== evaluator dryrun: $BLOCK_DIR ==="
 echo ""
 
 echo "--- 1. Block files ---"
-for file in CLAUDE.md config.yaml dashboard/overview.mdx; do
+for file in CLAUDE.md config.yaml memory/overview.mdx; do
   if [[ -f "$BLOCK_DIR/$file" ]]; then
     ok "$file exists"
   else
@@ -212,10 +233,13 @@ fi
 [[ "$READONLY" == "true" || "$READONLY" == "false" ]] && ok "meta_info.repositories.harbor.readonly = $READONLY" || fail "meta_info.repositories.harbor.readonly must be true or false"
 
 if [[ -n "$HARBOR_PATH_RAW" ]]; then
-  if git -C "$BLOCK_DIR" check-ignore -q "$HARBOR_PATH_RAW" 2>/dev/null; then
+  if git -C "$BLOCK_DIR" ls-files --stage -- "$HARBOR_PATH_RAW" 2>/dev/null \
+      | awk '$1 == "160000" { found=1 } END { exit !found }'; then
+    ok "$HARBOR_PATH_RAW is a tracked submodule"
+  elif git -C "$BLOCK_DIR" check-ignore -q "$HARBOR_PATH_RAW" 2>/dev/null; then
     ok "$HARBOR_PATH_RAW is gitignored"
   else
-    warn "$HARBOR_PATH_RAW is not reported as gitignored"
+    warn "$HARBOR_PATH_RAW is neither a tracked submodule nor gitignored"
   fi
 fi
 
@@ -227,7 +251,13 @@ if [[ -n "$HARBOR_PATH_RAW" ]]; then
     ok "$HARBOR_PATH_RAW exists"
     CURRENT_URL="$(git -C "$HARBOR_DIR" remote get-url origin 2>/dev/null || true)"
     COMMIT="$(git -C "$HARBOR_DIR" rev-parse HEAD 2>/dev/null || true)"
-    [[ "$CURRENT_URL" == "$HARBOR_URL" ]] && ok "origin URL matches config.yaml" || fail "origin URL mismatch: $CURRENT_URL"
+    if [[ "$CURRENT_URL" == "$HARBOR_URL" ]]; then
+      ok "origin URL matches config.yaml"
+    elif [[ "$(normalize_git_url "$CURRENT_URL")" == "$(normalize_git_url "$HARBOR_URL")" ]]; then
+      ok "origin repository matches config.yaml (transport differs: $CURRENT_URL)"
+    else
+      fail "origin URL mismatch: $CURRENT_URL"
+    fi
     [[ -n "$COMMIT" ]] && ok "current commit: $COMMIT" || fail "cannot resolve current commit"
     if [[ -n "$HARBOR_COMMIT" ]]; then
       [[ "$COMMIT" == "$HARBOR_COMMIT" ]] && ok "current commit matches config.yaml pin" || fail "current commit $COMMIT does not match config.yaml pin $HARBOR_COMMIT"
@@ -258,7 +288,13 @@ if [[ -n "$UV_PROJECT_ENVIRONMENT_RAW" ]]; then
   UV_PROJECT_ENVIRONMENT_ABS="$(abspath "$UV_PROJECT_ENVIRONMENT_RAW")"
   PYTHON_CHECK_COMMAND="$UV_PROJECT_ENVIRONMENT_ABS/bin/python"
   HARBOR_CHECK_COMMAND="$UV_PROJECT_ENVIRONMENT_ABS/bin/harbor"
-  INSTALL_COMMAND="UV_PROJECT_ENVIRONMENT=$UV_PROJECT_ENVIRONMENT_ABS uv sync --all-extras"
+  # Lean sync (NO --all-extras): --all-extras pulls harbor[tinker] -> tinker-cookbook
+  # -> torch + full CUDA (several GB), which eval never uses and which filled the
+  # runner disk in the first root-smoke. Plain `uv sync` gives the CPU-side harbor
+  # eval deps. (Job-analysis needs scipy, also bundled by the tinker extra; add it
+  # lightly with `uv pip install scipy` if analysis is required — analysis is
+  # non-fatal, so a lean env just skips it.)
+  INSTALL_COMMAND="UV_PROJECT_ENVIRONMENT=$UV_PROJECT_ENVIRONMENT_ABS uv sync"
   ok "uv project environment path = $UV_PROJECT_ENVIRONMENT_RAW"
   if [[ -n "${HARBOR_DIR:-}" && -e "$HARBOR_DIR/.git" ]]; then
     case "$UV_PROJECT_ENVIRONMENT_ABS" in
@@ -411,7 +447,7 @@ else
 fi
 [[ -n "$MODEL_API_INPUT_COST" ]] && ok "runtime_info.input.llm_api.input_cost_per_token = $MODEL_API_INPUT_COST" || warn "runtime_info.input.llm_api.input_cost_per_token is empty"
 [[ -n "$MODEL_API_OUTPUT_COST" ]] && ok "runtime_info.input.llm_api.output_cost_per_token = $MODEL_API_OUTPUT_COST" || warn "runtime_info.input.llm_api.output_cost_per_token is empty"
-info "llm_api is raw upstream config; LiteLLM reachability is checked by each job after proxy startup"
+info "llm_api fields only; /evaluator:check and start.sh run scripts/probe_llm_completion.sh as the live launch gate"
 
 echo ""
 echo "--- 8. Harbor run config ---"
@@ -531,13 +567,13 @@ RUNTIME_HOST_PATH_RAW="$(cfg runtime_info.input.agent.runtime_host_path)"
 AGENT_NAME_RAW="$(cfg runtime_info.input.agent.name)"
 case "$AGENT_NAME_RAW" in
   custom-claude-code)
-    RUNTIME_MARKER="bin/claude" ; RUNTIME_IMG_SUBPATH="claude-code" ;;
+    RUNTIME_MARKER="bin/claude" ; RUNTIME_EXECUTABLE="bin/claude" ; RUNTIME_IMG_SUBPATH="claude-code" ;;
   custom-openhands-sdk)
-    RUNTIME_MARKER="runtime-env.sh" ; RUNTIME_IMG_SUBPATH="oh-sdk" ;;
+    RUNTIME_MARKER="runtime-env.sh" ; RUNTIME_EXECUTABLE="bin/python" ; RUNTIME_IMG_SUBPATH="oh-sdk" ;;
   custom-opencode)
-    RUNTIME_MARKER="bin/opencode" ; RUNTIME_IMG_SUBPATH="opencode" ;;
+    RUNTIME_MARKER="bin/opencode" ; RUNTIME_EXECUTABLE="bin/opencode" ; RUNTIME_IMG_SUBPATH="opencode" ;;
   *)
-    RUNTIME_MARKER="" ; RUNTIME_IMG_SUBPATH="" ;;
+    RUNTIME_MARKER="" ; RUNTIME_EXECUTABLE="" ; RUNTIME_IMG_SUBPATH="" ;;
 esac
 if [[ -n "$RUNTIME_HOST_PATH_RAW" ]]; then
   RUNTIME_HOST_PATH_ABS="$(abspath "$RUNTIME_HOST_PATH_RAW")"
@@ -548,10 +584,12 @@ if [[ -n "$RUNTIME_HOST_PATH_RAW" ]]; then
     fail "agent.runtime_host_path is empty: $RUNTIME_HOST_PATH_RAW $EXTRACT_HINT"
   elif [[ -n "$RUNTIME_MARKER" && ! -e "$RUNTIME_HOST_PATH_ABS/$RUNTIME_MARKER" ]]; then
     fail "agent.runtime_host_path missing $RUNTIME_MARKER: $RUNTIME_HOST_PATH_RAW (re-extract from $value)"
+  elif [[ -n "$RUNTIME_EXECUTABLE" && ! -x "$RUNTIME_HOST_PATH_ABS/$RUNTIME_EXECUTABLE" ]]; then
+    fail "agent.runtime_host_path missing executable $RUNTIME_EXECUTABLE: $RUNTIME_HOST_PATH_RAW (re-extract from $value)"
   elif [[ -z "$RUNTIME_MARKER" ]]; then
     warn "agent.runtime_host_path populated but no marker defined for agent.name=$AGENT_NAME_RAW; cannot verify contents"
   else
-    ok "agent.runtime_host_path is populated ($RUNTIME_MARKER present)"
+    ok "agent.runtime_host_path is populated ($RUNTIME_MARKER present, $RUNTIME_EXECUTABLE executable)"
   fi
 fi
 

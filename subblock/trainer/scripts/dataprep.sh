@@ -54,6 +54,7 @@ SOURCE_TYPE="$(cfg "source.type")"
 SCAFFOLD="$(cfg "source.scaffold")"
 JOB_DIR_RAW="$(cfg "source.job_dir")"
 JOB_DIR="$(abspath "$JOB_DIR_RAW")"
+HF_FILE_NAME="$(cfg "source.hf_file_name")"
 
 MAX_INSTANCES="$(cfg "conversion.max_instances")"
 EXCLUDE_REPOS_RAW="$(cfg "conversion.exclude_repos_file")"
@@ -71,7 +72,11 @@ echo "    LF output:   $LF_OUTPUT"
 if [[ "$SOURCE_TYPE" != "harbor_job" ]]; then
     echo ""
     echo "=== Source type '$SOURCE_TYPE' uses a ready-made LF dataset — nothing to convert. ==="
-    echo "    hf_lf:    the dataset is pulled from the HuggingFace Hub at train time."
+    if [[ "$SOURCE_TYPE" == "hf_lf" && -n "$HF_FILE_NAME" ]]; then
+        echo "    hf_lf:    scripts/train.sh downloads source.hf_file_name and registers that exact file."
+    else
+        echo "    hf_lf:    the dataset config is pulled from the HuggingFace Hub at train time."
+    fi
     echo "    local_lf: source.lf_path is registered as-is."
     echo "    Run scripts/train.sh (or scripts/start.sh) to register the dataset and train."
     exit 0

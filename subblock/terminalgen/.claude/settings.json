@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "terminalgen-block": {
+      "source": { "source": "directory", "path": ".claude/plugins" }
+    }
+  },
+  "enabledPlugins": {
+    "terminalgen@terminalgen-block": true
+  }
+}

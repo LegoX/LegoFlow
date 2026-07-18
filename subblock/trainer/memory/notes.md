@@ -2,15 +2,17 @@
 
 ## Architecture
 
-```
-Harbor job trajectories (job_dir, per-scaffold)
-    └─▶  python -m swe_data_process.<subpackage>.convert_*_to_im
-              └─▶  Intermediate "IM" format (PangUML v2 JSONL, score in meta_info.unique_info)
-                        └─▶  rule_score.py (auto-invoked) + optional llm_score.py
-                                  └─▶  LLaMA-Factory "LF" format (ShareGPT JSON)
-                                            └─▶  artifacts/data/lf_data/<dataset>.json
-                                                      └─▶  python -m llamafactory.cli train <generated_config.yaml>
-                                                                └─▶  artifacts/model/<run>/
+```text
+harbor_job ─▶ convert trajectory → IM → score/filter → LF JSON ─┐
+hf_lf + hf_file_name ─▶ download one exact Hub file ────────────┤
+hf_lf (no file name) ─▶ register Hub dataset config/split ──────┤
+local_lf ─▶ register an existing local LF JSON ─────────────────┘
+                                                               │
+                                                               ▼
+                                    dataset registration → LLaMA-Factory train
+                                                               │
+                                                               ▼
+                                                  artifacts/model/<run>/
 ```
 
 **Node layout:**
@@ -59,33 +61,38 @@ Regenerate with `scripts/generate_excluded_repos.py`.
 - The SFT Python environment is a uv venv at `meta_info.environment.sft_uv`
   (default `artifacts/env/lf`). Use `bash scripts/install_env.sh` to recreate it.
   The installer uses the Tsinghua PyPI mirror for general packages, installs
-  `swe_data_process[llm]`, installs PyTorch 2.8.0 / torchvision 0.23.0 /
-  torchaudio 2.8.0 from the CUDA 12.8 PyTorch index, installs
-  `LLaMA-Factory[torch,metrics,deepspeed,liger-kernel]` with `--no-build-isolation`,
-  installs the pinned flash-attn 2.8.3 wheel from `artifacts/wheels/`, and installs `wandb`.
+  PyTorch 2.10.0 / torchvision 0.25.0 / torchaudio 2.10.0 from the CUDA 12.8
+  PyTorch index, installs editable `swe_data_process[llm]` and the patched
+  LLaMA-Factory plus metrics/DeepSpeed/Liger requirements, builds `flash-attn`,
+  installs Qwen3.5's `flash-linear-attention` and `tilelang`, and installs `wandb`.
 - `FORCE_TORCHRUN=1` must be set before `python -m llamafactory.cli train` to enable distributed training.
 - `NPROC_PER_NODE` is set from `infrastructure.n_gpus_per_node`; keep it aligned with the
   actual visible GPU count on the current node.
-- `template: qwen3_nothink` disables thinking mode in the Qwen3 chat template.
-  Use `qwen3` if training with chain-of-thought (`reasoning_content` present).
-- `rope_scaling: yarn` is required for `cutoff_len > 32768`.
+- Qwen3 uses `qwen3` or `qwen3_nothink`; Qwen3.5 uses `qwen3_5` or
+  `qwen3_5_nothink`. Match the template to the base model and whether the
+  training records preserve thinking content. The active config uses `qwen3_5`.
+- Enable a model-supported RoPE scaling method such as `yarn` only when
+  `cutoff_len` exceeds that model's native `max_position_embeddings` or
+  documented context length; 32768 is not a universal threshold.
 - `save_only_model: true` skips saving optimizer state — saves disk but prevents resuming.
 - `resume_from_checkpoint: null` — set to checkpoint dir path to resume.
-- `overwrite_output_dir: true` will silently overwrite an existing checkpoint directory.
+- Non-empty output directories are rejected unless a checkpoint resume is configured
+  or both explicit overwrite controls are set.
 - LF output and `dataset_info.json` both live in `artifacts/data/lf_data/`;
   the generated YAML sets `dataset_dir` to point there.
 - `experiment.wandb_mode=disabled` generates `report_to: none`; `online` requires
-  `credentials.wandb_api_key`; `offline` does not.
+  `WANDB_API_KEY` in the private runtime environment; `offline` does not.
 - `source.type` selects the dataset source: `harbor_job` (default, convert trajectories),
-  `hf_lf` (register `hf_hub_url`, load from the HuggingFace Hub at train time), or `local_lf`
-  (register an existing LF json by absolute `file_name`). `hf_lf`/`local_lf` skip STEP 0; an
-  empty/absent `source.type` defaults to `harbor_job`. For ready-made sources, `conversion.data_name`
-  is still the dataset key and `conversion.max_instances` (>0) becomes the entry's `num_samples`.
-  Private HF datasets need `credentials.hf_token`. Scoring + repo-exclusion only run during
-  conversion, so clean `hf_lf`/`local_lf` data upstream.
+  `hf_lf`, or `local_lf` (register an existing LF json by absolute `file_name`). With `hf_lf`,
+  setting `source.hf_file_name` downloads that exact file in STEP 0 and registers it locally;
+  leaving it empty registers `hf_hub_url` plus the optional subset/split for train-time loading.
+  An empty/absent `source.type` defaults to `harbor_job`. For ready-made sources,
+  `conversion.data_name` remains the dataset key and `conversion.max_instances` (>0) becomes
+  the entry's `num_samples`. Private HF datasets use `HF_TOKEN` from the runtime. Scoring and
+  repo exclusion only run during conversion, so clean `hf_lf`/`local_lf` data upstream.
 - `scripts/dataprep.sh` runs data conversion only (STEP 0), no dataset registration or training.
-  Useful for preparing data independently. It exits early for `source.type` = `hf_lf`/`local_lf`
-  (nothing to convert).
+  Useful for preparing Harbor data independently. It exits early for `hf_lf`/`local_lf`;
+  `scripts/train.sh` performs any configured exact-Hub-file download.
 - Live training progress is served by the dashboard webui (`dashboard/start_dashboard.sh`),
   which reads `trainer_log.jsonl` / `trainer_state.json` from `artifacts/model/<run>/` directly.
 - `config.yaml.runtime_info.output` is updated after training with checkpoint, metrics,
@@ -100,7 +107,7 @@ Regenerate with `scripts/generate_excluded_repos.py`.
 
 | Date | Model | Dataset | Config | Notes |
 |---|---|---|---|---|
-| (fill in) | Qwen3-8B | — | — | — |
+| (fill in) | — | — | — | — |
 
 ## Known Failure Modes
 
@@ -108,7 +115,7 @@ Regenerate with `scripts/generate_excluded_repos.py`.
 |---|---|---|
 | 1 | `FORCE_TORCHRUN=1` missing → single-GPU run on 8-GPU node | Always set in train.sh |
 | 2 | Dataset key points to an old LF filename in `dataset_info.json` | Let train.sh update the mapping or pick a new dataset.name |
-| 3 | `cutoff_len > 32768` without `rope_scaling: yarn` → position embedding OOM | Add rope_scaling |
-| 4 | `overwrite_output_dir: true` overwrites in-progress checkpoint | Rename output_dir or set to false |
-| 5 | WandB online mode without an API key | Set `credentials.wandb_api_key` or switch to offline/disabled |
+| 3 | `cutoff_len` exceeds the model's native context window without compatible scaling | Enable a RoPE scaling method supported by that model |
+| 4 | Existing output directory blocks launch | Rename output_dir, resume explicitly, or acknowledge destructive overwrite |
+| 5 | WandB online mode without an API key | Export `WANDB_API_KEY` or switch to offline/disabled |
 | 6 | Partial conversion output exists (only IM or LF file) | Delete the partial file or restore the missing pair before rerunning |

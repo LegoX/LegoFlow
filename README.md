@@ -11,6 +11,7 @@ This entire project is built on a **block** abstraction. The pipeline consists o
 | Block | Role | Primary output |
 |-------|------|----------------|
 | `subblock/curator/` | Converts GitHub PRs → verified SWE tasks | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` |
+| `subblock/terminalgen/` | Converts StackOverflow Q&A → verified terminal tasks (parallel to curator, via terminal-lego) | `artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt` (terminal-lego v1.0) |
 | `subblock/tracer/` | Runs an agent on SWE tasks → raw trajectories | `artifacts/jobs/<job>/` (Harbor job dirs) |
 | `subblock/trainer/` | Converts trajectories → sharegpt data, trains with LLaMA-Factory | `artifacts/model/<run>/` (checkpoints) |
 | `subblock/rl/` | Online RL (GRPO/GSPO) on SWE-bench via Harbor + vLLM + verl | `repos/harbor-verl-train/outputs/` (actor checkpoints) |
@@ -57,6 +58,7 @@ SWE-Lego-Live/
 │   └── archives/run_NNN/      # per-run snapshots (metadata.yaml + config.yaml + scripts/)
 └── subblock/
     ├── curator/                # SWE task generation block (same scripts/ + artifacts/ layout)
+    ├── terminalgen/           # terminal task generation block (parallel to curator; wraps terminal-lego)
     ├── tracer/               # trajectory generation block
     ├── trainer/                   # SFT training block
     └── rl/                    # RL training block

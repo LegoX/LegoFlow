@@ -5,10 +5,11 @@ description: Monitor training runs in real time
 
 trainer ships a real-time, read-only web dashboard for monitoring LLaMA-Factory (HuggingFace Trainer) training runs. It is a React frontend + a Python `server.py` backend under [`dashboard/`](https://github.com/SWE-Lego/SWE-Lego-Live/tree/main/subblock/trainer/dashboard), parses the standard training output directly, and can compare multiple runs or connect to wandb.
 
-Live dashboard: **[cement-here-cross-quotations.trycloudflare.com](https://cement-here-cross-quotations.trycloudflare.com/)**
-
-<Callout title="The live URL is a quick tunnel" type="warn">
-Unlike a Cloudflare Pages site, this link is a **Cloudflare quick tunnel** in front of a locally running `start_dashboard.sh`. The URL changes every time the tunnel restarts and only works while that process is up — re-point this link (and the nav "dashboard" link in `docs/src/lib/layout.shared.tsx`) whenever the tunnel is restarted. For a stable address, use a [named tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) + Cloudflare Access.
+<Callout title="No public dashboard URL is checked in" type="warn">
+The dashboard exposes run names, metrics, configuration, and logs. Keep it on
+localhost by default. For remote access, use an authenticated named tunnel with
+Cloudflare Access or an equivalent identity-aware proxy; never publish a quick
+tunnel URL in this repository.
 </Callout>
 
 <Callout title="Monitoring only" type="info">
@@ -56,15 +57,17 @@ Any immediate sub-directory of the save dir containing `trainer_log.jsonl` or `t
 
 The UI supports a Chinese/English toggle and dark/light themes.
 
-## Expose externally (Cloudflare quick tunnel)
+## Expose externally
 
-To reach the dashboard from outside the network, forward the local port through a Cloudflare quick tunnel — no DNS, account, or login required:
+For temporary private debugging, `start_dashboard.sh` can still start a quick
+tunnel:
 
 ```bash
 TUNNEL=true ./start_dashboard.sh
 ```
 
-The script auto-discovers `cloudflared` from `PATH` and prints a temporary `https://<random>.trycloudflare.com` URL once the tunnel is up.
+The script prints a temporary URL once the tunnel is up. Do not copy that URL
+into docs, issues, logs, or source control.
 
 <Callout title="Quick tunnels are unauthenticated" type="warn">
 Anyone with the URL can read the dashboard (logs, metrics, run names). Treat the URL as a secret and stop the tunnel when done. For persistent, access-controlled exposure, use a [named tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) + Cloudflare Access instead.

@@ -2,14 +2,14 @@
 name: setup
 description: >
   Bootstrap the trainer block from a fresh clone to "/trainer:check passes":
-  preflight tooling (uv, wget, system python3 + PyYAML), check out the
+  preflight tooling (uv, system python3 + PyYAML), check out the
   repos under repos/ (LLaMA-Factory, swe_data_process) at their pinned
   commits — initialising the git submodules, rewriting the swe_data_process
   SSH remote to https+token when needed — build the uv env at
   meta_info.environment.sft_uv (artifacts/env/lf) via scripts/install_env.sh
-  (swe_data_process[llm] + torch cu128 + LLaMA-Factory[torch,metrics,
-  deepspeed,liger-kernel] + flash-attn 2.8.3 wheel + wandb), then fill in
-  runtime_info.input (source.job_dir, conversion.data_name,
+  (torch 2.10 cu128 + editable repos + metrics/DeepSpeed/Liger +
+  flash-attn + Qwen3.5 linear-attention dependencies + wandb), then fill in
+  runtime_info.input (source-specific fields, conversion.data_name,
   model.model_name_or_path, training.output_dir, experiment.wandb_*),
   prompting only for unset or placeholder values and keeping the WandB key
   out of git. Idempotent; ends by handing off to /trainer:check (which owns the
@@ -42,13 +42,12 @@ The build scripts and the inline config readers depend on these:
   `~/.local/bin` is root-owned use
   `UV_INSTALL_DIR="$HOME/.uv/bin" UV_UNMANAGED_INSTALL=1 sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'`
   and persist `PATH="$HOME/.uv/bin:$PATH"`.
-- **`wget`** — `install_env.sh` downloads the flash-attn wheel with it.
 - **system `python3` + PyYAML** — every `scripts/*.sh` reads config through
   `scripts/config_value.py` (default `CONFIG_PYTHON=python3`), which
   `import yaml`. `python3 -c 'import yaml'` must succeed; `pip install
   --user pyyaml` if not.
-- **network** — `install_env.sh` pulls from the Tsinghua PyPI mirror, the
-  PyTorch cu128 index, and the flash-attn GitHub release. If the host is
+- **network** — `install_env.sh` pulls from the Tsinghua PyPI mirror and the
+  PyTorch cu128 index, and builds `flash-attn` from its source distribution. If the host is
   offline, stop here — don't half-build the env.
 
 ## Step 2 — Repos at pinned commits
@@ -63,19 +62,19 @@ root `.gitmodules`); a fresh clone leaves them empty. For each entry under
    ```bash
    git submodule update --init subblock/trainer/repos/LLaMA-Factory subblock/trainer/repos/swe_data_process
    ```
-2. **`swe_data_process` uses an SSH remote** (`git@github.com:SWE-Lego/
-   swe_data_process.git`) and is a private repo. On a host with only an
-   https token (no SSH key), the clone fails — override the submodule URL
-   first:
+2. **`swe_data_process` may require repository access.** The checked-in
+   submodule URL uses HTTPS. Authenticate with GitHub CLI or a credential
+   helper before initializing it:
    ```bash
-   git config submodule."subblock/trainer/repos/swe_data_process".url \
-     "https://<TOKEN>@github.com/SWE-Lego/swe_data_process.git"
+   gh auth login
+   gh auth setup-git
    ```
-   `LLaMA-Factory` is the public upstream (`https://github.com/hiyouga/
-   LLaMA-Factory.git`) and needs no token.
+   Never embed a token in the submodule URL or shell history.
+   `LLaMA-Factory` uses the public patched SWE-Lego fork
+   (`https://github.com/SWE-Lego/LLaMA-Factory.git`) and needs no token.
 3. Verify each checkout matches the pin:
    `git -C repos/<path> rev-parse HEAD` must equal `meta_info.repositories.
-   <name>.commit` (`e695fdfa…` for LLaMA-Factory, `8f60ee31…` for
+   <name>.commit` (`3e32f8ca…` for LLaMA-Factory, `67aadd1e…` for
    swe_data_process). If a present worktree has drifted or has local
    edits, **report it and ask** — per `BLOCK_DEFINITION.md`, `repos/` is
    pinned, read-only code; `:setup` configures and pins, it does not patch.
@@ -87,9 +86,10 @@ and `[OK] repos/swe_data_process is an installable src-layout package`.
 
 The canonical builder is `scripts/install_env.sh`. It **removes and
 recreates** `$SFT_UV` (it refuses any path outside `artifacts/env/`), then
-installs the full stack: `swe_data_process[llm]` → torch 2.8.0 cu128 →
-`LLaMA-Factory[torch,metrics,deepspeed,liger-kernel]` (`--no-build-
-isolation`) → the pinned flash-attn 2.8.3 wheel → wandb. It ends by
+installs the full stack: torch 2.10.0 cu128 → editable
+`swe_data_process[llm]` and patched LLaMA-Factory → metrics/DeepSpeed/Liger
+requirements → source-built `flash-attn` → `flash-linear-attention` +
+`tilelang` → wandb. It ends by
 importing `torch`, `swe_data_process`, `llamafactory` and printing
 `cuda available: <bool>`. **Step 2 must be done first** — it installs
 `-e repos/swe_data_process[llm]`, which fails on an empty submodule.
@@ -128,21 +128,23 @@ comments).
 
 | Key | What to ask / derive |
 |---|---|
-| `source.scaffold` | one of `openhands-sdk \| claude-code \| open-code \| terminus2` (matches the agent that produced the trajectories) |
-| `source.job_dir` | tracer job dir with raw trajectories — `tracer.output.raw_trajectories_dir` (`subblock/tracer/artifacts/jobs/<job>`). Offer to list candidates; confirm it exists on this host. |
+| `source.type` | `harbor_job`, `hf_lf`, or `local_lf` |
+| Harbor source fields | `source.scaffold` plus an existing `source.job_dir` |
+| Hugging Face source fields | `source.hf_hub_url`; optionally `source.hf_file_name` for exactly one file, otherwise subset/split; private datasets use `HF_TOKEN` from the runtime environment |
+| Local source fields | existing LF/ShareGPT JSON at `source.lf_path` |
 | `conversion.data_name` | unique name for this dataset (drives the IM/LF filenames and the registered dataset) |
 | `conversion.max_instances` / `conversion.exclude_repos_file` | usually keep defaults; confirm the exclude file exists |
 | `dataset.name` | leave empty to auto-derive from `data_name` (recommended) |
-| `model.model_name_or_path` | local base-model dir (must exist; dryrun checks it) |
+| `model.model_name_or_path` | Hub model ID or local base-model directory |
 | `training.output_dir` | run name → `artifacts/model/<basename>`; encode key hparams in the name as the existing value does |
 | `training.deepspeed` | ZeRO-3 config path (`artifacts/training_config/deepspeed/ds_z3_config.json`); confirm it exists |
 | `experiment.wandb_mode` | `offline` (default) \| `online` \| `disabled` |
-| `credentials.wandb_api_key` | **required when `wandb_mode: online`** — `dryrun.sh`/`train.sh` read the key from `config.yaml` (not from `WANDB_API_KEY` in the env), so write it here. Leave empty for `offline`/`disabled`. Never commit a real key. |
+| `credentials.wandb_api_key` | Leave empty in tracked config. For `wandb_mode: online`, export `WANDB_API_KEY` in the private runtime environment. |
 
-Do **not** invent a `job_dir` or `model_name_or_path` — a missing input is
+Do **not** invent source fields or `model_name_or_path` — a missing input is
 the user's signal to provide one, never a signal to fabricate a path.
-Conversion + dataset registration happen inside `/trainer:run`'s `train.sh`
-(STEP 0/1), so `:setup` does **not** convert data here.
+Data acquisition/conversion + dataset registration happen inside `/trainer:run`'s
+`train.sh` (STEP 0/1), so `:setup` does not prepare data here.
 
 ## Step 5 — Hand off to `/trainer:check`
 
@@ -163,8 +165,7 @@ doesn't exist on this host (model dir, `job_dir`) — fix those, not the env.
   without asking.
 - Never modify files under `repos/` beyond checking out the pinned commit;
   report drift, don't paper over it.
-- Online WandB requires `credentials.wandb_api_key` in `config.yaml` (the
-  scripts read it from there, not from the env). Never **commit** a real key
-  — keep it out of version control, not out of the local config.
+- Online WandB requires `WANDB_API_KEY` in the private runtime environment.
+  Never write a real key into tracked `config.yaml`.
 - Never run training or data conversion here — that's `/trainer:run`.
 - Local block: don't SSH anywhere (`meta_info.resources.ip: null`).

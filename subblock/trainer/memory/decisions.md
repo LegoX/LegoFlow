@@ -1,5 +1,25 @@
 # Training Decisions
 
+## 2026-07: Exact Hugging Face file selection
+**Decision:** `hf_lf` supports an optional `source.hf_file_name`. When set,
+`scripts/train.sh` downloads only that file with `hf_hub_download`, caches it under
+`artifacts/data/hf_data/`, and registers it with LLaMA-Factory as a local `file_name`.
+When unset, the original `hf_hub_url` + subset/split train-time loading path remains.
+**Why:** A Hub repository can contain several JSON files that Hugging Face combines
+into one default split. Training must be able to select one curated file without
+implicitly mixing the repository's other files. This extends the June input-source
+decision below.
+
+## 2026-07: Qwen3.5-capable training environment
+**Decision:** The environment installer now uses PyTorch 2.10.0 CUDA 12.8,
+builds `flash-attn` against the installed PyTorch, and installs
+`flash-linear-attention` plus `tilelang` for Qwen3.5. The patched SWE-Lego
+LLaMA-Factory is installed editable with its metrics, DeepSpeed, and Liger
+requirements.
+**Why:** Qwen3.5-35B-A3B uses linear-attention code paths and dependencies absent
+from the earlier Qwen3-8B environment. This supersedes the May environment stack
+description retained below as history.
+
 ## 2026-06: Pluggable input sources (harbor_job | hf_lf | local_lf)
 **Decision:** `config.yaml.runtime_info.input.source.type` selects the dataset source. `harbor_job`
 (default) converts raw Harbor trajectories as before. `hf_lf` registers the dataset with
@@ -7,7 +27,7 @@ LLaMA-Factory's native `hf_hub_url` and loads it from the HuggingFace Hub at tra
 `local_lf` registers an existing LF/ShareGPT json (absolute `file_name`) as-is. Both ready-made
 sources skip STEP 0 conversion in `scripts/train.sh`/`dataprep.sh`; `conversion.data_name` stays the
 dataset key and `conversion.max_instances` (>0) becomes the entry's `num_samples`. Private HF
-datasets use `credentials.hf_token`. Empty/absent `source.type` defaults to `harbor_job` (back-compat).
+datasets use `HF_TOKEN` from the private runtime environment. Empty/absent `source.type` defaults to `harbor_job` (back-compat).
 **Why:** Not every training set comes from a Harbor job — sometimes we already have a curated LF
 dataset (shared on HF or produced elsewhere). Leaning on LLaMA-Factory's built-in `hf_hub_url`
 support avoids writing any download/caching logic. Scoring and eval-repo exclusion only apply during

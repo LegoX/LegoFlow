@@ -12,6 +12,7 @@ set -u
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACTS_DIR="$BLOCK_DIR/artifacts"
+CONFIG="${SFT_CONFIG:-$BLOCK_DIR/config.yaml}"
 ARCHIVES_DIR="$ARTIFACTS_DIR/archives"
 INDEX_FILE="$ARTIFACTS_DIR/index.yaml"
 
@@ -55,7 +56,23 @@ mkdir -p "$RUN_DIR"
 
 # Snapshot config.yaml and scripts/ (top-level files + non-hidden subdirs only —
 # skip hidden state dirs like .swegen-py that some blocks stash inside scripts/).
-[[ -f "$BLOCK_DIR/config.yaml" ]] && cp -p "$BLOCK_DIR/config.yaml" "$RUN_DIR/config.yaml"
+if [[ -f "$CONFIG" ]]; then
+    python3 - "$CONFIG" "$RUN_DIR/config.yaml" <<'PY'
+import sys
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    config = yaml.safe_load(fh) or {}
+credentials = (
+    ((config.get("runtime_info") or {}).get("input") or {}).get("credentials")
+)
+if isinstance(credentials, dict):
+    for key in list(credentials):
+        credentials[key] = ""
+with open(sys.argv[2], "w", encoding="utf-8") as fh:
+    yaml.safe_dump(config, fh, sort_keys=False, allow_unicode=True)
+PY
+fi
 if [[ -d "$BLOCK_DIR/scripts" ]]; then
     mkdir -p "$RUN_DIR/scripts"
     shopt -s nullglob

@@ -22,6 +22,11 @@ PY
 MODEL_RAW="$(cfg runtime_info.input.model.model_name_or_path)"
 [[ -n "$MODEL_RAW" ]] || { echo "FAIL: model.model_name_or_path is empty"; exit 1; }
 
+if [[ "$MODEL_RAW" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "SKIP: Hugging Face Hub model ID configured; remote availability is checked at train time: $MODEL_RAW"
+  exit 77
+fi
+
 case "$MODEL_RAW" in
   /*) MODEL_DIR="$MODEL_RAW" ;;
   *)  MODEL_DIR="$BLOCK_DIR/$MODEL_RAW" ;;

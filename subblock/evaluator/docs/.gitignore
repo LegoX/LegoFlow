@@ -1,0 +1,12 @@
+# dependencies
+/node_modules
+
+# next.js / fumadocs build artifacts
+/.next/
+/.source/
+/out/
+
+# misc
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store

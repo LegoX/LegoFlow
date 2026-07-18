@@ -1,15 +1,15 @@
 # Curator — Status
 
-See `status.yaml` for live phase, current job, next steps, and history.
+See `config.yaml -> status` for live phase, current job, next steps, and blockers.
 
 ## Per-Language Status
 
-See `inputs.yaml` under `languages.{lang}.status` for per-language metrics:
-- `total_success` / `total_failed` / `total_filtered`
-- `success_rate`
-- `pr_pool_remaining`
-- `last_checked`
+Per-language run state (verified counts, last batch result, current run, etc.)
+lives in `artifacts/index.yaml`. The static per-language *configuration* is in
+`config.yaml -> runtime_info.input.languages.<lang>`.
 
-## Adaptive Tuning Log
+## Logs
 
-See `artifacts/logs/adaptive_decisions.jsonl` for a full record of parameter adjustments.
+- `artifacts/logs/swegen-create/cc_<lang>_March.txt` — per-language create logs
+- `artifacts/index.yaml` — appended per-run summary (started_at, status, archive)
+- `artifacts/archives/run_NNN/` — full per-run snapshots

@@ -1,0 +1,11 @@
+{
+  "name": "terminalgen-block",
+  "owner": { "name": "haoli" },
+  "plugins": [
+    {
+      "name": "terminalgen",
+      "source": "./terminalgen-plugin",
+      "description": "terminalgen block skills — setup, check, dashboard, run."
+    }
+  ]
+}

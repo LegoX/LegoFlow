@@ -4,8 +4,9 @@ description: >
   Preflight the evaluator block: validate config.yaml schema; verify
   `repos/harbor/` pinned commit matches `meta_info.repositories.harbor`;
   confirm Harbor uv env and LiteLLM venv exist with expected editable
-  installs; probe the configured LLM endpoint with `GET /models`
-  (no chat completion calls); confirm the configured
+  installs; probe the configured LLM endpoint with
+  `bash scripts/probe_llm_completion.sh` (a minimal real chat
+  completion); confirm the configured
   `(task_source.dataset_name, version)` resolves in
   `repos/harbor/registry.json`; confirm the LiteLLM proxy port is free
   or held by the current job. Read-only. Reports all failures in one
@@ -27,16 +28,16 @@ never launches.
 
 ## How to run
 
-1. **Be on the right host first.** `meta_info.resources.ip` is currently
-   `192.168.35.240` — a real remote IP, not `local`. If the current
-   shell is on a different host, SSH to `192.168.35.240` and run the
-   checks from the block dir there. Never preflight on a host the run
-   won't use; env paths, port ownership, and Docker state are all
+1. **Be on the right host first.** Read `meta_info.resources.ip`. For
+   `local` / null, run from the current host. For a configured remote
+   hostname or IP, connect with your SSH-key configuration and run the
+   checks from the block directory there. Never preflight on a host the
+   run won't use; env paths, port ownership, and Docker state are all
    host-specific.
 2. Execute `bash scripts/dryrun.sh` from the block root. It is the
    authoritative readiness check (sections below).
-3. Run the live contextual checks the dryrun can't (see "Contextual
-   checks").
+3. Run the live contextual checks the dryrun can't, including
+   `bash scripts/probe_llm_completion.sh` (see "Contextual checks").
 4. Report PASS / WARN / FAIL counts using the dryrun's section headings,
    then print the run-configuration summary.
 
@@ -44,9 +45,9 @@ never launches.
 
 | § | Checks |
 |---|---|
-| 1. Block files | `CLAUDE.md`, `config.yaml`, `dashboard/overview.mdx`, **`artifacts/index.yaml`** all exist. |
+| 1. Block files | `CLAUDE.md`, `config.yaml`, `memory/overview.mdx` exist. A missing `artifacts/index.yaml` is **INFO, not FAIL** (auto-created by `archive_run.sh` after the first run). |
 | 2. YAML syntax | `config.yaml` and `index.yaml` parse under PyYAML. |
-| 3. Harbor repo config | `url` / `commit` (or `ref`/`branch`) / `path` / `readonly` set; path is gitignored. |
+| 3. Harbor repo config | `url` / `commit` (or `ref`/`branch`) / `path` / `readonly` set; path is a tracked submodule (or gitignored for a non-submodule checkout). |
 | 4. Local Harbor checkout | `repos/harbor/.git` present, origin URL matches, **HEAD == `commit` pin** (drift is FAIL), worktree clean. |
 | 5. Harbor env | `harbor_uv` env exists and is outside `repos/harbor`; Python ≥ 3.12; `import harbor / litellm / datasets`; `harbor` resolves to `repos/harbor` (editable); `harbor --help` works. |
 | 6. LiteLLM env | `litellm_uv` venv exists; Python == 3.13; `litellm` CLI present; installed `litellm` version == `1.83.14`. |
@@ -59,13 +60,26 @@ never launches.
 `dryrun.sh` is static. Add these live checks and fold them into the
 report:
 
-- **LLM endpoint probe** (the description's `GET /models`): dryrun
-  deliberately skips it — §7 only confirms the fields are set, because
-  reachability is exercised by each job *after* LiteLLM proxy startup.
-  The skill is where the probe belongs:
-  `curl -fsS -H "Authorization: Bearer <api_key>" <api_base_url>/models`
-  — expect 200 with the configured model (basename of `llm_api.model`)
-  in `data[].id`. See "Interpreting results" for the CF-gating caveat.
+- **LLM endpoint probe**: dryrun deliberately skips it — §7 only
+  confirms the fields are set, because reachability is exercised by each
+  job *after* LiteLLM proxy startup. Run
+  `bash scripts/probe_llm_completion.sh` from the block root; it reads
+  `runtime_info.input.llm_api` and sends a minimal real request to
+  `/chat/completions`. Do **not** substitute `GET /models`: gateways can
+  serve the model catalog from local configuration while the upstream
+  origin returns 5xx for every completion. Interpret exit 0 as PASS,
+  exit 1 as FAIL, and exit 77 as WARN; preserve the script's diagnostic
+  in the consolidated report.
+  When `api_base_url` points at a **local vLLM endpoint** (custom
+  checkpoint), this probe doubles as the "is vLLM up?" gate: a
+  connection-refused/timeout or 5xx here means
+  `scripts/serve_local_model.sh` isn't healthy on the GPU node — FAIL,
+  not a configured gateway WARN. Gateway-specific 401/403 handling is
+  enabled only when `EVAL_GATEWAY_HOST_SUFFIX` is set. Tell the user to
+  start vLLM and re-check.
+  Note: the **active** `llm_api` in `config.yaml` is currently the local
+  Qwen3.5-35B-A3B vLLM endpoint (MODE B); MODE A is the commented
+  remote-GLM-5 alternate.
 - **A job already running**: a live `harbor run` (or a stray LiteLLM on
   the configured port) means launching now would double-book the host.
   Check for an existing `evaluator` tmux session and a `litellm`/`harbor`
@@ -76,10 +90,11 @@ report:
 - **Overwrite guard**: `start.sh` timestamps the job dir, so collisions
   are unlikely, but if `job_dir` is pinned in config, warn when it
   already contains results.
-- **`artifacts/index.yaml` presence**: it was removed in a recent merge,
-  so dryrun §1 currently FAILs. If absent, flag it and point the user at
-  `/evaluator:setup` to recreate it (`runs: []`); `scripts/archive_run.sh`
-  also writes it on first run.
+- **Job already analyzed?**: after a completed run, `start.sh`
+  auto-invokes `scripts/analyze_job.sh`, writing `<job_dir>/analysis/`.
+  This is post-run and non-fatal — not a preflight gate — but when
+  reporting on an existing/interrupted job dir, note whether `analysis/`
+  is present so the user knows the dashboard has data to read.
 
 ## Interpreting results
 
@@ -105,11 +120,13 @@ report:
 - **LiteLLM version mismatch** (§6): FAIL. The pin is `1.83.14`; other
   versions change proxy config semantics. Rebuild the venv in setup.
 - **LLM endpoint 401/403 from this shell** (contextual probe): when the
-  base URL is `qwen.jierungogogo.com` (or another CF-gated production
-  endpoint), `dummy-key` is the real production key and the 401 is a
-  network artifact specific to Claude Code's sandboxed shell — see memory
-  `project-swegen-llm-endpoint`. Treat as WARN, not FAIL, and suggest
-  re-probing from a non-sandboxed shell on `192.168.35.240`.
+  base URL matches the explicitly configured
+  `EVAL_GATEWAY_HOST_SUFFIX`, the response may come from a gateway edge
+  rather than the origin. Treat it as WARN and suggest re-probing from
+  a non-sandboxed shell on the configured evaluator host. Never commit the
+  gateway credential. A **local vLLM** base URL (MODE B) gets no such pass:
+  connection-refused/5xx means vLLM is not healthy, while 401/403 means
+  its API key does not match; both are FAIL.
 - **`scripts/stop.sh` missing**: WARN. The evaluator block currently ships no
   `stop.sh`; teardown is handled by `start.sh`'s EXIT trap
   (`cleanup_litellm` + `archive_run.sh`). Note it but do not block.
@@ -124,7 +141,7 @@ failures unless the user asks. The expected real-world WARNs:
 |---|---|
 | `input_cost_per_token / output_cost_per_token empty` | Billing accounting only. |
 | benchmark outside the curated `CLAUDE.md` table | Agent compatibility is the user's call. |
-| LLM endpoint 401/403 from this shell | Likely CF-gating artifact (see memory). |
+| CF-gated remote endpoint 401/403 from this shell | Likely sandbox/network artifact; re-probe on the eval node. |
 | `scripts/stop.sh` missing | Teardown is handled by `start.sh`'s EXIT trap. |
 
 ## Run-configuration summary
@@ -142,6 +159,7 @@ evaluator run config
   harbor job dir             : <harbor_job.jobs_dir>  (n_concurrent <N>, n_tasks <null|N>)
   litellm                    : port <port>, config <litellm_proxy.config_template>
   excluded tasks             : <HARBOR_EXCLUDE_TASKS or none>
+  post-eval analysis         : <job_analysis.enabled> (tag endpoint <job_analysis.tag_llm.base_url>)
 ```
 
 This is the surface the user inspects before approving `:run`.

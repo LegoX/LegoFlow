@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[22016,["/_next/static/chunks/33e_hbqy1tyc6.js","/_next/static/chunks/2a35y8vvamogv.js"],""]
+3:I[97367,["/_next/static/chunks/33e_hbqy1tyc6.js","/_next/static/chunks/2a35y8vvamogv.js"],"OutletBoundary"]
+4:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","main",null,{"className":"flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center","children":[["$","h1",null,{"className":"text-2xl font-semibold","children":"SWE-Lego-Live"}],["$","p",null,{"className":"text-fd-muted-foreground max-w-md","children":"A self-evolving LLM development pipeline. Curate SWE tasks, roll out agent trajectories, and train models with SFT and RL — one block at a time."}],["$","$L2",null,{"href":"/docs","className":"rounded-md bg-fd-primary px-4 py-2 text-fd-primary-foreground","children":"Read the docs"}]]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"rjNlKt2CRxUzrHEvYgerk"}
+5:null
