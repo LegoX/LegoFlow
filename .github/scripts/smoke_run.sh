@@ -83,6 +83,17 @@ remote() {
 
 # ---------- PREP ----------
 case "$BLOCK" in
+  eval)
+    # The verifier requires a run-scoped start marker and must never accept a
+    # result left by an earlier workspace. Fail immediately if root-owned
+    # residue cannot be removed instead of polling stale output for 40 minutes.
+    if ! rm -rf artifacts/jobs/smoke; then
+      echo "FAIL: could not clear stale eval smoke results" >&2
+      exit 1
+    fi
+    mkdir -p artifacts/jobs/smoke
+    date +%s > artifacts/jobs/smoke/.run-start
+    ;;
   sft)
     if [[ -n "$REMOTE_IP" ]]; then
       echo "INFO: sft remote mode → $REMOTE_USER@$REMOTE_IP:$REMOTE_PORT$REMOTE_DIR"
@@ -116,8 +127,8 @@ esac
 case "$BLOCK" in
   trajgen|eval)
     # Warm the cpfs/aliyun-alinas-efc cache for harbor's CLI: the first import
-    # takes ~20s (pydantic/asyncio cold pages), which trips dryrun.sh's
-    # `timeout 120` and turns the smoke into a SKIP. Second invocation is ~9s.
+    # takes ~20s (pydantic/asyncio cold pages). Warming keeps preflight and
+    # launch latency predictable; the second invocation is ~9s.
     # Done AFTER prepare_tasks (which reads 200 task dirs and can evict
     # harbor's pages from the page cache) so the warm sticks until start.sh.
     if [[ -x artifacts/env/harbor-uv/bin/harbor ]]; then

@@ -2,6 +2,7 @@
     "pages": [
         "index",
         "getting-started",
+        "examples",
         "core-concepts",
         "data-pipeline",
         "training",

@@ -2,12 +2,13 @@
 # Run the configured Harbor evaluation command.
 #
 # Mirrors trajgen/scripts/start.sh, but the eval block invokes Harbor with
-# `--dataset <name> --registry-path repos/harbor/registry.json` so the
+# `--dataset <name>@<version> --registry-path repos/harbor/registry.json` so the
 # benchmark is resolved from Harbor's registry (no local task copy).
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG="${EVAL_CONFIG:-$BLOCK_DIR/config.yaml}"
+export EVAL_CONFIG="$CONFIG"
 LOG_DIR="$BLOCK_DIR/artifacts/logs"
 PRINT_COMMAND_ONLY=0
 
@@ -26,6 +27,8 @@ Builds the default Harbor command from config.yaml and runs it inside
 repos/harbor. Set EVAL_UPDATE_REPOS=1 or pass --update-repos to refresh Harbor
 first. Add command_override in config.yaml only for special cases. Use
 --dry-run-command to print the generated command without launching.
+Before a real launch, a WARN (exit 77) from probe_llm_completion.sh blocks by
+default; set EVAL_ALLOW_PROBE_WARN=1 only after explicitly accepting that warning.
 EOF
 }
 
@@ -205,6 +208,28 @@ echo "=== eval preflight ==="
 bash "$BLOCK_DIR/scripts/dryrun.sh"
 echo ""
 
+if [[ "$PRINT_COMMAND_ONLY" != "1" ]]; then
+  echo "=== upstream completion launch gate ==="
+  PROBE_RC=0
+  bash "$BLOCK_DIR/scripts/probe_llm_completion.sh" || PROBE_RC=$?
+  case "$PROBE_RC" in
+    0)
+      ;;
+    77)
+      if [[ "${EVAL_ALLOW_PROBE_WARN:-0}" != "1" ]]; then
+        echo "ERROR: completion probe returned WARN; refusing to launch without explicit EVAL_ALLOW_PROBE_WARN=1" >&2
+        exit 1
+      fi
+      echo "WARNING: continuing after an explicitly accepted completion-probe warning." >&2
+      ;;
+    *)
+      echo "ERROR: completion probe failed; refusing to launch Harbor." >&2
+      exit 1
+      ;;
+  esac
+  echo ""
+fi
+
 HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
 RUN_COMMAND="$(cfg command_override)"
 UV_PROJECT_ENVIRONMENT_RAW="$(cfg meta_info.environment.harbor_uv)"
@@ -213,6 +238,10 @@ HARBOR_JOBS_DIR_RAW="$(cfg runtime_info.input.harbor_job.jobs_dir)"
 
 DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
 DATASET_VERSION="$(cfg runtime_info.input.task_source.version)"
+HARBOR_DATASET_SPEC="$DATASET_NAME"
+if [[ -n "$DATASET_VERSION" ]]; then
+  HARBOR_DATASET_SPEC="${DATASET_NAME}@${DATASET_VERSION}"
+fi
 REGISTRY_RAW="$(cfg runtime_info.input.task_source.registry_path)"
 if [[ -z "$REGISTRY_RAW" && -n "$HARBOR_PATH_RAW" ]]; then
   REGISTRY_RAW="$HARBOR_PATH_RAW/registry.json"
@@ -347,7 +376,8 @@ case "$AGENT_NAME" in
   custom-openhands-sdk)  export EVAL_CUSTOM_AGENT_PYTHON="$EVAL_RUNTIME_ROOT/bin/python" ;;
   custom-opencode)       export EVAL_CUSTOM_AGENT_OPENCODE="$EVAL_RUNTIME_ROOT/bin/opencode" ;;
 esac
-LITELLM_HOST_IP="$(hostname -I | awk '{print $1}')"
+LITELLM_HOST_IP="${LITELLM_HOST_IP:-$(hostname -I | awk '{print $1}')}"
+[[ -n "$LITELLM_HOST_IP" ]] || { echo "ERROR: could not determine LiteLLM host IP; set LITELLM_HOST_IP explicitly" >&2; exit 1; }
 LITELLM_PORT_RESOLVED="${LITELLM_PORT:-$(cfg runtime_info.input.litellm_proxy.port)}"
 export EVAL_LITELLM_ANTHROPIC_BASE_URL="http://$LITELLM_HOST_IP:$LITELLM_PORT_RESOLVED"
 export EVAL_LITELLM_OPENAI_BASE_URL="http://$LITELLM_HOST_IP:$LITELLM_PORT_RESOLVED/v1"
@@ -454,7 +484,7 @@ print(json.dumps({
     *)
       echo "ERROR: no default agent flags for agent.name=$AGENT_NAME (set command_override or extend start.sh)" >&2; exit 1 ;;
   esac
-  RUN_COMMAND="uv run harbor run --dataset $(printf '%q' "$DATASET_NAME") --registry-path $(printf '%q' "$EVAL_HARBOR_REGISTRY_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$EVAL_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$EVAL_JOB_NAME") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'
+  RUN_COMMAND="uv run harbor run --dataset $(printf '%q' "$HARBOR_DATASET_SPEC") --registry-path $(printf '%q' "$EVAL_HARBOR_REGISTRY_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$EVAL_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$EVAL_JOB_NAME") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'
 import json
 import os
 host_path = os.environ.get('EVAL_RUNTIME_HOST_PATH', '')
@@ -577,7 +607,7 @@ echo "=== eval start ===" | tee -a "$LOG_FILE"
 echo "Harbor dir: $HARBOR_PATH_RAW" | tee -a "$LOG_FILE"
 echo "Producer:   $PRODUCER_BLOCK" | tee -a "$LOG_FILE"
 echo "Format:     $OUTPUT_FORMAT" | tee -a "$LOG_FILE"
-echo "Dataset:    $DATASET_NAME${DATASET_VERSION:+@$DATASET_VERSION}" | tee -a "$LOG_FILE"
+echo "Dataset:    $HARBOR_DATASET_SPEC" | tee -a "$LOG_FILE"
 echo "Registry:   $REGISTRY_RAW" | tee -a "$LOG_FILE"
 echo "Jobs dir:   $HARBOR_JOBS_DIR_RAW" | tee -a "$LOG_FILE"
 echo "Job prefix: $JOB_NAME_PREFIX" | tee -a "$LOG_FILE"
@@ -587,10 +617,21 @@ echo "Config:     $JOB_DIR_RAW/config.yaml" | tee -a "$LOG_FILE"
 echo "Command:    $RUN_COMMAND" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
+set +e
 (cd "$HARBOR_DIR" && bash -lc "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
+PIPE_STATUS=("${PIPESTATUS[@]}")
+set -e
+HARBOR_RC="${PIPE_STATUS[0]:-1}"
+TEE_RC="${PIPE_STATUS[1]:-1}"
+RUN_RC="$HARBOR_RC"
+[[ "$RUN_RC" == "0" && "$TEE_RC" != "0" ]] && RUN_RC="$TEE_RC"
 
 echo "" | tee -a "$LOG_FILE"
-echo "eval complete. Expected job dir: $JOB_DIR_RAW" | tee -a "$LOG_FILE"
+if [[ "$RUN_RC" == "0" ]]; then
+  echo "eval complete. Expected job dir: $JOB_DIR_RAW" | tee -a "$LOG_FILE"
+else
+  echo "WARNING: Harbor command exited with rc=$HARBOR_RC (tee rc=$TEE_RC); analyzing any partial results before exit." | tee -a "$LOG_FILE"
+fi
 echo "Expected trajectory files: $EVAL_TRAJECTORY_FILE_PATTERN" | tee -a "$LOG_FILE"
 
 # Post-hoc job analysis: write attribution/scoring into <job_dir>/analysis/ so the
@@ -600,9 +641,20 @@ JOB_ANALYSIS_ENABLED="$(cfg runtime_info.input.job_analysis.enabled)"
 if [[ "$JOB_ANALYSIS_ENABLED" == "false" ]]; then
   echo "" | tee -a "$LOG_FILE"
   echo "job analysis disabled (runtime_info.input.job_analysis.enabled: false); skipping" | tee -a "$LOG_FILE"
+elif [[ "$RUN_RC" != "0" ]] \
+    && [[ -z "$(find "$JOB_DIR" -mindepth 2 -maxdepth 2 -type f -name result.json -print -quit 2>/dev/null)" ]]; then
+  echo "" | tee -a "$LOG_FILE"
+  echo "job analysis skipped: Harbor failed before any per-trial result was written" | tee -a "$LOG_FILE"
 else
   echo "" | tee -a "$LOG_FILE"
   echo "=== running post-eval job analysis ===" | tee -a "$LOG_FILE"
+  # Partial-result analysis must not turn a failed Harbor run into an expensive
+  # full dataset download/tagging job. It may reuse existing gold only.
+  [[ "$RUN_RC" == "0" ]] || export JOB_ANALYSIS_PREPARE_DATASET=0
   bash "$BLOCK_DIR/scripts/analyze_job.sh" "$JOB_DIR" 2>&1 | tee -a "$LOG_FILE" || \
     echo "WARNING: job analysis failed; eval results are unaffected. See log above." | tee -a "$LOG_FILE"
+fi
+
+if [[ "$RUN_RC" != "0" ]]; then
+  exit "$RUN_RC"
 fi

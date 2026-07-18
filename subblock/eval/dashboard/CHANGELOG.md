@@ -7,19 +7,19 @@
 已为 single job detail 页面添加以下细致分析：
 
 #### 1. **Difficulty breakdown (难度分布)**
-- 数据来源: `analysis/tag_analysis/summary.json` → `tables.difficulty_label`
+- 数据来源: `analysis/instance_analysis/summary.json` → `tables.difficulty_label`
 - 展示: 每个难度级别（easy/medium）的resolved vs unresolved split bar chart
 - 格式: `[unresolved | resolved]` 对比条，显示比例和绝对数
 - 可展开查看完整 contingency table (`contingency_difficulty_label.txt`)
 
 #### 2. **Project type (tag2) breakdown**
-- 数据来源: `analysis/tag_analysis/summary.json` → `tables.tag2`
+- 数据来源: `analysis/instance_analysis/summary.json` → `tables.tag2`
 - 展示: 项目类型（library/backend/framework/cli/testing）的resolved vs unresolved split bar
 - 格式: 同上，左侧红色 unresolved，右侧绿色 resolved
 - 可展开查看 contingency table (`contingency_tag2.txt`)
 
 #### 3. **Correlations with resolve rate (相关性分析)**
-- 数据来源: `analysis/tag_analysis/correlations.json`
+- 数据来源: `analysis/instance_analysis/correlations.json`
 - 展示指标:
   - `difficulty_score` — 任务难度综合评分
   - `metrics.patch_lines` — 补丁代码行数
@@ -31,7 +31,7 @@
 - 统计显著性: *** p<0.001, ** p<0.01, * p<0.05
 
 #### 4. **Rule-based composite score**
-- 数据来源: `analysis/rule_score/score_comparison.json`
+- 数据来源: `analysis/traj_analysis/score_comparison.json`
 - 展示: resolved vs unresolved 的 composite_score, oec_score, iac_score 均值
 - 对比: 两组数据并排展示
 
@@ -56,13 +56,14 @@ GET /api/jobs/<name>/rule_score_instances?kind=resolved&limit=50
 `styles.css`:
 - `.bar-chart.split` — 左右分开的轨道，红色/绿色对比
 - `.code-block` — 用于展示 contingency table 的等宽字体 pre 块
-- `.muted-card` — 灰色虚线边框的提示���片
+- `.muted-card` — 灰色虚线边框的提示卡片
 
 ## 测试
 
 服务器已重启（端口 8092），新数据已可访问:
 ```bash
-curl http://127.0.0.1:8092/api/jobs/swebench-verified-custom-openhands-sdk-1.14.0-Qwen3.5-35B-A3B-20260517095333 \
+JOB_NAME="<artifacts/jobs 下的 job 目录名>"
+curl "http://127.0.0.1:8092/api/jobs/$JOB_NAME" \
   | jq '.tag_analysis_summary.tables.difficulty_label'
 ```
 

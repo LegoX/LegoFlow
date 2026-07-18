@@ -9,17 +9,18 @@ Everything a job produces lands under this block's `artifacts/` directory. This 
 
 ```text
 artifacts/jobs/<job>/
-├── results.json                             # aggregate job stats (rewards, errors)
+├── result.json                              # aggregate job stats (rewards, errors)
 ├── config.yaml                              # snapshot of the active config at launch
 ├── analysis/                                # post-eval job analysis (see below)
 └── <task>/
     ├── agent/litellm-trajectory.jsonl       # one raw trajectory per task
-    └── evaluation/                          # per-task verdict, scoring, test logs
+    ├── result.json                          # trial status, reward, and exception
+    └── verifier/                            # per-task verdict, scoring, test logs
 ```
 
 - **`litellm-trajectory.jsonl`** is the replayable log of one trial, written by the LiteLLM logger.
-- **`evaluation/`** holds the per-task grading output — verdict, scoring, and test logs that determine the reward.
-- **`results.json`** aggregates rewards and error stats across all trials.
+- **`verifier/`** holds the per-task grading output — verdict, scoring, and test logs that determine the reward.
+- **`result.json`** at the job root aggregates rewards and error stats across all trials.
 
 This directory is the block's `eval_results_dir` output (declared in `config.yaml → runtime_info.output`). eval is a terminal block, so there is no downstream consumer.
 
@@ -45,15 +46,19 @@ After each run, a snapshot is archived under:
 
 ```text
 artifacts/archives/run_NNN/
-├── metadata.yaml   # run id, timestamps, results, repo commit ids, copy of inputs
+├── metadata.yaml   # run id, timestamps, status, job dir, and repo commit ids
 ├── config.yaml     # config as it was at run time
-├── scripts/        # copy of executed scripts
-├── session.log     # session record
-└── monitor.md      # monitor output
+└── scripts/        # copy of executed scripts
 ```
 
-and one entry is appended to `artifacts/index.yaml`. Use `artifacts/index.yaml` for archived run history — its newest entry is the current/last run's status (see [Status](/docs/reference/status)).
+and one entry is appended to `artifacts/index.yaml` when the run exits. Use it
+for completed/failed/interrupted archive history; live progress remains under
+the active job directory (see [Status](/docs/reference/status)).
 
 ## Cleaning up
 
-`scripts/clean.sh` removes everything under `artifacts/` **except** `env/`/`envs/`, `index.yaml`, and `archives/` (so environments and archived runs are preserved). Pass `-n`/`--dry-run` to preview what would be removed. It does not touch `repos/`.
+`scripts/clean.sh` removes disposable logs, generated LiteLLM state, and other
+unrecognized entries. It preserves `env/`/`envs/`, `index.yaml`, `archives/`,
+`jobs/`, `datasets/`, and `runtime/`. Pass `-n`/`--dry-run` to preview the
+deletions. It does not touch `repos/`; remove sensitive job/archive data
+explicitly before packaging a worktree.

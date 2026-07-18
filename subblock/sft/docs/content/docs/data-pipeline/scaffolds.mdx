@@ -46,4 +46,4 @@ Every converter emits the same intermediate (IM) shape — one JSONL row per tra
 
 ## Reasoning content and templates
 
-When a trajectory carries `reasoning_content` (chain-of-thought), train with the `qwen3` chat template to keep it. The default `qwen3_nothink` template disables thinking mode and drops it. See [Configuration](/docs/training/configuration#template).
+Match the template family to the base model: Qwen3 uses `qwen3` / `qwen3_nothink`, while Qwen3.5 uses `qwen3_5` / `qwen3_5_nothink`. Select the thinking-capable variant when the training records intentionally preserve reasoning content; use the `*_nothink` variant for non-thinking data. The active Qwen3.5 profile uses `qwen3_5`. See [Configuration](/docs/training/configuration#template).

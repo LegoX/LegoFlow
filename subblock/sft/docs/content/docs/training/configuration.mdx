@@ -15,6 +15,7 @@ All training parameters live in `config.yaml` → `runtime_info.input.training`.
 | `template` | Chat template (see below) |
 | `cutoff_len` | Max sequence length (tokens) |
 | `rope_scaling` | RoPE scaling method (see below) |
+| `max_samples` | Upper bound applied by LLaMA-Factory after loading |
 | `output_dir` | Run name / checkpoint directory |
 | `per_device_train_batch_size` | Batch size per GPU |
 | `gradient_accumulation_steps` | Gradient accumulation steps |
@@ -22,23 +23,30 @@ All training parameters live in `config.yaml` → `runtime_info.input.training`.
 | `num_train_epochs` | Number of epochs |
 | `lr_scheduler_type` | LR schedule (e.g. `cosine`) |
 | `warmup_ratio` | Warmup fraction of total steps |
-| `save_steps` | Checkpoint interval (steps) |
+| `save_strategy` | Checkpoint schedule: `steps`, `epoch`, or `no` |
+| `save_steps` | Checkpoint interval when `save_strategy: steps` |
+| `save_only_model` | Save only model weights, without resumable optimizer state |
 
 The effective global batch size is `per_device_train_batch_size × gradient_accumulation_steps × n_gpus`.
 
 ## Template
 
-`template: qwen3_nothink` disables thinking mode in the Qwen3 chat template. Use `template: qwen3` when training on trajectories that carry chain-of-thought (`reasoning_content` present) so the reasoning is kept. See [Scaffolds](/docs/data-pipeline/scaffolds#reasoning-content-and-templates).
+Match the template family to the model: Qwen3 uses `qwen3` / `qwen3_nothink`; Qwen3.5 uses `qwen3_5` / `qwen3_5_nothink`. Select a thinking-capable variant only when the dataset intentionally preserves reasoning content. The active Qwen3.5 profile uses `qwen3_5`. See [Scaffolds](/docs/data-pipeline/scaffolds#reasoning-content-and-templates).
 
 ## Long context
 
-`rope_scaling: yarn` is **required** whenever `cutoff_len > 32768`. Without it, position embeddings overflow and training OOMs or produces garbage.
+Enable a model-supported RoPE scaling method such as `yarn` when `cutoff_len` exceeds the base model's native context window (`max_position_embeddings` or the documented context length). There is no universal 32K threshold: compare the requested cutoff with the selected model's own limit.
+
+The checked-in Qwen3.5 profile uses `rope_scaling: null`: its native context
+already covers the configured 128K cutoff, and this architecture ignores the
+older top-level RoPE scaling option.
 
 ## Checkpointing
 
 - `save_only_model: true` skips saving optimizer state — it saves disk but prevents resuming.
+- `save_strategy: steps` uses `save_steps`; `epoch` saves at epoch boundaries.
 - `resume_from_checkpoint: null` — set it to a checkpoint directory path to resume.
-- `overwrite_output_dir: true` will **silently overwrite** an existing checkpoint directory. Rename `output_dir` or set this to `false` to protect an in-progress run.
+- A non-empty `output_dir` is rejected by default. Destructive replacement requires both `overwrite_output_dir: true` and the explicit runtime acknowledgement `SFT_ALLOW_OVERWRITE_OUTPUT=1`.
 - A relative `output_dir` writes to `artifacts/model/<basename>`; an absolute path is honored as-is by both training and the dashboard.
 
 ## Performance toggles
@@ -48,11 +56,11 @@ The effective global batch size is `per_device_train_batch_size × gradient_accu
 | `bf16: true` | bf16 mixed-precision training |
 | `enable_liger_kernel: true` | Liger fused kernels |
 | `use_unsloth_gc: true` | Unsloth gradient checkpointing |
-| `flash_attn: fa2` | FlashAttention-2 (pinned flash-attn 2.8.3 wheel) |
+| `flash_attn: fa2` | FlashAttention-2, built against the installed PyTorch |
 
 ## Experiment tracking
 
-`experiment.wandb_mode` controls reporting: `disabled` generates `report_to: none`; `offline` logs locally without an API key; `online` requires `credentials.wandb_api_key`.
+`experiment.wandb_mode` controls reporting: `disabled` generates `report_to: none`; `offline` logs locally without an API key; `online` requires `WANDB_API_KEY` in the private runtime environment.
 
 ## Tunable parameters
 
@@ -64,7 +72,7 @@ The block declares the parameters safe to auto-tune under `evolving.tunable_para
 | `num_train_epochs` | Number of epochs |
 | `per_device_train_batch_size` | Batch size per GPU |
 | `gradient_accumulation_steps` | Gradient accumulation steps |
-| `max_instances` | Maximum training instances (conversion cap) |
+| `max_instances` | Harbor conversion cap or ready-made-source `num_samples` |
 
 ## Common failure modes
 
@@ -72,6 +80,6 @@ The block declares the parameters safe to auto-tune under `evolving.tunable_para
 | --- | --- |
 | Single-GPU run on an 8-GPU node | Ensure `FORCE_TORCHRUN=1` (set by `train.sh`) and `n_gpus_per_node` is correct |
 | Dataset key points to an old LF filename | Let `train.sh` update the mapping, or pick a new `conversion.data_name` |
-| Position-embedding OOM at long context | Add `rope_scaling: yarn` for `cutoff_len > 32768` |
-| In-progress checkpoint overwritten | Rename `output_dir` or set `overwrite_output_dir: false` |
-| WandB online mode without an API key | Set `credentials.wandb_api_key`, or switch to `offline`/`disabled` |
+| Requested `cutoff_len` exceeds the model's native context window | Enable a RoPE scaling method supported by that model, such as `yarn` |
+| Non-empty output directory rejected | Rename `output_dir`; only intentional destructive replacement should set both overwrite controls |
+| WandB online mode without an API key | Export `WANDB_API_KEY`, or switch to `offline`/`disabled` |

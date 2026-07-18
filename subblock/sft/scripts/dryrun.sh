@@ -7,7 +7,7 @@ BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LF_REPO="$BLOCK_DIR/repos/LLaMA-Factory"
 SWE_DP_REPO="$BLOCK_DIR/repos/swe_data_process"
 SWE_DP_SRC="$SWE_DP_REPO/src"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG="${SFT_CONFIG:-$BLOCK_DIR/config.yaml}"
 CONFIG_PYTHON="${CONFIG_PYTHON:-python3}"
 
 PASS=0
@@ -134,19 +134,44 @@ else
     fail "SFT uv python is missing: $LF_PYTHON"
 fi
 
+if command -v uv &>/dev/null && [[ -x "$LF_PYTHON" ]]; then
+    if UV_CHECK_OUTPUT="$(uv pip check --python "$LF_PYTHON" 2>&1)"; then
+        ok "SFT uv package dependencies are compatible"
+    else
+        fail "SFT uv package dependency conflicts detected; rerun scripts/install_env.sh"
+        while IFS= read -r line; do info "$line"; done <<< "$UV_CHECK_OUTPUT"
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 # 3. Repos and imports
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- 3. Repos and Python modules ---"
+check_repo_pin() {
+    local label="$1" repo="$2" expected="$3" head
+    if [[ -z "$expected" ]]; then
+        fail "$label commit pin is empty"
+        return
+    fi
+    head="$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)"
+    if [[ "$head" == "$expected" ]]; then
+        ok "$label HEAD matches configured pin: $expected"
+    else
+        fail "$label HEAD=$head does not match configured pin=$expected"
+    fi
+}
+
 if [[ -d "$LF_REPO" ]]; then
     ok "repos/LLaMA-Factory/ exists"
+    check_repo_pin "LLaMA-Factory" "$LF_REPO" "$(meta_cfg "repositories.llama_factory.commit")"
 else
     fail "repos/LLaMA-Factory/ not found"
 fi
 
 if [[ -f "$SWE_DP_REPO/pyproject.toml" && -d "$SWE_DP_SRC/swe_data_process" ]]; then
     ok "repos/swe_data_process is an installable src-layout package"
+    check_repo_pin "swe_data_process" "$SWE_DP_REPO" "$(meta_cfg "repositories.swe_data_process.commit")"
 else
     fail "repos/swe_data_process package files not found"
 fi
@@ -155,6 +180,12 @@ if [[ -x "$LF_PYTHON" ]] && PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON
     ok "swe_data_process is importable with local PYTHONPATH"
 else
     warn "skipping or failing swe_data_process import check because SFT uv python is unavailable or import failed"
+fi
+
+if [[ -x "$LF_PYTHON" ]] && PYTHONPATH="$LF_REPO/src:$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" -c "import llamafactory.hparams" 2>/dev/null; then
+    ok "LLaMA-Factory imports and dependency checks pass"
+else
+    fail "LLaMA-Factory import/dependency check failed; rerun scripts/install_env.sh"
 fi
 
 # ---------------------------------------------------------------------------
@@ -168,6 +199,7 @@ SCAFFOLD="$(cfg "source.scaffold")"
 JOB_DIR_RAW="$(cfg "source.job_dir")"
 JOB_DIR="$(abspath "$JOB_DIR_RAW")"
 HF_HUB_URL="$(cfg "source.hf_hub_url")"
+HF_FILE_NAME="$(cfg "source.hf_file_name")"
 HF_SUBSET="$(cfg "source.hf_subset")"
 HF_SPLIT="$(cfg "source.hf_split")"
 LF_PATH_RAW="$(cfg "source.lf_path")"
@@ -198,13 +230,16 @@ case "$SOURCE_TYPE" in
             fail "source.hf_hub_url is empty — set runtime_info.input.source.hf_hub_url"
         else
             ok "source.hf_hub_url = $HF_HUB_URL"
+            if [[ -n "$HF_FILE_NAME" ]]; then
+                ok "source.hf_file_name = $HF_FILE_NAME (only this file will be downloaded)"
+            fi
             [[ -n "$HF_SUBSET" ]] && info "hf_subset=$HF_SUBSET"
             info "hf_split=${HF_SPLIT:-train}"
         fi
-        if [[ -n "$(cfg "credentials.hf_token")" ]]; then
-            ok "credentials.hf_token is set (private datasets supported)"
+        if [[ -n "${HF_TOKEN:-$(cfg "credentials.hf_token")}" ]]; then
+            ok "Hugging Face token is available from the private runtime environment"
         else
-            info "credentials.hf_token is empty — only public datasets will load"
+            info "credentials.hf_token is empty — Hub access must be public or pre-authenticated on this host"
         fi
         ;;
     local_lf)
@@ -247,10 +282,10 @@ PYEOF
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Conversion output paths
+# 6. Data acquisition / conversion outputs
 # ---------------------------------------------------------------------------
 echo ""
-echo "--- 6. Conversion output paths ---"
+echo "--- 6. Data acquisition / conversion outputs ---"
 DATA_NAME="$(cfg "conversion.data_name")"
 MAX_INSTANCES_DRYRUN="$(cfg "conversion.max_instances")"
 IM_OUTPUT="$BLOCK_DIR/artifacts/data/im_data/${DATA_NAME}.jsonl"
@@ -282,6 +317,17 @@ if [[ "$SOURCE_TYPE" == "harbor_job" ]]; then
     else
         fail "exclude_repos_file not found: $EXCL"
     fi
+elif [[ "$SOURCE_TYPE" == "hf_lf" && -n "$HF_FILE_NAME" ]]; then
+    HF_DOWNLOAD_TARGET="$BLOCK_DIR/artifacts/data/hf_data/${HF_HUB_URL//\//__}/$HF_FILE_NAME"
+    info "exact Hub file target = $HF_DOWNLOAD_TARGET"
+    if [[ -f "$HF_DOWNLOAD_TARGET" ]]; then
+        ok "Exact Hub file is already cached locally"
+    else
+        info "Exact Hub file is not cached yet — STEP 0 will download it"
+    fi
+    if [[ -n "$MAX_INSTANCES_DRYRUN" ]] && [[ "$MAX_INSTANCES_DRYRUN" -gt 0 ]] 2>/dev/null; then
+        info "conversion.max_instances=$MAX_INSTANCES_DRYRUN — applied as the dataset's num_samples (random subsample)"
+    fi
 else
     info "source.type=$SOURCE_TYPE — STEP 0 conversion skipped; data_name is used only as the dataset key"
     if [[ -n "$MAX_INSTANCES_DRYRUN" ]] && [[ "$MAX_INSTANCES_DRYRUN" -gt 0 ]] 2>/dev/null; then
@@ -309,7 +355,15 @@ else
     case "$SOURCE_TYPE" in
         harbor_job) EXPECT_MODE="file";   EXPECT_VALUE="$(basename "$LF_OUTPUT")" ;;
         local_lf)   EXPECT_MODE="file";   EXPECT_VALUE="$LF_PATH" ;;
-        hf_lf)      EXPECT_MODE="hf_hub"; EXPECT_VALUE="$HF_HUB_URL" ;;
+        hf_lf)
+            if [[ -n "$HF_FILE_NAME" ]]; then
+                EXPECT_MODE="file"
+                EXPECT_VALUE="$BLOCK_DIR/artifacts/data/hf_data/${HF_HUB_URL//\//__}/$HF_FILE_NAME"
+            else
+                EXPECT_MODE="hf_hub"
+                EXPECT_VALUE="$HF_HUB_URL"
+            fi
+            ;;
         *)          EXPECT_MODE="file";   EXPECT_VALUE="$(basename "$LF_OUTPUT")" ;;
     esac
     DATASET_INFO="$BLOCK_DIR/artifacts/data/lf_data/dataset_info.json"
@@ -358,8 +412,10 @@ MODEL_PATH="$(cfg "model.model_name_or_path")"
 info "model_name_or_path = $MODEL_PATH"
 if [[ -n "$MODEL_PATH" && -d "$MODEL_PATH" ]]; then
     ok "Model directory exists"
+elif [[ "$MODEL_PATH" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+    ok "Model is a Hugging Face Hub ID (availability is checked at train time)"
 else
-    fail "Model directory not found: $MODEL_PATH"
+    fail "Model directory not found and value is not a Hub ID: $MODEL_PATH"
 fi
 
 # ---------------------------------------------------------------------------
@@ -371,9 +427,18 @@ OUTPUT_DIR="$(cfg "training.output_dir")"
 TEMPLATE="$(cfg "training.template")"
 EPOCHS="$(cfg "training.num_train_epochs")"
 LR="$(cfg "training.learning_rate")"
+DEEPSPEED_RAW="$(cfg "training.deepspeed")"
+DEEPSPEED_PATH="$(abspath "$DEEPSPEED_RAW")"
+RESUME_FROM_CHECKPOINT="$(cfg "training.resume_from_checkpoint")"
+OVERWRITE_OUTPUT_DIR="$(cfg "training.overwrite_output_dir")"
 info "template=$TEMPLATE  epochs=$EPOCHS  lr=$LR"
+if [[ -f "$DEEPSPEED_PATH" ]]; then
+    ok "DeepSpeed config exists: $DEEPSPEED_PATH"
+else
+    fail "DeepSpeed config not found: $DEEPSPEED_PATH"
+fi
 if [[ -z "$OUTPUT_DIR" ]]; then
-    fail "training.output_dir is empty — set it (e.g. qwen3_8b_oh_sdk_1k_gbs64pbs1acc8_lr1e-4_epo4_think)"
+    fail "training.output_dir is empty — set a unique run name (e.g. qwen3_5_35b_dataset_gbs64_lr5e-5_epo3)"
 else
     ok "training.output_dir = $OUTPUT_DIR"
     ABS_OUTPUT_DIR="$(resolve_output_dir "$OUTPUT_DIR")"
@@ -383,6 +448,15 @@ else
     if [[ -f "$BLOCK_DIR/artifacts/training_config/$TRAIN_YAML_NAME" ]]; then
         info "YAML already exists from a previous run — will be overwritten"
     fi
+    if [[ -d "$ABS_OUTPUT_DIR" && -n "$(find "$ABS_OUTPUT_DIR" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+        if [[ -n "$RESUME_FROM_CHECKPOINT" && "$RESUME_FROM_CHECKPOINT" != "null" ]]; then
+            ok "non-empty output_dir will resume from checkpoint: $RESUME_FROM_CHECKPOINT"
+        elif [[ "$OVERWRITE_OUTPUT_DIR" == "true" && "${SFT_ALLOW_OVERWRITE_OUTPUT:-0}" == "1" ]]; then
+            warn "non-empty output_dir overwrite explicitly allowed by SFT_ALLOW_OVERWRITE_OUTPUT=1"
+        else
+            fail "output_dir is non-empty: $ABS_OUTPUT_DIR — choose a new run name; destructive overwrite requires overwrite_output_dir=true and SFT_ALLOW_OVERWRITE_OUTPUT=1"
+        fi
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -391,13 +465,13 @@ fi
 echo ""
 echo "--- 10. Credentials ---"
 WANDB_MODE="$(cfg "experiment.wandb_mode")"
-WANDB_KEY="$(cfg "credentials.wandb_api_key")"
+WANDB_KEY="${WANDB_API_KEY:-$(cfg "credentials.wandb_api_key")}"
 case "$WANDB_MODE" in
     online)
         if [[ -n "$WANDB_KEY" ]]; then
-            ok "credentials.wandb_api_key is set for online WandB logging"
+            ok "WANDB_API_KEY is available for online WandB logging"
         else
-            fail "credentials.wandb_api_key is empty — required when experiment.wandb_mode=online"
+            fail "WANDB_API_KEY is empty — required when experiment.wandb_mode=online"
         fi
         ;;
     offline)

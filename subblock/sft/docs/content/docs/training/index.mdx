@@ -8,13 +8,13 @@ Training is driven entirely by `config.yaml`. The pipeline has three steps, run 
 ## The pipeline
 
 ```text
-STEP 0  Data conversion        raw trajectories → IM JSONL → LF JSON
-STEP 1  Dataset registration   LF JSON → dataset_info.json
+STEP 0  Obtain LF data         convert Harbor data / download exact HF file / use ready-made source
+STEP 1  Dataset registration   selected source → dataset_info.json
 STEP 2  Train                  generate YAML → python -m llamafactory.cli train
 ```
 
-- **STEP 0** converts the source `job_dir` for the configured scaffold into LF data under `artifacts/data/lf_data/`. See [Data Pipeline](/docs/data-pipeline).
-- **STEP 1** registers the LF file in LLaMA-Factory's `dataset_info.json` under the dataset key derived from `conversion.data_name`.
+- **STEP 0** obtains LF data according to `source.type`: convert a Harbor `job_dir`, download one configured Hub file, defer a whole Hub dataset config to train time, or use a local file. See [Data Pipeline](/docs/data-pipeline).
+- **STEP 1** registers the selected source in LLaMA-Factory's `dataset_info.json` under the key derived from `conversion.data_name`.
 - **STEP 2** generates the LLaMA-Factory training YAML from `runtime_info.input.training` and launches it through torchrun.
 
 ## Launch
@@ -49,5 +49,5 @@ The executed LLaMA-Factory YAML is **generated at runtime** from `config.yaml`, 
 
 ## Data-only and cleanup
 
-- `scripts/dataprep.sh` — run STEP 0 only, to prepare and inspect data without training.
+- `scripts/dataprep.sh` — run Harbor conversion only, to prepare and inspect converted data without training.
 - `scripts/clean.sh` — remove script-local `__pycache__`. Artifact deletion requires `--artifacts --yes`; repo-cache cleanup requires `--repo-cache --yes`.

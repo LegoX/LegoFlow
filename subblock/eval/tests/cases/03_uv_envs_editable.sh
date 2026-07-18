@@ -19,8 +19,12 @@ print("" if cur is None else cur)
 PY
 }
 
-HARBOR_UV="$BLOCK_DIR/$(cfg meta_info.environment.harbor_uv)"
-LITELLM_UV="$BLOCK_DIR/$(cfg meta_info.environment.litellm_uv)"
+abspath() {
+  if [[ "$1" = /* ]]; then printf '%s\n' "$1"; else printf '%s\n' "$BLOCK_DIR/$1"; fi
+}
+
+HARBOR_UV="$(abspath "$(cfg meta_info.environment.harbor_uv)")"
+LITELLM_UV="$(abspath "$(cfg meta_info.environment.litellm_uv)")"
 LITELLM_PIN="$(cfg meta_info.environment.litellm.litellm_version)"
 [[ -n "$LITELLM_PIN" ]] || LITELLM_PIN="1.83.14"
 
@@ -31,7 +35,15 @@ HARBOR_PY="$HARBOR_UV/bin/python"
 if [[ ! -x "$HARBOR_PY" ]]; then
   echo "FAIL: harbor: python missing at $HARBOR_PY"; fail=$((fail+1))
 else
-  HARBOR_DIR="$BLOCK_DIR/$(cfg meta_info.repositories.harbor.path)"
+  HARBOR_DIR="$(abspath "$(cfg meta_info.repositories.harbor.path)")"
+  if ! "$HARBOR_PY" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1; then
+    echo "FAIL: harbor: Python must be >=3.12"; fail=$((fail+1))
+  fi
+  for pkg in litellm datasets; do
+    if ! "$HARBOR_PY" -c "import $pkg" >/dev/null 2>&1; then
+      echo "FAIL: harbor: package not importable: $pkg"; fail=$((fail+1))
+    fi
+  done
   (
     cd "$HARBOR_DIR"
     HARBOR_EDITABLE_ROOT="$HARBOR_DIR" \
@@ -45,6 +57,11 @@ else
     import_error:*) echo "FAIL: harbor: ${out#import_error:}"; fail=$((fail+1)) ;;
     *)              echo "FAIL: harbor: editable check inconclusive: $out"; fail=$((fail+1)) ;;
   esac
+  if [[ ! -x "$HARBOR_UV/bin/harbor" ]]; then
+    echo "FAIL: harbor CLI missing at $HARBOR_UV/bin/harbor"; fail=$((fail+1))
+  elif ! "$HARBOR_UV/bin/harbor" --help >/dev/null 2>&1; then
+    echo "FAIL: harbor CLI --help failed"; fail=$((fail+1))
+  fi
 fi
 
 # --- litellm venv: CLI present AND installed version == the pin -------------

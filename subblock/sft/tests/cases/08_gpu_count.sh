@@ -28,7 +28,12 @@ if ! command -v nvidia-smi >/dev/null 2>&1; then
   exit 77
 fi
 
-HAVE="$(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null | wc -l | tr -d ' ')"
+if ! GPU_ROWS="$(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null)" \
+    || [[ -z "$GPU_ROWS" ]]; then
+  echo "SKIP: nvidia-smi is installed but no GPU/driver is available on this cases runner"
+  exit 77
+fi
+HAVE="$(wc -l <<<"$GPU_ROWS" | tr -d ' ')"
 if [[ "${HAVE:-0}" -ge "$N_GPUS" ]]; then
   echo "INFO: nvidia-smi reports $HAVE GPU(s); config needs $N_GPUS"
   echo "PASS: enough GPUs visible"

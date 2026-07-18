@@ -9,7 +9,7 @@ PROJECT_NAME="${PROJECT_NAME:-harbor-dashboard}"
 BRANCH_NAME="${BRANCH_NAME:-harbor-webui}"
 LOOP_SECONDS="${LOOP_SECONDS:-3600}"
 PORT="${PORT:-8093}"
-HARBOR_JOBS_DIR="${HARBOR_JOBS_DIR:-$SCRIPT_DIR/../jobs}"
+HARBOR_JOBS_DIR="${HARBOR_JOBS_DIR:-$SCRIPT_DIR/../artifacts/jobs}"
 PUBLIC_DIR="${PUBLIC_DIR:-$SCRIPT_DIR/site}"
 EXPORT_EXTRA_ARGS="${EXPORT_EXTRA_ARGS:-}"
 TRAJECTORY_TARGET="${TRAJECTORY_TARGET:-chunks}"
@@ -45,6 +45,28 @@ if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
   log "missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID in $ENV_FILE"
   exit 1
 fi
+case "$TRAJECTORY_TARGET" in
+  none)
+    if [[ -z "${R2_BUCKET_NAME:-}" ]]; then
+      log "TRAJECTORY_TARGET=none requires R2_BUCKET_NAME"
+      exit 1
+    fi
+    ;;
+  chunks|pages)
+    ;;
+  *)
+    log "unsupported TRAJECTORY_TARGET=$TRAJECTORY_TARGET (expected none, chunks, or pages)"
+    exit 1
+    ;;
+esac
+case "$TRIAL_DETAIL_TARGET" in
+  files|chunks)
+    ;;
+  *)
+    log "unsupported TRIAL_DETAIL_TARGET=$TRIAL_DETAIL_TARGET (expected files or chunks)"
+    exit 1
+    ;;
+esac
 export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID R2_BUCKET_NAME R2_UPLOAD_WORKERS TRAJECTORY_TARGET TRAJECTORY_CHUNK_MB TRIAL_DETAIL_TARGET TRIAL_DETAIL_CHUNK_MB
 
 mkdir -p "$PUBLIC_DIR"
@@ -90,7 +112,7 @@ while true; do
     continue
   fi
 
-  if [[ "$TRAJECTORY_TARGET" == "none" && -n "${R2_BUCKET_NAME:-}" ]]; then
+  if [[ "$TRAJECTORY_TARGET" == "none" ]]; then
     log "ensuring R2 bucket $R2_BUCKET_NAME exists"
     npx --yes wrangler r2 bucket create "$R2_BUCKET_NAME" >/tmp/harbor_webui_r2_bucket_create.log 2>&1 || true
     log "uploading trajectories to R2 bucket $R2_BUCKET_NAME"
@@ -106,8 +128,8 @@ while true; do
     fi
   elif [[ "$TRAJECTORY_TARGET" == "chunks" ]]; then
     log "using static trajectory chunks; R2 upload skipped"
-  else
-    log "R2_BUCKET_NAME is empty; public R2 trajectory requests will return 500/404"
+  elif [[ "$TRAJECTORY_TARGET" == "pages" ]]; then
+    log "trajectories are embedded in the Pages export; R2 upload skipped"
   fi
 
   if [[ "$PROJECT_READY" -eq 0 ]]; then

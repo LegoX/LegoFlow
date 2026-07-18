@@ -2,6 +2,11 @@
 # CI test 04: trajgen LLM endpoint reachable; configured model in /models catalog.
 # (Light probe — /trajgen:check intentionally avoids chat.completions because
 # the trajgen proxy stack is what consumes tokens, not preflight.)
+#
+# The request uses the configured API key. Cloudflare 5xx/52x responses are
+# retried briefly because edge/origin transitions can be transient, but a
+# persistent Cloudflare edge failure is SKIPped so unrelated changes are not
+# blocked by shared gateway health. Non-Cloudflare and auth failures still FAIL.
 
 set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -29,36 +34,32 @@ PY
 [[ -n "$MODEL_API_BASE_URL" && -n "$MODEL_API_MODEL" ]] || { echo "FAIL: api_base_url or model not configured"; exit 1; }
 
 RESULT="$(MODEL_API_BASE_URL="$MODEL_API_BASE_URL" MODEL_API_KEY="$MODEL_API_KEY" MODEL_API_MODEL="$MODEL_API_MODEL" python3 - <<'PY'
-import json, os, sys, urllib.request, urllib.error
+import json, os, sys, time, urllib.request, urllib.error
 base = os.environ["MODEL_API_BASE_URL"].rstrip("/")
 key  = os.environ.get("MODEL_API_KEY", "")
 want = os.environ["MODEL_API_MODEL"].split("/", 1)[-1]
-req = urllib.request.Request(
-    f"{base}/models",
-    headers={"Authorization": f"Bearer {key}", "User-Agent": "curl/8.5.0"},
-)
-try:
-    with urllib.request.urlopen(req, timeout=15) as r:
-        body = json.loads(r.read().decode("utf-8", "replace"))
-except urllib.error.HTTPError as e:
-    print(f"HTTP:{e.code}"); sys.exit(0)
-except Exception as e:
-    print(f"NET:{type(e).__name__}:{e}"); sys.exit(0)
+transient_cf = {502, 503, 521, 522, 523, 525, 530}
+for attempt in range(3):
+    req = urllib.request.Request(
+        f"{base}/models",
+        headers={"Authorization": f"Bearer {key}", "User-Agent": "curl/8.5.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            body = json.loads(r.read().decode("utf-8", "replace"))
+        break
+    except urllib.error.HTTPError as e:
+        server = (e.headers.get("server") or "").lower() if e.headers else ""
+        if e.code in transient_cf and "cloudflare" in server and attempt < 2:
+            time.sleep(attempt + 1)
+            continue
+        print(f"HTTP:{e.code}:{server}"); sys.exit(0)
+    except Exception as e:
+        print(f"NET:{type(e).__name__}:{e}"); sys.exit(0)
 ids = [m.get("id") for m in (body.get("data") or [])]
-# vLLM without --served-model-name publishes the checkpoint PATH as the id
-# (e.g. /data/models/Qwen3.6-35B-A3B) yet accepts the basename in requests —
-# match on either the full id or its basename.
-names = {i for i in ids if i} | {i.rsplit("/", 1)[-1] for i in ids if i}
-print(f"OK:{len(ids)}:{int(want in names)}")
+print(f"OK:{len(ids)}:{int(want in ids)}")
 PY
 )"
-
-# Cloudflare-gating / proxy-mediated codes that are not trajgen misconfigurations.
-# The shared endpoint (llm.jierungogogo.com) can return 401/403/52x to a direct
-# /models probe even though real traffic is proxy-mediated and works — so these
-# downgrade to SKIP, matching subblock/eval/tests/cases/04_llm_endpoint.sh and the
-# root preflight (see memory project-eval-llm-endpoint / project-swegen-llm-endpoint).
-is_cf_code() { case "$1" in 401|403|429|502|503|521|522|523|525|530) return 0 ;; *) return 1 ;; esac; }
 
 case "$RESULT" in
   OK:*)
@@ -71,13 +72,18 @@ case "$RESULT" in
     fi
     ;;
   HTTP:*)
-    code="${RESULT#HTTP:}"
-    if is_cf_code "$code"; then
-      echo "SKIP: LLM endpoint returned $code — Cloudflare-gating/proxy-mediated artifact, not a misconfig (see memory project-swegen-llm-endpoint)"
-      exit 77
-    fi
-    echo "FAIL: LLM endpoint returned HTTP $code"; exit 1 ;;
+    response="${RESULT#HTTP:}"
+    code="${response%%:*}"
+    server="${response#*:}"
+    case "$code" in
+      502|503|521|522|523|525|530)
+        if [[ "$server" == *cloudflare* ]]; then
+          echo "SKIP: Cloudflare gateway still returned $code after retries"
+          exit 77
+        fi
+        ;;
+    esac
+    echo "FAIL: LLM endpoint returned $code"; exit 1 ;;
   NET:*)
-    echo "SKIP: LLM endpoint not directly reachable from this host (${RESULT#NET:}); real reachability is proxy-mediated and covered by the smoke"
-    exit 77 ;;
+    echo "FAIL: LLM endpoint unreachable: ${RESULT#NET:}"; exit 1 ;;
 esac

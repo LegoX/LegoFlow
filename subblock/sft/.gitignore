@@ -1,7 +1,10 @@
 # Runtime data (large files, generated per-run)
+artifacts/archives/
 artifacts/data/im_data/
 artifacts/data/lf_data/
 artifacts/data/raw/
+# Exact Hugging Face files downloaded by scripts/train.sh
+artifacts/data/hf_data/
 # Staged smoke dataset snapshot (88 MB; produced by tests/smoke/prepare_smoke_data.sh,
 # canonical copy lives in $SHARED_RUNTIME/sft and is symlinked in for CI)
 artifacts/data/examples/
@@ -22,7 +25,7 @@ artifacts/wandb/
 # Training logs
 artifacts/logs/
 
-# Generated training YAML (regenerated from inputs/index.yaml each run)
+# Generated training YAML (regenerated from config.yaml each run)
 artifacts/training_config/*.yaml
 
 # Downloaded wheels (large binaries; reinstalled by scripts/install_env.sh)

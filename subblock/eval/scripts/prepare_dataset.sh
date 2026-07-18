@@ -8,7 +8,7 @@
 #   2. TAGGER   — repos/harbor/scripts/task_analysis/tag_task_metadata.py rewrites
 #                 each task.toml's tags into the 4-part schema the dashboard reads:
 #                 [language, area, topic, bug_class] + difficulty. Needs an
-#                 OpenAI-compatible LLM (defaults to the block's llm_api endpoint).
+#                 OpenAI-compatible LLM (job_analysis.tag_llm, then llm_api).
 #
 # Usage:
 #   bash scripts/prepare_dataset.sh <dataset_name>     # e.g. swebench-verified
@@ -19,20 +19,47 @@
 #   PREP_FORCE=1            re-generate even if the dataset dir is already populated
 #   PREP_SKIP_TAGGING=1     generate gold only; skip the LLM tagging step
 #   PREP_TAG_JOBS=N         tagger concurrency (default 8)
-#   PREP_TAG_MODEL=...      override tagger model (default: llm_api.model sans openai/)
-#   PREP_TAG_API_KEY=...    override tagger api key (default: llm_api.api_key)
-#   PREP_TAG_BASE_URL=...   override tagger base url (default: llm_api.api_base_url)
+#   PREP_TAG_MODEL=...      override model (default: job_analysis.tag_llm, then llm_api)
+#   PREP_TAG_API_KEY=...    override key (default: job_analysis.tag_llm, then llm_api)
+#   PREP_TAG_BASE_URL=...   override URL (default: job_analysis.tag_llm, then llm_api)
+#   PREP_TAG_RETRIES=N      retry each failed tag call N times (default 2)
+#   PREP_TAG_RETRY_DELAY_SEC=N  base retry backoff in seconds (default 2)
 #
 # Harbor is read-only: we only `cd` into adapter / script dirs for their relative
 # imports; all output lands under the writable artifacts/datasets/.
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
-HARBOR_DIR="$BLOCK_DIR/repos/harbor"
+CONFIG="${EVAL_CONFIG:-$BLOCK_DIR/config.yaml}"
 DATASETS_ROOT="$BLOCK_DIR/artifacts/datasets"
 
-PY="$BLOCK_DIR/artifacts/env/harbor-uv/bin/python"
+cfg() {
+  python3 - "$CONFIG" "$1" <<'PY'
+import sys
+import yaml
+
+data = yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}
+value = data
+for part in sys.argv[2].split("."):
+    value = value.get(part) if isinstance(value, dict) else None
+print("" if value is None else value)
+PY
+}
+
+abspath() {
+  if [[ "$1" = /* ]]; then
+    printf '%s\n' "$1"
+  else
+    printf '%s\n' "$BLOCK_DIR/$1"
+  fi
+}
+
+HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
+[[ -n "$HARBOR_PATH_RAW" ]] || HARBOR_PATH_RAW="repos/harbor"
+HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
+HARBOR_UV_RAW="$(cfg meta_info.environment.harbor_uv)"
+[[ -n "$HARBOR_UV_RAW" ]] || HARBOR_UV_RAW="artifacts/env/harbor-uv"
+PY="$(abspath "$HARBOR_UV_RAW")/bin/python"
 [[ -x "$PY" ]] || PY="python3"
 
 DATASET_NAME="${1:-}"
@@ -135,6 +162,8 @@ TAG_MODEL="${PREP_TAG_MODEL:-$LA_MODEL}"
 TAG_KEY="${PREP_TAG_API_KEY:-$LA_KEY}"
 TAG_URL="${PREP_TAG_BASE_URL:-$LA_URL}"
 TAG_JOBS="${PREP_TAG_JOBS:-8}"
+TAG_RETRIES="${PREP_TAG_RETRIES:-2}"
+TAG_RETRY_DELAY_SEC="${PREP_TAG_RETRY_DELAY_SEC:-2}"
 
 if [[ -z "$TAG_MODEL" || -z "$TAG_URL" ]]; then
   echo "Step 2/2 tagger: SKIP — no LLM endpoint (set llm_api in config.yaml or PREP_TAG_* env)."
@@ -144,13 +173,14 @@ if [[ -z "$TAG_MODEL" || -z "$TAG_URL" ]]; then
   exit 0
 fi
 
-echo "Step 2/2 tagger: completing task.toml tags via $TAG_URL (model=$TAG_MODEL, jobs=$TAG_JOBS) ..."
+echo "Step 2/2 tagger: completing task.toml tags via $TAG_URL (model=$TAG_MODEL, jobs=$TAG_JOBS, retries=$TAG_RETRIES) ..."
 # Best-effort: the gold (step 1) is the critical output that unblocks analysis.
 # Tag completion only enriches the dashboard's Language/Area breakdown and depends
 # on the model returning clean JSON, so a tagging failure must not lose the gold.
 TAG_RC=0
 TAG_ARGS=(--datasets-root "$DATASETS_ROOT" --dataset "$GOLD_BASE"
-          --model "$TAG_MODEL" --base-url "$TAG_URL" --jobs "$TAG_JOBS")
+          --model "$TAG_MODEL" --base-url "$TAG_URL" --jobs "$TAG_JOBS"
+          --retries "$TAG_RETRIES" --retry-delay-sec "$TAG_RETRY_DELAY_SEC")
 # Only pass --api-key if we actually have one; passing an empty/sentinel key
 # would send a bogus credential rather than letting the tagger run keyless.
 [[ -n "$TAG_KEY" ]] && TAG_ARGS+=(--api-key "$TAG_KEY")

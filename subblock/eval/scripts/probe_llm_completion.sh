@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# Live launch-gate probe for /eval:check: send a real 1-token chat completion
+# Live launch-gate probe for /eval:check: send a minimal real chat completion
 # to the configured upstream and classify the result by ORIGIN HEALTH.
 #
 # Why a completion and not GET /models: LiteLLM (and many gateways) answer
 # /models from local config without contacting the model backend, so /models
 # can return 200 while every completion 502s. A 100/100-error run on
-# 2026-06-14 was caused by trusting a /models 200 over a dead origin. See
-# memory project-eval-llm-endpoint.
+# 2026-06-14 was caused by trusting a /models 200 over a dead origin.
 #
 # Usage:
 #   bash scripts/probe_llm_completion.sh                 # read config.yaml
 #   bash scripts/probe_llm_completion.sh <base_url> <model> [api_key]
 #
-# Exit codes: 0 = PASS (origin served a completion; safe to launch)
-#             1 = FAIL (origin down: 5xx / connection / timeout — do NOT launch)
-#            77 = WARN (ambiguous: 401/403 auth-or-gating, or 400/404 model name)
+# Exit codes: 0 = PASS (origin served a valid completion; safe to launch)
+#             1 = FAIL (5xx/network, malformed 2xx, or local auth failure)
+#            77 = WARN (configured gateway 401/403 or app-level 400/404/422)
+# Set EVAL_GATEWAY_HOST_SUFFIX for gateways whose edge can mask origin auth.
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG="${EVAL_CONFIG:-$BLOCK_DIR/config.yaml}"
 
 cfg() { python3 - "$CONFIG" "$1" <<'PY'
 import sys, yaml
@@ -58,7 +58,17 @@ req = urllib.request.Request(
 try:
     with urllib.request.urlopen(req, timeout=25) as r:
         server = (r.headers.get("server") or "").lower()
-        print(f"HTTP:{r.status}:{server}")
+        body = r.read()
+        try:
+            response = json.loads(body)
+        except Exception:
+            print(f"BAD2XX:{r.status}:invalid_json:{server}")
+        else:
+            choices = response.get("choices") if isinstance(response, dict) else None
+            if isinstance(choices, list) and choices:
+                print(f"HTTP:{r.status}:{server}")
+            else:
+                print(f"BAD2XX:{r.status}:missing_choices:{server}")
 except urllib.error.HTTPError as e:
     server = (e.headers.get("server") or "").lower() if e.headers else ""
     print(f"HTTP:{e.code}:{server}")
@@ -66,6 +76,13 @@ except Exception as e:
     print(f"NET:{type(e).__name__}:{e}")
 PY
 )"
+
+is_configured_gateway() {
+  local host="$1"
+  local suffix="${EVAL_GATEWAY_HOST_SUFFIX:-}"
+  suffix="${suffix#.}"
+  [[ -n "$suffix" ]] && [[ "$host" == "$suffix" || "$host" == *."$suffix" ]]
+}
 
 case "$RESULT" in
   HTTP:200:*)
@@ -81,11 +98,24 @@ case "$RESULT" in
   NET:*)
     echo "FAIL: upstream unreachable (${RESULT#NET:}) — connection/timeout; do NOT launch [$BASE_URL]"
     exit 1 ;;
+  BAD2XX:*)
+    echo "FAIL: upstream returned a 2xx response without a valid chat-completion choices array (${RESULT#BAD2XX:}) — do NOT launch [$BASE_URL]"
+    exit 1 ;;
   HTTP:401:*|HTTP:403:*)
     code="$(cut -d: -f2 <<<"$RESULT")"
-    echo "WARN: upstream returned HTTP $code — auth/CF-gating ambiguity (dummy-key may be the real prod key)."
-    echo "      Re-probe from a non-sandboxed shell on the node before trusting; this is NOT origin-down (502)."
-    exit 77 ;;
+    host="$(BASE_URL="$BASE_URL" python3 - <<'PY'
+import os
+from urllib.parse import urlparse
+print((urlparse(os.environ["BASE_URL"]).hostname or "").lower())
+PY
+)"
+    if is_configured_gateway "$host"; then
+      echo "WARN: upstream returned HTTP $code — auth/gateway ambiguity on $host."
+      echo "      Re-probe from a non-sandboxed shell on the node before trusting; this is NOT origin-down (502)."
+      exit 77
+    fi
+    echo "FAIL: upstream returned HTTP $code from $host — credentials/API key are invalid; do NOT launch."
+    exit 1 ;;
   HTTP:400:*|HTTP:404:*|HTTP:422:*)
     code="$(cut -d: -f2 <<<"$RESULT")"
     echo "WARN: upstream app responded HTTP $code (origin is UP) but rejected the probe — likely the model name."

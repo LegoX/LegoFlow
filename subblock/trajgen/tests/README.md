@@ -129,7 +129,11 @@ import time.
 `GET ${api_base_url}/models` with `Authorization: Bearer ${api_key}` and
 `User-Agent: curl/8.5.0` (dodges the CF UA filter that 403s
 `Python-urllib/*`). Asserts 200 and that the configured model — stripped of
-any `openai/` litellm provider prefix — appears in `data[].id`.
+any `openai/` litellm provider prefix — appears in `data[].id`. Cloudflare
+`502/503/52x/530` responses are retried up to three times to absorb brief edge
+transitions. A persistent response identified by the `Server: cloudflare`
+header SKIPs this external-health check; the same status from another server,
+or an authentication error, still FAILs.
 </details>
 
 <details>

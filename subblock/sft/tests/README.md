@@ -42,7 +42,7 @@ on a CPU-only cases runner, while still catching real config drift.
 
 | # | Test | What it does | Time |
 |---|---|---|---|
-| 10 | train demo | runs the real `train.sh` pipeline at the **production shape** — the 512-sample dataset at `cutoff_len=131072` on `n_gpus_per_node` GPUs with DeepSpeed ZeRO-3 — bounded to `SFT_SMOKE_MAX_STEPS` (default 4) optimizer steps with `save_strategy=no` (no checkpoint) | ~25-40 min |
+| 10 | train demo | runs the real `train.sh` pipeline with `Qwen/Qwen3.5-35B-A3B-Base`, the production 512-sample dataset, `qwen3_5` template, `cutoff_len=131072`, and DeepSpeed ZeRO-3 — bounded to `SFT_SMOKE_MAX_STEPS` (default 4) with `save_strategy=no` | ~25-45 min |
 
 `smoke/10_train_demo.sh` is the end-to-end training smoke. It exercises dataset
 registration → train-YAML generation → `torchrun llamafactory` launch → the
@@ -52,8 +52,9 @@ throwaway `_smoke_*` dir, so the real `config.yaml` is never touched, and the
 trap removes the smoke model dir + generated YAML + temp config on exit.
 
 It feeds on a **staged 512-sample snapshot** (`source.type=local_lf`,
-`artifacts/data/examples/lf_512.json`) rather than a live HF pull. Produce /
-refresh that snapshot with:
+`artifacts/data/examples/lf_512.json`) rather than a live HF pull. The snapshot
+helper reads the canonical production `hf_hub_url` + `hf_file_name`, so changing
+the selected Hub file requires refreshing the snapshot:
 
 ```bash
 bash subblock/sft/tests/smoke/prepare_smoke_data.sh   # → $SHARED_RUNTIME/sft/.../lf_512.json
@@ -67,7 +68,8 @@ isn't present: uv env, base model, deepspeed config, the staged dataset, or
 foreign-held GPUs).
 
 Tunables: `SFT_SMOKE_MAX_STEPS` (default 4), `SFT_SMOKE_LF_PATH` (override the
-dataset), `SFT_SMOKE_BUDGET` (timeout seconds, default 2700).
+dataset), `SFT_SMOKE_MODEL_PATH` (optional staged local copy of the same
+Qwen3.5-35B model), and `SFT_SMOKE_BUDGET` (timeout seconds, default 2700).
 
 ---
 
@@ -84,6 +86,7 @@ dataset), `SFT_SMOKE_BUDGET` (timeout seconds, default 2700).
 | 06: SKIPped | the base model isn't staged on the cases runner | not a failure; a real run needs it present |
 | 07: `deepspeed config missing` | `artifacts/training_config/deepspeed/*.json` got deleted | `git restore subblock/sft/artifacts/training_config/deepspeed/` |
 | 08: SKIPped | runner has no `nvidia-smi` | not a failure on a CPU cases runner |
+| 09: smoke contract missing | workflow/runner drifted away from guarded synchronous training | restore `.github/scripts/sft_smoke_run.sh` integration |
 
 ---
 
@@ -99,6 +102,7 @@ cases/                cheap deterministic checks
   06_model_path.sh
   07_deepspeed_config.sh
   08_gpu_count.sh
+  09_ci_smoke_contract.sh
 smoke/                gated (--with-smoke): real GPU training
   10_train_demo.sh
   prepare_smoke_data.sh   helper: snapshot the 512-sample dataset (not a test)
@@ -117,21 +121,21 @@ Skip this section unless you're debugging a specific case or about to change one
 Parses `config.yaml` with PyYAML and asserts every key the runtime contract
 depends on is present and non-empty: `meta_info.name == "sft"`,
 `meta_info.environment.sft_uv`, both `meta_info.repositories.<repo>.{path,commit}`,
-`runtime_info.input.source.{scaffold,job_dir}`,
+source-type-specific fields for `harbor_job`, `hf_lf`, or `local_lf`,
 `runtime_info.input.conversion.{data_name,exclude_repos_file}`,
 `runtime_info.input.model.model_name_or_path`,
 `runtime_info.input.training.{stage,finetuning_type,deepspeed,template,cutoff_len,output_dir}`,
 `runtime_info.input.infrastructure.n_gpus_per_node`,
 `runtime_info.input.experiment.wandb_mode`. Also range-checks `scaffold`,
-`wandb_mode`, the online-WandB key requirement, and that `n_gpus_per_node` is a
+`wandb_mode`, the online `WANDB_API_KEY` requirement, and that `n_gpus_per_node` is a
 positive integer. Pure-Python, no I/O.
 </details>
 
 <details>
 <summary><code>cases/02_repo_pins.sh</code> — submodule pins</summary>
 
-For `llama_factory` and `swe_data_process`: asserts `repos/<path>/.git` exists
-and, when `commit` is non-null, `git rev-parse HEAD` matches the pin. Also
+For `llama_factory` and `swe_data_process`: asserts production config, smoke
+config, superproject gitlink, and checked-out/shared-runtime HEAD all match. Also
 asserts `swe_data_process` is a src-layout package (`pyproject.toml` +
 `src/swe_data_process/`).
 </details>
@@ -139,7 +143,7 @@ asserts `swe_data_process` is a src-layout package (`pyproject.toml` +
 <details>
 <summary><code>cases/03_uv_env_editable.sh</code> — training stack imports</summary>
 
-Resolves `meta_info.environment.sft_uv`, then imports `torch`,
+Resolves `meta_info.environment.sft_uv`, checks pinned package versions, then imports `torch`,
 `swe_data_process`, `llamafactory` inside that env's python (with
 `PYTHONPATH=repos/swe_data_process/src`, as `train.sh` runs it). Reports
 `torch.cuda.is_available()` but does not require it.
@@ -157,16 +161,16 @@ STEP 0 of a run.
 <details>
 <summary><code>cases/05_source_job_dir.sh</code> — trajectory source present</summary>
 
-Resolves `source.job_dir` and asserts it contains ≥1
-`*/agent/litellm-trajectory.jsonl`. SKIPs (77) when the dir is absent — the
-trajgen output may live on another node.
+For `source.type=harbor_job`, resolves `source.job_dir` and asserts it contains
+≥1 `*/agent/litellm-trajectory.jsonl`. Ready-made HF/local sources SKIP this
+trajectory-only check.
 </details>
 
 <details>
 <summary><code>cases/06_model_path.sh</code> — base model present</summary>
 
-Asserts `model.model_name_or_path` exists and contains `config.json`. SKIPs
-when absent (the base model is a large external asset).
+For a local model path, asserts it exists and contains `config.json`. A valid
+Hugging Face Hub model ID SKIPs the local-filesystem check.
 </details>
 
 <details>

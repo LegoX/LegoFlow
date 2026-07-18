@@ -2,11 +2,10 @@
 # Materialize the 512-sample SFT smoke dataset as a local LF/ShareGPT json.
 #
 # The production config (runtime_info.input.source) pulls the same 512 samples
-# live from the HuggingFace Hub (source.type=hf_lf,
-# hf_hub_url=SWE-Lego/samples_for_llama_factory_sft). CI runners shouldn't
-# depend on a live, possibly-gated HF pull mid-job, so we snapshot those 512
-# rows ONCE into a plain LF json that the training smoke (tests/smoke/
-# 10_train_demo.sh) consumes via source.type=local_lf.
+# live from one exact file on the HuggingFace Hub (source.type=hf_lf with
+# hf_file_name set). CI runners shouldn't depend on a live, possibly-gated HF
+# pull mid-job, so we snapshot those 512 rows ONCE into a plain LF json that the
+# training smoke (tests/smoke/10_train_demo.sh) consumes via source.type=local_lf.
 #
 # Output is a json array of {"messages": [...]} objects — exactly the
 # `formatting: sharegpt, columns.messages: messages` shape train.sh registers.
@@ -38,44 +37,48 @@ print("" if cur is None else cur)
 PY
 }
 
-# Shared-runtime canonical location (mirrors the repos/ + env layout CI links).
-# CI (.github/workflows/ci.yml) reads from /gpufs/haoli/cicd/shared/runtime; the
-# GPU dev pod mounts the SAME storage at /mnt/public/storage/haoli/... . Default
-# to whichever is mounted, preferring the CI path so a seed run on the GPU runner
-# lands exactly where `sft-smoke` looks (CANON="$SHARED_RUNTIME/sft"). Override
-# with the SHARED_RUNTIME env var or an explicit OUT arg.
-if [[ -z "${SHARED_RUNTIME:-}" ]]; then
-  if [[ -d /gpufs/haoli/cicd/shared/runtime ]]; then
-    SHARED_RUNTIME=/gpufs/haoli/cicd/shared/runtime
-  else
-    SHARED_RUNTIME=/mnt/public/storage/haoli/cicd/shared/runtime
-  fi
+# Default to this block's ignored artifacts tree. CI/runtime maintainers can
+# provide SHARED_RUNTIME or an explicit output path without checking a
+# machine-specific mount into the repository.
+if [[ -n "${SHARED_RUNTIME:-}" ]]; then
+  DEFAULT_OUT="$SHARED_RUNTIME/sft/artifacts/data/examples/lf_512.json"
+else
+  DEFAULT_OUT="$BLOCK_DIR/artifacts/data/examples/lf_512.json"
 fi
-DEFAULT_OUT="$SHARED_RUNTIME/sft/artifacts/data/examples/lf_512.json"
 OUT="${1:-$DEFAULT_OUT}"
 
 HF_URL="$(cfg runtime_info.input.source.hf_hub_url)"
+HF_FILE_NAME="$(cfg runtime_info.input.source.hf_file_name)"
 HF_SPLIT="$(cfg runtime_info.input.source.hf_split)"
 HF_SUBSET="$(cfg runtime_info.input.source.hf_subset)"   # dataset config name, if any
+HF_TOKEN_VAL="${HF_TOKEN:-$(cfg runtime_info.input.credentials.hf_token)}"
 [[ -n "$HF_SPLIT" ]] || HF_SPLIT="train"
 [[ -n "$HF_URL" ]] || { echo "ERROR: source.hf_hub_url empty in $CONFIG" >&2; exit 1; }
+if [[ -n "$HF_TOKEN_VAL" ]]; then
+  export HF_TOKEN="$HF_TOKEN_VAL"
+  export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN_VAL"
+fi
 
 SFT_UV="$BLOCK_DIR/$(cfg meta_info.environment.sft_uv 2>/dev/null || echo artifacts/env/lf)"
 PY_BIN="$SFT_UV/bin/python"
 [[ -x "$PY_BIN" ]] || PY_BIN="python3"
 
 mkdir -p "$(dirname "$OUT")"
-echo "INFO: snapshotting $HF_URL${HF_SUBSET:+ (subset=$HF_SUBSET)} [$HF_SPLIT] -> $OUT"
+echo "INFO: snapshotting $HF_URL${HF_FILE_NAME:+/$HF_FILE_NAME}${HF_SUBSET:+ (subset=$HF_SUBSET)} [$HF_SPLIT] -> $OUT"
 
-HF_URL="$HF_URL" HF_SPLIT="$HF_SPLIT" HF_SUBSET="$HF_SUBSET" OUT="$OUT" "$PY_BIN" - <<'PY'
+HF_URL="$HF_URL" HF_FILE_NAME="$HF_FILE_NAME" HF_SPLIT="$HF_SPLIT" HF_SUBSET="$HF_SUBSET" OUT="$OUT" "$PY_BIN" - <<'PY'
 import json, os
 from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 
 url, split, out = os.environ["HF_URL"], os.environ["HF_SPLIT"], os.environ["OUT"]
-# Honor source.hf_subset so the snapshot matches the production hf_lf source
-# (train.sh registers the hf_hub dataset with the same subset/config name).
-subset = os.environ.get("HF_SUBSET") or None
-ds = load_dataset(url, name=subset, split=split)
+filename = os.environ.get("HF_FILE_NAME")
+if filename:
+    path = hf_hub_download(repo_id=url, filename=filename, repo_type="dataset")
+    ds = load_dataset("json", data_files=path, split="train")
+else:
+    subset = os.environ.get("HF_SUBSET") or None
+    ds = load_dataset(url, name=subset, split=split)
 assert "messages" in ds.column_names, f"dataset has no 'messages' column: {ds.column_names}"
 rows = [{"messages": r} for r in ds["messages"]]
 tmp = out + ".tmp"

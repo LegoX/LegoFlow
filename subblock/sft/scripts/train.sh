@@ -81,11 +81,29 @@ SCAFFOLD="$(cfg "source.scaffold")"
 JOB_DIR_RAW="$(cfg "source.job_dir")"
 JOB_DIR="$(abspath "$JOB_DIR_RAW")"
 HF_HUB_URL="$(cfg "source.hf_hub_url")"
+HF_FILE_NAME="$(cfg "source.hf_file_name")"
 HF_SUBSET="$(cfg "source.hf_subset")"
 HF_SPLIT="$(cfg "source.hf_split")"
 LF_PATH_RAW="$(cfg "source.lf_path")"
 LF_PATH="$(abspath "$LF_PATH_RAW")"
-HF_TOKEN_VAL="$(cfg "credentials.hf_token")"
+HF_TOKEN_VAL="${HF_TOKEN:-$(cfg "credentials.hf_token")}"
+
+# Make a configured token available both to an exact-file download in STEP 0
+# and to LLaMA-Factory's Hub loader in STEP 2. An existing HF_TOKEN remains
+# untouched when credentials.hf_token is empty.
+if [[ "$SOURCE_TYPE" == "hf_lf" && -n "$HF_TOKEN_VAL" ]]; then
+    export HF_TOKEN="$HF_TOKEN_VAL"
+    export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN_VAL"
+fi
+
+# This pipeline registers text-only ShareGPT messages. Qwen3.5 is
+# multimodal-capable, so LLaMA-Factory would otherwise interpret literal
+# <image>/<video>/<audio> strings in code, HTML, or Markdown as media inputs.
+# Preserve explicit caller overrides while defaulting to collision-resistant
+# sentinels that cannot be mistaken for ordinary source text.
+export IMAGE_PLACEHOLDER="${IMAGE_PLACEHOLDER:-<|__lf_image_placeholder__|>}"
+export VIDEO_PLACEHOLDER="${VIDEO_PLACEHOLDER:-<|__lf_video_placeholder__|>}"
+export AUDIO_PLACEHOLDER="${AUDIO_PLACEHOLDER:-<|__lf_audio_placeholder__|>}"
 
 MAX_INSTANCES="$(cfg "conversion.max_instances")"
 EXCLUDE_REPOS_RAW="$(cfg "conversion.exclude_repos_file")"
@@ -129,7 +147,7 @@ ENABLE_LIGER="$(cfg "training.enable_liger_kernel")"
 USE_UNSLOTH_GC="$(cfg "training.use_unsloth_gc")"
 FLASH_ATTN="$(cfg "training.flash_attn")"
 RUN_NAME_RAW="$(cfg "experiment.run_name")"
-WANDB_API_KEY_VAL="$(cfg "credentials.wandb_api_key")"
+WANDB_API_KEY_VAL="${WANDB_API_KEY:-$(cfg "credentials.wandb_api_key")}"
 WANDB_MODE="$(cfg "experiment.wandb_mode")"
 WANDB_RUN_ID="$(cfg "experiment.wandb_run_id")"
 
@@ -157,7 +175,9 @@ case "$SOURCE_TYPE" in
         echo "    Scaffold:    $SCAFFOLD"
         echo "    LF output:   $LF_OUTPUT"
         ;;
-    hf_lf)      echo "    HF dataset:  $HF_HUB_URL${HF_SUBSET:+ (subset=$HF_SUBSET)}${HF_SPLIT:+ split=$HF_SPLIT}" ;;
+    hf_lf)
+        echo "    HF dataset:  $HF_HUB_URL${HF_FILE_NAME:+/$HF_FILE_NAME}${HF_SUBSET:+ (subset=$HF_SUBSET)}${HF_SPLIT:+ split=$HF_SPLIT}"
+        ;;
     local_lf)   echo "    LF path:     $LF_PATH" ;;
 esac
 echo "    Dataset:     $DATASET_NAME"
@@ -180,7 +200,8 @@ fi
 # ---------------------------------------------------------------------------
 # STEP 0: Obtain the LF dataset, depending on source.type.
 #   harbor_job — convert raw Harbor trajectories (IM -> LF), idempotent.
-#   hf_lf      — no conversion; the dataset is pulled from the HF Hub at train time.
+#   hf_lf      — load a Hub dataset, or download/register one exact file when
+#                source.hf_file_name is set.
 #   local_lf   — no conversion; an existing LF json is registered as-is.
 # Sets REGISTER_MODE (file|hf_hub) and REGISTER_VALUE for STEP 1.
 # ---------------------------------------------------------------------------
@@ -264,10 +285,35 @@ case "$SOURCE_TYPE" in
             echo "ERROR: source.hf_hub_url is empty — set runtime_info.input.source.hf_hub_url for source.type=hf_lf"
             exit 1
         fi
-        echo "=== Dataset will be loaded from the HuggingFace Hub at train time (no conversion) ==="
-        echo "    hf_hub_url: $HF_HUB_URL${HF_SUBSET:+  subset: $HF_SUBSET}${HF_SPLIT:+  split: $HF_SPLIT}"
-        REGISTER_MODE="hf_hub"
-        REGISTER_VALUE="$HF_HUB_URL"
+        if [[ -n "$HF_FILE_NAME" ]]; then
+            HF_DOWNLOAD_DIR="$BLOCK_DIR/artifacts/data/hf_data/${HF_HUB_URL//\//__}"
+            mkdir -p "$HF_DOWNLOAD_DIR"
+            echo "=== Downloading exact LF file from the HuggingFace Hub ==="
+            echo "    repo: $HF_HUB_URL"
+            echo "    file: $HF_FILE_NAME"
+            REGISTER_VALUE="$(
+                "$LF_PYTHON" - "$HF_HUB_URL" "$HF_FILE_NAME" "$HF_DOWNLOAD_DIR" <<'PYEOF'
+import sys
+from huggingface_hub import hf_hub_download
+
+repo_id, filename, local_dir = sys.argv[1:4]
+path = hf_hub_download(
+    repo_id=repo_id,
+    filename=filename,
+    repo_type="dataset",
+    local_dir=local_dir,
+)
+print(path)
+PYEOF
+            )"
+            echo "=== Exact LF file ready: $REGISTER_VALUE ==="
+            REGISTER_MODE="file"
+        else
+            echo "=== Dataset will be loaded from the HuggingFace Hub at train time (no conversion) ==="
+            echo "    hf_hub_url: $HF_HUB_URL${HF_SUBSET:+  subset: $HF_SUBSET}${HF_SPLIT:+  split: $HF_SPLIT}"
+            REGISTER_MODE="hf_hub"
+            REGISTER_VALUE="$HF_HUB_URL"
+        fi
         ;;
 
     *)
@@ -381,6 +427,18 @@ fi
 
 # Relative output dirs are stored under artifacts/model/; absolute paths are honored.
 ABS_OUTPUT_DIR="$(resolve_output_dir "$OUTPUT_DIR")"
+if [[ -d "$ABS_OUTPUT_DIR" && -n "$(find "$ABS_OUTPUT_DIR" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+    if [[ -n "$RESUME_FROM_CHECKPOINT" && "$RESUME_FROM_CHECKPOINT" != "null" ]]; then
+        echo "INFO: resuming existing output from checkpoint: $RESUME_FROM_CHECKPOINT"
+    elif [[ "$OVERWRITE_OUTPUT_DIR" == "true" && "${SFT_ALLOW_OVERWRITE_OUTPUT:-0}" == "1" ]]; then
+        echo "WARNING: destructive overwrite explicitly enabled for $ABS_OUTPUT_DIR" >&2
+    else
+        echo "ERROR: refusing to train into non-empty output_dir: $ABS_OUTPUT_DIR" >&2
+        echo "       Choose a new training.output_dir. To overwrite intentionally, set" >&2
+        echo "       overwrite_output_dir=true and SFT_ALLOW_OVERWRITE_OUTPUT=1." >&2
+        exit 1
+    fi
+fi
 
 # Generate the LLaMA-Factory train YAML from config.yaml runtime_info.input parameters
 TRAIN_YAML_NAME="$(basename "$OUTPUT_DIR").yaml"
@@ -425,7 +483,6 @@ data = {
     "dataset": dataset_name,
     "template": training["template"],
     "cutoff_len": training["cutoff_len"],
-    "rope_scaling": training["rope_scaling"],
     "max_samples": training["max_samples"],
     "overwrite_cache": True,
     "preprocessing_num_workers": training["preprocessing_num_workers"],
@@ -456,6 +513,8 @@ data = {
     "use_unsloth_gc": training["use_unsloth_gc"],
     "flash_attn": training["flash_attn"],
 }
+if training.get("rope_scaling"):
+    data["rope_scaling"] = training["rope_scaling"]
 
 # Optional hard cap on optimizer steps. Only emitted when training.max_steps is
 # present and > 0 (default config omits it, so full-length runs are unaffected).
@@ -492,7 +551,7 @@ export WANDB_DIR="$BLOCK_DIR/artifacts"
 case "$WANDB_MODE_CFG" in
     online)
         if [[ -z "$WANDB_API_KEY_VAL" ]]; then
-            echo "ERROR: credentials.wandb_api_key is required when experiment.wandb_mode=online"
+            echo "ERROR: WANDB_API_KEY is required when experiment.wandb_mode=online"
             exit 1
         fi
         export WANDB_API_KEY="$WANDB_API_KEY_VAL"
@@ -519,12 +578,6 @@ esac
 if [[ "$WANDB_MODE_CFG" != "disabled" && -n "$WANDB_RUN_ID" ]]; then
     export WANDB_RESUME=allow
     export WANDB_RUN_ID="$WANDB_RUN_ID"
-fi
-
-# HuggingFace token for pulling a private hf_lf dataset at train time.
-if [[ "$SOURCE_TYPE" == "hf_lf" && -n "$HF_TOKEN_VAL" ]]; then
-    export HF_TOKEN="$HF_TOKEN_VAL"
-    export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN_VAL"
 fi
 
 echo "=== Launching training ==="
