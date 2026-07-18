@@ -3,7 +3,7 @@ title: terminalgen
 description: Convert StackOverflow Q&A into verified terminal tasks
 ---
 
-`terminalgen` is a data-curation stage **parallel to curator**: where swegen builds verified SWE tasks from GitHub PRs, terminalgen builds verified **terminal** tasks from StackOverflow Q&A. It wraps the pinned, read-only [terminal-lego](https://github.com/SWE-Lego/terminal-lego) pipeline (scrape → generate → validate) and groups tasks into 13 domains. Its output feeds the same downstream chain (tracer → sft → eval).
+`terminalgen` is a data-curation stage **parallel to curator**: where curator builds verified SWE tasks from GitHub PRs, terminalgen builds verified **terminal** tasks from StackOverflow Q&A. It wraps the pinned, read-only [terminal-lego](https://github.com/SWE-Lego/terminal-lego) pipeline (scrape → generate → validate) and groups tasks into 13 domains. Its output feeds the same downstream chain (tracer → trainer → evaluator).
 
 Full docs: **[terminalgen-docs.pages.dev/docs](https://terminalgen-docs.pages.dev/docs)**
 
