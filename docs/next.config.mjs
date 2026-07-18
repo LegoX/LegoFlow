@@ -10,6 +10,9 @@ const config = {
   // optimization. The root redirect (/ -> /docs) is expressed in public/_redirects.
   output: 'export',
   images: { unoptimized: true },
+  experimental: {
+    externalDir: true,
+  },
 };
 
 export default withMDX(config);
