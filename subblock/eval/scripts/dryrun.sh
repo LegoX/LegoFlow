@@ -288,7 +288,13 @@ if [[ -n "$UV_PROJECT_ENVIRONMENT_RAW" ]]; then
   UV_PROJECT_ENVIRONMENT_ABS="$(abspath "$UV_PROJECT_ENVIRONMENT_RAW")"
   PYTHON_CHECK_COMMAND="$UV_PROJECT_ENVIRONMENT_ABS/bin/python"
   HARBOR_CHECK_COMMAND="$UV_PROJECT_ENVIRONMENT_ABS/bin/harbor"
-  INSTALL_COMMAND="UV_PROJECT_ENVIRONMENT=$UV_PROJECT_ENVIRONMENT_ABS uv sync --all-extras"
+  # Lean sync (NO --all-extras): --all-extras pulls harbor[tinker] -> tinker-cookbook
+  # -> torch + full CUDA (several GB), which eval never uses and which filled the
+  # runner disk in the first root-smoke. Plain `uv sync` gives the CPU-side harbor
+  # eval deps. (Job-analysis needs scipy, also bundled by the tinker extra; add it
+  # lightly with `uv pip install scipy` if analysis is required — analysis is
+  # non-fatal, so a lean env just skips it.)
+  INSTALL_COMMAND="UV_PROJECT_ENVIRONMENT=$UV_PROJECT_ENVIRONMENT_ABS uv sync"
   ok "uv project environment path = $UV_PROJECT_ENVIRONMENT_RAW"
   if [[ -n "${HARBOR_DIR:-}" && -e "$HARBOR_DIR/.git" ]]; then
     case "$UV_PROJECT_ENVIRONMENT_ABS" in

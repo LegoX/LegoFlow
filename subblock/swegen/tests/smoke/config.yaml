@@ -33,23 +33,22 @@ runtime_info:
   input:
     github_tokens: human
 
-    # Smoke uses az.gptplus5.com / deepseek-v4-flash (matches production
-    # swegen config). Outage history (kept for context — task #19 still
-    # tracks fixture rot, separate problem):
-    #   - 2026-06-19/20: v4-flash upstream returned HTTP 500 for ~hours
-    #     (13+ probes, distinct request ids). PR #48 temporarily swapped
-    #     to llm10/GLM-5-FP8 to unblock; reverted here once v4-flash
-    #     recovered (probed 3/3 HTTP 200 with real content on 2026-06-20).
-    #   - GLM-5-FP8, claude-opus-4-8, claude-sonnet-4-6 were all tested
-    #     as fallbacks: GLM produced 7 task dirs / 0 verified (LLM-quality
-    #     fix.patch wrong), opus returned empty content for swegen's
-    #     verdict-shaped prompt, sonnet returned empty for ~95% of PRs.
-    #     deepseek-v4-flash is the only model with historical real PASSes.
+    # Reliable OpenAI-only endpoint (llm12 / Qwen3.6-35B-A3B) reached through a
+    # local LiteLLM CC proxy — verified cleanly by 10_pr_demo.sh. The smoke
+    # runner (.github/scripts/smoke_run.sh) starts the proxy on cc_proxy_port.
+    # History (all in NATIVE-anthropic mode, which is why native was abandoned):
+    # az.gptplus5/deepseek-v4-flash had real PASSes but was flaky AND needed a
+    # committed real key; GLM-5-FP8 gave 0 verified, opus/sonnet returned empty
+    # for swegen's verdict-shaped prompt. openai_proxy + Qwen sidesteps all of
+    # it — no real key (the llm endpoint takes the dummy-cf CF token).
     llm_api:
-      api_key: sk-Rz6InDxYzznd3uCXk3ectMXoLlzjkItSTLl3L7jdELFuHKrY
-      api_base_url: https://az.gptplus5.com/v1
-      pr_model: deepseek-v4-flash
-      task_model: deepseek-v4-flash
+      api_key: dummy-cf
+      api_base_url: https://llm.jierungogogo.com/v1
+      pr_model: Qwen3.6-35B-A3B
+      task_model: claude-sonnet-4-6
+      cc_provider_mode: openai_proxy
+      anthropic_base_url: http://127.0.0.1:4010
+      cc_proxy_port: 4010
 
     # Smoke uses only py. Other languages and the adaptive `global` /
     # `status` blocks from production are dropped; they're not read by

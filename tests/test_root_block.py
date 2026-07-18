@@ -17,8 +17,17 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SUBBLOCK_DIR = REPO_ROOT / "subblock"
+SMOKE_DIR = REPO_ROOT / "tests" / "smoke"
 EXPECTED_SUBBLOCKS = ["swegen", "trajgen", "sft", "rl", "eval"]
+# The four blocks the root end-to-end smoke chains (rl is not in this pipeline).
+PIPELINE_BLOCKS = ["swegen", "trajgen", "sft", "eval"]
 UNIFORM_SCRIPTS = ["start.sh", "dryrun.sh", "clean.sh", "archive_run.sh"]
+ROOT_SMOKE_SCRIPTS = [
+    "tests/run.sh",
+    "tests/smoke/run_pipeline.sh",
+    "tests/smoke/verify.sh",
+    "tests/smoke/serve_checkpoint.sh",
+]
 EXPECTED_PARENT = "swe_lego_live"
 
 
@@ -62,3 +71,51 @@ def test_meta_info_identity(name: str):
 def test_uniform_scripts_present(name: str, script: str):
     script_path = SUBBLOCK_DIR / name / "scripts" / script
     assert script_path.is_file(), f"missing uniform script: {script_path}"
+
+
+# --- Root end-to-end smoke harness -------------------------------------------
+# The deeper, semantic checks (dependency wiring, smoke-config chain
+# consistency) live in tests/cases/*.sh, which need bash; these pytest checks
+# are the cloud-CI-portable structural layer.
+
+
+@pytest.mark.parametrize("name", PIPELINE_BLOCKS)
+def test_smoke_config_present_and_parses(name: str):
+    cfg_path = SMOKE_DIR / name / "config.yaml"
+    assert cfg_path.is_file(), f"missing root smoke config: {cfg_path}"
+    with cfg_path.open() as f:
+        cfg = yaml.safe_load(f)
+    assert isinstance(cfg, dict), f"{cfg_path} did not parse to a mapping"
+    assert "meta_info" in cfg and "runtime_info" in cfg, (
+        f"{cfg_path} missing meta_info/runtime_info"
+    )
+
+
+@pytest.mark.parametrize("name", PIPELINE_BLOCKS)
+def test_smoke_config_identity(name: str):
+    cfg_path = SMOKE_DIR / name / "config.yaml"
+    with cfg_path.open() as f:
+        cfg = yaml.safe_load(f)
+    meta = cfg.get("meta_info", {})
+    assert meta.get("name") == name, (
+        f"{cfg_path}: meta_info.name={meta.get('name')!r} != {name!r}"
+    )
+    assert meta.get("parent") == EXPECTED_PARENT, (
+        f"{cfg_path}: meta_info.parent={meta.get('parent')!r} != {EXPECTED_PARENT!r}"
+    )
+
+
+@pytest.mark.parametrize("name", PIPELINE_BLOCKS)
+def test_smoke_config_schema_subset_of_production(name: str):
+    """A smoke overlay may prune production keys but must not invent new
+    top-level sections the block code won't read."""
+    smoke = yaml.safe_load((SMOKE_DIR / name / "config.yaml").read_text())
+    prod = yaml.safe_load((SUBBLOCK_DIR / name / "config.yaml").read_text())
+    extra = set(smoke) - set(prod)
+    assert not extra, f"tests/smoke/{name}/config.yaml has non-production top-level keys: {sorted(extra)}"
+
+
+@pytest.mark.parametrize("script", ROOT_SMOKE_SCRIPTS)
+def test_root_smoke_scripts_present(script: str):
+    path = REPO_ROOT / script
+    assert path.is_file(), f"missing root smoke harness script: {script}"

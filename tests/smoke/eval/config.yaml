@@ -1,0 +1,136 @@
+# ROOT SMOKE — stage 4/4: eval.
+# Overlaid onto subblock/eval/config.yaml by tests/smoke/run_pipeline.sh.
+# Schema-compatible with production eval; deltas tagged "# ROOT:".
+#
+# Evaluates the model sft (stage 3) just trained on the SWE-bench Verified
+# 100-task subset. eval itself does NOT serve a model — it drives a per-job
+# LiteLLM proxy in front of an OpenAI-compatible endpoint. So before this stage
+# run_pipeline.sh deploys the sft checkpoint with vLLM on the SAME remote GPU
+# pod that trained it, wraps it with LiteLLM, and rewrites
+# runtime_info.input.llm_api.api_base_url here to that wrapper's URL.
+# See tests/smoke/serve_checkpoint.sh.
+
+meta_info:
+  name: eval
+  label: "Evaluation"
+  description: Evaluates the sft checkpoint (served via remote vLLM+LiteLLM) on the SWE-bench Verified 100-subset.
+  parent: swe_lego_live
+  subblocks: {}
+  dependencies:
+    # ROOT: the model under test is sft's persisted checkpoint.
+    model_checkpoint: sft.output.checkpoint_path
+
+  resources:
+    ip: local                          # eval orchestration + Harbor containers run on the CI host
+    user: null
+    pwd: null
+    directory: /gpufs/haoli/code/
+    description: local Harbor execution; the model under test is served remotely on the sft GPU pod
+    public_storage: /gpufs/haoli/swedata
+
+  repositories:
+    harbor:
+      url: https://github.com/SWE-Lego/harbor.git
+      branch: main
+      commit: 4c1f27dcee78bdb134bafd01a81e9c12aaaae3d2
+      path: repos/harbor
+      readonly: true
+
+  environment:
+    harbor_uv: artifacts/env/harbor-uv
+    litellm_uv: artifacts/env/litellm-venv
+    litellm:
+      python_version: "3.13"
+      litellm_version: "1.83.14"
+
+runtime_info:
+  input:
+    llm_api:
+      # ROOT (MODE B): api_base_url is rewritten by run_pipeline.sh to the RAW
+      # vLLM /v1 on the pod (serve_checkpoint.sh, vLLM-only). eval's own per-job
+      # LiteLLM (:4101) wraps it, so the model uses the openai/ provider prefix.
+      api_key: dummy-key-root-smoke
+      api_base_url: "PENDING_SET_BY_run_pipeline.sh"
+      model: "openai/root-smoke-sft"   # openai/<vLLM --served-model-name>
+      description: The freshly-trained sft checkpoint, served vLLM-only (MODE B) on the sft GPU pod; eval's LiteLLM wraps the raw endpoint.
+      served_via: remote_vllm_of_sft_checkpoint
+      protocols: [openai_compatible]
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+
+    litellm_proxy:
+      config_template: scripts/serve_llm/litellm_config.example.yaml
+      port: 4101
+      master_key: dummy-key-cf
+
+    # ROOT: how run_pipeline.sh stands up serving for the sft checkpoint. `host`
+    # is resolved from the sft block's meta_info.resources at run time so there's
+    # no second copy of the pod's IP/key to drift.
+    serving:
+      host: from_sft_resources
+      vllm:
+        port: 8000
+        served_model_name: root-smoke-sft
+        tensor_parallel_size: 1   # 8B fits on 1 GPU
+        # data_parallel_size: N replicas (1/GPU) behind one endpoint for ~Nx eval
+        # throughput. null/"auto" => serve_checkpoint.sh uses all FREE GPUs on the
+        # (shared) pod. An 8B model should data-parallel, not tensor-parallel —
+        # the first smoke served TP=1 on 1 of 8 GPUs and was throughput-bound.
+        data_parallel_size: null
+        # The OpenHands agent requests max_tokens up to the model's full context
+        # (131072) because eval's generated LiteLLM model_list carries no
+        # model_info cap. vLLM 400s if max_tokens + prompt > max_model_len, which
+        # errored every trial in run 28371626594 at 32768. Serve the model's full
+        # native window (config max_position_embeddings=163840, rope_theta=1e6, no
+        # rope_scaling needed) so a 131072 completion + a ~32K trajectory prompt fit.
+        max_model_len: 163840
+        gpu_memory_utilization: 0.92
+        dtype: bfloat16
+      litellm:
+        port: 4110
+        master_key: dummy-key-root-smoke
+
+    task_source:
+      provider: harbor_registry
+      dataset_name: swebench-verified
+      version: "1.0"
+      registry_path: repos/harbor/registry.json
+
+    harbor_job:
+      jobs_dir: artifacts/jobs/root-smoke   # ROOT: isolate from prod + subblock smoke
+      n_concurrent: 8
+      n_tasks: 100                           # ROOT: the verified 100-subset (design step 4)
+      max_retries: 1
+      timeout_multiplier: 1
+
+    agent:
+      name: custom-openhands-sdk
+      version: 1.14.0
+      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
+      runtime_host_path: artifacts/runtime/openhands-sdk
+      max_turns: 100
+      temperature: 0.0                       # ROOT: deterministic eval of the trained model
+
+  output:
+    eval_results_dir:
+      description: Harbor job directories containing per-task evaluation results and LiteLLM trajectory logs
+      path: artifacts/jobs
+      job_layout: "artifacts/jobs/<job>/<task>/{agent,evaluation}/"
+      trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
+      results_summary_format: "artifacts/jobs/<job>/results.json"
+      consumer_block: null
+
+environment:
+  extra:
+    HARBOR_EXCLUDE_TASKS: ""
+    LITELLM_STICKY_ROUTING_ALIASES: ""
+    LITELLM_NUM_WORKERS: "1"
+
+evolving:
+  description: Runs evaluation benchmarks via Harbor.
+  tunable_params:
+    temperature: "Agent sampling temperature (0.0-1.0)"
+    max_turns: "Maximum agent turns per task"
+    n_concurrent: "Harbor concurrent tasks"
+    timeout_multiplier: "Task timeout multiplier"
+    n_tasks: "Smoke-run cap on number of tasks (null = full benchmark)"
