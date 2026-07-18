@@ -34,6 +34,7 @@ subblock/*/repos/*
 node_modules/
 npm-debug.log*
 yarn-error.log*
+docs/out/
 docs/.next/
 docs/.source/
 

@@ -48,6 +48,16 @@ export const trainerDocs = defineDocs({
   },
 });
 
+export const evaluatorDocs = defineDocs({
+  dir: path.join(repoRoot, 'subblock/evaluator/docs/content/docs'),
+  docs: {
+    schema: frontmatterSchema,
+  },
+  meta: {
+    schema: metaSchema,
+  },
+});
+
 export default defineConfig({
   mdxOptions: {},
 });

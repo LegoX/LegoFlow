@@ -1,7 +1,6 @@
 {
     "title": "Blocks",
     "pages": [
-        "terminalgen",
-        "evaluator"
+        "terminalgen"
     ]
 }

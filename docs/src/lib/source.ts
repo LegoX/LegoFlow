@@ -1,4 +1,4 @@
-import { curatorDocs, docs, tracerDocs, trainerDocs } from '@/.source/server';
+import { curatorDocs, docs, evaluatorDocs, tracerDocs, trainerDocs } from '@/.source/server';
 import { loader } from 'fumadocs-core/source';
 import { lucideIconsPlugin } from 'fumadocs-core/source/lucide-icons';
 
@@ -27,12 +27,22 @@ const blockSources = {
     source: trainerDocs.toFumadocsSource(),
     plugins,
   }),
+  evaluator: loader({
+    baseUrl: '/docs/sub-block/evaluator',
+    source: evaluatorDocs.toFumadocsSource(),
+    plugins,
+  }),
 };
 
 type BlockName = keyof typeof blockSources;
 
 function isBlockName(value: string | undefined): value is BlockName {
-  return value === 'curator' || value === 'tracer' || value === 'trainer';
+  return (
+    value === 'curator' ||
+    value === 'tracer' ||
+    value === 'trainer' ||
+    value === 'evaluator'
+  );
 }
 
 function blockFolder(name: BlockName) {
@@ -59,13 +69,14 @@ function mergedPageTree() {
         ...node,
         children: [
           blockFolder('curator'),
-          blockFolder('tracer'),
-          blockFolder('trainer'),
           ...node.children.filter(
             (child: any) =>
               child.type === 'page' &&
-              child.url === '/docs/sub-block/evaluator',
+              child.url === '/docs/sub-block/terminalgen',
           ),
+          blockFolder('tracer'),
+          blockFolder('trainer'),
+          blockFolder('evaluator'),
         ],
       };
     }),
@@ -141,6 +152,10 @@ export const source = {
       return blockSources.trainer.resolveHref(href, parent);
     }
 
+    if (parent.url?.startsWith('/docs/sub-block/evaluator')) {
+      return blockSources.evaluator.resolveHref(href, parent);
+    }
+
     return rootSource.resolveHref(href, parent);
   },
 
@@ -162,6 +177,13 @@ export const source = {
     if (href.startsWith('/docs/sub-block/trainer')) {
       return blockSources.trainer.getPageByHref(
         href.replace('/docs/sub-block/trainer', '/docs'),
+        options,
+      );
+    }
+
+    if (href.startsWith('/docs/sub-block/evaluator')) {
+      return blockSources.evaluator.getPageByHref(
+        href.replace('/docs/sub-block/evaluator', '/docs'),
         options,
       );
     }
