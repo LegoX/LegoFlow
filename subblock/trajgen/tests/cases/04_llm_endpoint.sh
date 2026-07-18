@@ -57,7 +57,11 @@ for attempt in range(3):
     except Exception as e:
         print(f"NET:{type(e).__name__}:{e}"); sys.exit(0)
 ids = [m.get("id") for m in (body.get("data") or [])]
-print(f"OK:{len(ids)}:{int(want in ids)}")
+# vLLM without --served-model-name publishes the checkpoint PATH as the id
+# (e.g. /data/models/Qwen3.6-35B-A3B) yet accepts the basename in requests —
+# match on either the full id or its basename (aligns with eval's 04 case).
+names = {i for i in ids if i} | {i.rsplit("/", 1)[-1] for i in ids if i}
+print(f"OK:{len(ids)}:{int(want in names)}")
 PY
 )"
 
