@@ -592,12 +592,11 @@ jobs:
         (github.event_name == 'workflow_dispatch' && inputs.run_smoke == true) ||
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
-    # Prefers the dedicated `swe-lego-gpu` runner (real 8× GPU host) when it
-    # is online; falls back to the generic `swe-lego-ci` pool if not — in that
-    # case the smoke's SKIP-on-no-nvidia-smi guard fires and the verify step
-    # gracefully maps the 77 to a `::warning::` instead of queuing forever.
+    # The swe-lego-ci runner orchestrates either a configured remote GPU host
+    # (private sft-remote.env) or a local GPU. Missing/failed prerequisites are
+    # real failures; this job is green only after guarded training completes.
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps:
       - name: Pre-checkout — reclaim residue from prior runs
         # Reclaim anything not owned by uid 1000 so checkout's workspace-clean
@@ -647,18 +646,8 @@ jobs:
             echo "WARNING: staged smoke dataset missing at $CANON/artifacts/data/examples/lf_512.json — the smoke will SKIP. Seed it with: bash subblock/sft/tests/smoke/prepare_smoke_data.sh"
           fi
           ls -la repos artifacts artifacts/data
-      - name: Overlay smoke config.yaml from subblock/sft/tests/smoke
-        run: cp subblock/sft/tests/smoke/config.yaml subblock/sft/config.yaml
-      - name: Run smoke via .github/scripts/smoke_run.sh sft
-        run: bash .github/scripts/smoke_run.sh sft 2700
-      - name: Verify smoke
-        if: always()
-        shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
-        run: |
-          bash subblock/sft/tests/smoke/verify.sh
-          rc=$?
-          if [[ $rc -eq 77 ]]; then echo "::warning::sft smoke SKIPped"; exit 0; fi
-          exit $rc
+      - name: Run guarded SFT training smoke
+        run: bash .github/scripts/sft_smoke_run.sh 2700
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

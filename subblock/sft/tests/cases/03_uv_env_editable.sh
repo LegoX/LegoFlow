@@ -26,13 +26,17 @@ PY_BIN="$SFT_UV/bin/python"
 
 [[ -x "$PY_BIN" ]] || { echo "FAIL: sft uv python missing at $SFT_UV_REL/bin/python — run /sft:setup"; exit 1; }
 
-# Make the swe_data_process src importable even if the editable .pth drifted,
-# exactly as train.sh does (PYTHONPATH=repos/swe_data_process/src).
+# Make both src trees importable even if an editable .pth contains the absolute
+# path used by another mount of the shared workspace.
 SWE_DP_SRC="$BLOCK_DIR/repos/swe_data_process/src"
+LLAMA_FACTORY_SRC="$BLOCK_DIR/repos/LLaMA-Factory/src"
 
-PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$PY_BIN" - <<'PY'
+uv pip check --python "$PY_BIN"
+
+PYTHONPATH="$LLAMA_FACTORY_SRC:$SWE_DP_SRC:${PYTHONPATH:-}" "$PY_BIN" - <<'PY'
 import importlib, sys
-mods = ["torch", "swe_data_process", "llamafactory"]
+from importlib.metadata import version
+mods = ["torch", "swe_data_process", "llamafactory.hparams"]
 bad = []
 for m in mods:
     try:
@@ -44,6 +48,20 @@ if bad:
         print(f"FAIL: import failed — {line}", file=sys.stderr)
     sys.exit(1)
 import torch
+expected = {
+    "torch": "2.10.0",
+    "transformers": "5.6.0",
+    "flash-linear-attention": "0.5.0",
+    "fsspec": "2025.3.0",
+    "flash-attn": "2.8.3.post1",
+    "tilelang": "0.1.12",
+    "wandb": "0.28.0",
+}
+for package, want in expected.items():
+    got = version(package).split("+", 1)[0]
+    if got != want:
+        print(f"FAIL: {package} version drift: expected {want}, got {got}", file=sys.stderr)
+        sys.exit(1)
 print(f"INFO: torch {torch.__version__}  cuda_available={torch.cuda.is_available()}")
-print("PASS: sft uv env imports torch + swe_data_process + llamafactory")
+print("PASS: sft uv env imports training stack and matches pinned package versions")
 PY

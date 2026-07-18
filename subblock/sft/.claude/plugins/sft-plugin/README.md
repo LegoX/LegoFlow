@@ -1,8 +1,8 @@
 # sft — block-local skills for the supervised fine-tuning block
 
 Slash commands tailored to `subblock/sft/`. They wrap LLaMA-Factory +
-DeepSpeed ZeRO-3 training on Qwen3-8B with the trajectory conversion
-provided by `swe_data_process`.
+DeepSpeed ZeRO-3 training on config-selected models (currently Qwen3.5-35B)
+with Harbor conversion or ready-made Hugging Face/local LF datasets.
 
 For the generic block-system command (only `/root:create` lives there),
 see `.claude/plugins/root-plugin/`.
@@ -11,10 +11,10 @@ see `.claude/plugins/root-plugin/`.
 
 | Command | What it does |
 | --- | --- |
-| `/sft:setup`     | Bootstrap: install `repos/LLaMA-Factory/`, prepare `swe_data_process` PYTHONPATH, register the SFT dataset (from trajgen's `lf.json`), fill in `runtime_info.input` (model path, training hyperparams, WandB). |
+| `/sft:setup`     | Bootstrap the repos/environment and fill source-aware `runtime_info.input` fields (dataset source, model, training hyperparameters, WandB). |
 | `/sft:check`     | Preflight: schema + GPU availability (8× expected) + deepspeed config + dataset registration + WandB credentials + base model path + dryrun. Read-only. |
 | `/sft:dashboard` | Show training progress: current step, loss curve from the latest log, WandB run URL if configured. |
-| `/sft:run`       | Preflight, then launch `scripts/start.sh` (8× GPU, long-running). Stamps live state into `artifacts/index.yaml`. |
+| `/sft:run`       | Preflight, then launch `scripts/start.sh` (8× GPU, long-running). Live progress comes from the output directory/dashboard; the terminal run is archived on exit. |
 
 Per the block plugin guidelines, **no `/sft:create`** — new blocks are only
 created via `/root:create`.

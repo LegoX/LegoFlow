@@ -13,20 +13,20 @@ This repo is organized as a tree of blocks. The root directory is the root block
 
 ## What To Read First
 
-1. `config.yaml` — block identity, training config, runtime values (one-shot per run; live state in `artifacts/index.yaml`)
+1. `config.yaml` — block identity and one-shot training configuration; live progress comes from the active output directory/dashboard
 2. `memory/overview.mdx` — current state narrative
 
 ## Input/Output Contract
 
 **Inputs** (read from `config.yaml` → `runtime_info.input`):
-- `source`: Dataset source. `source.type` is `harbor_job` (default; convert raw trajectories from a supported scaffold + Harbor `job_dir`), `hf_lf` (load a ready-made LF/ShareGPT dataset from `source.hf_hub_url` on the HuggingFace Hub), or `local_lf` (register an existing LF json at `source.lf_path`). `hf_lf`/`local_lf` skip conversion.
+- `source`: Dataset source. `source.type` is `harbor_job` (default; convert raw trajectories from a supported scaffold + Harbor `job_dir`), `hf_lf` (load a ready-made LF/ShareGPT dataset from `source.hf_hub_url`), or `local_lf` (register an existing LF json at `source.lf_path`). For `hf_lf`, a non-empty `source.hf_file_name` downloads and registers only that Hub file; when empty, LLaMA-Factory loads the selected Hub dataset config/split at train time. `hf_lf`/`local_lf` skip trajectory conversion.
 - `conversion`: Data conversion settings (max_instances, exclude_repos_file, data_name). For `hf_lf`/`local_lf`, only `data_name` (dataset key) and `max_instances` (→ `num_samples`) apply.
 - `dataset`: LLaMA-Factory dataset registration
 - `model`: Base model path and config
 - `training`: Training hyperparameters (stage, deepspeed, template, cutoff_len, batch size, learning rate, epochs, etc.)
 - `infrastructure`: GPU configuration
 - `experiment`: WandB tracking settings
-- `credentials`: API keys
+- `credentials`: optional local-only fallback values; prefer private runtime environment variables for API keys
 
 **Outputs** (written to `config.yaml` → `runtime_info.output`):
 - `checkpoint_path`: Path to trained model checkpoint
@@ -47,13 +47,13 @@ uv env: `artifacts/env/lf` (Python 3.12 by default, configured at `meta_info.env
 bash scripts/install_env.sh
 ```
 
-`scripts/install_env.sh` recreates the env, installs `repos/swe_data_process[llm]` from the Tsinghua PyPI mirror, installs PyTorch 2.8.0 CUDA 12.8 wheels, installs `repos/LLaMA-Factory[torch,metrics,deepspeed,liger-kernel]` with `--no-build-isolation`, installs the pinned flash-attn 2.8.3 wheel, then installs `wandb`.
+`scripts/install_env.sh` recreates the env, installs PyTorch 2.10.0 CUDA 12.8 wheels, the editable `swe_data_process[llm]` and patched LLaMA-Factory repos plus metrics/DeepSpeed/Liger requirements, builds `flash-attn` against that PyTorch, installs Qwen3.5's `flash-linear-attention` and `tilelang` dependencies, then installs `wandb`.
 
 ## How To Run
 
 - `scripts/start.sh`: Launch an SFT training run (reads config.yaml)
 - `scripts/install_env.sh`: Recreate the uv training environment and install local repos
-- `scripts/train.sh`: End-to-end pipeline (data conversion → dataset registration → training)
+- `scripts/train.sh`: End-to-end pipeline (obtain/convert LF data → dataset registration → training)
 - `scripts/dataprep.sh`: Data-only pipeline (conversion only, no training)
 - `scripts/dryrun.sh`: Validate config, paths, and uv environment
 - `scripts/clean.sh`: Remove temporary outputs; artifact deletion requires `--artifacts --yes`
@@ -61,9 +61,9 @@ bash scripts/install_env.sh
 ## Artifact Archiving
 
 After each successful run, `scripts/train.sh` updates `config.yaml.runtime_info.output`.
-If archiving is needed, create `artifacts/archives/run_NNN/` containing metadata.yaml,
-config snapshot, scripts copy, session.log, and monitor.md, then append an entry to
-`artifacts/index.yaml`.
+If archiving is needed, create `artifacts/archives/run_NNN/` containing metadata,
+a credential-redacted config snapshot, and a scripts copy, then append the
+terminal record to `artifacts/index.yaml`.
 
 ## Dashboard
 

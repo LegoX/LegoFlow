@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" role="img" aria-labelledby="title desc">
+  <title id="title">Training loss and learning-rate curves for the Qwen3.5 35B SFT example</title>
+  <desc id="desc">Across 24 optimizer steps, loss falls from 0.5097 to 0.2313 while learning rate warms up to 5e-5 at step 4 and then follows cosine decay.</desc>
+  <rect width="1000" height="560" rx="18" fill="#0b1220"/>
+
+  <text x="50" y="44" fill="#f8fafc" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="700">Qwen3.5-35B full SFT - training curves</text>
+  <text x="50" y="69" fill="#94a3b8" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14">512 samples - 3 epochs - effective batch 64 - 24 optimizer steps</text>
+
+  <g stroke="#273449" stroke-width="1">
+    <line x1="90" y1="90" x2="920" y2="90"/>
+    <line x1="90" y1="175" x2="920" y2="175"/>
+    <line x1="90" y1="260" x2="920" y2="260"/>
+    <line x1="90" y1="345" x2="920" y2="345"/>
+    <line x1="90" y1="430" x2="920" y2="430"/>
+  </g>
+
+  <g stroke="#475569" stroke-width="1.5">
+    <line x1="90" y1="90" x2="90" y2="430"/>
+    <line x1="920" y1="90" x2="920" y2="430"/>
+    <line x1="90" y1="430" x2="920" y2="430"/>
+  </g>
+
+  <g stroke="#64748b" stroke-width="1" stroke-dasharray="5 7">
+    <line x1="342.6" y1="90" x2="342.6" y2="430"/>
+    <line x1="631.3" y1="90" x2="631.3" y2="430"/>
+  </g>
+  <g fill="#94a3b8" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">
+    <text x="210" y="108" text-anchor="middle">epoch 1</text>
+    <text x="487" y="108" text-anchor="middle">epoch 2</text>
+    <text x="776" y="108" text-anchor="middle">epoch 3</text>
+  </g>
+
+  <g fill="#cbd5e1" font-family="ui-monospace, SFMono-Regular, monospace" font-size="12" text-anchor="end">
+    <text x="78" y="94">0.6</text>
+    <text x="78" y="179">0.5</text>
+    <text x="78" y="264">0.4</text>
+    <text x="78" y="349">0.3</text>
+    <text x="78" y="434">0.2</text>
+  </g>
+  <text x="24" y="260" fill="#fb7185" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="600" text-anchor="middle" transform="rotate(-90 24 260)">loss</text>
+
+  <g fill="#cbd5e1" font-family="ui-monospace, SFMono-Regular, monospace" font-size="12">
+    <text x="932" y="94">5.00</text>
+    <text x="932" y="179">3.75</text>
+    <text x="932" y="264">2.50</text>
+    <text x="932" y="349">1.25</text>
+    <text x="932" y="434">0</text>
+  </g>
+  <text x="978" y="260" fill="#38bdf8" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="600" text-anchor="middle" transform="rotate(90 978 260)">learning rate (x 10^-5)</text>
+
+  <g fill="#cbd5e1" font-family="ui-monospace, SFMono-Regular, monospace" font-size="12" text-anchor="middle">
+    <text x="90" y="452">1</text>
+    <text x="198.3" y="452">4</text>
+    <text x="342.6" y="452">8</text>
+    <text x="487" y="452">12</text>
+    <text x="631.3" y="452">16</text>
+    <text x="775.7" y="452">20</text>
+    <text x="920" y="452">24</text>
+  </g>
+  <text x="505" y="481" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" text-anchor="middle">optimizer step</text>
+
+  <polyline
+    points="90.0,430.0 126.1,316.7 162.2,203.3 198.3,90.0 234.3,91.9 270.4,97.6 306.5,106.8 342.6,119.5 378.7,135.4 414.8,154.0 450.9,175.0 487.0,197.9 523.0,222.2 559.1,247.3 595.2,272.7 631.3,297.8 667.4,322.1 703.5,345.0 739.6,366.0 775.7,384.6 811.7,400.5 847.8,413.2 883.9,422.4 920.0,428.1"
+    fill="none"
+    stroke="#38bdf8"
+    stroke-width="3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <polyline
+    points="90.0,166.8 126.1,135.6 162.2,146.7 198.3,144.4 234.3,170.1 270.4,221.7 306.5,214.4 342.6,277.7 378.7,297.7 414.8,315.7 450.9,336.2 487.0,342.1 523.0,332.4 559.1,370.0 595.2,334.6 631.3,355.8 667.4,406.9 703.5,407.3 739.6,396.3 775.7,402.5 811.7,403.3 847.8,409.4 883.9,424.2 920.0,403.4"
+    fill="none"
+    stroke="#fb7185"
+    stroke-width="3.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <g fill="#fb7185" stroke="#0b1220" stroke-width="2">
+    <circle cx="90" cy="166.8" r="4"/>
+    <circle cx="126.1" cy="135.6" r="4"/>
+    <circle cx="162.2" cy="146.7" r="4"/>
+    <circle cx="198.3" cy="144.4" r="4"/>
+    <circle cx="234.3" cy="170.1" r="4"/>
+    <circle cx="270.4" cy="221.7" r="4"/>
+    <circle cx="306.5" cy="214.4" r="4"/>
+    <circle cx="342.6" cy="277.7" r="4"/>
+    <circle cx="378.7" cy="297.7" r="4"/>
+    <circle cx="414.8" cy="315.7" r="4"/>
+    <circle cx="450.9" cy="336.2" r="4"/>
+    <circle cx="487" cy="342.1" r="4"/>
+    <circle cx="523" cy="332.4" r="4"/>
+    <circle cx="559.1" cy="370" r="4"/>
+    <circle cx="595.2" cy="334.6" r="4"/>
+    <circle cx="631.3" cy="355.8" r="4"/>
+    <circle cx="667.4" cy="406.9" r="4"/>
+    <circle cx="703.5" cy="407.3" r="4"/>
+    <circle cx="739.6" cy="396.3" r="4"/>
+    <circle cx="775.7" cy="402.5" r="4"/>
+    <circle cx="811.7" cy="403.3" r="4"/>
+    <circle cx="847.8" cy="409.4" r="4"/>
+    <circle cx="883.9" cy="424.2" r="4"/>
+    <circle cx="920" cy="403.4" r="4"/>
+  </g>
+
+  <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">
+    <line x1="285" y1="523" x2="318" y2="523" stroke="#fb7185" stroke-width="4" stroke-linecap="round"/>
+    <text x="329" y="528" fill="#e2e8f0">step loss</text>
+    <line x1="500" y1="523" x2="533" y2="523" stroke="#38bdf8" stroke-width="4" stroke-linecap="round"/>
+    <text x="544" y="528" fill="#e2e8f0">learning rate</text>
+  </g>
+</svg>

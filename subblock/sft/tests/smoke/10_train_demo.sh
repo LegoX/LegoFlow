@@ -13,7 +13,7 @@
 #     (the full 512 samples are still loaded + tokenized at cutoff_len=131072).
 #   * save_strategy=no disables the multiplicative INTERMEDIATE checkpoint-*
 #     dirs. LLaMA-Factory's do_train still writes ONE final consolidated model
-#     (~16 GB) into the run dir at the end; the trap removes the whole dir on
+#     (~66 GiB for this 35B model) into the run dir at the end; the trap removes the whole dir on
 #     exit, so nothing persists. (Disabling 16-bit gather to skip that save is
 #     WORSE — DeepSpeed then dumps the full ~96 GB partitioned optimizer state.)
 #
@@ -36,12 +36,24 @@
 set -uo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG="${SFT_CONFIG:-$BLOCK_DIR/config.yaml}"
 TS="$(date +%Y%m%d-%H%M%S)"
 MAX_STEPS="${SFT_SMOKE_MAX_STEPS:-4}"
 BUDGET="${SFT_SMOKE_BUDGET:-2700}"
+STRICT="${SFT_SMOKE_CI_STRICT:-0}"
+MIN_FREE_GIB="${SFT_SMOKE_MIN_FREE_GIB:-80}"
 
 [[ -f "$CONFIG" ]] || { echo "FAIL: $CONFIG missing"; exit 1; }
+
+missing_prerequisite() {
+  local message="$1"
+  if [[ "$STRICT" == "1" ]]; then
+    echo "FAIL: $message"
+    exit 1
+  fi
+  echo "SKIP: $message"
+  exit 77
+}
 
 cfg() { python3 - "$CONFIG" "$1" <<'PY'
 import sys, yaml
@@ -64,33 +76,43 @@ abspath() {
 
 # --- SKIP gates: every heavy prerequisite that may be absent on a runner ----
 SFT_UV="$(abspath "$(cfg meta_info.environment.sft_uv)")"
-[[ -x "$SFT_UV/bin/python" ]] || { echo "SKIP: uv env absent at $SFT_UV (install_env.sh hasn't run here)"; exit 77; }
+[[ -x "$SFT_UV/bin/python" ]] || missing_prerequisite "uv env absent at $SFT_UV (install_env.sh hasn't run here)"
 
-MODEL_DIR="$(abspath "$(cfg runtime_info.input.model.model_name_or_path)")"
-[[ -f "$MODEL_DIR/config.json" ]] || { echo "SKIP: base model not staged here: $MODEL_DIR"; exit 77; }
+MODEL_VALUE="${SFT_SMOKE_MODEL_PATH:-$(cfg runtime_info.input.model.model_name_or_path)}"
+if [[ "$MODEL_VALUE" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+  echo "INFO: smoke model is a Hugging Face Hub ID: $MODEL_VALUE"
+else
+  MODEL_DIR="$(abspath "$MODEL_VALUE")"
+  [[ -f "$MODEL_DIR/config.json" ]] || missing_prerequisite "base model not staged here: $MODEL_DIR"
+  MODEL_VALUE="$MODEL_DIR"
+fi
 
 DS_CONFIG="$(abspath "$(cfg runtime_info.input.training.deepspeed)")"
-[[ -f "$DS_CONFIG" ]] || { echo "SKIP: deepspeed config missing: $DS_CONFIG"; exit 77; }
+[[ -f "$DS_CONFIG" ]] || missing_prerequisite "deepspeed config missing: $DS_CONFIG"
 
 N_GPUS="$(cfg runtime_info.input.infrastructure.n_gpus_per_node)"
 [[ "$N_GPUS" =~ ^[0-9]+$ ]] || { echo "FAIL: n_gpus_per_node not an integer: $N_GPUS"; exit 1; }
-command -v nvidia-smi >/dev/null 2>&1 || { echo "SKIP: nvidia-smi absent — no GPUs to train on"; exit 77; }
+command -v nvidia-smi >/dev/null 2>&1 || missing_prerequisite "nvidia-smi absent — no GPUs to train on"
 
 # Need N GPUs that are actually idle — a co-tenant job means we must not launch.
 FREE_GPUS="$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null \
   | awk '{ if ($1+0 < 2000) c++ } END { print c+0 }')"
 if [[ "${FREE_GPUS:-0}" -lt "$N_GPUS" ]]; then
-  echo "SKIP: only ${FREE_GPUS:-0} idle GPU(s) (< $N_GPUS) — a foreign job holds the rest; not launching training"
-  exit 77
+  missing_prerequisite "only ${FREE_GPUS:-0} idle GPU(s) (< $N_GPUS) — a foreign job holds the rest; not launching training"
 fi
 
 # Staged dataset snapshot (local_lf). Default: block-relative path CI symlinks
 # from $SHARED_RUNTIME/sft. Regenerate with tests/smoke/prepare_smoke_data.sh.
 LF_PATH="${SFT_SMOKE_LF_PATH:-$BLOCK_DIR/artifacts/data/examples/lf_512.json}"
 if [[ ! -s "$LF_PATH" ]]; then
-  echo "SKIP: staged smoke dataset not found: $LF_PATH"
-  echo "      stage it with: bash tests/smoke/prepare_smoke_data.sh"
-  exit 77
+  missing_prerequisite "staged smoke dataset not found: $LF_PATH (run tests/smoke/prepare_smoke_data.sh)"
+fi
+
+mkdir -p "$BLOCK_DIR/artifacts/model"
+AVAILABLE_KIB="$(df -Pk "$BLOCK_DIR/artifacts/model" | awk 'NR==2 {print $4}')"
+REQUIRED_KIB=$((MIN_FREE_GIB * 1024 * 1024))
+if [[ ! "$AVAILABLE_KIB" =~ ^[0-9]+$ || "$AVAILABLE_KIB" -lt "$REQUIRED_KIB" ]]; then
+  missing_prerequisite "insufficient free disk for final 35B model save (need ${MIN_FREE_GIB} GiB)"
 fi
 
 # --- Build a disposable config copy with the bounded overrides --------------
@@ -131,7 +153,7 @@ trap cleanup EXIT INT TERM
 
 CONFIG="$CONFIG" SMOKE_CONFIG="$SMOKE_CONFIG" LF_PATH="$LF_PATH" \
   SMOKE_OUTPUT_REL="$SMOKE_OUTPUT_REL" SMOKE_DATA_NAME="$SMOKE_DATA_NAME" \
-  MAX_STEPS="$MAX_STEPS" python3 - <<'PY' || { echo "FAIL: could not write smoke config"; exit 1; }
+  MODEL_VALUE="$MODEL_VALUE" MAX_STEPS="$MAX_STEPS" python3 - <<'PY' || { echo "FAIL: could not write smoke config"; exit 1; }
 import os, sys
 try:
     import yaml
@@ -153,6 +175,8 @@ conv = ri.setdefault("conversion", {})
 conv["data_name"] = os.environ["SMOKE_DATA_NAME"]
 ri.setdefault("dataset", {})["name"] = ""   # force auto-derive from data_name
 
+ri.setdefault("model", {})["model_name_or_path"] = os.environ["MODEL_VALUE"]
+
 tr = ri.setdefault("training", {})
 tr["output_dir"] = os.environ["SMOKE_OUTPUT_REL"]
 tr["max_steps"] = int(os.environ["MAX_STEPS"])
@@ -166,11 +190,12 @@ exp["wandb_mode"] = "disabled"  # no wandb run dirs from a throwaway smoke
 with open(os.environ["SMOKE_CONFIG"], "w", encoding="utf-8") as fh:
     yaml.safe_dump(cfg, fh, sort_keys=False, allow_unicode=True)
 print(f"INFO: smoke config -> {os.environ['SMOKE_CONFIG']}")
-print(f"      source=local_lf max_steps={os.environ['MAX_STEPS']} save_strategy=no output={os.environ['SMOKE_OUTPUT_REL']}")
+print(f"      model={os.environ['MODEL_VALUE']} source=local_lf max_steps={os.environ['MAX_STEPS']} save_strategy=no output={os.environ['SMOKE_OUTPUT_REL']}")
 PY
 
 echo "INFO: smoke log     -> $LOG"
 echo "INFO: dataset       -> $LF_PATH ($(python3 -c "import json,sys; print(len(json.load(open('$LF_PATH'))))" 2>/dev/null || echo '?') records)"
+echo "INFO: model         -> $MODEL_VALUE"
 echo "INFO: cutoff_len    -> $(cfg runtime_info.input.training.cutoff_len)  | max_steps=$MAX_STEPS | gpus=$N_GPUS | budget=${BUDGET}s"
 
 # --- Launch the real pipeline against the disposable config -----------------

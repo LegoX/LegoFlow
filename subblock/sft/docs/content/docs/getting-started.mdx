@@ -3,15 +3,15 @@ title: Getting Started
 description: Set up the block and run your first training job
 ---
 
-This page walks through preparing the sft block and running a training job end to end. sft wraps a pinned [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) checkout and the `swe_data_process` converter package, so most setup is about getting those into a single `uv` environment.
+This page walks through preparing the sft block and running a training job end to end. sft wraps a pinned [SWE-Lego LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory) checkout and the `swe_data_process` converter package, so most setup is about getting those into a single `uv` environment.
 
 ## Prerequisites
 
 - **8× A100/H100 GPUs** — full fine-tuning with DeepSpeed ZeRO-3 targets a single 8-GPU node.
 - **[uv](https://docs.astral.sh/uv/)** — used to build and run the training environment.
 - **CUDA 12.8** toolchain available on the node (the installer pulls CUDA 12.8 PyTorch wheels).
-- **Raw trajectories from trajgen** — a Harbor `job_dir` of agent rollouts (see [Core Concepts](/docs/core-concepts#trajectory)).
-- **A base model** — a local path to the model to fine-tune (e.g. `Qwen3-8B`).
+- **Training data** — a Harbor `job_dir`, a ready-made Hugging Face LF dataset/file, or a local LF JSON.
+- **A base model** — a Hub model ID or local model directory (the active profile uses `Qwen/Qwen3.5-35B-A3B-Base`).
 
 <Callout title="Where to run" type="info">
 sft trains on the node declared in `config.yaml` (`meta_info.resources.ip`). Run its scripts inside a `tmux` session on that host so a long training job survives shell disconnects.
@@ -25,16 +25,16 @@ Create the `uv` training environment at `meta_info.environment.sft_uv` (default 
 bash scripts/install_env.sh
 ```
 
-This installs `repos/swe_data_process[llm]`, the CUDA 12.8 PyTorch 2.8.0 wheels, `repos/LLaMA-Factory[torch,metrics,deepspeed,liger-kernel]` (with `--no-build-isolation`), the pinned flash-attn 2.8.3 wheel, and `wandb`. See [Inputs & Outputs](/docs/reference/io) for the env layout.
+This installs CUDA 12.8 PyTorch 2.10.0, editable `repos/swe_data_process[llm]` and the patched LLaMA-Factory plus metrics/DeepSpeed/Liger requirements, source-built `flash-attn`, Qwen3.5's `flash-linear-attention` and `tilelang` dependencies, and `wandb`. See [Inputs & Outputs](/docs/reference/io) for the env layout.
 
 ## 2. Point the config at your inputs
 
 Edit `config.yaml` → `runtime_info.input`:
 
 - `source.type` — the dataset source: `harbor_job` (convert Harbor trajectories, the default), `hf_lf` (a ready-made LF dataset on the HuggingFace Hub), or `local_lf` (a local LF json). See [Input sources](/docs/data-pipeline#input-sources).
-- For `harbor_job`: `source.scaffold` + `source.job_dir` — the trajectory scaffold and the Harbor job directory to convert. For `hf_lf`: `source.hf_hub_url`. For `local_lf`: `source.lf_path`.
+- For `harbor_job`: set `source.scaffold` + `source.job_dir`. For `hf_lf`: set `source.hf_hub_url`; optionally set `source.hf_file_name` to select exactly one repository file, otherwise use `hf_subset`/`hf_split`. For `local_lf`: set `source.lf_path`.
 - `conversion.data_name` — the dataset name (the LF file and registered dataset key derive from it).
-- `model.model_name_or_path` — the local base-model path.
+- `model.model_name_or_path` — a Hub model ID or local base-model directory.
 - `training.*` — hyperparameters (template, cutoff length, batch size, learning rate, epochs, …).
 - `infrastructure.n_gpus_per_node` — the GPU count on this node.
 
@@ -42,7 +42,7 @@ See [Configuration](/docs/training/configuration) for what each field controls.
 
 ## 3. Validate the config
 
-Run the dry-run preflight. It checks the pinned repos, the `uv` environment, the converter modules, the source job dir, the model path, the output directory, and the GPU count — without side effects:
+Run the dry-run preflight. It checks the pinned repos, the `uv` environment, source-specific data settings, converter modules when applicable, the model, output directory, and GPU count — without side effects:
 
 ```bash
 bash scripts/dryrun.sh
@@ -58,11 +58,11 @@ To convert and inspect the dataset before committing to a training run, run the 
 bash scripts/dataprep.sh
 ```
 
-This runs STEP 0 (conversion) and writes the LF dataset under `artifacts/data/lf_data/` without registering it or training. See [Data Pipeline](/docs/data-pipeline).
+For `harbor_job`, this runs conversion and writes the LF dataset under `artifacts/data/lf_data/` without registering it or training. Ready-made `hf_lf`/`local_lf` sources have nothing to convert, so the command exits early. See [Data Pipeline](/docs/data-pipeline).
 
 ## 5. Launch a run
 
-`scripts/start.sh` runs the dry run, then the full pipeline (conversion → dataset registration → training), and archives the run on exit:
+`scripts/start.sh` runs the dry run, then the full pipeline (obtain/convert LF data → dataset registration → training), and archives the run on exit:
 
 ```bash
 bash scripts/start.sh

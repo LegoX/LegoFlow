@@ -18,12 +18,6 @@ export function baseOptions(): BaseLayoutProps {
         text: "docs",
         active: "nested-url",
       },
-      {
-        url: "https://cement-here-cross-quotations.trycloudflare.com/",
-        text: "dashboard",
-        active: "none",
-        external: true,
-      },
     ],
     themeSwitch: {
       enabled: true,
