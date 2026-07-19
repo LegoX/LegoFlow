@@ -5,11 +5,11 @@ description: The core plugin skills for operating any block
 
 ## Prerequisites
 
-- **Claude Code** with this repo's plugin loaded — `/reload-plugins` should show `1 plugin · 3 skills`.
-- **Docker** on whichever host runs `curator` and `tracer` (containerized rollouts).
-- **An OpenAI-compatible LLM endpoint** with an API key — `curator` and `tracer` both call it.
-- An **8× GPU node** for `trainer`.
+- A **CPU** node with enough disk quota (e.g., >= 10T) for `curator` and `tracer` to create SWE tasks and trajectories
+- A **GPU** node (preferrably 8 GPU cards) for `trainer` and `evaluator` to train and evaluate customized models
+- A LLM API key used to either curate SWE tasks, generate trajectory rollouts etc.
 - **GitHub token(s)** with `repo` read scope, for PR collection in `curator`.
+- **Claude Code** or **Codex** (coming soon)
 
 
 ## Step 1: Clone

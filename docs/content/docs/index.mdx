@@ -3,16 +3,16 @@ title: Introduction
 description: An end-to-end agentic workflow for intelligence
 ---
 
-Training a strong coding agent is not a single training job. A realistic SWE pipeline has to mine useful GitHub changes, turn them into verifiable tasks, roll agents out in isolated environments, filter and convert trajectories, train models, and measure them with an evaluator. Each stage tends to grow its own scripts, storage layout, runtime assumptions, GPU requirements, and failure modes. The hard part is not only running the stages; it is keeping their handoffs reproducible as the data, repos, models, and infrastructure keep changing.
+A real software engineering data pipeline has to mine useful GitHub changes, turn them into verifiable tasks, roll agents out in isolated environments, filter and convert trajectories, and train and evaluate models in a closed loop. Because the online resources it depends on keep changing, keeping such a pipeline alive and reproducible is far from easy.
 
 **SWE-Lego-Live** turns that loop into one agentic workflow. Instead of treating data construction, rollout, training, and evaluator measurement as disconnected jobs, it keeps them in a live pipeline where each stage can be checked, rerun, inspected, and extended by agents.
 
 
 ## Highlights
 
-- **Live, growing dataset**: download the SWE-Lego-Live dataset from <a href="https://huggingface.co/datasets/SWE-Lego/SWE-Lego-Live" className="docs-hf-link"><img src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" alt="" aria-hidden="true" className="docs-hf-logo" />Hugging Face</a>, with **bi-weekly** updates that keep tasks and trajectories aligned with real repository activity.
-- **Fully agentic data pipeline**: curate high-quality SWE and coding tasks across **8+** programming languages and **20+** task tags, then roll out trajectories with **4+** coding agents, including Claude Code, OpenCode, OpenHands, and Terminus.
-- **Unified, block-wise design**: use agent plugin skills to interact with, customize, and extend each stage through a consistent block interface.
+- **Live and grow dataset**: download the SWE-Lego-Live dataset from <a href="https://huggingface.co/datasets/SWE-Lego/SWE-Lego-Live" className="docs-hf-link"><img src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" alt="" aria-hidden="true" className="docs-hf-logo" />Hugging Face</a>, with **bi-weekly** updates that keep tasks and trajectories aligned with real repository activity.
+- **Fully agentic data pipeline**: curate high-quality SWE tasks across **8+** programming languages and **20+** task tags, then roll out trajectories with **4+** coding agents, including Claude Code, OpenCode, OpenHands, and Terminus.
+- **Plug-and-play design**: the design is highly modular and it allows easy customization and extension to other agentic tasks (e.g., terminal operations, long-horizon programes).
 
 
 ## Project Design
@@ -20,9 +20,7 @@ Training a strong coding agent is not a single training job. A realistic SWE pip
 ![SWE-Lego-Live pipeline introduction](/figures/my-version-coding-repos-expandable.png)
 
 
-The project is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. Users can operate the workflow through the same plugin-skill lifecycle across blocks: `:setup`, `:check`, and `:run`.
-
-The **root** block orchestrates four subblocks: **curator** builds verified SWE tasks, **tracer** rolls out agent trajectories, **trainer** turns trajectories into model checkpoints, and **evaluator** measures those checkpoints with shared rubrics.
+The project is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. The **root** block orchestrates four subblocks: **curator** builds verified SWE tasks, **tracer** rolls out agent trajectories, **trainer** turns trajectories into model checkpoints, and **evaluator** measures those checkpoints with shared rubrics.
 
 - **curator**: curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums such as Stack Overflow. Carefully designed filtering requirements preserve high-quality instances across **8+** programming languages and **20+** task tags.
 - **tracer**: collects high-quality trajectories with verified rewards, supporting rollouts across multiple coding scaffolds such as Claude Code, OpenCode, OpenHands, and Terminus.
@@ -33,7 +31,9 @@ The **root** block orchestrates four subblocks: **curator** builds verified SWE 
 
 ### Why Blocks?
 
-Blocks make the pipeline easier to use and easier to change. Because every stage follows the same contract, users can run the whole system through plugin skills, restart a failed stage from its archived state, swap one block without breaking the others, and inspect artifacts through a consistent dashboard interface. See [Block Design](/docs/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
+
+Blocks make the pipeline easier to use and easier to change.
+Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. Users can operate the block through the pre-defined plugin-skills associated with each block, i.e., `<block>:setup`, `<block>:check`, and `<block>:run`. See [Block Design](/docs/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
 
 
 ## Where to go next
