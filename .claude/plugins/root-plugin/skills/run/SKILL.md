@@ -34,11 +34,11 @@ Never silently mutate `runtime_info` or `meta_info` fields. A user instruction i
 | Args | Target | Behavior |
 | ---- | ------ | -------- |
 | *(empty)* | root | run root `start.sh` directly |
-| `swegen` | swegen | run directly |
-| `swegen only 32 verified tasks` | swegen | propose config/flag change, confirm, run |
-| `run swegen with 32 tasks` | swegen | same — name embedded in text |
-| `run the trajectory generator` | trajgen | resolved via paraphrase + `CLAUDE.md` |
-| `run swegen and trajgen` | ambiguous | ask which block |
+| `curator` | curator | run directly |
+| `curator only 32 verified tasks` | curator | propose config/flag change, confirm, run |
+| `run curator with 32 tasks` | curator | same — name embedded in text |
+| `run the trajectory generator` | tracer | resolved via paraphrase + `CLAUDE.md` |
+| `run curator and tracer` | ambiguous | ask which block |
 | `start the data pipeline` | root | run root `start.sh` directly |
 | `run frobnicator` | abort | print valid list, ask user to pick |
 

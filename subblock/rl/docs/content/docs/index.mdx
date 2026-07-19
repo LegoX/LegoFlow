@@ -8,13 +8,13 @@ reinforcement learning** — the policy improves by repeatedly attempting real
 tasks and being rewarded for the patches that make the tests pass.
 
 It is the final stage of the [SWE-Lego-Live](https://github.com/SWE-Lego/SWE-Lego-Live)
-pipeline, after task curation (`swegen`), trajectory generation (`trajgen`), and
-supervised fine-tuning (`sft`). Where `sft` imitates known-good trajectories, rl
+pipeline, after task curation (`curator`), trajectory generation (`tracer`), and
+supervised fine-tuning (`trainer`). Where `trainer` imitates known-good trajectories, rl
 optimizes the policy directly against the environment's own reward signal, in a
 closed self-improvement loop.
 
 ```text
-swegen ─▶ trajgen ─▶ sft ─▶ rl
+curator ─▶ tracer ─▶ trainer ─▶ rl
 ```
 
 rl provides:

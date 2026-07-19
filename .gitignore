@@ -34,6 +34,9 @@ subblock/*/repos/*
 node_modules/
 npm-debug.log*
 yarn-error.log*
+docs/out/
+docs/.next/
+docs/.source/
 
 # OS artifacts
 .DS_Store
@@ -51,13 +54,13 @@ artifacts/index.yaml
 subblock/*/artifacts/index.yaml
 
 # SWE-gen subblock — generated data and virtual env
-subblock/swegen/artifacts/*
-subblock/swegen/scripts/jobs/*
-subblock/swegen/scripts/.swegen-*/
+subblock/curator/artifacts/*
+subblock/curator/scripts/jobs/*
+subblock/curator/scripts/.swegen-*/
 
-# Trajgen subblock — runtime mount + per-run artifacts (kept manifest yamls tracked)
-subblock/trajgen/artifacts/*
+# Tracer subblock — runtime mount + per-run artifacts (kept manifest yamls tracked)
+subblock/tracer/artifacts/*
 
 # Dashboard transient runtime output
-subblock/swegen/dashboard/memory/.progress_monitor_all_state.jsonl.*
-subblock/swegen/dashboard/dashboard_sync.log
+subblock/curator/dashboard/memory/.progress_monitor_all_state.jsonl.*
+subblock/curator/dashboard/dashboard_sync.log

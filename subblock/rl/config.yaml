@@ -9,7 +9,7 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    base_model_checkpoint: sft.output.checkpoint_path  # path: subblock/sft/artifacts/model/<run>/checkpoint-N
+    base_model_checkpoint: trainer.output.checkpoint_path  # path: subblock/trainer/artifacts/model/<run>/checkpoint-N
 
   repos:
     harbor_verl_train:

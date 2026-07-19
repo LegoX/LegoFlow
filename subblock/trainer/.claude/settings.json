@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "trainer-block": {
+      "source": { "source": "directory", "path": ".claude/plugins" }
+    }
+  },
+  "enabledPlugins": {
+    "trainer@trainer-block": true
+  }
+}

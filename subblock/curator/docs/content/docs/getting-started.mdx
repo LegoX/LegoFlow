@@ -1,0 +1,174 @@
+---
+title: Getting Started
+description: Set up the Curator block and run the first task generation pass
+---
+
+Curator wraps the pinned `repos/swegen` checkout in the SWE-Lego-Live block
+layout. The pinned repository is recorded as a gitlink under
+`subblock/curator/repos/swegen`.
+
+## Recommended: operate via the Claude plugin
+
+The block ships a Claude Code plugin (`curator-plugin`) that drives the whole
+lifecycle through slash commands. This is the recommended way to run curator —
+each command performs the preflight, confirmation, and bookkeeping steps for
+you. Launch Claude from inside `subblock/curator/` so the block-local plugin
+loads, then:
+
+```text
+/curator:setup        # init submodule, build venv, install swegen, dryrun
+/curator:check        # preflight: config, GitHub tokens, LLM endpoint, docker
+/curator:collect-prs  # collect GitHub PRs -> artifacts/collected_prs/{lang}_pr_ids.txt
+/curator:run          # generate + verify tasks -> verifiable_tasks.txt
+/curator:dashboard    # local preview or Cloudflare Pages sync
+```
+
+The knobs these commands read live in `config.yaml` — LLM endpoint under
+`runtime_info.input.llm_api`, PR collection under
+`runtime_info.input.pr_collection`, and per-language generation params under
+`runtime_info.input.languages`. Edit `config.yaml`, not the scripts.
+
+The rest of this page documents the underlying commands the plugin runs, for
+manual operation or debugging.
+
+## Prerequisites
+
+- Docker - task validation and task execution use containerized Harbor tasks.
+- Python - install the SWE-gen package from `repos/swegen`.
+- GitHub tokens - used for PR collection and PR metadata lookup.
+- OpenAI-compatible LLM endpoint - used for PR evaluation and task instruction generation.
+- Claude-compatible task model - used by the task completion stage.
+
+## 1. Enter the block
+
+Run commands from the block root:
+
+```bash
+cd subblock/curator
+```
+
+Confirm the pinned repo is checked out:
+
+```bash
+git rev-parse HEAD:repos/swegen
+```
+
+This prints the gitlink commit recorded for the submodule. `/curator:setup`
+initializes it if the `repos/swegen/` working tree is empty.
+
+## 2. Install the environment
+
+Create the block virtual environment and install SWE-gen:
+
+```bash
+python3 -m venv artifacts/envs/swegen-env
+source artifacts/envs/swegen-env/bin/activate
+pip install -U pip
+pip install -e repos/swegen/
+```
+
+If you already maintain a compatible environment, activate it before running
+the scripts. The important requirement is that `swegen` resolves to the pinned
+checkout.
+
+## 3. Configure credentials
+
+Set runtime inputs in the shell or in a local env file that is not committed:
+
+```bash
+export GITHUB_TOKENS="ghp_xxx,ghp_yyy"
+export OPENAI_API_KEY="..."
+export ANTHROPIC_API_KEY="$OPENAI_API_KEY"
+export OPENAI_API_BASE_URL="https://your-openai-compatible-endpoint/v1"
+export ANTHROPIC_BASE_URL="https://your-anthropic-compatible-endpoint"
+export OPENAI_MODEL="openai/MiniMax-M2.7"
+export ANTHROPIC_MODEL="claude-sonnet-4-6"
+```
+
+`GITHUB_TOKEN` may also be derived from the first entry in `GITHUB_TOKENS`.
+Do not commit tokens or local env files. Keep the OpenAI-compatible and
+Anthropic-compatible variables aligned with the same provider setup you intend
+to use for the run. If your shell already contains old `ANTHROPIC_API_KEY` or
+`ANTHROPIC_BASE_URL` values, overwrite or unset them before launching
+generation; stale Anthropic-compatible variables can make the Claude SDK stage
+use the wrong endpoint or key.
+
+> **Important — the `ANTHROPIC_BASE_URL` path also drives verification.**
+> It runs task completion *and* the step that writes `verifiable_tasks.txt`.
+> If your provider is OpenAI-only (Qwen, GLM, sglang, vLLM, most self-hosted
+> endpoints), it rejects `role:system` on `/v1/messages` and verification fails
+> silently. Set `llm_api.cc_provider_mode: openai_proxy` in `config.yaml` and
+> point `ANTHROPIC_BASE_URL` at a local LiteLLM proxy rather than the raw
+> provider URL. Use `native` only when the provider already speaks the
+> Anthropic Messages API. See the "LLM provider modes" section of the block
+> `CLAUDE.md`.
+
+For reproducible runs on shared machines, use a clean Claude Code config
+directory so user-level hooks and plugins do not affect task completion:
+
+```bash
+export CLAUDE_CONFIG_DIR="$PWD/artifacts/claude-config/swegen-clean"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+```
+
+## 4. Run a dry run
+
+Check the block before starting a large batch:
+
+```bash
+bash scripts/dryrun.sh
+```
+
+This validates expected directories, config values, and basic runtime
+dependencies. Fix dry-run failures before launching generation.
+
+## 5. Run a smoke generation
+
+For a small first pass, use a direct `swegen create` command with explicit
+limits and shared output paths:
+
+```bash
+swegen create \
+  --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
+  --max-pr 1 \
+  --n-concurrent 1 \
+  --output artifacts/swe_tasks/py-cc \
+  --state-dir scripts/.swegen-py \
+  --timeout 2400 \
+  --cc-timeout 1800 \
+  --no-require-issue \
+  --min-source-files 1 \
+  --max-source-files 10 \
+  --docker-prune-batch 0
+```
+
+The language scripts are intended for production batches and read concurrency
+from `config.yaml`; prefixing `N_CONCURRENT=1` may not override their configured
+defaults.
+
+For the full multi-language run:
+
+```bash
+bash scripts/create_all_bg.sh
+```
+
+Per-language scripts are available for `py`, `js`, `ts`, `go`, `c`, `cpp`,
+`java`, and `rust`.
+
+## 6. Resume after moving nodes
+
+If you restored a March state package into a new clone, check the batch state
+before running generation. Curator stores batch state under a filename derived
+from `input_ids_file.resolve()`. A new clone path creates a new hash even when
+the relative input file is the same.
+
+For portable recovery, keep these files together:
+
+- `artifacts/swe_tasks/<lang>-cc/`
+- `artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt`
+- `artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/*.json`
+- the matching PR input files in `artifacts/collected_prs/`
+
+If the clone path changes, rewrite or regenerate the `.swegen-create-batch`
+state filenames so they match the current resolved input file paths before
+launching `scripts/create_{lang}.sh`.

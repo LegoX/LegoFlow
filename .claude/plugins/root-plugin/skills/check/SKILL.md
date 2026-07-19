@@ -39,11 +39,11 @@ Any extra context in args (beyond identifying the block) is a hint for **how to 
 | Args | Target | Behavior |
 | ---- | ------ | -------- |
 | *(empty)* | root | full report across all blocks |
-| `swegen` | swegen | full report for swegen |
-| `trajgen focus on api connectivity` | trajgen | lead with `api:*` findings |
+| `curator` | curator | full report for curator |
+| `tracer focus on api connectivity` | tracer | lead with `api:*` findings |
 | `are my api keys working` | root | full tree; lead with `api:*` findings |
-| `check swegen for missing inputs` | swegen | lead with `input:*` / `schema:*` findings |
-| `compare swegen and trajgen configs` | ambiguous | ask which block |
+| `check curator for missing inputs` | curator | lead with `input:*` / `schema:*` findings |
+| `compare curator and tracer configs` | ambiguous | ask which block |
 | `check frobnicator` | abort | print valid list, ask user to pick |
 
 ## Step 0 — Orient
@@ -130,7 +130,7 @@ Print one consolidated report. Lead with the tree shape, then per-block status, 
 ```
 Block tree (CWD = <path>):
   <path>            (no config.yaml — pseudo-root)
-  └─ subblock/swegen
+  └─ subblock/curator
       ✓ all checks
       ✓ dryrun passed
       ✓ api(llm_api) → https://endpoint/v1   models: pr_model, task_model present

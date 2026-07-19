@@ -1,6 +1,6 @@
 # swe-lego-live-docs
 
-User-facing documentation for the [LegoFactory](../README.md) root project,
+User-facing documentation for the [SWE-Lego-Live](../README.md) root project,
 built as a [fumadocs](https://fumadocs.dev/) (Next.js) site and deployed to
 Cloudflare Pages as a static export.
 
@@ -9,7 +9,7 @@ Live site: **<https://swe-lego-live-docs.pages.dev>**
 The prose lives in `content/docs/`; everything else is the minimal app shell
 needed to render and deploy it. This site documents the *root* block (pipeline,
 block system, getting started). Each subblock has its own docs site, e.g.
-trajgen at <https://swe-trajgen-docs.pages.dev>.
+tracer at <https://swe-tracer-docs.pages.dev>.
 
 ## Requirements
 
@@ -61,9 +61,9 @@ docs/
 │   ├── getting-started.mdx
 │   ├── block-design.mdx
 │   ├── sub-block/         #   per-block portals (each links to that block's full docs)
-│   │   ├── swegen.mdx
-│   │   ├── trajgen.mdx
-│   │   ├── sft.mdx
+│   │   ├── curator.mdx
+│   │   ├── tracer.mdx
+│   │   ├── trainer.mdx
 │   │   └── rl.mdx
 │   └── reference/         #   config-schema, artifacts
 ├── src/                   # app shell (docs route, layouts, source loader)
@@ -79,6 +79,6 @@ docs/
    `description` frontmatter.
 2. Add its slug to the folder's `meta.json` `pages` array to place it in the
    sidebar order.
-3. Link to other pages by their route, e.g. `/docs/pipeline/trajgen`.
+3. Link to other pages by their route, e.g. `/docs/pipeline/tracer`.
 
 Build outputs (`node_modules/`, `.next/`, `.source/`, `out/`) are gitignored.

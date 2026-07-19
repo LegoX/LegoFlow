@@ -1,6 +1,0 @@
-{
-  "name": "eval",
-  "description": "eval block skills — Harbor + LiteLLM env bootstrap, preflight (uv env + LiteLLM venv + LLM endpoint + harbor registry lookup), dashboard (per-job task counts + accuracy), and run (LiteLLM proxy + harbor benchmark execution). Provides /eval:setup, /eval:check, /eval:dashboard, /eval:run.",
-  "version": "0.1.0",
-  "author": { "name": "SWE-Lego" }
-}

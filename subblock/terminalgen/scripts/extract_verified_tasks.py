@@ -5,7 +5,7 @@ Optional convenience step: reads each domain's verifiable_tasks.txt (the
 authoritative manifest) and copies every listed task into a flat
 artifacts/merged_terminal_tasks/ directory, **verbatim** — no format change.
 Tasks stay in terminal-lego's native v1.0 schema, which is what downstream
-trajgen/sft/eval consume (harbor's task loader reads v1.0 directly).
+tracer/sft/eval consume (harbor's task loader reads v1.0 directly).
 
 Merged ids are prefixed with the domain (`{domain}__{task_id}`) so per-domain
 `task_00000` ids don't collide in the flat directory.

@@ -7,19 +7,19 @@
 # stage's terminal artifact. Between stages it wires each block's REAL output
 # into the next, and stops the moment a stage's verify fails.
 #
-#   stage 1 swegen  : collect ~200 PRs from scratch -> generate verified tasks
-#   stage 2 trajgen : infer trajectories on those verified tasks -> keep reward==1
+#   stage 1 curator  : collect ~200 PRs from scratch -> generate verified tasks
+#   stage 2 tracer : infer trajectories on those verified tasks -> keep reward==1
 #                     -> convert to LF SFT data
-#   stage 3 sft     : train on the 512 fixture + trajgen reward==1 LF (combined)
+#   stage 3 trainer     : train on the 512 fixture + tracer reward==1 LF (combined)
 #                     -> PERSIST a checkpoint   (remote GPU pod)
-#   stage 4 eval    : serve that checkpoint (vLLM+LiteLLM on the pod) -> evaluate
+#   stage 4 evaluator    : serve that checkpoint (vLLM+LiteLLM on the pod) -> evaluate
 #                     on the SWE-bench Verified 100-subset
 #
 # Usage:
 #   bash tests/smoke/run_pipeline.sh [--from <stage>] [--to <stage>]
 #                                    [--budget <sec>] [--keep-serving] [--dry-run]
 #
-# Stages: swegen trajgen sft eval. --from/--to bound which run (default all).
+# Stages: curator tracer trainer evaluator. --from/--to bound which run (default all).
 # Each stage overlays tests/smoke/<block>/config.yaml onto
 # subblock/<block>/config.yaml; the originals are restored on exit.
 #
@@ -33,19 +33,19 @@
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-STAGES=(swegen trajgen sft eval)
-FROM="swegen"; TO="eval"
+STAGES=(curator tracer trainer evaluator)
+FROM="curator"; TO="evaluator"
 BUDGET_OVERRIDE=""
 KEEP_SERVING=0
 DRY_RUN=0
 CLAUDE_SDK="${CLAUDE_SDK:-1}"
 
-# Per-stage default budgets (seconds). swegen gets 4h: a genuine ~200-PR
-# from-scratch collection + create-to-verified is slow. trajgen/eval use
+# Per-stage default budgets (seconds). curator gets 4h: a genuine ~200-PR
+# from-scratch collection + create-to-verified is slow. tracer/evaluator use
 # policy=first early-exit so these are just upper bounds on the wait.
-# sft: 50 steps at 128K cutoff on an 8B model (DeepSpeed ZeRO-3) is ~4 min/step
+# trainer: 50 steps at 128K cutoff on an 8B model (DeepSpeed ZeRO-3) is ~4 min/step
 # (~3.3h), plus model load + tokenization — 4h cap.
-declare -A BUDGET=( [swegen]=14400 [trajgen]=10800 [sft]=14400 [eval]=5400 )
+declare -A BUDGET=( [curator]=14400 [tracer]=10800 [trainer]=14400 [evaluator]=5400 )
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -183,10 +183,10 @@ wait_job() {  # wait_job <pgrep_pattern> <budget> <progress_glob>
       return 0
     else
       absent=$((absent + 1))
-      # Grace before concluding "never started": the eval/trajgen start.sh runs
+      # Grace before concluding "never started": the evaluator/tracer start.sh runs
       # its OWN dryrun (litellm import off a shared FS is ~2-3 min) + starts the
       # LiteLLM proxy BEFORE `harbor run` ever appears — a 3-min grace raced that
-      # and false-SKIP'd eval. 10 min comfortably covers the double-dryrun startup.
+      # and false-SKIPd evaluator. 10 min comfortably covers the double-dryrun startup.
       (( absent >= 20 )) && { log "  harbor job never started (10 min) — proceeding to verify"; return 0; }
     fi
     sleep 30
@@ -219,7 +219,7 @@ want() {  # want <stage> -> 0 if in [FROM..TO] window
 # --- HARD RESOURCE GATE ------------------------------------------------------
 # Before launching ANY stage, confirm the hardware/network we are about to lean
 # on has headroom right now: runner disk/memory/Docker, the GPU pod's free GPUs/
-# disk/memory (scope-aware — only when sft/eval are in-window), and upstream LLM
+# disk/memory (scope-aware — only when trainer/evaluator are in-window), and upstream LLM
 # reachability. This is the failure class that has actually bitten this smoke
 # (pod GPUs held by someone else -> OOM; disk full; endpoint down -> 0 verified).
 # Set SKIP_PREFLIGHT=1 only to deliberately bypass (not recommended).
@@ -236,11 +236,11 @@ CHAIN_RC=0
 hr; log "ROOT SMOKE CHAIN  from=$FROM to=$TO  claude_sdk=$CLAUDE_SDK  dry_run=$DRY_RUN"; hr
 [[ "$DRY_RUN" == 1 ]] && log "NOTE: dry-run skips the config overlay, so smoke-only launch params (max_pr, collect.*, ...) render blank below — they populate from tests/smoke/<block>/config.yaml in a real run."
 
-# ============================================================ stage 1: swegen =
-if want swegen; then
-  hr; log "STAGE 1/4 — swegen (collect ~200 PRs -> verified tasks)"; hr
-  overlay swegen
-  SB="$ROOT_DIR/subblock/swegen"; CFG="$SB/config.yaml"
+# ============================================================ stage 1: curator =
+if want curator; then
+  hr; log "STAGE 1/4 — curator (collect ~200 PRs -> verified tasks)"; hr
+  overlay curator
+  SB="$ROOT_DIR/subblock/curator"; CFG="$SB/config.yaml"
   BASE="$(cfg "$CFG" runtime_info.output.swe_tasks_dir.path)"
   SUB="$(cfg "$CFG" runtime_info.input.smoke.output_subdir)"
   STATE="$(cfg "$CFG" runtime_info.input.smoke.state_subdir)"
@@ -257,13 +257,13 @@ if want swegen; then
   C_TARGET="$(cfg "$CFG" runtime_info.input.smoke.collect.target_prs)"
   C_OUT="$(cfg "$CFG" runtime_info.input.smoke.collect.output_dir)"
   C_BUDGET="$(cfg "$CFG" runtime_info.input.smoke.collect.time_budget_s)"; C_BUDGET="${C_BUDGET:-1200}"
-  # Never let PR collection outlast the swegen stage budget: when the run is
+  # Never let PR collection outlast the curator stage budget: when the run is
   # dispatched with --budget (e.g. root_budget=1800), the collector must honor it
   # too, or stage 1 alone could burn the config's time_budget_s (hours) before the
   # stage budget even starts and blow past the CI job cap.
-  if [[ -n "$BUDGET_OVERRIDE" ]] && (( C_BUDGET > BUDGET[swegen] )); then
-    log "capping PR-collection budget ${C_BUDGET}s -> swegen stage budget ${BUDGET[swegen]}s (--budget override)"
-    C_BUDGET="${BUDGET[swegen]}"
+  if [[ -n "$BUDGET_OVERRIDE" ]] && (( C_BUDGET > BUDGET[curator] )); then
+    log "capping PR-collection budget ${C_BUDGET}s -> curator stage budget ${BUDGET[curator]}s (--budget override)"
+    C_BUDGET="${BUDGET[curator]}"
   fi
   C_MINIDS="$(cfg "$CFG" runtime_info.input.smoke.collect.min_ids)"; C_MINIDS="${C_MINIDS:-8}"
   IDS_FILE="$SB/$C_OUT/${C_LANG}_pr_ids.txt"
@@ -319,31 +319,31 @@ PY
   if [[ "$DRY_RUN" != 1 && ! -s "$IDS_FILE" ]]; then
     echo "SKIP: no PR ids collected — cannot run swegen create"; CHAIN_RC=77
   else
-    # swegen's CC verification path (the half that writes verifiable_tasks.txt)
+    # curator's CC verification path (the half that writes verifiable_tasks.txt)
     # uses cc_provider_mode: openai_proxy, so it needs a local LiteLLM proxy on
     # cc_proxy_port translating Anthropic -> the upstream OpenAI endpoint. Unlike
     # the per-block smoke (10_pr_demo.sh), this orchestrator builds its own
     # swegen-create, so it must start the proxy itself — otherwise dryrun.sh's
     # /health check fails and verification SILENTLY banks 0 tasks (the failure
     # that sank the first root run). No-op when cc_provider_mode != openai_proxy;
-    # torn down after the swegen gate. shellcheck source=/dev/null
+    # torn down after the curator gate. shellcheck source=/dev/null
     source "$SB/scripts/cc_proxy_lib.sh"
     [[ "$DRY_RUN" == 1 ]] || cc_proxy_start "$SB" "$CFG" \
-      || log "WARN: CC LiteLLM proxy did not start — swegen dryrun/verification will fail"
+      || log "WARN: CC LiteLLM proxy did not start — curator dryrun/verification will fail"
     RUN="source scripts/load_runtime_env.sh && load_runtime_env >/dev/null 2>&1 ; source artifacts/envs/swegen-env/bin/activate ; nohup swegen create --input-ids-file ${IDS_FILE#$SB/} --max-pr ${MAXPR} --n-concurrent ${NCONC} --output ${BASE}/${SUB} --state-dir ${BASE}/${STATE} --timeout ${TO_} --cc-timeout ${CCTO} --no-require-issue --min-source-files ${MINSF} --max-source-files ${MAXSF} --docker-prune-batch ${DPB} --verbose >> artifacts/logs/root-smoke-swegen.log 2>&1 &"
-    ( cd "$SB" && mkdir -p artifacts/logs && claude_launch swegen \
+    ( cd "$SB" && mkdir -p artifacts/logs && claude_launch curator \
         '( test -d artifacts/envs || test -d artifacts/env ) && test -d repos && echo setup-ok' \
-        'bash scripts/dryrun.sh' "$RUN" 'swegen create --input-ids-file' 'swegen' )
-    # Wait until swegen banks up to max_pr verified tasks (not just the first) so
-    # trajgen gets a diverse pool — one hard/unsolvable task shouldn't sink the
+        'bash scripts/dryrun.sh' "$RUN" 'swegen create --input-ids-file' 'curator' )
+    # Wait until curator banks up to max_pr verified tasks (not just the first) so
+    # tracer gets a diverse pool — one hard/unsolvable task shouldn't sink the
     # reward==1 gate. Break early once `create` finishes (PRs exhausted or it hit
     # its own --max-pr) or the budget elapses.
     MAN="$SB/$BASE/$SUB/verifiable_tasks.txt"
-    swdl=$(( $(date +%s) + ${BUDGET[swegen]} ))
-    log "waiting for swegen to bank up to max_pr=$MAXPR verified task(s) (budget ${BUDGET[swegen]}s)"
+    swdl=$(( $(date +%s) + ${BUDGET[curator]} ))
+    log "waiting for curator to bank up to max_pr=$MAXPR verified task(s) (budget ${BUDGET[curator]}s)"
     while (( $(date +%s) < swdl )); do
       nver=$([[ -f "$MAN" ]] && grep -c . "$MAN" 2>/dev/null || echo 0)
-      if (( nver >= MAXPR )); then log "  swegen banked $nver verified task(s) (>= max_pr=$MAXPR)"; break; fi
+      if (( nver >= MAXPR )); then log "  curator banked $nver verified task(s) (>= max_pr=$MAXPR)"; break; fi
       if ! pgrep -f 'swegen create --input-ids-file' >/dev/null 2>&1; then
         log "  swegen create finished — $nver verified task(s) banked"; break
       fi
@@ -353,40 +353,40 @@ PY
     # banked enough (or hit the stage budget) it keeps grinding the remaining PRs
     # in the background. Left detached, its continuous Docker/disk writeback makes
     # the NEXT stage's overlay() `sync` block in wb_wait_for_completion and wedge
-    # the whole pipeline (observed: trajgen overlay `sync` stuck 44+ min behind 8
+    # the whole pipeline (observed: tracer overlay `sync` stuck 44+ min behind 8
     # orphaned create workers). Stop it (and any lingering PR collector) here so
     # `sync` can settle and the chain advances.
     # Bracket-trick the patterns ('[c]reate') so pkill can never match its own
     # command line — a `pkill -f '<pat>'` whose cmdline contains <pat> SIGKILLs
     # the wrapper shell (instant exit, empty log). Convention for all smoke pkills.
-    pkill -f 'swegen [c]reate --input-ids-file' 2>/dev/null || true
+    pkill -f 'curator [c]reate --input-ids-file' 2>/dev/null || true
     pkill -f 'collect_[p]rs_wo_image' 2>/dev/null || true
-    if gate swegen; then log "stage swegen PASS"; else
-      rc=$?; [[ $rc == 77 ]] && { log "stage swegen SKIP"; CHAIN_RC=77; } || { log "stage swegen FAIL"; CHAIN_RC=1; }
+    if gate curator; then log "stage curator PASS"; else
+      rc=$?; [[ $rc == 77 ]] && { log "stage curator SKIP"; CHAIN_RC=77; } || { log "stage curator FAIL"; CHAIN_RC=1; }
     fi
-    # Tear down the swegen CC proxy before the next stage (no-op if not started).
+    # Tear down the curator CC proxy before the next stage (no-op if not started).
     [[ "$DRY_RUN" == 1 ]] || cc_proxy_stop
   fi
 fi
 
-# =========================================================== stage 2: trajgen =
-if want trajgen && [[ "$CHAIN_RC" == 0 ]]; then
-  hr; log "STAGE 2/4 — trajgen (verified tasks -> reward==1 -> LF SFT data)"; hr
-  overlay trajgen
-  TB="$ROOT_DIR/subblock/trajgen"; CFG="$TB/config.yaml"
-  # WIRE: harbor has no "run a task N times" knob, so to give trajgen multiple
+# =========================================================== stage 2: tracer =
+if want tracer && [[ "$CHAIN_RC" == 0 ]]; then
+  hr; log "STAGE 2/4 — tracer (verified tasks -> reward==1 -> LF SFT data)"; hr
+  overlay tracer
+  TB="$ROOT_DIR/subblock/tracer"; CFG="$TB/config.yaml"
+  # WIRE: harbor has no "run a task N times" knob, so to give tracer multiple
   # independent solve attempts (raising the reward==1 gate's odds without
-  # re-running swegen) we stage `smoke_attempts` replicas of each swegen verified
+  # re-running curator) we stage `smoke_attempts` replicas of each curator verified
   # task into a dir of distinct names (harbor IDs tasks by dir name; task.toml
   # has no id), then point task_source.dataset_name at that staging dir.
-  # Read swegen's smoke output location from the STATIC smoke config (it carries
-  # the smoke-only output_subdir field) — the production swegen config lacks it,
-  # and with --from trajgen swegen is never overlaid, so reading the subblock
+  # Read curator's smoke output location from the STATIC smoke config (it carries
+  # the smoke-only output_subdir field) — the production curator config lacks it,
+  # and with --from tracer curator is never overlaid, so reading the subblock
   # config would yield an empty subdir and stage 0 tasks.
-  SWE_SMOKE_CFG="$ROOT_DIR/tests/smoke/swegen/config.yaml"
+  SWE_SMOKE_CFG="$ROOT_DIR/tests/smoke/curator/config.yaml"
   SWE_SUB="$(cfg "$SWE_SMOKE_CFG" runtime_info.input.smoke.output_subdir)"
   SWE_BASE="$(cfg "$SWE_SMOKE_CFG" runtime_info.output.swe_tasks_dir.path)"
-  SWE_ABS="$ROOT_DIR/subblock/swegen/$SWE_BASE/$SWE_SUB"
+  SWE_ABS="$ROOT_DIR/subblock/curator/$SWE_BASE/$SWE_SUB"
   ATTEMPTS="$(cfg "$CFG" runtime_info.input.smoke_attempts)"; ATTEMPTS="${ATTEMPTS:-1}"
   STAGE_DIR="$TB/artifacts/root-smoke-src-tasks"
   if [[ "$DRY_RUN" != 1 ]]; then
@@ -417,7 +417,7 @@ p, src = sys.argv[1], sys.argv[2]
 d = yaml.safe_load(open(p)) or {}
 d["runtime_info"]["input"]["task_source"]["dataset_name"] = src
 yaml.safe_dump(d, open(p, "w"), sort_keys=False, allow_unicode=True)
-print(f"wired trajgen task_source.dataset_name -> {src}")
+print(f"wired tracer task_source.dataset_name -> {src}")
 PY
   fi
   JOBS="$(cfg "$CFG" runtime_info.input.harbor_job.jobs_dir)"
@@ -425,42 +425,42 @@ PY
   # policy=first would match an old result.json instantly and verify the wrong
   # job. jobs_dir is smoke-isolated (artifacts/jobs/root-smoke). ALSO clear the
   # sft_data out_dir: stage 3 merges every `*/lf.json` under it, so a prior run's
-  # converted LF would otherwise be trained on even when THIS trajgen resolves
-  # zero — masking a broken swegen→trajgen handoff.
+  # converted LF would otherwise be trained on even when THIS tracer resolves
+  # zero — masking a broken curator→tracer handoff.
   TRAJ_OUT="$(cfg "$CFG" runtime_info.input.sft_conversion.out_dir)"; TRAJ_OUT="${TRAJ_OUT:-artifacts/sft_data}"
   if [[ "$DRY_RUN" != 1 ]]; then
     rm -rf "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" "$TB/$TRAJ_OUT"
   fi
-  RUN="nohup bash scripts/start.sh >> artifacts/logs/root-smoke-trajgen.log 2>&1 &"
+  RUN="nohup bash scripts/start.sh >> artifacts/logs/root-smoke-tracer.log 2>&1 &"
   ( cd "$TB" && mkdir -p artifacts/logs && \
     { [[ "$DRY_RUN" == 1 ]] && echo "[DRY-RUN] prepare_tasks.sh" || bash scripts/prepare_tasks.sh || log "WARN: prepare_tasks.sh non-zero"; } && \
-    claude_launch trajgen \
+    claude_launch tracer \
       'test -d artifacts/env && test -d repos && echo setup-ok' \
-      'bash scripts/dryrun.sh' "$RUN" 'bash scripts/start.sh' 'trajgen' )
+      'bash scripts/dryrun.sh' "$RUN" 'bash scripts/start.sh' 'tracer' )
   # Wait for the harbor job PROCESS to exit (NOT for a result.json to appear —
   # harbor writes the job-level result.json before the trials are actually done,
   # and exiting then tears the LiteLLM proxy down under the still-running trials
   # -> ConnectionRefused). Only after the job truly finishes does verify.sh grade
   # the per-task rewards (needs >=1 reward==1 across the replicas).
-  wait_job "harbor run.*$JOBS" "${BUDGET[trajgen]}" "$TB/$JOBS/*/*/result.json"
-  if gate trajgen; then log "stage trajgen PASS"; else
-    rc=$?; [[ $rc == 77 ]] && { log "stage trajgen SKIP"; CHAIN_RC=77; } || { log "stage trajgen FAIL"; CHAIN_RC=1; }
+  wait_job "harbor run.*$JOBS" "${BUDGET[tracer]}" "$TB/$JOBS/*/*/result.json"
+  if gate tracer; then log "stage tracer PASS"; else
+    rc=$?; [[ $rc == 77 ]] && { log "stage tracer SKIP"; CHAIN_RC=77; } || { log "stage tracer FAIL"; CHAIN_RC=1; }
   fi
 fi
 
-# =============================================================== stage 3: sft =
-if want sft && [[ "$CHAIN_RC" == 0 ]]; then
-  hr; log "STAGE 3/4 — sft (512 fixture + trajgen reward==1 -> trained checkpoint)"; hr
-  overlay sft
-  FB="$ROOT_DIR/subblock/sft"; CFG="$FB/config.yaml"
+# =============================================================== stage 3: trainer =
+if want trainer && [[ "$CHAIN_RC" == 0 ]]; then
+  hr; log "STAGE 3/4 — trainer (512 fixture + tracer reward==1 -> trained checkpoint)"; hr
+  overlay trainer
+  FB="$ROOT_DIR/subblock/trainer"; CFG="$FB/config.yaml"
   FIXTURE="$(cfg "$CFG" runtime_info.input.source.fixture_lf)"
   UPDIR="$(cfg "$CFG" runtime_info.input.source.upstream_lf_dir)"
   R_IP="$(cfg "$CFG" meta_info.resources.ip)"
-  # The trajgen reward==1 LF lives on the CI host under subblock/trajgen/<out_dir>.
-  TRAJ_SFT="$ROOT_DIR/subblock/trajgen/$(cfg "$ROOT_DIR/subblock/trajgen/config.yaml" runtime_info.input.sft_conversion.out_dir)"
+  # The tracer reward==1 LF lives on the CI host under subblock/tracer/<out_dir>.
+  TRAJ_SFT="$ROOT_DIR/subblock/tracer/$(cfg "$ROOT_DIR/subblock/tracer/config.yaml" runtime_info.input.sft_conversion.out_dir)"
 
-  # WIRE: merge fixture + every trajgen lf.json into one combined LF, then lower
-  # source.type to the sft block's native local_lf. For a remote pod this merge
+  # WIRE: merge fixture + every tracer lf.json into one combined LF, then lower
+  # source.type to the trainer block's native local_lf. For a remote pod this merge
   # is staged onto the pod (where train.sh reads it); for local it stays here.
   # Write under artifacts/data/ (haoli-owned) NOT artifacts/data/examples/ —
   # that dir is often root:root residue from CI/remote runs (lf_512.json lives
@@ -472,7 +472,7 @@ if want sft && [[ "$CHAIN_RC" == 0 ]]; then
     MERGED_ABS="$FB/$MERGED_REL"; mkdir -p "$(dirname "$MERGED_ABS")"
     # Stage the 512 fixture if it isn't present yet.
     if [[ ! -s "$FB/$FIXTURE" ]]; then
-      log "fixture $FIXTURE absent — staging via subblock/sft/tests/smoke/prepare_smoke_data.sh"
+      log "fixture $FIXTURE absent — staging via subblock/trainer/tests/smoke/prepare_smoke_data.sh"
       bash "$FB/tests/smoke/prepare_smoke_data.sh" "$FB/$FIXTURE" || log "WARN: could not stage 512 fixture"
     fi
     FIXTURE_ABS="$FB/$FIXTURE"; TRAJ_SFT_ABS="$TRAJ_SFT" MERGED="$MERGED_ABS" FIX="$FIXTURE_ABS" python3 - <<'PY'
@@ -499,7 +499,7 @@ p = sys.argv[1]; d = yaml.safe_load(open(p)) or {}
 src = d["runtime_info"]["input"]["source"]
 src["type"] = "local_lf"; src["lf_path"] = os.environ["MERGED_REL"]
 yaml.safe_dump(d, open(p, "w"), sort_keys=False, allow_unicode=True)
-print("lowered sft source.type -> local_lf")
+print("lowered trainer source.type -> local_lf")
 PY
   fi
 
@@ -507,39 +507,39 @@ PY
   if [[ -z "$R_IP" || "$R_IP" == "local" || "$R_IP" == "null" ]]; then
     # Local GPU training.
     RUN="nohup bash scripts/start.sh >> artifacts/logs/root-smoke-sft.log 2>&1 &"
-    ( cd "$FB" && mkdir -p artifacts/logs && claude_launch sft \
+    ( cd "$FB" && mkdir -p artifacts/logs && claude_launch trainer \
         '( test -d artifacts/env ) && test -d repos && echo setup-ok' \
-        'bash scripts/dryrun.sh' "$RUN" 'bash scripts/start.sh' 'sft' )
-    wait_for "$FB/artifacts/model/$OUT/train_results.json" "${BUDGET[sft]}" first
+        'bash scripts/dryrun.sh' "$RUN" 'bash scripts/start.sh' 'trainer' )
+    wait_for "$FB/artifacts/model/$OUT/train_results.json" "${BUDGET[trainer]}" first
   else
     # Remote GPU pod: stage the merged data + smoke config, launch start.sh over
     # SSH, poll the pod, and fetch train_results.json back so verify.sh (local)
     # sees it. The persisted checkpoint stays on the pod for serve_checkpoint.sh.
-    log "sft runs on remote pod $R_IP — staging data + launching over SSH"
-    bash "$ROOT_DIR/tests/smoke/_remote_sft.sh" "$FB" "$MERGED_REL" "${BUDGET[sft]}" "$DRY_RUN" \
-      || log "WARN: remote sft helper returned non-zero"
+    log "trainer runs on remote pod $R_IP — staging data + launching over SSH"
+    bash "$ROOT_DIR/tests/smoke/_remote_sft.sh" "$FB" "$MERGED_REL" "${BUDGET[trainer]}" "$DRY_RUN" \
+      || log "WARN: remote trainer helper returned non-zero"
   fi
-  if gate sft; then log "stage sft PASS"; else
-    rc=$?; [[ $rc == 77 ]] && { log "stage sft SKIP"; CHAIN_RC=77; } || { log "stage sft FAIL"; CHAIN_RC=1; }
+  if gate trainer; then log "stage trainer PASS"; else
+    rc=$?; [[ $rc == 77 ]] && { log "stage trainer SKIP"; CHAIN_RC=77; } || { log "stage trainer FAIL"; CHAIN_RC=1; }
   fi
 fi
 
-# ============================================================== stage 4: eval =
-if want eval && [[ "$CHAIN_RC" == 0 ]]; then
-  hr; log "STAGE 4/4 — eval (serve checkpoint -> swebench-verified 100-subset)"; hr
-  overlay eval
-  EB="$ROOT_DIR/subblock/eval"; CFG="$EB/config.yaml"
+# ============================================================== stage 4: evaluator =
+if want evaluator && [[ "$CHAIN_RC" == 0 ]]; then
+  hr; log "STAGE 4/4 — evaluator (serve checkpoint -> swebench-verified 100-subset)"; hr
+  overlay evaluator
+  EB="$ROOT_DIR/subblock/evaluator"; CFG="$EB/config.yaml"
 
-  # WIRE: stand up vLLM+LiteLLM on the sft pod, point eval at the wrapper.
+  # WIRE: stand up vLLM+LiteLLM on the trainer pod, point evaluator at the wrapper.
   if [[ "$DRY_RUN" == 1 ]]; then
-    log "[DRY-RUN] serve_checkpoint.sh start ; rewrite eval llm_api.api_base_url"
+    log "[DRY-RUN] serve_checkpoint.sh start ; rewrite evaluator llm_api.api_base_url"
   else
     set +e
     BASE_URL="$(bash "$ROOT_DIR/tests/smoke/serve_checkpoint.sh" start | tail -1)"
     serve_rc=$?
     set -e
     if [[ $serve_rc == 77 ]]; then
-      log "serve SKIP — no servable checkpoint/pod; eval cannot evaluate the trained model"
+      log "serve SKIP — no servable checkpoint/pod; evaluator cannot evaluate the trained model"
       CHAIN_RC=77
     elif [[ $serve_rc != 0 || -z "$BASE_URL" || "$BASE_URL" != http* ]]; then
       log "serve FAIL — could not stand up the checkpoint endpoint"
@@ -547,16 +547,16 @@ if want eval && [[ "$CHAIN_RC" == 0 ]]; then
     else
       # Only rewrite api_base_url. Do NOT touch api_key: serve_checkpoint.sh
       # started vLLM with --api-key = llm_api.api_key (derived from THIS field so
-      # the two can't drift), so eval's LiteLLM must keep forwarding that same key
+      # the two can't drift), so evaluator's LiteLLM must keep forwarding that same key
       # upstream. Overwriting it with serving.litellm.master_key would 401 every
-      # eval request against vLLM (they only happen to match today).
+      # evaluator request against vLLM (they only happen to match today).
       BASE_URL="$BASE_URL" python3 - "$CFG" <<'PY'
 import sys, os, yaml
 p = sys.argv[1]; d = yaml.safe_load(open(p)) or {}
 api = d["runtime_info"]["input"]["llm_api"]
 api["api_base_url"] = os.environ["BASE_URL"]
 yaml.safe_dump(d, open(p, "w"), sort_keys=False, allow_unicode=True)
-print(f"wired eval llm_api.api_base_url -> {os.environ['BASE_URL']}")
+print(f"wired evaluator llm_api.api_base_url -> {os.environ['BASE_URL']}")
 PY
     fi
   fi
@@ -577,13 +577,13 @@ PY
     RUN="nohup env HOME='$EVAL_CACHE_ROOT' XDG_CACHE_HOME='$EVAL_CACHE_ROOT/.cache' TMPDIR='$EVAL_CACHE_ROOT/tmp' bash scripts/start.sh >> artifacts/logs/root-smoke-eval.log 2>&1 &"
     ( cd "$EB" && mkdir -p artifacts/logs && \
       { [[ -x artifacts/env/harbor-uv/bin/harbor ]] && artifacts/env/harbor-uv/bin/harbor --help >/dev/null 2>&1 || true; } && \
-      claude_launch eval \
+      claude_launch evaluator \
         'test -d artifacts/env && test -d repos && echo setup-ok' \
-        'bash scripts/dryrun.sh' "$RUN" 'bash scripts/start.sh' 'eval' )
-    # Wait for the harbor job process to exit (see trajgen note) before grading.
-    wait_job "harbor run.*$JOBS" "${BUDGET[eval]}" "$EB/$JOBS/*/*/result.json"
-    if gate eval; then log "stage eval PASS"; else
-      rc=$?; [[ $rc == 77 ]] && { log "stage eval SKIP"; CHAIN_RC=77; } || { log "stage eval FAIL"; CHAIN_RC=1; }
+        'bash scripts/dryrun.sh' "$RUN" 'bash scripts/start.sh' 'evaluator' )
+    # Wait for the harbor job process to exit (see tracer note) before grading.
+    wait_job "harbor run.*$JOBS" "${BUDGET[evaluator]}" "$EB/$JOBS/*/*/result.json"
+    if gate evaluator; then log "stage evaluator PASS"; else
+      rc=$?; [[ $rc == 77 ]] && { log "stage evaluator SKIP"; CHAIN_RC=77; } || { log "stage evaluator FAIL"; CHAIN_RC=1; }
     fi
   fi
 
@@ -595,7 +595,7 @@ fi
 
 hr
 case "$CHAIN_RC" in
-  0)  log "ROOT SMOKE CHAIN: PASS (swegen -> trajgen -> sft -> eval)"; ;;
+  0)  log "ROOT SMOKE CHAIN: PASS (curator -> tracer -> trainer -> evaluator)"; ;;
   77) log "ROOT SMOKE CHAIN: SKIPPED at a stage (prereq absent — see above)"; ;;
   *)  log "ROOT SMOKE CHAIN: FAILED (see the failing stage above)"; ;;
 esac

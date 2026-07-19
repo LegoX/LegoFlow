@@ -2,6 +2,7 @@
     "pages": [
         "index",
         "getting-started",
+        "example-usages",
         "block-design",
         "sub-block",
         "reference"

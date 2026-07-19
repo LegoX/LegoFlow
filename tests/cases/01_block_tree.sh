@@ -16,7 +16,7 @@ except ImportError:
     print("FAIL: PyYAML not installed", file=sys.stderr); sys.exit(1)
 
 root = sys.argv[1]
-EXPECTED = ["swegen", "trajgen", "sft", "rl", "eval"]
+EXPECTED = ["curator", "tracer", "trainer", "rl", "evaluator"]
 PARENT = "swe_lego_live"
 errs = []
 for name in EXPECTED:

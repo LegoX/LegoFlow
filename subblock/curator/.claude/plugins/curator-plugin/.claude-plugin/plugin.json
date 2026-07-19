@@ -1,0 +1,6 @@
+{
+  "name": "curator",
+  "description": "curator block skills — env/venv bootstrap, preflight (GitHub tokens + LLM endpoint + docker), PR collection, dashboard, and pipeline launch (PR collection → task generation → verification). Provides /curator:setup, /curator:check, /curator:collect-prs, /curator:dashboard, /curator:run.",
+  "version": "0.1.0",
+  "author": { "name": "haoli" }
+}

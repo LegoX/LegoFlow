@@ -6,17 +6,17 @@
 # env): this one answers "does the hardware/network we are about to lean on
 # actually have headroom right now?" — the failure modes that have actually
 # bitten this smoke:
-#   - GPU pod's 8 GPUs already held by someone else's job  -> sft OOM
+#   - GPU pod's 8 GPUs already held by someone else's job  -> trainer OOM
 #     (the pod is SHARED; we never kill others' work, we abort and tell the user)
 #   - disk full on the CI runner or the pod's storage dir   -> mid-run write fail
-#   - runner low on memory / Docker daemon down             -> swegen/trajgen die
+#   - runner low on memory / Docker daemon down             -> curator/tracer die
 #   - upstream LLM endpoint unreachable                     -> 0 verified tasks
 #
-# Scope-aware: GPU/pod checks only run when sft or eval is in the [from..to]
+# Scope-aware: GPU/pod checks only run when trainer or evaluator is in the [from..to]
 # window; Docker/LLM checks only when a stage that needs them is in-window.
 #
 # Usage:  bash tests/smoke/preflight.sh [<from-stage>] [<to-stage>]
-#         (defaults: swegen .. eval — i.e. the whole chain)
+#         (defaults: curator .. evaluator — i.e. the whole chain)
 #
 # Exit 0 = clear to launch (FAILs == 0; WARNs are advisory).
 # Exit 1 = do NOT launch (one or more hard checks failed).
@@ -24,13 +24,13 @@
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SFT_CFG="$ROOT_DIR/tests/smoke/sft/config.yaml"
-SWEGEN_CFG="$ROOT_DIR/tests/smoke/swegen/config.yaml"
-EVAL_CFG="$ROOT_DIR/tests/smoke/eval/config.yaml"
+SFT_CFG="$ROOT_DIR/tests/smoke/trainer/config.yaml"
+SWEGEN_CFG="$ROOT_DIR/tests/smoke/curator/config.yaml"
+EVAL_CFG="$ROOT_DIR/tests/smoke/evaluator/config.yaml"
 
-STAGES=(swegen trajgen sft eval)
-FROM="${1:-swegen}"
-TO="${2:-eval}"
+STAGES=(curator tracer trainer evaluator)
+FROM="${1:-curator}"
+TO="${2:-evaluator}"
 
 # --- thresholds (override via env if a host legitimately needs different) ----
 CI_DISK_MIN_GB="${CI_DISK_MIN_GB:-15}"      # hard floor on the runner workspace fs
@@ -99,8 +99,8 @@ else
   warn "runner memory: could not read /proc/meminfo"
 fi
 
-# Docker — swegen (image build), trajgen + eval (harbor containers) all need it
-if in_window swegen || in_window trajgen || in_window eval; then
+# Docker — curator (image build), tracer + evaluator (harbor containers) all need it
+if in_window curator || in_window tracer || in_window evaluator; then
   if docker info >/dev/null 2>&1; then
     ok "docker daemon reachable"
     # `docker info` passing does NOT mean containers can RUN: the GPU pod's
@@ -113,10 +113,10 @@ if in_window swegen || in_window trajgen || in_window eval; then
        || timeout 60 docker run --rm "$RUN_IMG" true >/dev/null 2>&1; then
       ok "docker can run containers ($RUN_IMG)"
     else
-      fail "docker daemon up but CANNOT run containers (cgroup/rootless restriction?) — Harbor agent containers will fail here; run eval on a Docker-capable host"
+      fail "docker daemon up but CANNOT run containers (cgroup/rootless restriction?) — Harbor agent containers will fail here; run evaluator on a Docker-capable host"
     fi
   else
-    fail "docker daemon NOT reachable (\`docker info\` failed) — swegen/trajgen/eval cannot run containers"
+    fail "docker daemon NOT reachable (\`docker info\` failed) — curator/tracer/evaluator cannot run containers"
   fi
 
   # docker buildkit + /tmp build scratch live on the ROOT partition, NOT the
@@ -131,9 +131,9 @@ if in_window swegen || in_window trajgen || in_window eval; then
   fi
 fi
 
-# =========================================== upstream LLM endpoint (swegen) ===
-if in_window swegen || in_window trajgen; then
-  echo "[2] Upstream LLM endpoint (swegen/trajgen)"
+# =========================================== upstream LLM endpoint (curator) ===
+if in_window curator || in_window tracer; then
+  echo "[2] Upstream LLM endpoint (curator/tracer)"
   LLM_URL="$(cfg "$SWEGEN_CFG" runtime_info.input.llm_api.api_base_url)"
   if [[ -z "$LLM_URL" ]]; then
     warn "no llm_api.api_base_url in $SWEGEN_CFG"
@@ -146,13 +146,13 @@ if in_window swegen || in_window trajgen; then
     if [[ -n "$CODE" && "$CODE" != "000" ]]; then
       ok "LLM endpoint reachable: $LLM_URL (HTTP $CODE)"
     else
-      warn "LLM endpoint did not respond: $LLM_URL (curl code ${CODE:-none}) — may be CF-gated from here; verify on the runner if swegen gets 0 verified"
+      warn "LLM endpoint did not respond: $LLM_URL (curl code ${CODE:-none}) — may be CF-gated from here; verify on the runner if curator gets 0 verified"
     fi
   fi
 fi
 
-# ===================================================== GPU pod (sft / eval) ===
-if in_window sft || in_window eval; then
+# ===================================================== GPU pod (trainer / evaluator) ===
+if in_window trainer || in_window evaluator; then
   echo "[3] GPU pod — reachability / GPUs / disk / memory"
   R_IP="$(cfg "$SFT_CFG" meta_info.resources.ip)"
   R_USER="$(cfg "$SFT_CFG" meta_info.resources.user)"
@@ -161,7 +161,7 @@ if in_window sft || in_window eval; then
   R_DIR="$(cfg "$SFT_CFG" meta_info.resources.directory)"
 
   if [[ -z "$R_IP" || "$R_IP" == "local" || "$R_IP" == "null" ]]; then
-    ok "sft/eval configured local (ip=$R_IP) — no remote GPU pod to probe"
+    ok "trainer/evaluator configured local (ip=$R_IP) — no remote GPU pod to probe"
   else
     remote() {
       ssh -i "$R_KEY" -p "$R_PORT" \
@@ -169,12 +169,12 @@ if in_window sft || in_window eval; then
           "$R_USER@$R_IP" "$@"
     }
 
-    # How many GPUs does this window need? sft trains across n_gpus_per_node;
-    # eval-only serving needs just the vLLM tensor-parallel size.
+    # How many GPUs does this window need? trainer trains across n_gpus_per_node;
+    # evaluator-only serving needs just the vLLM tensor-parallel size.
     REQ_GPUS=1
-    if in_window sft; then
+    if in_window trainer; then
       N="$(cfg "$SFT_CFG" runtime_info.input.training.n_gpus_per_node)"; REQ_GPUS="${N:-8}"
-    elif in_window eval; then
+    elif in_window evaluator; then
       # serving uses data_parallel_size x tensor_parallel_size GPUs. With DP
       # auto/null, serve_checkpoint.sh scales to whatever is FREE, so we only
       # need >=1 free here; with an explicit DP we need DP*TP.
@@ -184,7 +184,7 @@ if in_window sft || in_window eval; then
     fi
 
     if ! remote "echo ok" >/dev/null 2>&1; then
-      fail "GPU pod unreachable over SSH: $R_USER@$R_IP:$R_PORT (key $R_KEY) — sft/eval cannot run"
+      fail "GPU pod unreachable over SSH: $R_USER@$R_IP:$R_PORT (key $R_KEY) — trainer/evaluator cannot run"
     else
       ok "GPU pod reachable: $R_USER@$R_IP:$R_PORT"
 

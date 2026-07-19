@@ -1,0 +1,31 @@
+---
+title: Motivation
+description: Why we built trainer
+---
+
+trainer turns agent trajectories into ready-to-train datasets and fine-tunes SWE coding models on them.
+
+It is the supervised-fine-tuning stage of the [SWE-Lego-Live](https://github.com/SWE-Lego/SWE-Lego-Live) pipeline, sitting between trajectory generation (`tracer`) and reinforcement learning (`rl`). It can convert good rollouts produced upstream or consume a ready-made Hugging Face/local ShareGPT dataset, then trains a model with the patched [SWE-Lego LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory) + DeepSpeed ZeRO-3 — all driven by a single `config.yaml`.
+
+```text
+curator ─▶ tracer ─▶ trainer ─▶ rl
+```
+
+trainer provides:
+
+- **One-config runs** — source trajectories, conversion settings, dataset, model, hyperparameters, and infrastructure all live in `config.yaml`
+- **Scaffold-aware conversion** — Claude Code, OpenCode, OpenHands SDK, and Terminus-2 trajectories convert through the `swe_data_process` package
+- **Ready-made LF sources** — load a Hub dataset config, select one exact Hub file, or register a local ShareGPT JSON
+- **Quality scoring** — rule-based scoring runs automatically; optional LLM scoring layers on top
+- **Eval-leak protection** — SWE-bench benchmark repos are filtered out of training data by default
+- **Multi-GPU training** — LLaMA-Factory through torchrun with DeepSpeed ZeRO-3 on a single 8-GPU node
+- **A live web dashboard** that reads the training output directly, with multi-run comparison and optional wandb
+
+## Where to go next
+
+- [Getting Started](/docs/getting-started) — set up the environment and run your first training job
+- [Example Run](/docs/examples) — inspect measured runtime, curves, metrics, and artifacts from the checked-in profile
+- [Core Concepts](/docs/core-concepts) — trajectories, IM/LF formats, datasets, runs, and checkpoints
+- [Data Pipeline](/docs/data-pipeline) — convert trajectories into LLaMA-Factory datasets
+- [Training](/docs/training) — launch the pipeline, tune the configuration, and read the outputs
+- [Dashboard](/docs/dashboard) — monitor training runs in real time

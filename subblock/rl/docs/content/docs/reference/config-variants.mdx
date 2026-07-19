@@ -39,7 +39,7 @@ and `export WANDB_API_KEY=...` in your shell before launch (or set
 ## Build & deploy the docs site
 
 This documentation is a [fumadocs](https://fumadocs.dev/) (Next.js) static
-export, deployed to a dedicated Cloudflare Pages project (`swe-rl-docs`),
+export, deployed to a dedicated Cloudflare Pages project (`swe-lego-rl-docs`),
 separate from the training dashboard's `swe-lego-rl-dashboard`.
 
 ```bash
@@ -48,7 +48,7 @@ export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"; n
 npm install            # first time
 npm run dev            # local preview at http://localhost:3000
 npm run build          # static export to out/
-bash deploy_cloudflare_pages.sh   # build + deploy to swe-rl-docs
+bash deploy_cloudflare_pages.sh   # build + deploy to swe-lego-rl-docs
 ```
 
 The deploy script asserts Node >= 20 (via nvm), reuses the dashboard's Cloudflare

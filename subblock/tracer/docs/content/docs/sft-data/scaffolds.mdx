@@ -1,0 +1,38 @@
+---
+title: Scaffolds
+description: Supported agent formats and their converters
+---
+
+The **scaffold** is the agent harness that produced a trajectory. Because each scaffold logs in its own shape, the converter that reshapes a trajectory into IM format is scaffold-specific. tracer ships converters for the four scaffolds below via the [`swe_data_process`](https://github.com/SWE-Lego/swe_data_process) package.
+
+## Supported scaffolds
+
+| Scaffold | `--scaffold` key | Converter |
+| --- | --- | --- |
+| Claude Code | `claude_code` | `convert_cc_to_im.py` |
+| OpenCode | `open_code` | `convert_oc_to_im.py` |
+| OpenHands SDK | `openhands_sdk` | `convert_openhands_sdk_to_im.py` |
+| Terminus-2 | `terminus2` | `convert_terminus2_to_im.py` |
+
+## Automatic detection
+
+By default the scaffold is detected automatically (`--scaffold auto`):
+
+- `scripts/convert_trajectories.sh` derives it from `runtime_info.input.agent.name` in `config.yaml` (for example `custom-claude-code` → `claude_code`).
+- The dashboard's online sync derives it from the **job directory name** instead, because the live job name may differ from `agent.name`.
+
+You can always override detection by passing `--scaffold <key>` explicitly.
+
+<Callout title="Pick the scaffold that matches the run" type="warn">
+Converting a trajectory with the wrong scaffold key produces malformed IM rows. If the agent that generated a job does not match `agent.name` in the current config, pass `--scaffold` explicitly.
+</Callout>
+
+## What a converter does
+
+Each converter normalizes its scaffold's raw log into the shared IM schema:
+
+- Extracts user/assistant/tool messages and normalizes tool calls into OpenAI `tool_calls`.
+- Splits reasoning from actions where the scaffold separates them (for example Terminus-2's analysis/plan/command structure).
+- Deduplicates repeated trajectory prefixes so a single clean sequence remains.
+
+The result is uniform across scaffolds, so downstream scoring and LF conversion are scaffold-agnostic.

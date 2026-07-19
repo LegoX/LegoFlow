@@ -1,0 +1,11 @@
+{
+  "name": "curator-block",
+  "owner": { "name": "haoli" },
+  "plugins": [
+    {
+      "name": "curator",
+      "source": "./curator-plugin",
+      "description": "curator block skills — setup, check, dashboard, run."
+    }
+  ]
+}

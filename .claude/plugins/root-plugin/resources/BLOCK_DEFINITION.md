@@ -116,10 +116,10 @@ Subblock dependencies are declared in `meta_info.subblocks[].dependencies`. This
 
 ```yaml
 subblocks:
-  trajgen:
+  tracer:
     role: Generate trajectories from verified SWE instances
     dependencies:
-      verified_tasks_dir: swegen.output.verified_tasks_dir  # from sibling block
+      verified_tasks_dir: curator.output.verified_tasks_dir  # from sibling block
       api_key: human                                         # filled manually
 ```
 
@@ -177,8 +177,8 @@ Termination is intentionally not a skill — see §2.1. Each block ships a `scri
 
 Naming rules:
 
-- Plugin manifest `name` MUST equal the block name (`root`, `rl`, `swegen`, …). The slash-command namespace is `/<name>:`.
-- Marketplace `name` in `marketplace.json` MUST equal the key used in `settings.json` `extraKnownMarketplaces` (e.g. `swegen-local`).
+- Plugin manifest `name` MUST equal the block name (`root`, `rl`, `curator`, …). The slash-command namespace is `/<name>:`.
+- Marketplace `name` in `marketplace.json` MUST equal the key used in `settings.json` `extraKnownMarketplaces` (e.g. `curator-local`).
 - Directory name follows `<block_name>-plugin/` for grep-friendliness; the source path in `marketplace.json` (`./<block_name>-plugin`) must match.
 
 ### 4.3 Inter-plugin references

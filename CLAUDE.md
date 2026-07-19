@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # SWE Lego Live
 
-Root orchestration block for the self-evolving LLM development pipeline. Coordinates data curation (swegen), trajectory generation (trajgen), supervised fine-tuning (sft), and reinforcement learning (rl) in sequence.
+Root orchestration block for the self-evolving LLM development pipeline. Coordinates data curation (curator), trajectory generation (tracer), supervised fine-tuning (trainer), and reinforcement learning (rl) in sequence.
 
 ## Block System
 
@@ -49,11 +49,11 @@ If — and only if — `meta_info.resources.ip` is set to a real remote IP, the 
 
 - **Name**: swe_lego_live
 - **Parent**: none
-- **Children**: swegen → trajgen → sft → rl
+- **Children**: curator → tracer → trainer → rl
 
 ## What To Read First
 
-1. `subblock/swegen/config.yaml` and `subblock/trajgen/config.yaml` — identity, resources, dependency wiring, and runtime values of the two active subblocks. Live state is in each subblock's `artifacts/index.yaml`, not `config.yaml`.
+1. `subblock/curator/config.yaml` and `subblock/tracer/config.yaml` — identity, resources, dependency wiring, and runtime values of the two active subblocks. Live state is in each subblock's `artifacts/index.yaml`, not `config.yaml`.
 2. `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md` — full block system specification
 
 The root block has no `config.yaml` of its own; inputs and outputs are owned by the subblock configs listed below. Each subblock has its own `CLAUDE.md` agent contract.
@@ -62,21 +62,21 @@ The root block has no `config.yaml` of its own; inputs and outputs are owned by 
 
 The root block does not consume external inputs directly. Required external values are filled into each active subblock's `runtime_info.input`:
 
-**swegen** (`subblock/swegen/config.yaml` → `runtime_info.input`):
+**curator** (`subblock/curator/config.yaml` → `runtime_info.input`):
 - `github_tokens`: comma-separated GitHub API tokens for PR collection
 - `llm_api.api_key`, `llm_api.api_base_url`: OpenAI-compatible LLM endpoint
 - `llm_api.pr_model`, `llm_api.task_model`: model names for PR evaluation and task completion
 
-**trajgen** (`subblock/trajgen/config.yaml` → `runtime_info.input`):
+**tracer** (`subblock/tracer/config.yaml` → `runtime_info.input`):
 - `llm_api.api_key`, `llm_api.api_base_url`, `llm_api.model`: OpenAI-compatible LLM endpoint and model used by the per-job LiteLLM proxy
 
 **Outputs** (downstream-consumable artifacts):
-- `swegen.output.swe_tasks_dir`: verified SWE tasks under `subblock/swegen/artifacts/swe_tasks/{lang}-cc/`. The authoritative manifest is `{lang}-cc/verifiable_tasks.txt` — only task IDs in that file have passed NOP/Oracle validation.
-- `terminalgen.output.terminal_tasks_dir`: verified **terminal** tasks (terminal-lego v1.0) under `subblock/terminalgen/artifacts/terminal_tasks/{domain}-tl/`, with per-domain manifests `verifiable_tasks.txt`. `extract_verified_tasks.py` optionally flattens them into `merged_terminal_tasks/` (same format). terminalgen is a task source **parallel to swegen** — trajgen can consume either via its `task_source.provider` selector.
-- `trajgen.output.raw_trajectories_dir`: raw agent trajectories under `subblock/trajgen/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
-- `trajgen.output.sft_data_dir`: LLaMA-Factory LF-format SFT JSON converted from those trajectories at `subblock/trajgen/artifacts/sft_data/<job>/lf.json` (produced by `subblock/trajgen/scripts/convert_trajectories.sh`, which runs the `swe_data_process` converters under their own uv env at `subblock/trajgen/artifacts/env/swe-data-process-uv`)
+- `curator.output.swe_tasks_dir`: verified SWE tasks under `subblock/curator/artifacts/swe_tasks/{lang}-cc/`. The authoritative manifest is `{lang}-cc/verifiable_tasks.txt` — only task IDs in that file have passed NOP/Oracle validation.
+- `terminalgen.output.terminal_tasks_dir`: verified **terminal** tasks (terminal-lego v1.0) under `subblock/terminalgen/artifacts/terminal_tasks/{domain}-tl/`, with per-domain manifests `verifiable_tasks.txt`. `extract_verified_tasks.py` optionally flattens them into `merged_terminal_tasks/` (same format). terminalgen is a task source **parallel to curator** — tracer can consume either via its `task_source.provider` selector.
+- `tracer.output.raw_trajectories_dir`: raw agent trajectories under `subblock/tracer/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
+- `tracer.output.sft_data_dir`: LLaMA-Factory LF-format SFT JSON converted from those trajectories at `subblock/tracer/artifacts/sft_data/<job>/lf.json` (produced by `subblock/tracer/scripts/convert_trajectories.sh`, which runs the `swe_data_process` converters under their own uv env at `subblock/tracer/artifacts/env/swe-data-process-uv`)
 
-**Producer→consumer contract**: trajgen consumes **only** tasks listed in swegen's `verifiable_tasks.txt`. `subblock/trajgen/scripts/prepare_tasks.sh` enforces this by filtering through the manifest when copying from a local task source; task IDs already processed are tracked in `subblock/trajgen/artifacts/consumption_ledger.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in trajgen's `config.yaml`. When the `sft` subblock is added, it should wire `sft.meta_info.subblocks[].dependencies.training_data: trajgen.output.sft_data_dir` rather than reading raw trajectories directly.
+**Producer→consumer contract**: tracer consumes **only** tasks listed in curator's `verifiable_tasks.txt`. `subblock/tracer/scripts/prepare_tasks.sh` enforces this by filtering through the manifest when copying from a local task source; task IDs already processed are tracked in `subblock/tracer/artifacts/consumption_ledger.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in tracer's `config.yaml`. When the `trainer` subblock is added, it should wire `trainer.meta_info.subblocks[].dependencies.training_data: tracer.output.sft_data_dir` rather than reading raw trajectories directly.
 
 ## How To Run
 
@@ -98,10 +98,10 @@ All subblocks run **locally** by default (`meta_info.resources.ip: local`). Over
 
 | Block | Execution | Key tool | Status |
 |---|---|---|---|
-| `subblock/swegen/` | Local (CPU + Docker) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
-| `subblock/terminalgen/` | Local (CPU + Docker) | `terminal-lego` pipeline + StackExchange API | Adaptive per-domain terminal task generation (parallel to swegen) |
-| `subblock/trajgen/` | Local (CPU + Docker) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
-| `subblock/sft/` | Local (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
+| `subblock/curator/` | Local (CPU + Docker) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
+| `subblock/terminalgen/` | Local (CPU + Docker) | `terminal-lego` pipeline + StackExchange API | Adaptive per-domain terminal task generation (parallel to curator) |
+| `subblock/tracer/` | Local (CPU + Docker) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
+| `subblock/trainer/` | Local (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
 | `subblock/rl/` | Local (needs 8× GPU) | Harbor + vLLM + verl | Online RL on Qwen3-30B |
 
 Each subblock has its own `CLAUDE.md` with its full agent contract.

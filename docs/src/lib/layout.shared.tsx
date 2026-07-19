@@ -5,8 +5,15 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       title: (
         <div className="flex items-center gap-2 mr-4">
-          <p className="font-mono tracking-tight text-lg font-normal">
-            LegoFactory
+          <p className="docs-brand-title">
+            SWE-Lego-
+            <span className="docs-live-word">
+              Live
+              <span
+                className="docs-live-pulse-dot"
+                aria-hidden="true"
+              />
+            </span>
           </p>
         </div>
       ),
@@ -14,7 +21,7 @@ export function baseOptions(): BaseLayoutProps {
     githubUrl: "https://github.com/SWE-Lego/SWE-Lego-Live",
     links: [
       {
-        url: "https://legofactory.pages.dev",
+        url: "https://swe-lego-live.pages.dev",
         text: "home",
         active: "none",
         external: true,

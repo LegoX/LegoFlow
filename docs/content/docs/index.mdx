@@ -1,29 +1,44 @@
 ---
-title: Motivation
-description: Why we built LegoFactory
+title: Introduction
+description: An end-to-end agentic workflow for intelligence
 ---
 
-Training a strong coding agent is a multi-stage pipeline — curate tasks, roll out trajectories, do SFT, then RL. Each stage needs its own data, its own environment, and its own GPUs, and the handoffs between them quietly break every time someone runs them by hand.
+Training a strong coding agent is not a single training job. A realistic SWE pipeline has to mine useful GitHub changes, turn them into verifiable tasks, roll agents out in isolated environments, filter and convert trajectories, train models, and measure them with an evaluator. Each stage tends to grow its own scripts, storage layout, runtime assumptions, GPU requirements, and failure modes. The hard part is not only running the stages; it is keeping their handoffs reproducible as the data, repos, models, and infrastructure keep changing.
 
-We built **LegoFactory** so the whole pipeline behaves like one project. Every stage is a self-contained **block** with the same shape — a `config.yaml`, a `scripts/start.sh`, an `artifacts/` tree — wired into a parent by name. Run one block, run the whole tree, or swap a block out; the contracts hold.
+**SWE-Lego-Live** turns that loop into one agentic workflow. Instead of treating data construction, rollout, training, and evaluator measurement as disconnected jobs, it keeps them in a live pipeline where each stage can be checked, rerun, inspected, and extended by agents.
 
-```text
-GitHub PRs ─▶ swegen ─▶ trajgen ─▶ sft ─▶ rl
-```
 
-LegoFactory provides:
+## Highlights
 
-- A **block abstraction** that makes every pipeline stage swappable, restartable, and replayable
-- **swegen** — curated SWE tasks generated and NOP/Oracle-verified directly from GitHub PRs
-- **trajgen** — containerized agent rollouts at scale on Harbor, with pluggable agent scaffolds
-- **sft** — supervised fine-tuning on the resulting trajectories (LLaMA-Factory + DeepSpeed ZeRO-3)
-- **rl** — online RL on SWE-bench through Harbor + vLLM + verl
-- **Per-run archives** with config, scripts, and repo SHAs frozen for every execution
-- **A Claude Code plugin** (`/root:check`, `/root:run`, `/root:create`) that drives the tree end-to-end
+- **Live, growing dataset**: download the SWE-Lego-Live dataset from <a href="https://huggingface.co/datasets/SWE-Lego/SWE-Lego-Live" className="docs-hf-link"><img src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" alt="" aria-hidden="true" className="docs-hf-logo" />Hugging Face</a>, with **bi-weekly** updates that keep tasks and trajectories aligned with real repository activity.
+- **Fully agentic data pipeline**: curate high-quality SWE and coding tasks across **8+** programming languages and **20+** task tags, then roll out trajectories with **4+** coding agents, including Claude Code, OpenCode, OpenHands, and Terminus.
+- **Unified, block-wise design**: use agent plugin skills to interact with, customize, and extend each stage through a consistent block interface.
+
+
+## Project Design
+
+![SWE-Lego-Live pipeline introduction](/figures/my-version-coding-repos-expandable.png)
+
+
+The project is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. Users can operate the workflow through the same plugin-skill lifecycle across blocks: `:setup`, `:check`, and `:run`.
+
+The **root** block orchestrates four subblocks: **curator** builds verified SWE tasks, **tracer** rolls out agent trajectories, **trainer** turns trajectories into model checkpoints, and **evaluator** measures those checkpoints with shared rubrics.
+
+- **curator**: curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums such as Stack Overflow. Carefully designed filtering requirements preserve high-quality instances across **8+** programming languages and **20+** task tags.
+- **tracer**: collects high-quality trajectories with verified rewards, supporting rollouts across multiple coding scaffolds such as Claude Code, OpenCode, OpenHands, and Terminus.
+- **trainer**: converts rollout traces into training-ready formats and launches end-to-end training workflows.
+- **evaluator**: measures checkpoints on coding benchmarks and supports detailed analysis with carefully designed rubrics and tags.
+- **live dashboard**: displays live statistics across tasks, trajectories, training status, and evaluator results. It also supports experiment comparison and deeper analysis over curated rubrics and tags.
+
+
+### Why Blocks?
+
+Blocks make the pipeline easier to use and easier to change. Because every stage follows the same contract, users can run the whole system through plugin skills, restart a failed stage from its archived state, swap one block without breaking the others, and inspect artifacts through a consistent dashboard interface. See [Block Design](/docs/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
+
 
 ## Where to go next
 
 - [Getting Started](/docs/getting-started) — the three skills (`:setup`, `:check`, `:run`) used to drive every block
 - [Block Design](/docs/block-design) — the abstraction the whole pipeline is built on
-- Blocks: [swegen](/docs/sub-block/swegen) · [trajgen](/docs/sub-block/trajgen) · [sft](/docs/sub-block/sft) · [rl](/docs/sub-block/rl) — each links out to that block's full docs site
+- Block docs: [curator](/docs/sub-block/curator) · [tracer](/docs/sub-block/tracer) · [trainer](/docs/sub-block/trainer) · [evaluator](/docs/sub-block/evaluator)
 - [Reference](/docs/reference) — `config.yaml` schema and the archive format

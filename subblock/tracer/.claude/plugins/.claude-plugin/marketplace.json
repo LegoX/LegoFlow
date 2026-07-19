@@ -1,0 +1,11 @@
+{
+  "name": "tracer",
+  "owner": { "name": "tracer" },
+  "plugins": [
+    {
+      "name": "tracer",
+      "source": "./tracer-plugin",
+      "description": "tracer block skills — setup, check, dashboard, run."
+    }
+  ]
+}

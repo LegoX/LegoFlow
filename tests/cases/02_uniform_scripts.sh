@@ -8,7 +8,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 UNIFORM=(start.sh dryrun.sh clean.sh archive_run.sh)
-SUBBLOCKS=(swegen trajgen sft rl eval)
+SUBBLOCKS=(curator tracer trainer rl evaluator)
 missing=()
 
 # Root block scripts.

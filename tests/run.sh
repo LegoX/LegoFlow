@@ -6,16 +6,16 @@
 # subblock's isolated smoke, or the root CHAINED end-to-end smoke:
 #
 #   bash tests/run.sh                      # cheap cases only (no net/GPU/Docker)
-#   bash tests/run.sh --smoke root         # the chained pipeline (swegen->trajgen
-#                                          #   ->sft->eval, real wiring, fail-fast)
+#   bash tests/run.sh --smoke root         # the chained pipeline (curator->tracer
+#                                          #   ->trainer->evaluator, real wiring, fail-fast)
 #   bash tests/run.sh --with-smoke         # alias for --smoke root
-#   bash tests/run.sh --smoke swegen       # ONE subblock's isolated smoke
+#   bash tests/run.sh --smoke curator       # ONE subblock's isolated smoke
 #   bash tests/run.sh --smoke subblocks    # every subblock's isolated smoke, in turn
 #
 # Root-chain options (only meaningful with --smoke root), forwarded verbatim to
 # tests/smoke/run_pipeline.sh:
 #   --from <stage> --to <stage>   run a sub-range of the chain (stages:
-#                                 swegen trajgen sft eval)
+#                                 curator tracer trainer evaluator)
 #   --budget <sec>                per-stage wait budget override
 #
 # Other:
@@ -31,7 +31,7 @@
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SUBBLOCKS=(swegen trajgen sft eval)
+SUBBLOCKS=(curator tracer trainer evaluator)
 
 SMOKE_TARGET=""                          # "", root, <subblock>, subblocks/all
 SMOKE_FROM=""; SMOKE_TO=""
@@ -108,7 +108,11 @@ if [[ "$CASES" == "1" ]]; then
   echo "================================================================="
   echo ">> pytest/test_root_block.py"
   echo "================================================================="
-  if command -v pytest >/dev/null 2>&1; then
+  # Prefer python3 -m pytest: a bare `pytest` on PATH may belong to python2.
+  if python3 -m pytest --version >/dev/null 2>&1; then
+    set +e; python3 -m pytest "$ROOT_DIR/tests/test_root_block.py" -q; rc=$?; set -e
+    tally "$rc" "pytest/test_root_block.py"
+  elif command -v pytest >/dev/null 2>&1; then
     set +e; pytest "$ROOT_DIR/tests/test_root_block.py" -q; rc=$?; set -e
     tally "$rc" "pytest/test_root_block.py"
   else
@@ -133,7 +137,7 @@ case "$SMOKE_TARGET" in
     run_root_smoke ;;
   subblocks|all)
     for b in "${SUBBLOCKS[@]}"; do run_subblock_smoke "$b"; done ;;
-  swegen|trajgen|sft|eval|rl)
+  curator|tracer|trainer|evaluator|rl)
     run_subblock_smoke "$SMOKE_TARGET" ;;
   *)
     echo "ERROR: unknown --smoke target '$SMOKE_TARGET' (want: root | ${SUBBLOCKS[*]} | subblocks)" >&2

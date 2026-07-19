@@ -1,0 +1,59 @@
+---
+title: Example Usages
+description: Run the root block end to end
+---
+
+This page shows a concrete root-block workflow. Use it after cloning the repo, initializing submodules, and filling the required `config.yaml` inputs described in [Getting Started](/docs/getting-started).
+
+## Run the Full Pipeline
+
+The root block can operate the whole block tree with the same plugin-skill lifecycle used by individual blocks.
+
+```text
+/root:check
+```
+
+Run this first. It validates the root and all subblocks: config schema, human-provided inputs, inter-block dependencies, repo pins, environments, remote resources, and live LLM endpoints. Fix every reported issue before launching a long run.
+
+```text
+/root:run start the data pipeline
+```
+
+This asks the root orchestrator to resolve the target workflow, dispatch the relevant blocks, and archive each run. The expected high-level flow is:
+
+```text
+curator ─▶ tracer ─▶ trainer ─▶ evaluator
+```
+
+The handoffs are resolved through block outputs, not copied paths. For example, `tracer` consumes the verified task directory published by `curator`, and `trainer` consumes the trajectory or SFT data directory published by `tracer`.
+
+## Run One Block from Root
+
+You can also ask the root block to operate a specific subblock:
+
+```text
+/root:check curator
+/root:run curator
+```
+
+This is equivalent to using `/curator:check` and `/curator:run`, but keeps the interaction anchored at the root. It is useful when you are debugging one stage while still relying on the root block to resolve paths and dependencies.
+
+## Inspect Results
+
+After a run, inspect archived outputs first:
+
+```text
+artifacts/index.yaml
+artifacts/archives/run_NNN/metadata.yaml
+artifacts/archives/run_NNN/config.yaml
+```
+
+Then open a dashboard for the stage you care about:
+
+```text
+/tracer:dashboard
+/trainer:dashboard
+/evaluator:dashboard
+```
+
+Dashboards are optional, but they are the fastest way to inspect run state, compare artifacts, and continue analysis after the pipeline finishes.

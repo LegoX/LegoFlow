@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Root smoke helper: serve the sft checkpoint for the eval stage.
+# Root smoke helper: serve the trainer checkpoint for the evaluator stage.
 #
-# eval (stage 4) does not host a model — it drives Harbor containers that call
-# an OpenAI-compatible endpoint through eval's OWN per-job LiteLLM proxy
-# (start.sh, :4101). To evaluate the model sft (stage 3) just trained, we stand
-# it up on the SAME remote GPU pod that trained it with vLLM, and point eval's
+# evaluator (stage 4) does not host a model — it drives Harbor containers that call
+# an OpenAI-compatible endpoint through evaluator's OWN per-job LiteLLM proxy
+# (start.sh, :4101). To evaluate the model trainer (stage 3) just trained, we stand
+# it up on the SAME remote GPU pod that trained it with vLLM, and point evaluator's
 # llm_api.api_base_url at it.
 #
-#   eval host (CI runner)                        GPU pod (this script)
+#   evaluator host (CI runner)                        GPU pod (this script)
 #   ┌──────────────────────────┐                 ┌──────────────────────┐
 #   │ Harbor agent containers  │   ssh -L 8000   │ vLLM :8000/v1        │
-#   │   -> eval LiteLLM :4101 ──┼───localhost────▶│  (DP across N GPUs)  │
+#   │   -> evaluator LiteLLM :4101 ──┼───localhost────▶│  (DP across N GPUs)  │
 #   │      (start.sh)          │  127.0.0.1:8000  └──────────────────────┘
 #   └──────────────────────────┘
 #
@@ -19,7 +19,7 @@
 #     exposed to the runner network, and resolving the pod's internal IP is
 #     fragile (that's what made the earlier serve "succeed then be unreachable").
 #     Instead we open `ssh -L 127.0.0.1:PORT:127.0.0.1:PORT` from the runner and
-#     hand eval a plain localhost URL — works regardless of pod network topology.
+#     hand evaluator a plain localhost URL — works regardless of pod network topology.
 #   * DATA PARALLEL across all free GPUs. An 8B model fits on one GPU, so tensor
 #     parallelism wastes the other 7. `--data-parallel-size N` runs N replicas
 #     behind one endpoint (~Nx throughput). data_parallel_size defaults to the
@@ -28,7 +28,7 @@
 #     Factory save_only_model), not <output_dir> itself. We pick the newest
 #     checkpoint-*/ that has a config.json, else fall back to <output_dir>.
 #
-# vLLM lives in a conda env on the pod (the sft training env 'lf' lacks vllm).
+# vLLM lives in a conda env on the pod (the trainer training env 'lf' lacks vllm).
 #
 # Usage:
 #   bash tests/smoke/serve_checkpoint.sh start   # launch vLLM + tunnel, print base URL
@@ -41,12 +41,12 @@ set -uo pipefail
 
 ACTION="${1:-start}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-# Read sft's pod resources + output_dir from the SMOKE config (that's what the
-# checkpoint was trained with). subblock/sft/config.yaml is the production config
-# at eval time — the eval stage overlays eval, not sft — so it would carry the
+# Read trainer's pod resources + output_dir from the SMOKE config (that's what the
+# checkpoint was trained with). subblock/trainer/config.yaml is the production config
+# at evaluator time — the evaluator stage overlays evaluator, not trainer — so it would carry the
 # wrong output_dir / resources here.
-SFT_CFG="$ROOT_DIR/tests/smoke/sft/config.yaml"
-EVAL_CFG="$ROOT_DIR/subblock/eval/config.yaml"
+SFT_CFG="$ROOT_DIR/tests/smoke/trainer/config.yaml"
+EVAL_CFG="$ROOT_DIR/subblock/evaluator/config.yaml"
 TUNNEL_PIDFILE="$ROOT_DIR/.smoke-run/serve-tunnel.pid"
 
 cfg() {  # cfg <file> <dotted-key>
@@ -61,16 +61,16 @@ print("" if cur is None else cur)
 PY
 }
 
-# --- Resolve the remote pod from the sft block's resources ------------------
+# --- Resolve the remote pod from the trainer block's resources ------------------
 R_IP="$(cfg "$SFT_CFG" meta_info.resources.ip)"
 R_USER="$(cfg "$SFT_CFG" meta_info.resources.user)"
 R_KEY="$(cfg "$SFT_CFG" meta_info.resources.key)"
 R_PORT="$(cfg "$SFT_CFG" meta_info.resources.port)"
 R_DIR="$(cfg "$SFT_CFG" meta_info.resources.directory)"
 OUTPUT_DIR="$(cfg "$SFT_CFG" runtime_info.input.training.output_dir)"
-MODEL_ROOT="$R_DIR/subblock/sft/artifacts/model/$OUTPUT_DIR"
+MODEL_ROOT="$R_DIR/subblock/trainer/artifacts/model/$OUTPUT_DIR"
 
-# --- Serving params from the eval config ------------------------------------
+# --- Serving params from the evaluator config ------------------------------------
 VLLM_PORT="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.port)";            VLLM_PORT="${VLLM_PORT:-8000}"
 SERVED_NAME="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.served_model_name)"; SERVED_NAME="${SERVED_NAME:-root-smoke-sft}"
 TP="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.tensor_parallel_size)";   TP="${TP:-1}"
@@ -79,16 +79,16 @@ MAXLEN="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.max_model_len)";      
 GPUUTIL="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.gpu_memory_utilization)"; GPUUTIL="${GPUUTIL:-0.90}"
 DTYPE="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.dtype)";               DTYPE="${DTYPE:-bfloat16}"
 GPU_FREE_USED_MIB="${GPU_FREE_USED_MIB:-4000}"
-# vLLM's --api-key MUST equal the key eval's per-job LiteLLM forwards upstream
+# vLLM's --api-key MUST equal the key evaluator's per-job LiteLLM forwards upstream
 # (runtime_info.input.llm_api.api_key) or EVERY request 401s and vLLM returns
-# empty choices -> all eval trials error -> eval FAIL. Derive it from the SAME
-# config field eval reads so the two can never drift.
+# empty choices -> all evaluator trials error -> evaluator FAIL. Derive it from the SAME
+# config field evaluator reads so the two can never drift.
 VLLM_API_KEY="$(cfg "$EVAL_CFG" runtime_info.input.llm_api.api_key)";           VLLM_API_KEY="${VLLM_API_KEY:-dummy-key}"
 
 BASE_URL="http://127.0.0.1:${VLLM_PORT}/v1"   # always localhost via the SSH tunnel
 
 if [[ -z "$R_IP" || "$R_IP" == "local" || "$R_IP" == "null" ]]; then
-  echo "SKIP: sft block has no remote pod (ip=$R_IP) — nowhere to serve the checkpoint"
+  echo "SKIP: trainer block has no remote pod (ip=$R_IP) — nowhere to serve the checkpoint"
   exit 77
 fi
 
@@ -153,7 +153,7 @@ case "$ACTION" in
   start)
     CKPT_REMOTE="$(resolve_remote_ckpt)"
     if [[ -z "$CKPT_REMOTE" ]]; then
-      echo "SKIP: no checkpoint (config.json) under $MODEL_ROOT on the pod (sft stage didn't persist a model)"
+      echo "SKIP: no checkpoint (config.json) under $MODEL_ROOT on the pod (trainer stage didn't persist a model)"
       exit 77
     fi
 
@@ -167,13 +167,13 @@ case "$ACTION" in
       (( DP < 1 )) && DP=1
     fi
 
-    echo "INFO: serving sft checkpoint for eval (vLLM DP=$DP TP=$TP; eval's LiteLLM wraps it)"
+    echo "INFO: serving trainer checkpoint for evaluator (vLLM DP=$DP TP=$TP; evaluator's LiteLLM wraps it)"
     echo "      pod        : $R_USER@$R_IP:$R_PORT"
     echo "      checkpoint : $CKPT_REMOTE"
     echo "      vLLM       : :$VLLM_PORT  dp=$DP tp=$TP  max_len=$MAXLEN  served_name=$SERVED_NAME  (conda $VLLM_CONDA_ENV)"
-    echo "      base_url   : $BASE_URL   api_key=$VLLM_API_KEY (matches eval llm_api.api_key)"
+    echo "      base_url   : $BASE_URL   api_key=$VLLM_API_KEY (matches evaluator llm_api.api_key)"
 
-    LOG_DIR="$R_DIR/subblock/sft/artifacts/logs"
+    LOG_DIR="$R_DIR/subblock/trainer/artifacts/logs"
     DP_FLAG=""; [[ "$DP" -gt 1 ]] && DP_FLAG="--data-parallel-size ${DP}"
     # vLLM in the pod's conda env, launched inside a detached tmux session so it
     # survives the SSH connection closing (a bare nohup child can get reaped).

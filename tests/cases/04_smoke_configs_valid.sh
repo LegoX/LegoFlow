@@ -18,7 +18,7 @@ except ImportError:
 
 root = sys.argv[1]
 # The four blocks the root smoke chains. rl is not part of this pipeline.
-BLOCKS = ["swegen", "trajgen", "sft", "eval"]
+BLOCKS = ["curator", "tracer", "trainer", "evaluator"]
 errs = []
 for b in BLOCKS:
     smoke = os.path.join(root, "tests", "smoke", b, "config.yaml")

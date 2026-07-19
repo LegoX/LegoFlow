@@ -1,16 +1,16 @@
-[submodule "subblock/swegen/repos/swegen"]
-	path = subblock/swegen/repos/swegen
+[submodule "subblock/curator/repos/swegen"]
+	path = subblock/curator/repos/swegen
 	url = https://github.com/SWE-Lego/SWE-Lego-Live-SWEgen.git
 	branch = main
-[submodule "subblock/sft/repos/swe_data_process"]
-	path = subblock/sft/repos/swe_data_process
+[submodule "subblock/trainer/repos/swe_data_process"]
+	path = subblock/trainer/repos/swe_data_process
 	url = https://github.com/SWE-Lego/swe_data_process.git
 	branch = main
-[submodule "subblock/trajgen/repos/harbor"]
-	path = subblock/trajgen/repos/harbor
+[submodule "subblock/tracer/repos/harbor"]
+	path = subblock/tracer/repos/harbor
 	url = git@github.com:SWE-Lego/harbor.git
-[submodule "subblock/sft/repos/LLaMA-Factory"]
-	path = subblock/sft/repos/LLaMA-Factory
+[submodule "subblock/trainer/repos/LLaMA-Factory"]
+	path = subblock/trainer/repos/LLaMA-Factory
 	url = https://github.com/SWE-Lego/LLaMA-Factory.git
 	branch = main
 [submodule "subblock/rl/repos/harbor-verl-train"]
@@ -24,8 +24,8 @@
 	path = subblock/rl/repos/harbor
 	url = https://github.com/SWE-Lego/harbor.git
 	branch = ydu_dev
-[submodule "subblock/eval/repos/harbor"]
-	path = subblock/eval/repos/harbor
+[submodule "subblock/evaluator/repos/harbor"]
+	path = subblock/evaluator/repos/harbor
 	url = git@github.com:SWE-Lego/harbor.git
 [submodule "subblock/terminalgen/repos/terminal-lego"]
 	path = subblock/terminalgen/repos/terminal-lego

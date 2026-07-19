@@ -1,0 +1,51 @@
+---
+title: Core Concepts
+description: Core concepts and terminology in tracer
+---
+
+tracer has the following core concepts:
+
+## Verified task and manifest
+
+A **task** is a single Harbor task directory: an instruction, a container environment, and a test script. tracer does not author tasks — it consumes them from the upstream `curator` block.
+
+A task is only eligible for a rollout if it appears in the source's **manifest**, `verifiable_tasks.txt`. curator writes this file to mark which tasks have passed NOP/Oracle validation. `scripts/prepare_tasks.sh` filters strictly through the manifest, so unverified tasks never reach a job.
+
+## Trajectory
+
+A **trajectory** is the complete, replayable log of one agent rollout. tracer captures it via the LiteLLM logger at:
+
+```text
+artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+```
+
+Each line records a model request/response together with token usage and metadata. Trajectories are the block's primary output and the raw material for SFT data.
+
+## Rollout / trial
+
+A **rollout** (Harbor calls it a **trial**) is one attempt by the agent to complete a task. A rollout produces a reward — typically `1.0` if the task's test script passes and `0.0` otherwise. tracer can retry failed rollouts up to `max_retries`.
+
+## Job
+
+A **job** is a collection of rollouts across the prepared task set, driven by a single `config.yaml`. Harbor runs up to `n_concurrent` rollouts in parallel and writes an aggregate `result.json` plus per-task trajectories under `artifacts/jobs/<job>/`.
+
+## LiteLLM proxy
+
+tracer starts a **per-job LiteLLM proxy** in front of your upstream model API. The proxy normalizes the endpoint so the agent can speak OpenAI- or Anthropic-compatible protocols, attaches the trajectory logger, and is torn down when the job ends. Each job gets its own generated config under `artifacts/litellm/<job>/`.
+
+## Agent scaffold
+
+A **scaffold** is the agent harness that drives the model through a task — for example Claude Code, OpenCode, OpenHands SDK, or Terminus-2. The scaffold determines the raw trajectory shape, which in turn selects the converter used for SFT data. See [SFT scaffolds](/docs/sft-data/scaffolds).
+
+## Consumption ledger
+
+The **consumption ledger** (`artifacts/consumption_ledger.yaml`) is the source of truth for which task IDs tracer has already processed (`pending | running | done | failed | skipped`). Every task that is `done`, excluded, or `skipped` is also added to `HARBOR_EXCLUDE_TASKS` so Harbor never rolls it out again. Together the manifest and the ledger guarantee each verified task is consumed exactly once.
+
+## SFT data (IM and LF)
+
+tracer converts raw trajectories into training data in two stages:
+
+- **IM** (intermediate) — OpenAI-style messages with `tool_calls`, one JSONL row per trajectory, auto-scored for quality.
+- **LF** (LLaMA-Factory) — ShareGPT-style messages as a JSON array, ready to feed the `trainer` block.
+
+See [SFT Data](/docs/sft-data) for the full conversion pipeline.

@@ -3,7 +3,7 @@
 #   bash cicd/smoke/run.sh <block> [budget_seconds]
 #
 # Three phases per block:
-#   PREP   — block-specific staging (e.g. trajgen's prepare_tasks.sh).
+#   PREP   — block-specific staging (e.g. tracer's prepare_tasks.sh).
 #   LAUNCH — kick off the long-running smoke in the background. EVERY block
 #            uses claude SDK as the launcher: a single narrow `claude -p`
 #            prompt that says "run this exact bash command, confirm the
@@ -15,8 +15,8 @@
 #            "check → confirm → run" step that the block CLAUDE.mds require
 #            for interactive runs.
 #   WAIT   — poll the filesystem for the block's terminal artifact every 30s
-#            up to <budget> seconds. swegen/sft exit on the first artifact
-#            (single output); trajgen/eval wait the full budget (multi-task
+#            up to <budget> seconds. curator/trainer exit on the first artifact
+#            (single output); tracer/evaluator wait the full budget (multi-task
 #            runs where exiting on the first result would skip trials 2-N).
 
 set -uo pipefail
@@ -25,10 +25,10 @@ BLOCK="${1:?usage: bash cicd/smoke/run.sh <block> [budget_seconds]}"
 BUDGET="${2:-1800}"
 
 case "$BLOCK" in
-  swegen)  TERMINAL_GLOB="artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt"; WAIT_POLICY="first" ;;
-  trajgen) TERMINAL_GLOB="artifacts/jobs/smoke/*/*/result.json"; WAIT_POLICY="full" ;;
-  eval)    TERMINAL_GLOB="artifacts/jobs/smoke/*/result.json"; WAIT_POLICY="full" ;;
-  sft)     TERMINAL_GLOB="artifacts/model/_smoke_train_ci/train_results.json"; WAIT_POLICY="first" ;;
+  curator)  TERMINAL_GLOB="artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt"; WAIT_POLICY="first" ;;
+  tracer) TERMINAL_GLOB="artifacts/jobs/smoke/*/*/result.json"; WAIT_POLICY="full" ;;
+  evaluator)    TERMINAL_GLOB="artifacts/jobs/smoke/*/result.json"; WAIT_POLICY="full" ;;
+  trainer)     TERMINAL_GLOB="artifacts/model/_smoke_train_ci/train_results.json"; WAIT_POLICY="first" ;;
   *) echo "FAIL: unknown block '$BLOCK'" >&2; exit 1 ;;
 esac
 
@@ -52,13 +52,13 @@ print("" if cur is None else cur)
 PY
 }
 
-# Detect remote-execution mode (currently only used by sft). When
+# Detect remote-execution mode (currently only used by trainer). When
 # meta_info.resources.ip is a real IP, the smoke runs on the remote host over
 # SSH. The runner stays the orchestrator: launches via ssh, polls via ssh,
 # scps the terminal artifact back into the local workspace so verify.sh keeps
 # operating on the same paths it does for the local case.
 REMOTE_IP=""
-if [[ "$BLOCK" == "sft" ]]; then
+if [[ "$BLOCK" == "trainer" ]]; then
   ip="$(cfg meta_info.resources.ip)"
   case "$ip" in
     ""|null|local) ;;  # local mode
@@ -83,32 +83,32 @@ remote() {
 
 # ---------- PREP ----------
 case "$BLOCK" in
-  eval)
+  evaluator)
     # The verifier requires a run-scoped start marker and must never accept a
     # result left by an earlier workspace. Fail immediately if root-owned
     # residue cannot be removed instead of polling stale output for 40 minutes.
     if ! rm -rf artifacts/jobs/smoke; then
-      echo "FAIL: could not clear stale eval smoke results" >&2
+      echo "FAIL: could not clear stale evaluator smoke results" >&2
       exit 1
     fi
     mkdir -p artifacts/jobs/smoke
     date +%s > artifacts/jobs/smoke/.run-start
     ;;
-  sft)
+  trainer)
     if [[ -n "$REMOTE_IP" ]]; then
-      echo "INFO: sft remote mode → $REMOTE_USER@$REMOTE_IP:$REMOTE_PORT$REMOTE_DIR"
-      if ! remote 'echo OK; nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | wc -l' >/tmp/sft-remote-probe 2>&1; then
-        echo "WARNING: sft SSH probe failed — falling back to SKIP"
-        cat /tmp/sft-remote-probe
+      echo "INFO: trainer remote mode → $REMOTE_USER@$REMOTE_IP:$REMOTE_PORT$REMOTE_DIR"
+      if ! remote 'echo OK; nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | wc -l' >/tmp/trainer-remote-probe 2>&1; then
+        echo "WARNING: trainer SSH probe failed — falling back to SKIP"
+        cat /tmp/trainer-remote-probe
         exit 0
       fi
-      cat /tmp/sft-remote-probe
+      cat /tmp/trainer-remote-probe
     else
       # Local mode and no GPU: SKIP fast so verify.sh maps to ::warning::
       # (the swe-lego-gpu runner isn't online and there's no remote SSH
       # config either).
       if ! command -v nvidia-smi >/dev/null 2>&1; then
-        echo "INFO: sft SKIP-fast — no remote SSH config and nvidia-smi absent"
+        echo "INFO: trainer SKIP-fast — no remote SSH config and nvidia-smi absent"
         exit 0
       fi
     fi
@@ -116,8 +116,8 @@ case "$BLOCK" in
 esac
 
 case "$BLOCK" in
-  trajgen)
-    echo "INFO: trajgen — running prepare_tasks.sh (dryrun.sh requires staged tasks)"
+  tracer)
+    echo "INFO: tracer — running prepare_tasks.sh (dryrun.sh requires staged tasks)"
     if ! bash scripts/prepare_tasks.sh; then
       echo "FAIL: prepare_tasks.sh exited non-zero — terminal artifact will not appear"
     fi
@@ -125,7 +125,7 @@ case "$BLOCK" in
 esac
 
 case "$BLOCK" in
-  trajgen|eval)
+  tracer|evaluator)
     # Warm the cpfs/aliyun-alinas-efc cache for harbor's CLI: the first import
     # takes ~20s (pydantic/asyncio cold pages). Warming keeps preflight and
     # launch latency predictable; the second invocation is ~9s.
@@ -190,7 +190,7 @@ SETUP_CHECK_LOCAL='( test -d artifacts/env || test -d artifacts/envs ) && test -
 PREFLIGHT_LOCAL='bash scripts/dryrun.sh'
 
 case "$BLOCK" in
-  swegen)
+  curator)
     # Drive via claude SDK. The smoke config is the source of truth — it
     # specifies the PR list (smoke.input_prs) and all swegen create flags
     # under runtime_info.input.smoke.*. We materialize the PR list into a
@@ -229,7 +229,7 @@ PY
     echo "INFO: smoke PR list ($(wc -l <"$SMOKE_IDS_FILE") entries):"
     sed 's/^/         /' "$SMOKE_IDS_FILE"
     SMOKE_CMD="source scripts/load_runtime_env.sh && load_runtime_env >/dev/null 2>&1 ; source artifacts/envs/swegen-env/bin/activate ; nohup swegen create --input-ids-file ${SMOKE_IDS_FILE#${BLOCK_DIR}/} --max-pr ${SMOKE_MAX_PR} --n-concurrent ${SMOKE_NCONC} --output ${SMOKE_OUT#${BLOCK_DIR}/} --state-dir ${SMOKE_STATE#${BLOCK_DIR}/} --timeout ${SMOKE_TO} --cc-timeout ${SMOKE_CCTO} --no-require-issue --min-source-files ${SMOKE_MINSF} --max-source-files ${SMOKE_MAXSF} --docker-prune-batch ${SMOKE_DPB} --verbose >> artifacts/logs/smoke-launch.log 2>&1 &"
-    # swegen's openai_proxy CC verification path (the half that writes
+    # curator's (swegen CLI) openai_proxy CC verification path (the half that writes
     # verifiable_tasks.txt) needs a local LiteLLM proxy on cc_proxy_port. This
     # runner builds its own swegen-create, so it must start the proxy itself —
     # otherwise PREFLIGHT_LOCAL (dryrun.sh) /health check fails and verification
@@ -241,11 +241,11 @@ PY
     cc_proxy_start "$BLOCK_DIR" "$BLOCK_DIR/config.yaml" \
       || { echo "FAIL: CC LiteLLM proxy did not start (openai_proxy mode)"; exit 1; }
     claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
-                  "swegen create --input-ids-file" "swegen"
+                  "swegen create --input-ids-file" "curator"
     LAUNCH_PID=$(pgrep -f 'swegen create --input-ids-file' | head -1)
     LAUNCH_PID=${LAUNCH_PID:-0}
     ;;
-  trajgen|eval)
+  tracer|evaluator)
     # claude SDK drives 3 phases: setup-check, dryrun.sh, then nohup start.sh.
     # Phases gate each other; start.sh only launches if both earlier phases
     # exited 0. The trailing & on phase 3 detaches start.sh so claude can exit.
@@ -255,16 +255,16 @@ PY
     LAUNCH_PID=$(pgrep -f 'bash scripts/start.sh' | head -1)
     LAUNCH_PID=${LAUNCH_PID:-0}
     ;;
-  sft)
+  trainer)
     if [[ -n "$REMOTE_IP" ]]; then
-      # Remote sft: all 3 phases run on the GPU host. Stage 3 small SSH
+      # Remote trainer: all 3 phases run on the GPU host. Stage 3 small SSH
       # wrappers under artifacts/logs/ so claude only has to do 3 simple
       # Bash calls. Phase 1 also fast-forwards the remote checkout to the
       # current branch + overlays the smoke config (this IS the setup-step,
       # which is intentional: dryrun.sh in phase 2 must read the smoke
       # config, not whatever was on the remote before).
       BRANCH="${GITHUB_REF_NAME:-haoli/ci-cd}"
-      REMOTE_LOG="$REMOTE_DIR/subblock/sft/artifacts/logs/smoke-launch.log"
+      REMOTE_LOG="$REMOTE_DIR/subblock/trainer/artifacts/logs/smoke-launch.log"
       SETUP_SH="artifacts/logs/.smoke-remote-setup.sh"
       CHECK_SH="artifacts/logs/.smoke-remote-check.sh"
       RUN_SH="artifacts/logs/.smoke-remote-run.sh"
@@ -280,15 +280,15 @@ EOS
       }
       # Phase 1: fast-forward + overlay + env sanity. Exits 0 if the env
       # dir exists and the smoke config is in place.
-      _ssh_wrap "set -e; cd '$REMOTE_DIR'; /usr/bin/git.real fetch origin '$BRANCH' --quiet; /usr/bin/git.real reset --hard 'origin/$BRANCH' --quiet; cp subblock/sft/tests/smoke/config.yaml subblock/sft/config.yaml; mkdir -p subblock/sft/artifacts/logs; rm -rf subblock/sft/artifacts/model/_smoke_train_ci; test -d subblock/sft/artifacts/env && echo 'remote setup OK'" \
+      _ssh_wrap "set -e; cd '$REMOTE_DIR'; /usr/bin/git.real fetch origin '$BRANCH' --quiet; /usr/bin/git.real reset --hard 'origin/$BRANCH' --quiet; cp subblock/trainer/tests/smoke/config.yaml subblock/trainer/config.yaml; mkdir -p subblock/trainer/artifacts/logs; rm -rf subblock/trainer/artifacts/model/_smoke_train_ci; test -d subblock/trainer/artifacts/env && echo 'remote setup OK'" \
         > "$BLOCK_DIR/$SETUP_SH"
 
-      # Phase 2: dryrun.sh on the remote sft dir.
-      _ssh_wrap "set -e; cd '$REMOTE_DIR/subblock/sft'; PATH=/root/.local/bin:\\\$PATH bash scripts/dryrun.sh" \
+      # Phase 2: dryrun.sh on the remote trainer dir.
+      _ssh_wrap "set -e; cd '$REMOTE_DIR/subblock/trainer'; PATH=/root/.local/bin:\\\$PATH bash scripts/dryrun.sh" \
         > "$BLOCK_DIR/$CHECK_SH"
 
       # Phase 3: backgrounded start.sh, SSH returns once disown completes.
-      _ssh_wrap "set -e; cd '$REMOTE_DIR/subblock/sft'; PATH=/root/.local/bin:\\\$PATH nohup bash scripts/start.sh > '$REMOTE_LOG' 2>&1 & disown; echo \\\"REMOTE_LAUNCH_PID=\\\$!\\\"" \
+      _ssh_wrap "set -e; cd '$REMOTE_DIR/subblock/trainer'; PATH=/root/.local/bin:\\\$PATH nohup bash scripts/start.sh > '$REMOTE_LOG' 2>&1 & disown; echo \\\"REMOTE_LAUNCH_PID=\\\$!\\\"" \
         > "$BLOCK_DIR/$RUN_SH"
 
       chmod +x "$BLOCK_DIR/$SETUP_SH" "$BLOCK_DIR/$CHECK_SH" "$BLOCK_DIR/$RUN_SH"
@@ -297,12 +297,12 @@ EOS
       PREFLIGHT_CMD="bash $CHECK_SH"
       SMOKE_CMD="bash $RUN_SH 2>&1 | tee -a artifacts/logs/smoke-launch.log"
       claude_launch "$SETUP_CMD" "$PREFLIGHT_CMD" "$SMOKE_CMD" \
-                    "REMOTE_LAUNCH_PID=" "sft (remote $REMOTE_IP)"
+                    "REMOTE_LAUNCH_PID=" "trainer (remote $REMOTE_IP)"
       LAUNCH_PID=0   # remote — nothing local to kill -0
     else
       SMOKE_CMD="nohup bash scripts/start.sh >> artifacts/logs/smoke-launch.log 2>&1 &"
       claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
-                    "bash scripts/start.sh" "sft (local)"
+                    "bash scripts/start.sh" "trainer (local)"
       LAUNCH_PID=$(pgrep -f 'bash scripts/start.sh' | head -1)
       LAUNCH_PID=${LAUNCH_PID:-0}
     fi
@@ -323,28 +323,28 @@ START=$(date +%s)
 DEADLINE=$((START + BUDGET))
 LAST_COUNT=0
 
-# When sft is running remotely, the terminal artifact lives on the GPU host.
+# When trainer is running remotely, the terminal artifact lives on the GPU host.
 # Poll the remote and scp the result.json + trainer_state.json back as soon
 # as they appear so verify.sh (which runs on the local CI workspace) sees
 # the same files at the same paths it would for a local run.
 fetch_sft_remote_if_ready() {
   [[ -n "$REMOTE_IP" ]] || return 1
-  remote "test -f '$REMOTE_DIR/subblock/sft/artifacts/model/_smoke_train_ci/train_results.json'" 2>/dev/null || return 1
+  remote "test -f '$REMOTE_DIR/subblock/trainer/artifacts/model/_smoke_train_ci/train_results.json'" 2>/dev/null || return 1
   echo "INFO: remote train_results.json appeared — fetching"
   mkdir -p "$BLOCK_DIR/artifacts/model/_smoke_train_ci"
   scp -i "$REMOTE_KEY" -P "$REMOTE_PORT" \
       -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/subblock/sft/artifacts/model/_smoke_train_ci/train_results.json" \
+      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/subblock/trainer/artifacts/model/_smoke_train_ci/train_results.json" \
       "$BLOCK_DIR/artifacts/model/_smoke_train_ci/train_results.json" 2>&1 | tail -3
   scp -i "$REMOTE_KEY" -P "$REMOTE_PORT" \
       -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/subblock/sft/artifacts/model/_smoke_train_ci/trainer_state.json" \
+      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/subblock/trainer/artifacts/model/_smoke_train_ci/trainer_state.json" \
       "$BLOCK_DIR/artifacts/model/_smoke_train_ci/trainer_state.json" 2>&1 | tail -3 || true
   return 0
 }
 
 while (( $(date +%s) < DEADLINE )); do
-  # Remote sft: poll over SSH and scp on success.
+  # Remote trainer: poll over SSH and scp on success.
   if [[ -n "$REMOTE_IP" ]]; then
     if fetch_sft_remote_if_ready; then
       elapsed=$(($(date +%s) - START))
@@ -405,13 +405,13 @@ if command -v docker >/dev/null 2>&1; then
     sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null; find /x -type f -exec chmod u+r {} + 2>/dev/null" || true
 fi
 
-# Remote sft: drop the throwaway _smoke_train_ci run dir + dataset entry.
+# Remote trainer: drop the throwaway _smoke_train_ci run dir + dataset entry.
 # verify.sh's trap does the equivalent on its local copy; we mirror it here
 # for the GPU host so successive CI runs don't accumulate stale state.
-if [[ "$BLOCK" == "sft" && -n "$REMOTE_IP" ]]; then
+if [[ "$BLOCK" == "trainer" && -n "$REMOTE_IP" ]]; then
   echo "INFO: cleanup — remote run dir + dataset_info entry"
   remote "
-    cd '$REMOTE_DIR/subblock/sft' || exit 0
+    cd '$REMOTE_DIR/subblock/trainer' || exit 0
     rm -rf artifacts/model/_smoke_train_ci
     python3 - <<'PY' 2>/dev/null || true
 import fcntl, json, os

@@ -16,7 +16,7 @@ on:
           - all         # subblocks + root
         default: none
       root_budget:
-        description: "Per-stage budget (sec) for the ROOT chain; blank = config defaults (swegen 4h). Set e.g. 1800 for a quick pass."
+        description: "Per-stage budget (sec) for the ROOT chain; blank = config defaults (curator 4h). Set e.g. 1800 for a quick pass."
         type: string
         default: ""
 
@@ -62,34 +62,34 @@ jobs:
     name: Detect changed subblocks
     runs-on: ubuntu-latest
     outputs:
-      swegen: ${{ steps.filter.outputs.swegen }}
-      trajgen: ${{ steps.filter.outputs.trajgen }}
-      eval: ${{ steps.filter.outputs.eval }}
-      sft: ${{ steps.filter.outputs.sft }}
+      curator: ${{ steps.filter.outputs.curator }}
+      tracer: ${{ steps.filter.outputs.tracer }}
+      evaluator: ${{ steps.filter.outputs.evaluator }}
+      trainer: ${{ steps.filter.outputs.trainer }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
-            swegen:
-              - 'subblock/swegen/**'
+            curator:
+              - 'subblock/curator/**'
               - '.github/workflows/ci.yml'
-            trajgen:
-              - 'subblock/trajgen/**'
+            tracer:
+              - 'subblock/tracer/**'
               - '.github/workflows/ci.yml'
-            eval:
-              - 'subblock/eval/**'
+            evaluator:
+              - 'subblock/evaluator/**'
               - '.github/workflows/ci.yml'
-            sft:
-              - 'subblock/sft/**'
+            trainer:
+              - 'subblock/trainer/**'
               - '.github/workflows/ci.yml'
 
-  # --- swegen: cheap test cases (self-hosted, fixed-paths CI runner) ---------
-  swegen-cases:
-    name: swegen tests (cases)
+  # --- curator: cheap test cases (self-hosted, fixed-paths CI runner) ---------
+  curator-cases:
+    name: curator tests (cases)
     needs: detect-changes
-    if: needs.detect-changes.outputs.swegen == 'true'
+    if: needs.detect-changes.outputs.curator == 'true'
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 30   # cpfs cold-cache uv-env-editable case can take ~7 min
     steps:
@@ -97,7 +97,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -121,11 +121,11 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/swegen
+        working-directory: subblock/curator
         run: |
           set -euo pipefail
-          CANON="${SHARED_RUNTIME}/swegen"
-          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh swegen"; exit 1; }
+          CANON="${SHARED_RUNTIME}/curator"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh curator"; exit 1; }
           # actions/checkout creates empty placeholder dirs for declared
           # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
           mkdir -p repos artifacts artifacts/swe_tasks
@@ -137,8 +137,8 @@ jobs:
           [ -d "$CANON/artifacts/swe_tasks/py-cc" ] && \
             ln -s "$CANON/artifacts/swe_tasks/py-cc" artifacts/swe_tasks/py-cc || true
           ls -la repos artifacts artifacts/swe_tasks
-      - name: Run swegen test cases
-        working-directory: subblock/swegen
+      - name: Run curator test cases
+        working-directory: subblock/curator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
@@ -146,19 +146,19 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: swegen-cases-logs-${{ github.run_id }}
+          name: curator-cases-logs-${{ github.run_id }}
           path: |
-            subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py.log
-            subblock/swegen/artifacts/logs/
+            subblock/curator/artifacts/swe_tasks/.swegen-smoke-py.log
+            subblock/curator/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 7
 
-  # --- swegen: end-to-end 10-PR smoke (~30 min) ------------------------------
-  swegen-smoke:
-    name: swegen tests (smoke)
-    needs: [detect-changes, swegen-cases]
+  # --- curator: end-to-end 10-PR smoke (~30 min) ------------------------------
+  curator-smoke:
+    name: curator tests (smoke)
+    needs: [detect-changes, curator-cases]
     if: |
-      needs.detect-changes.outputs.swegen == 'true' &&
+      needs.detect-changes.outputs.curator == 'true' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
@@ -170,7 +170,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -193,51 +193,51 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/swegen
+        working-directory: subblock/curator
         run: |
           set -euo pipefail
-          CANON="${SHARED_RUNTIME}/swegen"
+          CANON="${SHARED_RUNTIME}/curator"
           mkdir -p repos artifacts
           rm -rf repos/swegen artifacts/envs gh_token.txt
           ln -s "$CANON/repos/swegen"        repos/swegen
           ln -s "$CANON/artifacts/envs"      artifacts/envs
           [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
-      - name: Overlay smoke config.yaml from subblock/swegen/tests/smoke
-        run: cp subblock/swegen/tests/smoke/config.yaml subblock/swegen/config.yaml
-      - name: Run smoke via .github/scripts/smoke_run.sh swegen
+      - name: Overlay smoke config.yaml from subblock/curator/tests/smoke
+        run: cp subblock/curator/tests/smoke/config.yaml subblock/curator/config.yaml
+      - name: Run smoke via .github/scripts/smoke_run.sh curator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
-        run: bash .github/scripts/smoke_run.sh swegen 3600
+        run: bash .github/scripts/smoke_run.sh curator 3600
       - name: Verify smoke
         if: always()
         shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
         run: |
-          bash subblock/swegen/tests/smoke/verify.sh
+          bash subblock/curator/tests/smoke/verify.sh
           rc=$?
-          if [[ $rc -eq 77 ]]; then echo "::warning::swegen smoke SKIPped"; exit 0; fi
+          if [[ $rc -eq 77 ]]; then echo "::warning::curator smoke SKIPped"; exit 0; fi
           exit $rc
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: swegen-smoke-logs-${{ github.run_id }}
+          name: curator-smoke-logs-${{ github.run_id }}
           path: |
-            subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py.log
-            subblock/swegen/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
-            subblock/swegen/artifacts/logs/
+            subblock/curator/artifacts/swe_tasks/.swegen-smoke-py.log
+            subblock/curator/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
+            subblock/curator/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 14
 
-  # --- trajgen: cheap test cases ---------------------------------------------
-  trajgen-cases:
-    name: trajgen tests (cases)
+  # --- tracer: cheap test cases ---------------------------------------------
+  tracer-cases:
+    name: tracer tests (cases)
     needs: detect-changes
-    if: needs.detect-changes.outputs.trajgen == 'true'
+    if: needs.detect-changes.outputs.tracer == 'true'
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 30   # cpfs cold-cache uv-env-editable case can take ~7 min
     steps:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
-        # Prior trajgen smokes drop root-owned files in the workspace —
+        # Prior tracer smokes drop root-owned files in the workspace —
         # Harbor's bind-mounted agent-runtime AND Docker trial containers
         # running as root drop sessions/state under jobs/smoke/. Any of
         # these makes actions/checkout's workspace-clean fail with EACCES.
@@ -246,7 +246,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -269,11 +269,11 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/trajgen
+        working-directory: subblock/tracer
         run: |
           set -euo pipefail
-          CANON="${SHARED_RUNTIME}/trajgen"
-          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh trajgen"; exit 1; }
+          CANON="${SHARED_RUNTIME}/tracer"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh tracer"; exit 1; }
           mkdir -p repos artifacts
           rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
@@ -288,8 +288,8 @@ jobs:
           [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
             ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
           ls -la repos artifacts
-      - name: Run trajgen test cases
-        working-directory: subblock/trajgen
+      - name: Run tracer test cases
+        working-directory: subblock/tracer
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
@@ -297,17 +297,17 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: trajgen-cases-logs-${{ github.run_id }}
-          path: subblock/trajgen/artifacts/logs/
+          name: tracer-cases-logs-${{ github.run_id }}
+          path: subblock/tracer/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 7
 
-  # --- trajgen: end-to-end 10-HF-task smoke (~30 min) -----------------------
-  trajgen-smoke:
-    name: trajgen tests (smoke)
-    needs: [detect-changes, trajgen-cases]
+  # --- tracer: end-to-end 10-HF-task smoke (~30 min) -----------------------
+  tracer-smoke:
+    name: tracer tests (smoke)
+    needs: [detect-changes, tracer-cases]
     if: |
-      needs.detect-changes.outputs.trajgen == 'true' &&
+      needs.detect-changes.outputs.tracer == 'true' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
@@ -319,7 +319,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -342,10 +342,10 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/trajgen
+        working-directory: subblock/tracer
         run: |
           set -euo pipefail
-          CANON="${SHARED_RUNTIME}/trajgen"
+          CANON="${SHARED_RUNTIME}/tracer"
           mkdir -p repos artifacts
           rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
@@ -359,43 +359,43 @@ jobs:
             ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
           [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
             ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
-      - name: Overlay smoke config.yaml from subblock/trajgen/tests/smoke
-        run: cp subblock/trajgen/tests/smoke/config.yaml subblock/trajgen/config.yaml
-      - name: Run smoke via .github/scripts/smoke_run.sh trajgen
+      - name: Overlay smoke config.yaml from subblock/tracer/tests/smoke
+        run: cp subblock/tracer/tests/smoke/config.yaml subblock/tracer/config.yaml
+      - name: Run smoke via .github/scripts/smoke_run.sh tracer
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
           LITELLM_NUM_WORKERS: "1"
-        run: bash .github/scripts/smoke_run.sh trajgen 2400
+        run: bash .github/scripts/smoke_run.sh tracer 2400
       - name: Verify smoke
         if: always()
         shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
         run: |
-          bash subblock/trajgen/tests/smoke/verify.sh
+          bash subblock/tracer/tests/smoke/verify.sh
           rc=$?
-          if [[ $rc -eq 77 ]]; then echo "::warning::trajgen smoke SKIPped"; exit 0; fi
+          if [[ $rc -eq 77 ]]; then echo "::warning::tracer smoke SKIPped"; exit 0; fi
           exit $rc
       - name: Upload logs
         if: always()
         continue-on-error: true   # harbor's root-owned agent/sessions can survive cleanup → upload EACCES, don't fail the job
         uses: actions/upload-artifact@v4
         with:
-          name: trajgen-smoke-logs-${{ github.run_id }}
+          name: tracer-smoke-logs-${{ github.run_id }}
           path: |
-            subblock/trajgen/artifacts/logs/
-            subblock/trajgen/artifacts/jobs/smoke/
+            subblock/tracer/artifacts/logs/
+            subblock/tracer/artifacts/jobs/smoke/
           if-no-files-found: ignore
           retention-days: 14
 
-  # --- eval: cheap test cases ------------------------------------------------
-  eval-cases:
-    name: eval tests (cases)
+  # --- evaluator: cheap test cases ------------------------------------------------
+  evaluator-cases:
+    name: evaluator tests (cases)
     needs: detect-changes
-    if: needs.detect-changes.outputs.eval == 'true'
+    if: needs.detect-changes.outputs.evaluator == 'true'
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 30   # cpfs cold-cache uv-env-editable case can take ~7 min
     steps:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
-        # eval smokes drop root-owned files in the workspace — Harbor's
+        # evaluator smokes drop root-owned files in the workspace — Harbor's
         # bind-mounted agent-runtime AND Docker trial containers running as
         # root drop state under artifacts/jobs/smoke/. Any of these makes
         # actions/checkout's workspace-clean fail with EACCES. Run docker
@@ -404,7 +404,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + envs come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -425,11 +425,11 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/eval
+        working-directory: subblock/evaluator
         run: |
           set -euo pipefail
-          CANON="${SHARED_RUNTIME}/eval"
-          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh eval"; exit 1; }
+          CANON="${SHARED_RUNTIME}/evaluator"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh evaluator"; exit 1; }
           # actions/checkout creates empty placeholder dirs for declared
           # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
           mkdir -p repos artifacts
@@ -444,8 +444,8 @@ jobs:
           [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
             || printf 'runs: []\n' > artifacts/index.yaml
           ls -la repos artifacts
-      - name: Run eval test cases
-        working-directory: subblock/eval
+      - name: Run evaluator test cases
+        working-directory: subblock/evaluator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
@@ -453,17 +453,17 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: eval-cases-logs-${{ github.run_id }}
-          path: subblock/eval/artifacts/logs/
+          name: evaluator-cases-logs-${{ github.run_id }}
+          path: subblock/evaluator/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 7
 
-  # --- eval: end-to-end registry-task smoke (~40 min) ------------------------
-  eval-smoke:
-    name: eval tests (smoke)
-    needs: [detect-changes, eval-cases]
+  # --- evaluator: end-to-end registry-task smoke (~40 min) ------------------------
+  evaluator-smoke:
+    name: evaluator tests (smoke)
+    needs: [detect-changes, evaluator-cases]
     if: |
-      needs.detect-changes.outputs.eval == 'true' &&
+      needs.detect-changes.outputs.evaluator == 'true' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
@@ -475,7 +475,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -495,11 +495,11 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/eval
+        working-directory: subblock/evaluator
         run: |
           set -euo pipefail
-          CANON="${SHARED_RUNTIME}/eval"
-          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh eval"; exit 1; }
+          CANON="${SHARED_RUNTIME}/evaluator"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh evaluator"; exit 1; }
           mkdir -p repos artifacts
           rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
           ln -s "$CANON/repos/harbor"        repos/harbor
@@ -507,46 +507,46 @@ jobs:
           ln -s "$CANON/artifacts/runtime"   artifacts/runtime
           [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
             || printf 'runs: []\n' > artifacts/index.yaml
-      - name: Overlay smoke config.yaml from subblock/eval/tests/smoke
-        run: cp subblock/eval/tests/smoke/config.yaml subblock/eval/config.yaml
-      - name: Run smoke via .github/scripts/smoke_run.sh eval
+      - name: Overlay smoke config.yaml from subblock/evaluator/tests/smoke
+        run: cp subblock/evaluator/tests/smoke/config.yaml subblock/evaluator/config.yaml
+      - name: Run smoke via .github/scripts/smoke_run.sh evaluator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
           LITELLM_NUM_WORKERS: "1"
-        run: bash .github/scripts/smoke_run.sh eval 2400
+        run: bash .github/scripts/smoke_run.sh evaluator 2400
       - name: Verify smoke
         if: always()
-        run: bash subblock/eval/tests/smoke/verify.sh
+        run: bash subblock/evaluator/tests/smoke/verify.sh
       - name: Upload logs
         if: always()
         continue-on-error: true   # harbor's root-owned agent/sessions can survive cleanup → upload EACCES, don't fail the job
         uses: actions/upload-artifact@v4
         with:
-          name: eval-smoke-logs-${{ github.run_id }}
+          name: evaluator-smoke-logs-${{ github.run_id }}
           path: |
-            subblock/eval/artifacts/logs/
-            subblock/eval/artifacts/jobs/smoke/
-            subblock/eval/artifacts/litellm/
+            subblock/evaluator/artifacts/logs/
+            subblock/evaluator/artifacts/jobs/smoke/
+            subblock/evaluator/artifacts/litellm/
           if-no-files-found: ignore
           retention-days: 14
 
-  # --- sft: cheap test cases -------------------------------------------------
-  sft-cases:
-    name: sft tests (cases)
+  # --- trainer: cheap test cases -------------------------------------------------
+  trainer-cases:
+    name: trainer tests (cases)
     needs: detect-changes
-    if: needs.detect-changes.outputs.sft == 'true'
+    if: needs.detect-changes.outputs.trainer == 'true'
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 30   # cpfs cold-cache imports (swe_data_process converters) hit ~7 min each
     steps:
       - name: Pre-checkout — reclaim residue from prior runs
-        # sft-cases doesn't write root-owned files itself, but a co-tenant
-        # trajgen/eval smoke on this runner might have; reclaim and drop
+        # trainer-cases doesn't write root-owned files itself, but a co-tenant
+        # tracer/evaluator smoke on this runner might have; reclaim and drop
         # everyone's smoke residue so actions/checkout's workspace-clean
         # never trips on EACCES.
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -567,11 +567,11 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/sft
+        working-directory: subblock/trainer
         run: |
           set -euo pipefail
-          CANON="${SHARED_RUNTIME}/sft"
-          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh sft"; exit 1; }
+          CANON="${SHARED_RUNTIME}/trainer"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh trainer"; exit 1; }
           # actions/checkout creates empty placeholder dirs for declared
           # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
           # The tracked artifacts/training_config/deepspeed/*.json come from the
@@ -582,24 +582,24 @@ jobs:
           ln -s "$CANON/repos/swe_data_process"  repos/swe_data_process
           ln -s "$CANON/artifacts/env"           artifacts/env
           ls -la repos artifacts
-      - name: Run sft test cases
-        working-directory: subblock/sft
+      - name: Run trainer test cases
+        working-directory: subblock/trainer
         run: bash tests/run.sh
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: sft-cases-logs-${{ github.run_id }}
-          path: subblock/sft/artifacts/logs/
+          name: trainer-cases-logs-${{ github.run_id }}
+          path: subblock/trainer/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 7
 
-  # --- sft: GPU training smoke (gated) --------------------------------------
-  sft-smoke:
-    name: sft tests (smoke)
-    needs: [detect-changes, sft-cases]
+  # --- trainer: GPU training smoke (gated) --------------------------------------
+  trainer-smoke:
+    name: trainer tests (smoke)
+    needs: [detect-changes, trainer-cases]
     if: |
-      needs.detect-changes.outputs.sft == 'true' &&
+      needs.detect-changes.outputs.trainer == 'true' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
         (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
@@ -617,7 +617,7 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/eval/artifacts/runtime /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/sft/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -638,11 +638,11 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/sft
+        working-directory: subblock/trainer
         run: |
           set -euo pipefail
-          CANON="${SHARED_RUNTIME}/sft"
-          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh sft"; exit 1; }
+          CANON="${SHARED_RUNTIME}/trainer"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh trainer"; exit 1; }
           mkdir -p repos artifacts artifacts/data
           rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env artifacts/data/examples
           ln -s "$CANON/repos/LLaMA-Factory"     repos/LLaMA-Factory
@@ -655,7 +655,7 @@ jobs:
           if [ -s "$CANON/artifacts/data/examples/lf_512.json" ]; then
             ln -s "$CANON/artifacts/data/examples" artifacts/data/examples
           else
-            echo "WARNING: staged smoke dataset missing at $CANON/artifacts/data/examples/lf_512.json — the smoke will SKIP. Seed it with: bash subblock/sft/tests/smoke/prepare_smoke_data.sh"
+            echo "WARNING: staged smoke dataset missing at $CANON/artifacts/data/examples/lf_512.json — the smoke will SKIP. Seed it with: bash subblock/trainer/tests/smoke/prepare_smoke_data.sh"
           fi
           ls -la repos artifacts artifacts/data
       - name: Run guarded SFT training smoke
@@ -664,18 +664,18 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sft-smoke-logs-${{ github.run_id }}
-          path: subblock/sft/artifacts/logs/
+          name: trainer-smoke-logs-${{ github.run_id }}
+          path: subblock/trainer/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 14
 
   # --- root: CHAINED end-to-end smoke (manual dispatch only) -----------------
   # Runs tests/smoke/run_pipeline.sh, which overlays each tests/smoke/<block>/
-  # config.yaml and runs all four blocks in sequence (swegen -> trajgen -> sft
-  # -> eval), feeding each block's real output into the next. Far heavier than
-  # the per-block smokes (hours; touches the remote GPU pod for sft + serving),
+  # config.yaml and runs all four blocks in sequence (curator -> tracer -> trainer
+  # -> evaluator), feeding each block's real output into the next. Far heavier than
+  # the per-block smokes (hours; touches the remote GPU pod for trainer + serving),
   # so it is workflow_dispatch-only and never runs on push. Set `root_budget`
-  # (e.g. 1800) for a quick pass; blank uses the config defaults (swegen 4h),
+  # (e.g. 1800) for a quick pass; blank uses the config defaults (curator 4h),
   # which can exceed the 6h job cap — tune accordingly.
   root-smoke:
     name: root smoke (chained end-to-end)
@@ -684,13 +684,13 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       (inputs.smoke_scope == 'root' || inputs.smoke_scope == 'all')
     runs-on: [self-hosted, swe-lego-ci]
-    timeout-minutes: 420   # 7h: real sft training (~3h20m) + swegen/trajgen/eval; self-hosted has no GH cap
+    timeout-minutes: 420   # 7h: real trainer training (~3h20m) + curator/tracer/eval; self-hosted has no GH cap
     steps:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/trajgen/artifacts/jobs/root-smoke /x/SWE-Lego-Live/subblock/trajgen/artifacts/root-smoke-src-tasks /x/SWE-Lego-Live/subblock/eval/artifacts/jobs/root-smoke /x/SWE-Lego-Live/subblock/swegen/artifacts/swe_tasks/py-cc-root-smoke /x/SWE-Lego-Live/subblock/sft/artifacts/model/root_smoke_model 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/root-smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/root-smoke-src-tasks /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/root-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-root-smoke /x/SWE-Lego-Live/subblock/trainer/artifacts/model/root_smoke_model 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
           fi
       - uses: actions/checkout@v4
         with:
@@ -710,18 +710,18 @@ jobs:
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
-      - name: Link runtime state for ALL blocks (swegen, trajgen, sft, eval)
+      - name: Link runtime state for ALL blocks (curator, tracer, trainer, evaluator)
         run: |
           set -euo pipefail
-          # swegen — venv + repo + gh_token
-          C="${SHARED_RUNTIME}/swegen"; cd "$GITHUB_WORKSPACE/subblock/swegen"
+          # curator — venv + repo + gh_token
+          C="${SHARED_RUNTIME}/curator"; cd "$GITHUB_WORKSPACE/subblock/curator"
           mkdir -p repos artifacts
           rm -rf repos/swegen artifacts/envs gh_token.txt
           ln -s "$C/repos/swegen" repos/swegen
           ln -s "$C/artifacts/envs" artifacts/envs
           [ -f "$C/gh_token.txt" ] && ln -s "$C/gh_token.txt" gh_token.txt || true
-          # trajgen — uv envs + repos + agent runtime + ledger
-          C="${SHARED_RUNTIME}/trajgen"; cd "$GITHUB_WORKSPACE/subblock/trajgen"
+          # tracer — uv envs + repos + agent runtime + ledger
+          C="${SHARED_RUNTIME}/tracer"; cd "$GITHUB_WORKSPACE/subblock/tracer"
           mkdir -p repos artifacts
           rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
           ln -s "$C/repos/harbor" repos/harbor
@@ -729,16 +729,16 @@ jobs:
           ln -s "$C/artifacts/env" artifacts/env
           [ -d "$C/artifacts/agent-runtime" ] && ln -s "$C/artifacts/agent-runtime" artifacts/agent-runtime || true
           [ -f "$C/artifacts/consumption_ledger.yaml" ] && ln -s "$C/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
-          # sft — uv env + repos + 512 fixture (remote pod hosts the GPUs)
-          C="${SHARED_RUNTIME}/sft"; cd "$GITHUB_WORKSPACE/subblock/sft"
+          # trainer — uv env + repos + 512 fixture (remote pod hosts the GPUs)
+          C="${SHARED_RUNTIME}/trainer"; cd "$GITHUB_WORKSPACE/subblock/trainer"
           mkdir -p repos artifacts artifacts/data
           rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env artifacts/data/examples
           ln -s "$C/repos/LLaMA-Factory" repos/LLaMA-Factory
           ln -s "$C/repos/swe_data_process" repos/swe_data_process
           ln -s "$C/artifacts/env" artifacts/env
           [ -s "$C/artifacts/data/examples/lf_512.json" ] && ln -s "$C/artifacts/data/examples" artifacts/data/examples || true
-          # eval — uv env + repo + agent runtime
-          C="${SHARED_RUNTIME}/eval"; cd "$GITHUB_WORKSPACE/subblock/eval"
+          # evaluator — uv env + repo + agent runtime
+          C="${SHARED_RUNTIME}/evaluator"; cd "$GITHUB_WORKSPACE/subblock/evaluator"
           mkdir -p repos artifacts
           rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
           ln -s "$C/repos/harbor" repos/harbor

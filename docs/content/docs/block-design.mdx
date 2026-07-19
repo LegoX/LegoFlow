@@ -3,7 +3,15 @@ title: Block Design
 description: The abstraction the whole pipeline is built on
 ---
 
-A **block** is the unit of work in LegoFactory. Every stage of the pipeline — data curation, trajectory generation, SFT, RL — is a block, with the same shape and the same three skills (`:setup`, `:check`, `:run`). This page is the long-form design: the vocabulary, the schema, the dependency rules, and the archive format.
+A **block** is the unit of work in SWE-Lego-Live. Every stage of the pipeline — data curation, trajectory generation, training, and evaluator measurement — is a block, with the same shape and the same three skills (`:setup`, `:check`, `:run`). This page is the long-form design: the vocabulary, the schema, the dependency rules, and the archive format.
+
+![Anatomy of a SWE-Lego-Live block](/figures/block-definition-editable.png)
+
+The diagram shows the block boundary. A block is not just a script directory: it is a package around one unit of work. `config.yaml` is the declaration layer; it names the block, pins code repositories, declares child blocks and dependencies, and separates runtime inputs from runtime outputs. The rest of the block is defined by that declaration.
+
+Inside the block, `repos/` holds pinned code dependencies, **plugin skills** expose the block's setup/check/run operations, and `memory/` keeps the context and traces an agent needs while operating the block. `scripts/` contains the concrete dry run, smoke test, and run entrypoints; `dashboard/` turns logs, metrics, and state into an inspectable surface; `subblocks/` lets the same shape nest, so a block can be a leaf task or a parent pipeline.
+
+The side panels are part of the contract too. Code repos are pinned outside the block logic but referenced by config; the config schema declares what the block is allowed to depend on and publish. A run then produces `artifacts/`: logs, archives, cache, output, and environment snapshots. That gives the root block something stable to inspect before execution and something durable to review after the run finishes.
 
 ## Block
 
@@ -23,7 +31,7 @@ The values a block needs that originate **outside** the block tree: API keys, Gi
 
 ## `runtime_info.output`
 
-The values a block publishes once it has run, for downstream blocks to consume — e.g. `swegen.output.swe_tasks_dir`. Downstream blocks reference these through `dependencies`, never by hand.
+The values a block publishes once it has run, for downstream blocks to consume — e.g. `curator.output.swe_tasks_dir`. Downstream blocks reference these through `dependencies`, never by hand.
 
 ## Dependency
 
@@ -31,7 +39,7 @@ Inter-block values are wired in `meta_info.subblocks[].dependencies` as `<source
 
 ## Repo
 
-A vendored, pinned dependency under a block's `repos/` directory (e.g. `trajgen/repos/harbor/`). Pinned by commit SHA in `config.yaml` under `meta_info.repositories.<name>`. Editing files under `repos/` is forbidden — auth/env fixes belong in `scripts/` or `config.yaml`.
+A vendored, pinned dependency under a block's `repos/` directory (e.g. `tracer/repos/harbor/`). Pinned by commit SHA in `config.yaml` under `meta_info.repositories.<name>`. Editing files under `repos/` is forbidden — auth/env fixes belong in `scripts/` or `config.yaml`.
 
 ## Resources
 

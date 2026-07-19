@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Internal helper for run_pipeline.sh stage 3 when sft runs on a remote GPU pod.
+# Internal helper for run_pipeline.sh stage 3 when trainer runs on a remote GPU pod.
 #
 # Stages the merged combined-LF dataset + the lowered smoke config onto the pod,
 # launches scripts/start.sh there, polls the pod for train_results.json, and
-# fetches it (plus trainer_state.json) back into the LOCAL sft block so the
+# fetches it (plus trainer_state.json) back into the LOCAL trainer block so the
 # local verify.sh sees the same artifact at the same path. The persisted
-# checkpoint stays on the pod — serve_checkpoint.sh (eval stage) serves it there.
+# checkpoint stays on the pod — serve_checkpoint.sh (evaluator stage) serves it there.
 #
 #   bash tests/smoke/_remote_sft.sh <sft_block_dir> <merged_rel> <budget> <dry_run>
 #
 # Reads the pod address from <sft_block_dir>/config.yaml meta_info.resources.
 
 set -uo pipefail
-FB="${1:?sft block dir}"; MERGED_REL="${2:?merged rel path}"; BUDGET="${3:-3000}"; DRY="${4:-0}"
+FB="${1:?trainer block dir}"; MERGED_REL="${2:?merged rel path}"; BUDGET="${3:-3000}"; DRY="${4:-0}"
 CFG="$FB/config.yaml"
 
 cfg() { python3 - "$CFG" "$1" <<'PY'
@@ -29,7 +29,7 @@ PY
 R_IP="$(cfg meta_info.resources.ip)"; R_USER="$(cfg meta_info.resources.user)"
 R_KEY="$(cfg meta_info.resources.key)"; R_PORT="$(cfg meta_info.resources.port)"
 R_DIR="$(cfg meta_info.resources.directory)"; OUT="$(cfg runtime_info.input.training.output_dir)"
-REMOTE_SFT="$R_DIR/subblock/sft"
+REMOTE_SFT="$R_DIR/subblock/trainer"
 # #3 fix: the pod SSH login is root, but the shared FS is owned by uid 1000 (the
 # SAME uid as the runner's user, just named differently per host). If training
 # runs as root it writes config.yaml runtime_info.output back as root:root 0600,
@@ -49,7 +49,7 @@ fi
 
 # Probe SSH first — SKIP cleanly if the pod is unreachable.
 if ! SSH 'echo ok' >/dev/null 2>&1; then
-  echo "SKIP: sft pod $R_IP unreachable over SSH — cannot run remote training"
+  echo "SKIP: trainer pod $R_IP unreachable over SSH — cannot run remote training"
   exit 77
 fi
 
@@ -68,7 +68,7 @@ SSH "mkdir -p '$REMOTE_SFT/$(dirname "$MERGED_REL")' '$REMOTE_SFT/artifacts/logs
 SCP_TO "$FB/$MERGED_REL" "$REMOTE_SFT/$MERGED_REL" \
   || { echo "FAIL: could not stage merged LF dataset to the pod"; exit 1; }
 SCP_TO "$CFG" "$REMOTE_SFT/config.yaml" \
-  || { echo "FAIL: could not stage sft config to the pod"; exit 1; }
+  || { echo "FAIL: could not stage trainer config to the pod"; exit 1; }
 # Drop any stale run dir; give the staged inputs + artifact dirs to the run uid
 # (SCP left them root-owned) so the non-root run can read config + write outputs.
 # Hand ALL run-written artifact dirs to the run uid — not just model/logs: dataset

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Register a GitHub Actions self-hosted runner ON THE CURRENT (GPU) MACHINE,
-# carrying the `swe-lego-gpu` label that the CI `sft-smoke` job is pinned to.
+# carrying the `swe-lego-gpu` label that the CI `trainer-smoke` job is pinned to.
 #
 # Run this on the GPU host itself — the runner binds to whatever machine it is
-# started on, and sft-smoke needs the 8× GPUs that live here. Every other CI
+# started on, and trainer-smoke needs the 8× GPUs that live here. Every other CI
 # job stays on the generic `swe-lego-ci` pool; this box also gets `swe-lego-ci`
 # so it can help with those too.
 #
@@ -34,7 +34,7 @@ if [ "${GPU_COUNT:-0}" -lt 8 ]; then
     echo "WARNING: host reports ${GPU_COUNT} GPU(s) (<8) but ALLOW_NON_GPU=1 — registering anyway." >&2
   else
     echo "ERROR: this host reports ${GPU_COUNT} GPU(s) (<8). The 'swe-lego-gpu' label is" >&2
-    echo "       reserved for the 8-GPU training host — sft-smoke is scheduled ONLY by it." >&2
+    echo "       reserved for the 8-GPU training host — trainer-smoke is scheduled ONLY by it." >&2
     echo "       Registering a CPU box here would let the gated smoke SKIP and the job go" >&2
     echo "       GREEN without ever running training. Aborting." >&2
     echo "       Run this on the real 8-GPU machine, or set ALLOW_NON_GPU=1 to override." >&2
@@ -69,5 +69,5 @@ Start it one of two ways (from $RUNNER_DIR):
   sudo ./svc.sh install && sudo ./svc.sh start   # as a systemd service
 
 Once online it shows up under repo Settings → Actions → Runners with the
-'swe-lego-gpu' label, and the CI sft-smoke job will schedule onto it.
+'swe-lego-gpu' label, and the CI trainer-smoke job will schedule onto it.
 EOF

@@ -1,81 +1,123 @@
 ---
 title: Getting Started
-description: Three skills to operate any block — setup, check, run
+description: The core plugin skills for operating any block
 ---
-
-Every block in LegoFactory is operated through the same three Claude Code skills, whether it's data curation, trajectory generation, SFT, or RL:
-
-| Skill | What it does | Side effects |
-| --- | --- | --- |
-| `/<block>:setup` | Install dependencies, build envs, fill default config values | Writes files; idempotent |
-| `/<block>:check` | Validate config, inputs, environments, and live endpoints | Read-only |
-| `/<block>:run` | Execute the block end-to-end and archive the run | Long-running; modifies artifacts |
-
-Replace `<block>` with the block name — `swegen`, `trajgen`, `sft`, or `rl`. Same three verbs, every block.
-
-## A short note on blocks
-
-A **block** is a self-contained directory that owns one stage of the pipeline. Every block has the same shape — `config.yaml` (inputs, outputs, dependencies), `scripts/` (setup, dryrun, start, archive), `artifacts/` (live state and per-run archives), and a `CLAUDE.md` that documents the agent contract. The parent block (this repo root) wires children together by name through `meta_info.subblocks[].dependencies`, so values flow from one block to the next without hand-copied paths.
-
-For the full design — schema, dependency rules, archive format, the `root` plugin — see [Block Design](/docs/block-design).
 
 ## Prerequisites
 
 - **Claude Code** with this repo's plugin loaded — `/reload-plugins` should show `1 plugin · 3 skills`.
-- **Docker** on whichever host runs `swegen` and `trajgen` (containerized rollouts).
-- **8× GPU node** for `sft` and `rl`.
-- **An OpenAI-compatible LLM endpoint** with an API key — `swegen` and `trajgen` both call it.
-- **GitHub token(s)** with `repo` read scope, for PR collection in `swegen`.
+- **Docker** on whichever host runs `curator` and `tracer` (containerized rollouts).
+- **An OpenAI-compatible LLM endpoint** with an API key — `curator` and `tracer` both call it.
+- An **8× GPU node** for `trainer`.
+- **GitHub token(s)** with `repo` read scope, for PR collection in `curator`.
 
-## 1. Clone
+
+## Step 1: Clone
 
 ```bash
 git clone --recurse-submodules <repo-url> SWE-Lego-Live
 cd SWE-Lego-Live
 ```
-
 If you cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.
 
-## 2. `/<block>:setup` — install dependencies
 
-Run setup once per block, in pipeline order:
+## Step 2: Fill in `config.yaml`
+
+Every block is driven by a `config.yaml`. The file declares what the block is, where it runs, which repositories and child blocks it depends on, what values a user must provide, and what outputs the block will publish after a run.
+
+The schema has three main parts:
+
+- `meta_info` describes the block identity, pinned repositories, execution environment, resources, and subblock wiring.
+- `runtime_info.input` contains values that come from outside the block tree, such as API keys, model names, GitHub tokens, dataset paths, or human choices.
+- `runtime_info.output` contains values produced by the block, such as verified task directories, trajectory directories, checkpoint paths, or evaluator reports.
+
+For example, a root block can wire `curator` into `tracer` by declaring that `tracer` receives its tasks from `curator.output.verified_tasks_dir`, while values like API keys are still marked as `human`:
+
+```yaml
+meta_info:
+  name: root
+  subblocks:
+    curator:
+      role: generate verified SWE tasks
+      dependencies:
+        github_tokens: human
+        llm_api: human
+    tracer:
+      role: roll out agent trajectories
+      dependencies:
+        task_source: curator.output.verified_tasks_dir
+        llm_api: human
+
+runtime_info:
+  input:
+    github_tokens: "ghp_xxx,ghp_yyy"
+    llm_api:
+      api_base_url: "https://api.example.com/v1"
+      api_key: "sk-..."
+      model: "gpt-4.1"
+  output: {}
+```
+
+When filling a block config, start with all `human` dependencies and all non-null `runtime_info.input` fields. Leave `runtime_info.output` empty before the first run; block scripts fill it after successful execution. Then run `/<block>:check` to catch missing tokens, unresolved dependencies, missing repos, or unreachable remote resources before launching a long job.
+
+
+## Step 3: Running with Plugin Skills
+
+Every block in SWE-Lego-Live is operated through the same plugin skills:
+
+| Skill | What it does |
+| --- | --- |
+| `/<block>:setup` | Install dependencies, build environments, and fill default config values |
+| `/<block>:check` | Validate config, inputs, environments, dependencies, repos, and live endpoints |
+| `/<block>:run` | Execute the block end-to-end and archive the run |
+
+Replace `<block>` with the block name — for example, `curator`, `tracer`, `trainer`, or `evaluator`. Same three verbs, every block.
+
+### Step 3.1: `/<block>:setup` — install dependencies
+
+Run setup once for the block you want to operate:
 
 ```text
-/swegen:setup        # clone repos, build envs, prepare default config
-/trajgen:setup
-/sft:setup
-/rl:setup
+/curator:setup        # clone repos, build envs, prepare default config
 ```
 
 Each `:setup` is idempotent and safe to re-run — it only fills in fields that aren't already set, and only builds environments that don't already exist. After setup, the block's `config.yaml` will still have a handful of `runtime_info.input` fields that only you can provide (API keys, GitHub tokens, model names). Fill those by hand.
 
-## 3. `/<block>:check` — preflight
+### Step 3.2: `/<block>:check` — preflight
 
 `<block>:check` is read-only. It validates the schema, every filled input, every inter-block dependency, repo pins, environment paths, and live LLM endpoints (via a no-cost `GET /models` probe). It never modifies anything and never costs anything.
 
 ```text
-/swegen:check
-/trajgen:check
-/sft:check
-/rl:check
+/tracer:check         # validate tracer config, dependencies, Docker, and endpoints
 ```
 
 Run `:check` after every config edit. It tells you exactly which input is unfilled, which submodule is missing, and whether the remote node is reachable, so you can fix gaps before committing to a long run.
 
-## 4. `/<block>:run` — execute
+### Step 3.3: `/<block>:run` — execute
 
 Only run after the matching `:check` passes:
 
 ```text
-/swegen:run          # generate and verify SWE tasks
-/trajgen:run         # roll the agent out across verified tasks
-/sft:run             # convert trajectories + SFT
-/rl:run              # online RL from the SFT checkpoint
+/trainer:run          # convert trajectories and train
 ```
 
 Each `:run` executes the block's `scripts/start.sh`. Long-running operations (multi-hour GPU training, multi-container rollouts) launch in tmux so they survive disconnects. Every run is archived automatically — `start.sh` installs an EXIT trap that fires `archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM). One entry lands in `artifacts/index.yaml`, and the snapshot lives in `artifacts/archives/run_NNN/`.
 
-## 5. Read the result
+
+## Working with Root
+
+`/root:check` and `/root:run` recursively apply the same lifecycle across the whole tree, with a free-form argument that selects the target block:
+
+```text
+/root:check                         # check root + every subblock
+/root:check curator                  # one block at a time
+/root:run tracer                   # equivalent to /tracer:run
+/root:run start the data pipeline   # paraphrased; resolves to the root orchestrator
+```
+
+An [Example Usage](/docs/example-usages) of root can be found here.
+
+## Result Collection
 
 The block's own artifacts are the source of truth:
 
@@ -83,17 +125,10 @@ The block's own artifacts are the source of truth:
 - `artifacts/archives/run_NNN/metadata.yaml` — id, timestamps, exit code, repo SHAs
 - `artifacts/archives/run_NNN/config.yaml` — the frozen config that produced this run
 
-For visual progress, every block also ships a `:dashboard` skill — e.g. `/trajgen:dashboard` for trajectory rollouts, `/sft:dashboard` for training loss. See each block's own docs under [Sub-block](/docs/sub-block/swegen).
-
-## Working at the root
-
-`/root:check` and `/root:run` recursively apply the same lifecycle across the whole tree, with a free-form argument that selects the target block:
+Optionally, open the block dashboard for a visual summary:
 
 ```text
-/root:check                         # check root + every subblock
-/root:check swegen                  # one block at a time
-/root:run trajgen                   # equivalent to /trajgen:run
-/root:run start the data pipeline   # paraphrased; resolves to the root orchestrator
+/tracer:dashboard     # inspect trajectory rollouts and conversion status
 ```
 
-Both forms — `/<block>:check` and `/root:check <block>` — are equivalent. Use whichever reads more naturally for what you're doing.
+Dashboards expose the same run state, logs, metrics, and artifacts in a more readable view. See each block's own docs under [Blocks](/docs/sub-block/curator).

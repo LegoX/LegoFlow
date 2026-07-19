@@ -1,0 +1,49 @@
+---
+title: Prepare Tasks
+description: Manifest-filtered task selection and exactly-once consumption
+---
+
+tracer only ever rolls out tasks that curator has marked verified, and never rolls the same task out twice. Two mechanisms enforce this: the **manifest filter** during task preparation, and the **consumption ledger** plus exclude list during a run.
+
+## Manifest-filtered copy
+
+`scripts/prepare_tasks.sh` copies task directories from the configured source into `artifacts/tasks/<dataset>/`:
+
+```bash
+bash scripts/prepare_tasks.sh
+```
+
+- If the source contains `verifiable_tasks.txt`, only the task IDs listed there are copied (a manifest-filtered copy). Unverified tasks are skipped.
+- If the manifest is missing, the script falls back to copying every task directory — so keep a manifest in the source.
+- The copy is idempotent: it skips when the target already holds valid Harbor task dirs. Pass `--overwrite` to rebuild.
+
+The task source is configured in `config.yaml` under `runtime_info.input.task_source` and is normally wired from curator's output via `meta_info.dependencies`.
+
+## The consumption ledger
+
+`artifacts/consumption_ledger.yaml` is the source of truth for which task IDs have already been processed. Each entry has a status:
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | Eligible, not yet run |
+| `running` | Currently being rolled out |
+| `done` | Completed; trajectory captured |
+| `failed` | Errored out (timeout/OOM); excluded from future runs |
+| `skipped` | Intentionally not run; excluded |
+
+After each job, append or update one entry per task (with `submitted_at`, `completed_at`, `trajectory_path`, `reward`, and a note).
+
+## The exclude list
+
+Every task that is `done`, `failed`, or `skipped` must also appear in `HARBOR_EXCLUDE_TASKS` (under `environment.extra` in `config.yaml`). `start.sh` turns that space-separated list into Harbor `--exclude-task-name` flags so those tasks are never rolled out again.
+
+```text
+curator tasks + verifiable_tasks.txt
+   └─ manifest filter ─▶ artifacts/tasks/<dataset>
+                           └─▶ Harbor job ◀── --exclude-task-name ── HARBOR_EXCLUDE_TASKS
+                                  │                                          ▲
+                                  └─ update entries ─▶ consumption_ledger.yaml
+                                                          (done / failed / skipped)
+```
+
+Together, the manifest gates *eligibility* and the ledger + exclude list guarantee *exactly-once* consumption.

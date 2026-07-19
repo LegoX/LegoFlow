@@ -28,7 +28,7 @@ structurally sound:
 | Test | What it asserts |
 |---|---|
 | `test_subblock_dir_exists` | `subblock/` directory exists at the repo root |
-| `test_subblock_present[<name>]` | every expected subblock dir exists (`swegen`, `trajgen`, `sft`, `rl`, `eval`) |
+| `test_subblock_present[<name>]` | every expected subblock dir exists (`curator`, `tracer`, `trainer`, `rl`, `evaluator`) |
 | `test_config_yaml_parses[<name>]` | each block's `config.yaml` is valid YAML with `meta_info` and `runtime_info` top-level keys |
 | `test_meta_info_identity[<name>]` | `meta_info.name` matches the block's directory name, `meta_info.parent` is `swe_lego_live` |
 | `test_uniform_scripts_present[<name>, <script>]` | each block has the four uniform scripts under `scripts/`: `start.sh`, `dryrun.sh`, `clean.sh`, `archive_run.sh` |
