@@ -69,11 +69,6 @@ function mergedPageTree() {
         ...node,
         children: [
           blockFolder('curator'),
-          ...node.children.filter(
-            (child: any) =>
-              child.type === 'page' &&
-              child.url === '/docs/sub-block/terminalgen',
-          ),
           blockFolder('tracer'),
           blockFolder('trainer'),
           blockFolder('evaluator'),
