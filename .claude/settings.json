@@ -9,7 +9,7 @@
     "terminalgen-block": {
       "source": { "source": "directory", "path": "subblock/terminalgen/.claude/plugins" }
     },
-    "tracer-block": {
+    "tracer": {
       "source": { "source": "directory", "path": "subblock/tracer/.claude/plugins" }
     },
     "trainer-block": {
@@ -26,7 +26,7 @@
     "root@root-block": true,
     "curator@curator-block": true,
     "terminalgen@terminalgen-block": true,
-    "tracer@tracer-block": true,
+    "tracer@tracer": true,
     "trainer@trainer-block": true,
     "rl@rl-block": true,
     "evaluator@evaluator-block": true
