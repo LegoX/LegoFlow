@@ -714,7 +714,7 @@ jobs:
         run: |
           set -euo pipefail
           # curator — venv + repo + gh_token
-          C="${SHARED_RUNTIME}/swegen"; cd "$GITHUB_WORKSPACE/subblock/curator"
+          C="${SHARED_RUNTIME}/curator"; cd "$GITHUB_WORKSPACE/subblock/curator"
           mkdir -p repos artifacts
           rm -rf repos/swegen artifacts/envs gh_token.txt
           ln -s "$C/repos/swegen" repos/swegen
@@ -730,7 +730,7 @@ jobs:
           [ -d "$C/artifacts/agent-runtime" ] && ln -s "$C/artifacts/agent-runtime" artifacts/agent-runtime || true
           [ -f "$C/artifacts/consumption_ledger.yaml" ] && ln -s "$C/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
           # trainer — uv env + repos + 512 fixture (remote pod hosts the GPUs)
-          C="${SHARED_RUNTIME}/sft"; cd "$GITHUB_WORKSPACE/subblock/trainer"
+          C="${SHARED_RUNTIME}/trainer"; cd "$GITHUB_WORKSPACE/subblock/trainer"
           mkdir -p repos artifacts artifacts/data
           rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env artifacts/data/examples
           ln -s "$C/repos/LLaMA-Factory" repos/LLaMA-Factory
@@ -738,7 +738,7 @@ jobs:
           ln -s "$C/artifacts/env" artifacts/env
           [ -s "$C/artifacts/data/examples/lf_512.json" ] && ln -s "$C/artifacts/data/examples" artifacts/data/examples || true
           # evaluator — uv env + repo + agent runtime
-          C="${SHARED_RUNTIME}/eval"; cd "$GITHUB_WORKSPACE/subblock/evaluator"
+          C="${SHARED_RUNTIME}/evaluator"; cd "$GITHUB_WORKSPACE/subblock/evaluator"
           mkdir -p repos artifacts
           rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
           ln -s "$C/repos/harbor" repos/harbor
