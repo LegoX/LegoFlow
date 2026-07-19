@@ -1,134 +1,376 @@
 ---
 title: Getting Started
-description: The core plugin skills for operating any block
+description: Set up and run SWE-Lego-Live from task curation through evaluation
 ---
 
-## Prerequisites
+This guide follows the pipeline in execution order:
 
-- A **CPU** node with enough disk quota (e.g., >= 10T) for `curator` and `tracer` to create SWE tasks and trajectories
-- A **GPU** node (preferrably 8 GPU cards) for `trainer` and `evaluator` to train and evaluate customized models
-- A LLM API key used to either curate SWE tasks, generate trajectory rollouts etc.
-- **GitHub token(s)** with `repo` read scope, for PR collection in `curator`.
-- **Claude Code** or **Codex** (coming soon)
+```text
+setup -> SWE task curation -> trace generation -> SFT training -> evaluator
+```
+
+Each stage is a self-contained block with its own `config.yaml`, scripts,
+artifacts, and plugin skills.
 
 
-## Step 1: Clone
+## 1. Setup
+
+### Prerequisites
+
+- A **CPU node** with Docker and sufficient disk for curator and tracer. Large
+  production runs can require several terabytes.
+- A **GPU node**, preferably with 8 A100/H100-class GPUs, for full-parameter SFT
+  and serving a trained model during evaluation.
+- Git, Python 3.10+, and [uv](https://docs.astral.sh/uv/) on the relevant hosts.
+- GitHub token(s) with repository read access.
+- An OpenAI-compatible or Anthropic-compatible LLM endpoint and API key.
+- Claude Code with the repository's block plugins loaded. Codex support is
+  coming soon.
+
+### Installation
 
 ```bash
-git clone --recurse-submodules <repo-url> SWE-Lego-Live
+git clone --recurse-submodules git@github.com:SWE-Lego/SWE-Lego-Live.git
 cd SWE-Lego-Live
 ```
-If you cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.
+
+If the repository was cloned without submodules:
+
+```bash
+git submodule update --init --recursive
+```
+
+Every block follows the same lifecycle:
+
+| Skill | Purpose |
+| --- | --- |
+| `/<block>:setup` | Install managed repositories and environments |
+| `/<block>:check` | Validate config, credentials, dependencies, and endpoints |
+| `/<block>:run` | Run the block and archive the result |
+| `/<block>:dashboard` | Inspect progress and artifacts |
+
+Run `:setup` once, edit the block's `config.yaml`, and repeat `:check` until
+it passes. Never commit real secrets; use environment variables, ignored
+credential files, or a secret manager.
 
 
-## Step 2: Fill in `config.yaml`
+## 2. SWE task curation
 
-Every block is driven by a `config.yaml`. The file declares what the block is, where it runs, which repositories and child blocks it depends on, what values a user must provide, and what outputs the block will publish after a run.
+Curator turns GitHub PRs into Harbor tasks. Only tasks that pass NOP and Oracle
+validation appear in `verifiable_tasks.txt` and become eligible for tracer.
 
-The schema has three main parts:
+### Install curator
 
-- `meta_info` describes the block identity, pinned repositories, execution environment, resources, and subblock wiring.
-- `runtime_info.input` contains values that come from outside the block tree, such as API keys, model names, GitHub tokens, dataset paths, or human choices.
-- `runtime_info.output` contains values produced by the block, such as verified task directories, trajectory directories, checkpoint paths, or evaluator reports.
+```bash
+cd subblock/curator
+```
 
-For example, a root block can wire `curator` into `tracer` by declaring that `tracer` receives its tasks from `curator.output.verified_tasks_dir`, while values like API keys are still marked as `human`:
+```text
+/curator:setup
+```
+
+Use the checked-in `config.yaml` as the schema. Preserve `meta_info` and
+`runtime_info.output`, then configure `runtime_info.input` from scratch.
+
+### Add GitHub credentials
+
+Set `runtime_info.input.github_tokens` to a runtime-provided value. The PR
+collector reads `gh_token.txt`, one token per line:
+
+```text
+ghp_first_token
+ghp_second_token
+```
+
+Keep this file uncommitted. `pr_collection.token_limit` selects the first N
+tokens; `0` uses all of them.
+
+### Choose the PR scope
+
+Start with one language and a small pool:
 
 ```yaml
-meta_info:
-  name: root
-  subblocks:
-    curator:
-      role: generate verified SWE tasks
-      dependencies:
-        github_tokens: human
-        llm_api: human
-    tracer:
-      role: roll out agent trajectories
-      dependencies:
-        task_source: curator.output.verified_tasks_dir
-        llm_api: human
-
 runtime_info:
   input:
-    github_tokens: "ghp_xxx,ghp_yyy"
+    github_tokens: human
+    pr_collection:
+      enabled: true
+      languages: [python]
+      repo_num: 10
+      max_prs_per_repo: 10
+      output_dir: artifacts/collected_prs
+      token_limit: 1
+      filters:
+        min_stars: 30
+        min_merged_prs: 5
+        min_language_percentage: 0.4
+        max_days_since_push: 1095
+        min_issue_body_length: 10
+        min_files_changed: 1
+        max_files_changed: 25
+        max_lines_changed: 1500
+```
+
+Production languages are `c`, `cpp`, `go`, `java`, `javascript`,
+`typescript`, `python`, and `rust`.
+
+### Configure both LLM paths
+
+Curator uses an OpenAI-compatible path for PR evaluation/instruction generation
+and an Anthropic Messages path for task completion/verification. For an
+OpenAI-only upstream provider, enable the LiteLLM translation proxy:
+
+```yaml
     llm_api:
-      api_base_url: "https://api.example.com/v1"
-      api_key: "sk-..."
-      model: "gpt-4.1"
-  output: {}
+      api_key: <YOUR_API_KEY>
+      api_base_url: https://your-provider.example/v1
+      pr_model: Qwen3.6-35B-A3B
+      task_model: claude-sonnet-4-6
+      cc_provider_mode: openai_proxy
+      anthropic_base_url: http://127.0.0.1:4010
+      cc_proxy_port: 4010
 ```
 
-When filling a block config, start with all `human` dependencies and all non-null `runtime_info.input` fields. Leave `runtime_info.output` empty before the first run; block scripts fill it after successful execution. Then run `/<block>:check` to catch missing tokens, unresolved dependencies, missing repos, or unreachable remote resources before launching a long job.
+For a provider that natively supports Anthropic Messages:
 
+```yaml
+    llm_api:
+      api_key: <YOUR_API_KEY>
+      api_base_url: https://your-provider.example/v1
+      pr_model: claude-opus-4-6
+      task_model: claude-opus-4-6
+      cc_provider_mode: native
+      anthropic_base_url: https://your-provider.example
+      cc_proxy_port: null
+```
 
-## Step 3: Running with Plugin Skills
+A wrong provider mode can make generation appear successful without producing
+a verified-task manifest.
 
-Every block in SWE-Lego-Live is operated through the same plugin skills:
+### Select generation parameters
 
-| Skill | What it does |
-| --- | --- |
-| `/<block>:setup` | Install dependencies, build environments, and fill default config values |
-| `/<block>:check` | Validate config, inputs, environments, dependencies, repos, and live endpoints |
-| `/<block>:run` | Execute the block end-to-end and archive the run |
+Keep one language enabled with concurrency 1 for the first run. Retain all
+language keys from the template because the scripts read them directly:
 
-Replace `<block>` with the block name — for example, `curator`, `tracer`, `trainer`, or `evaluator`. Same three verbs, every block.
+```yaml
+    languages:
+      py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 1 } }
+      js:   { enabled: false, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 1 } }
+      ts:   { enabled: false, params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 1 } }
+      go:   { enabled: false, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 1 } }
+      c:    { enabled: false, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 1 } }
+      cpp:  { enabled: false, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 1 } }
+      java: { enabled: false, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 1 } }
+      rust: { enabled: false, params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 1 } }
+```
 
-### Step 3.1: `/<block>:setup` — install dependencies
-
-Run setup once for the block you want to operate:
+### Collect and run
 
 ```text
-/curator:setup        # clone repos, build envs, prepare default config
+/curator:check
+/curator:collect-prs
+/curator:run
+/curator:dashboard
 ```
 
-Each `:setup` is idempotent and safe to re-run — it only fills in fields that aren't already set, and only builds environments that don't already exist. After setup, the block's `config.yaml` will still have a handful of `runtime_info.input` fields that only you can provide (API keys, GitHub tokens, model names). Fill those by hand.
+The downstream contract is
+`subblock/curator/artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt`.
 
-### Step 3.2: `/<block>:check` — preflight
+See [Curator: Getting Started](/docs/sub-block/curator/getting-started),
+[Core Concepts](/docs/sub-block/curator/core-concepts), and
+[Outputs](/docs/sub-block/curator/outputs) for provider modes, validation, and
+the complete artifact layout.
 
-`<block>:check` is read-only. It validates the schema, every filled input, every inter-block dependency, repo pins, environment paths, and live LLM endpoints (via a no-cost `GET /models` probe). It never modifies anything and never costs anything.
+
+## 3. Trace generation
+
+Tracer consumes curator's verified tasks, rolls a coding agent out through
+Harbor, and records replayable LiteLLM trajectories.
+
+### Install tracer
+
+From `subblock/curator`:
+
+```bash
+cd ../tracer
+```
 
 ```text
-/tracer:check         # validate tracer config, dependencies, Docker, and endpoints
+/tracer:setup
 ```
 
-Run `:check` after every config edit. It tells you exactly which input is unfilled, which submodule is missing, and whether the remote node is reachable, so you can fix gaps before committing to a long run.
+Preserve the checked-in `meta_info`, repository pins, environment, and
+`runtime_info.output`. Configure `runtime_info.input` as follows.
 
-### Step 3.3: `/<block>:run` — execute
+### Configure the endpoint and local proxy
 
-Only run after the matching `:check` passes:
+The model should include its LiteLLM provider prefix:
+
+```yaml
+runtime_info:
+  input:
+    llm_api:
+      api_key: <YOUR_API_KEY>
+      api_base_url: https://your-provider.example/v1
+      model: openai/Qwen3.6-35B-A3B
+      protocols: [openai_compatible, anthropic_compatible]
+      served_via: per_job_litellm_proxy
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+
+    litellm_proxy:
+      config_template: scripts/serve_llm/litellm_config.example.yaml
+      port: 4003
+      master_key: <LOCAL_PROXY_KEY>
+```
+
+The proxy port must be free. Its master key protects the local proxy; it does
+not replace the upstream API key.
+
+### Point tracer at curator output
+
+Choose one language directory. Relative paths resolve from `subblock/tracer`:
+
+```yaml
+    task_source:
+      provider: local
+      dataset_name: ../curator/artifacts/swe_tasks/py-cc
+      split: train
+```
+
+`scripts/prepare_tasks.sh` finds the manifest and copies only verified tasks.
+For a Hub-hosted task set, use `provider: huggingface` and set
+`dataset_name` to the dataset repository ID.
+
+### Size the first Harbor job
+
+```yaml
+    harbor_job:
+      jobs_dir: artifacts/jobs
+      n_concurrent: 1
+      n_tasks: 1
+      max_retries: 2
+      timeout_multiplier: 5
+```
+
+After the smoke run, increase concurrency and set `n_tasks: null` to consume
+all eligible tasks.
+
+### Choose one consistent agent profile
+
+```yaml
+    agent:
+      name: custom-claude-code
+      version: 2.1.118
+      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
+      runtime_host_path: artifacts/agent-runtime/claude-code
+      max_turns: 80
+      temperature: 0.7
+```
+
+The block also supports OpenCode, OpenHands SDK, and Terminus-2. Do not mix the
+name, version, image, or host path from different profiles.
+
+### Configure optional SFT conversion
+
+```yaml
+    sft_conversion:
+      enabled: true
+      scaffold: auto
+      out_dir: artifacts/sft_data
+      max_instances: null
+      exclude_repos_file: ""
+```
+
+With `enabled: true`, conversion runs after Harbor finishes;
+`scaffold: auto` derives the converter from `agent.name`.
+
+### Prepare and run
+
+```bash
+bash scripts/prepare_tasks.sh
+```
 
 ```text
-/trainer:run          # convert trajectories and train
+/tracer:check
+/tracer:run
+/tracer:dashboard
 ```
 
-Each `:run` executes the block's `scripts/start.sh`. Long-running operations (multi-hour GPU training, multi-container rollouts) launch in tmux so they survive disconnects. Every run is archived automatically — `start.sh` installs an EXIT trap that fires `archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM). One entry lands in `artifacts/index.yaml`, and the snapshot lives in `artifacts/archives/run_NNN/`.
+Raw output lives at
+`subblock/tracer/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`.
+
+See [Tracer: Getting Started](/docs/sub-block/tracer/getting-started),
+[Core Concepts](/docs/sub-block/tracer/core-concepts), and
+[SFT Data](/docs/sub-block/tracer/sft-data) for preparation, scaffold profiles,
+the consumption ledger, and conversion.
 
 
-## Working with Root
+## 4. SFT training
 
-`/root:check` and `/root:run` recursively apply the same lifecycle across the whole tree, with a free-form argument that selects the target block:
+Trainer accepts a Harbor job, a ready-made LF/ShareGPT dataset on Hugging Face,
+or a local LF JSON file.
+
+```bash
+cd ../trainer
+```
 
 ```text
-/root:check                         # check root + every subblock
-/root:check curator                  # one block at a time
-/root:run tracer                   # equivalent to /tracer:run
-/root:run start the data pipeline   # paraphrased; resolves to the root orchestrator
+/trainer:setup
 ```
 
-An [Example Usage](/docs/example-usages) of root can be found here.
+Edit `runtime_info.input` in `config.yaml`:
 
-## Result Collection
-
-The block's own artifacts are the source of truth:
-
-- `artifacts/index.yaml` — newest entry's `status` (`completed | failed | interrupted`)
-- `artifacts/archives/run_NNN/metadata.yaml` — id, timestamps, exit code, repo SHAs
-- `artifacts/archives/run_NNN/config.yaml` — the frozen config that produced this run
-
-Optionally, open the block dashboard for a visual summary:
+1. Set `source.type` to `harbor_job`, `hf_lf`, or `local_lf`, then fill
+   that source's fields.
+2. Set `conversion.data_name`.
+3. Set `model.model_name_or_path` to a Hub ID or local model path.
+4. Review `training`: template, cutoff length, output directory, batch size,
+   accumulation, learning rate, and epochs.
+5. Match `infrastructure.n_gpus_per_node` to the host and add Hugging Face or
+   Weights & Biases credentials only when required.
 
 ```text
-/tracer:dashboard     # inspect trajectory rollouts and conversion status
+/trainer:check
+/trainer:run
+/trainer:dashboard
 ```
 
-Dashboards expose the same run state, logs, metrics, and artifacts in a more readable view. See each block's own docs under [Blocks](/docs/sub-block/curator).
+The checkpoint is recorded in `runtime_info.output.checkpoint_path`. Continue
+with [Trainer: Getting Started](/docs/sub-block/trainer/getting-started),
+[Data Pipeline](/docs/sub-block/trainer/data-pipeline), and
+[Training](/docs/sub-block/trainer/training).
+
+
+## 5. Evaluator
+
+Evaluator runs a Harbor benchmark against a remote API or a local checkpoint
+served with vLLM.
+
+```bash
+cd ../evaluator
+```
+
+```text
+/evaluator:setup
+```
+
+Configure these `runtime_info.input` groups:
+
+1. Set `llm_api` for a remote endpoint, or configure `local_model_serving`
+   and a matching local vLLM endpoint/model name.
+2. Select `task_source.dataset_name` and `task_source.version`.
+3. Start with `harbor_job.n_tasks: 1` and `n_concurrent: 1`.
+4. Use a matching agent name, version, runtime image, and runtime host path.
+
+```text
+/evaluator:check
+/evaluator:run
+/evaluator:dashboard
+```
+
+Results, verifier output, trajectories, and analysis are stored under
+`subblock/evaluator/artifacts/jobs/<job>/`. See
+[Evaluator: Getting Started](/docs/sub-block/evaluator/getting-started),
+[Local Model](/docs/sub-block/evaluator/local-model), and
+[Dashboard](/docs/sub-block/evaluator/dashboard).
