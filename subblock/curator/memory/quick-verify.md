@@ -5,6 +5,10 @@ checkout wired into `SWE-Lego-Live/curator` can run end to end, and quickly
 tell whether a problem is in the environment, the LLM, Docker/Harbor, or the
 SWEgen code itself.
 
+This is a manual block-local verification flow. It is distinct from
+`/curator:run` smoke mode, which reads the bundled PR list under
+`repos/swegen/artifacts/` and writes under `artifacts/experiments/quick-verify/`.
+
 ## Goal
 
 Quick verification has three layers:
@@ -150,7 +154,8 @@ If Harbor cannot find the task, confirm the command arguments:
 ## 3. Small-sample generation
 
 Prepare 10 Python PR inputs. Put a lightweight, already-verified PR such as
-`tox-dev/tox:pr-3813` on the first line:
+`tox-dev/tox:pr-3813` on the first line of
+`artifacts/collected_prs/python_pr_ids.txt`:
 
 ```text
 tox-dev/tox:pr-3813

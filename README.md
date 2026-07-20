@@ -120,7 +120,7 @@ Open Claude Code in the repo root, then ask:
 /root:check curator       # only check the curator subblock
 ```
 
-On a fresh clone, the report tells you exactly which `runtime_info.input` keys are unfilled, which submodules are missing, whether the remote node is reachable, and whether your LLM endpoint answers a `GET /models` probe (no chat-completion calls — `/root:check` never costs anything to run). You don't need to read each `config.yaml` cold; let the skill point at the gaps.
+On a fresh clone, the report tells you exactly which `runtime_info.input` keys are unfilled, which submodules are missing, whether the remote node is reachable, and whether the configured LLM endpoint exposes the requested model. `/root:check` uses `GET /models`; the separate `/curator:check` adds a small real completion request before generation. You don't need to read each `config.yaml` cold; let the skill point at the gaps.
 
 Pass a subblock name (e.g. `/root:check tracer`) when you're iterating on one block and don't want noise from the others.
 
@@ -130,7 +130,7 @@ Edit each `config.yaml` flagged in step 2, setting only keys under `runtime_info
 
 | Block | What to fill (see that block's `CLAUDE.md` for the full list) |
 |-------|------------------------------------------------------------------|
-| **curator** | `github_tokens`; `llm_api` (api_key, api_base_url, pr_model, task_model) |
+| **curator** | Keep `github_tokens` as the external-input marker; provide `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored token file; fill `llm_api` (api_key, api_base_url, pr_model, task_model) |
 | **tracer** | `llm_api` (api_key, api_base_url, model); task source comes from swegen dependency |
 | **trainer** | `source` (provider, scaffold, job_dir / trajs_dir); `conversion`; `model`; `training`; `infrastructure`; `credentials` (WandB if online) |
 | **rl** | `model`; `infrastructure` (nodes, GPUs, K8s); `training`; `data` (parquet + Harbor task dirs); `experiment`; `credentials` |

@@ -1,15 +1,18 @@
 # Curator — Status
 
-See `config.yaml -> status` for live phase, current job, next steps, and blockers.
+`config.yaml -> status` is descriptive configuration text; the generation
+scripts do not update it.
 
 ## Per-Language Status
 
-Per-language run state (verified counts, last batch result, current run, etc.)
-lives in `artifacts/index.yaml`. The static per-language *configuration* is in
+Read live per-language progress from the create logs,
+`artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/`, and
+`verifiable_tasks.txt`. The static per-language configuration is in
 `config.yaml -> runtime_info.input.languages.<lang>`.
 
 ## Logs
 
 - `artifacts/logs/swegen-create/cc_<lang>_March.txt` — per-language create logs
-- `artifacts/index.yaml` — appended per-run summary (started_at, status, archive)
-- `artifacts/archives/run_NNN/` — full per-run snapshots
+- `artifacts/index.yaml` — appended launcher summary; `completed` means the
+  background launcher returned, not that detached workers finished
+- `artifacts/archives/run_NNN/` — launcher metadata plus config/script snapshots

@@ -16,6 +16,11 @@ owner/repo:pr-123
 
 The block stores PR pools under `artifacts/collected_prs/`. The main language
 scripts pass these files to `swegen create` through `--input-ids-file`.
+Collection and generation are separate stages. The collector may append to a
+pool over time, while `swegen create` parses the file once at startup; wait for
+collection to finish when all newly collected PRs must be included. The
+production create scripts use the fixed `artifacts/collected_prs/` paths rather
+than `pr_collection.output_dir`.
 
 ## Task skeleton
 

@@ -6,7 +6,7 @@ description: >
   create + activate the Python venv, `pip install -e repos/swegen/`, and
   ensure the cross-provider LLM env (`OPENAI_API_KEY`,
   `OPENAI_API_BASE_URL`, `OPENAI_MODEL`, mirrored to `ANTHROPIC_API_KEY` /
-  `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL`), `GITHUB_TOKENS`,
+  `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL`), `GITHUB_TOKENS` / `GITHUB_TOKEN`,
   `DOCKER_HOST`, and `CLAUDE_CONFIG_DIR` are set in the user's shell —
   prompting for any that are missing. Stage `gh_token.txt` (one token per
   line) if the user prefers the file channel. Idempotent. Triggers on

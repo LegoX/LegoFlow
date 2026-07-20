@@ -50,13 +50,17 @@ meta_info:
 
 runtime_info:
   input:
-    github_tokens: "ghp_xxx,ghp_yyy"
+    github_tokens: human
     llm_api:
       api_base_url: "https://api.example.com/v1"
       api_key: "sk-..."
       model: "gpt-4.1"
   output: {}
 ```
+
+For Curator, `github_tokens` is an external-input contract marker, not a secret
+storage field. Export `GITHUB_TOKENS` or `GITHUB_TOKEN`, or use an ignored local
+token file.
 
 When filling a block config, start with all `human` dependencies and all non-null `runtime_info.input` fields. Leave `runtime_info.output` empty before the first run; block scripts fill it after successful execution. Then run `/<block>:check` to catch missing tokens, unresolved dependencies, missing repos, or unreachable remote resources before launching a long job.
 
@@ -69,7 +73,7 @@ Every block in SWE-Lego-Live is operated through the same plugin skills:
 | --- | --- |
 | `/<block>:setup` | Install dependencies, build environments, and fill default config values |
 | `/<block>:check` | Validate config, inputs, environments, dependencies, repos, and live endpoints |
-| `/<block>:run` | Execute the block end-to-end and archive the run |
+| `/<block>:run` | Execute the selected block mode; archiving depends on the mode |
 
 Replace `<block>` with the block name — for example, `curator`, `tracer`, `trainer`, or `evaluator`. Same three verbs, every block.
 
@@ -81,11 +85,11 @@ Run setup once for the block you want to operate:
 /curator:setup        # clone repos, build envs, prepare default config
 ```
 
-Each `:setup` is idempotent and safe to re-run — it only fills in fields that aren't already set, and only builds environments that don't already exist. After setup, the block's `config.yaml` will still have a handful of `runtime_info.input` fields that only you can provide (API keys, GitHub tokens, model names). Fill those by hand.
+Each `:setup` is idempotent and safe to re-run — it only fills in fields that aren't already set, and only builds environments that don't already exist. After setup, the block's `config.yaml` will still have external `runtime_info.input` markers and provider settings that only you can supply. For Curator, keep GitHub tokens in `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored local token file rather than `config.yaml`.
 
 ### Step 3.2: `/<block>:check` — preflight
 
-`<block>:check` is read-only. It validates the schema, every filled input, every inter-block dependency, repo pins, environment paths, and live LLM endpoints (via a no-cost `GET /models` probe). It never modifies anything and never costs anything.
+`<block>:check` is read-only. It validates the schema, filled inputs, inter-block dependencies, repo pins, environment paths, and live LLM endpoints. Block-specific probes differ: `/curator:check` sends a small real completion request, so it can consume a small number of tokens.
 
 ```text
 /tracer:check         # validate tracer config, dependencies, Docker, and endpoints
@@ -101,7 +105,11 @@ Only run after the matching `:check` passes:
 /trainer:run          # convert trajectories and train
 ```
 
-Each `:run` executes the block's `scripts/start.sh`. Long-running operations (multi-hour GPU training, multi-container rollouts) launch in tmux so they survive disconnects. Every run is archived automatically — `start.sh` installs an EXIT trap that fires `archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM). One entry lands in `artifacts/index.yaml`, and the snapshot lives in `artifacts/archives/run_NNN/`.
+Full block modes generally execute `scripts/start.sh`, whose EXIT trap creates
+an archive. Curator is mode-sensitive: full mode uses `start.sh`, while smoke
+and single-language modes run direct commands and do not archive. Long-running
+operations may launch in tmux or as detached workers; follow the block-specific
+skill for monitoring details.
 
 
 ## Working with Root

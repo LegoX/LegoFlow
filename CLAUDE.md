@@ -63,7 +63,7 @@ The root block has no `config.yaml` of its own; inputs and outputs are owned by 
 The root block does not consume external inputs directly. Required external values are filled into each active subblock's `runtime_info.input`:
 
 **curator** (`subblock/curator/config.yaml` → `runtime_info.input`):
-- `github_tokens`: comma-separated GitHub API tokens for PR collection
+- `github_tokens`: external-input contract marker; provide PR collection tokens through `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored local token file
 - `llm_api.api_key`, `llm_api.api_base_url`: OpenAI-compatible LLM endpoint
 - `llm_api.pr_model`, `llm_api.task_model`: model names for PR evaluation and task completion
 
@@ -88,7 +88,7 @@ The root block does not consume external inputs directly. Required external valu
 
 ```bash
 scripts/dryrun.sh   # validate config, inputs, and required paths (no side effects)
-scripts/start.sh    # execute the full pipeline (ONLY after user confirms)
+scripts/start.sh    # launch the wired curator/tracer jobs; PR collection is separate (ONLY after user confirms)
 scripts/clean.sh    # remove temporary working files
 ```
 

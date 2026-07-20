@@ -6,7 +6,7 @@ description: Prepare PR pools, run create scripts, and monitor generation
 SWE-gen generation is driven by the block's Claude plugin, which wraps the
 language-specific shell scripts in `subblock/curator/scripts/`. Each script
 activates the environment, loads runtime variables from `config.yaml`,
-configures Docker cache paths, and calls `swegen create`.
+and calls `swegen create`.
 
 ## Plugin lifecycle (recommended)
 
@@ -22,7 +22,11 @@ From a Claude session started inside `subblock/curator/`:
 `config.yaml -> runtime_info.input.pr_collection`; `/curator:run` reads
 per-language `timeout` / `cc_timeout` / `n_concurrent` from
 `runtime_info.input.languages`. Edit `config.yaml`, then re-run the command.
-The sections below document the raw commands those skills run.
+These are separate stages: `/curator:run` never starts the collector. Wait for
+the background collector to exit before running generation. Production create
+scripts read fixed paths under `artifacts/collected_prs/`; changing
+`pr_collection.output_dir` requires a corresponding manual `swegen create`
+input path. The sections below document the raw commands those skills run.
 
 ## Collect PRs
 
@@ -47,11 +51,15 @@ pr_collection:
     max_lines_changed: 1500
 ```
 
+`pr_collection.enabled` is currently informational; the wrapper runs whenever
+you invoke it.
+
 `scripts/load_runtime_env.sh` exports these as `SWEGEN_COLLECT_*` /
 `SWEGEN_PR_*` / `COLLECT_TOKEN_LIMIT`, which the collector reads. GitHub
-collection tokens come from `gh_token.txt` (one per line), never from
-`config.yaml`. Per-language threshold overrides live in the collector's
-`LANGUAGE_OVERRIDES` and take precedence over the global `filters` above.
+collection tokens are combined from `repos/swegen/gh_token.txt` (or
+`COLLECT_GITHUB_TOKEN_FILE`) and `GITHUB_TOKENS` / `GITHUB_TOKEN`; they never
+come from `config.yaml`. Per-language threshold overrides live in the
+collector's `LANGUAGE_OVERRIDES` and take precedence over the global `filters`.
 
 The config-driven wrapper runs the full or single-language collection:
 
@@ -83,7 +91,9 @@ artifacts/collected_prs/python_pr_ids.txt
 ```
 
 A full multi-language pass takes a long time and consumes GitHub API quota.
-Use the smaller command above for smoke tests and node validation.
+Use the smaller command above for collector validation. It does not feed
+`/curator:run` smoke mode, which uses the sample PR file bundled in
+`repos/swegen`.
 
 ## Run one language
 
@@ -117,8 +127,8 @@ bash scripts/create_py.sh
 ```
 
 The script reads runtime parameters from `config.yaml`, including concurrency.
-Setting `N_CONCURRENT=1` in front of the script may not override the configured
-value. Script logs are written to:
+Setting `N_CONCURRENT=1` in front of the script does not override the configured
+value because `read_params.py` assigns it afterward. Script logs are written to:
 
 ```text
 artifacts/logs/swegen-create/cc_py_March.txt
@@ -132,8 +142,16 @@ After the smoke test is healthy:
 bash scripts/create_all_bg.sh
 ```
 
-The script launches the configured language create scripts in the background.
-Use `tmux` or a process supervisor for long production runs.
+The script always launches all eight language create scripts with `nohup`,
+regardless of their `enabled` values, and returns without waiting. Use the
+individual `scripts/create_<lang>.sh` scripts to limit the language set. Monitor
+the detached workers through their logs, batch state, and the dashboard.
+
+The mode-specific wrappers delegate to this same background launcher. Their
+`artifacts/index.yaml` archive records launcher exit, not worker completion.
+`start_with_openai_api.sh` also stops its LiteLLM proxy as soon as the launcher
+returns, so it does not supervise that proxy for the detached workers' full
+lifetime.
 
 ## Tuned parameters
 
@@ -145,14 +163,9 @@ Each language has its own defaults:
 - `--min-source-files` and `--max-source-files` filter PR scope.
 - `--docker-prune-batch` controls Docker cleanup cadence.
 
-You can override `N_CONCURRENT` at launch:
-
-```bash
-N_CONCURRENT=8 bash scripts/create_rust.sh
-```
-
-If the script loads concurrency from `config.yaml`, update the config value
-instead of relying only on a shell prefix.
+Each language script assigns `N_CONCURRENT` from `config.yaml` after loading the
+environment, so a shell prefix such as `N_CONCURRENT=8` is overwritten. Update
+the language's `params.n_concurrent` value in `config.yaml` instead.
 
 ## LLM and Claude SDK notes
 

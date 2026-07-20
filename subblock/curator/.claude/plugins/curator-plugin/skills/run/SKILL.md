@@ -1,17 +1,18 @@
 ---
 name: run
 description: >
-  Launch the curator pipeline via `scripts/start.sh` after preflight
-  passes: PR collection from GitHub → LLM-driven task generation per
-  language (`swegen create`) → NOP/Oracle verification → append to
+  Launch Curator task generation from existing per-language PR ID files after
+  preflight passes. This skill does not collect PRs. It runs `swegen create`,
+  performs NOP/Oracle verification, and appends verified task IDs to
   `verifiable_tasks.txt`. Per-language launches use
   `bash scripts/create_<lang>.sh` (tuned `--timeout`, `--cc-timeout`,
   `--n-concurrent`, `--state-dir`). Long-running (hours per language).
   For a first-time end-to-end smoke before committing to a full run,
-  this skill can drive a 10-PR `--max-pr 1` flow that produces a single
-  verified task ID and exits. Stamps live state into `artifacts/index.yaml` via
-  `scripts/archive_run.sh`. Triggers on phrases like "run curator",
-  "launch curator", "generate tasks", "kick off PR collection",
+  this skill can drive a 10-PR `--max-pr 1` flow that attempts to produce one
+  verified task ID. Full mode archives launcher exit into
+  `artifacts/index.yaml` via `scripts/archive_run.sh`; smoke and single-language
+  modes do not archive. Triggers on phrases like "run curator",
+  "launch curator", "generate tasks",
   "start the curator pipeline", "smoke-test curator".
 ---
 
@@ -21,10 +22,13 @@ Preflight and launch SWE task generation. Curator is a leaf block: this
 skill runs commands inside `subblock/curator/` and does not dispatch to
 child blocks.
 
-This skill consumes the `{lang}_pr_ids.txt` pools produced by
-`/curator:collect-prs`. If no PR pools exist yet under the configured
-`output_dir` (default `artifacts/collected_prs/`), run `/curator:collect-prs`
-first (or use the smoke mode below, which uses the submodule's sample PR file).
+Production modes consume the fixed
+`artifacts/collected_prs/{language}_pr_ids.txt` paths used by
+`scripts/create_<lang>.sh`. If a required pool is missing, run
+`/curator:collect-prs` first and wait for its background collector to finish.
+Changing `pr_collection.output_dir` does not change the create scripts' input
+paths. Smoke mode is independent: it uses the submodule's bundled sample PR
+file instead of the block's collected pool.
 
 ## Step 0 - Orient
 
@@ -63,7 +67,7 @@ Resolve the user's natural-language request into one mode:
 | --- | --- | --- |
 | `smoke` | First run, "quick verify", "smoke", "one task", or "10 PRs". | `swegen create` against the submodule sample PR file, with `--max-pr 1`, `--n-concurrent 1`, `--min-source-files 1`, and output under `artifacts/experiments/quick-verify/`. |
 | `single-language` | The user names one language: `py`, `js`, `ts`, `go`, `c`, `cpp`, `java`, or `rust`. | `bash scripts/create_<lang>.sh` after confirming tuned params from `scripts/read_params.py`. |
-| `full` | The user says all languages, pipeline, or gives no narrower scope. | Pick by `llm_api.cc_provider_mode` in `config.yaml`: `bash scripts/start_with_anthropic_api.sh` for `native` (real Claude / Anthropic-format gateway, no proxy), `bash scripts/start_with_openai_api.sh` for `openai_proxy` (starts the local LiteLLM proxy first, then runs `start.sh`). Both delegate to `scripts/start.sh -> scripts/create_all_bg.sh` and archive on exit. |
+| `full` | The user says all languages, pipeline, or gives no narrower scope. | Pick by `llm_api.cc_provider_mode` in `config.yaml`: `bash scripts/start_with_anthropic_api.sh` for `native` (real Claude / Anthropic-format gateway, no proxy), `bash scripts/start_with_openai_api.sh` for `openai_proxy` (starts the local LiteLLM proxy first, then runs `start.sh`). Both delegate to `scripts/start.sh -> scripts/create_all_bg.sh`, which starts all eight language scripts regardless of their `enabled` values. |
 
 If the request implies config changes, such as "32 tasks" or "more
 concurrency", show the exact proposed config/env override and wait for
@@ -105,7 +109,7 @@ curator run configuration
   concurrency       : <per-language n_concurrent>
   validation        : NOP + Oracle via Harbor
   logs              : artifacts/logs/swegen-create/
-  archive           : scripts/archive_run.sh -> artifacts/index.yaml
+  archive           : full only; none for smoke/single-language
 ```
 
 Never launch a full or single-language run without an explicit "yes".
@@ -167,15 +171,24 @@ Pick the launcher that matches `llm_api.cc_provider_mode` in `config.yaml`:
 bash scripts/start_with_anthropic_api.sh
 
 # openai_proxy: OpenAI-only provider (Qwen/GLM/sglang/vLLM); starts a local
-# LiteLLM proxy (Anthropic -> OpenAI) on cc_proxy_port first, then runs the pipeline
+# LiteLLM proxy (Anthropic -> OpenAI) on cc_proxy_port first, then launches generation
 bash scripts/start_with_openai_api.sh
 ```
 
 Both refuse to run if the config's `cc_provider_mode` does not match the
 launcher, then delegate to `scripts/start.sh` (which calls
-`scripts/create_all_bg.sh`). `start.sh` installs an EXIT trap that invokes
-`scripts/archive_run.sh`. Do not pre-write entries to `artifacts/index.yaml`;
-the scripts own run archiving.
+`scripts/create_all_bg.sh`). That script starts all eight language workers with
+`nohup` and returns without waiting for them. `start.sh` then archives the
+launcher exit, so an archive status of `completed` does not mean the workers
+have finished; use their logs, batch state, and `/curator:dashboard` for live
+progress.
+
+`start_with_openai_api.sh` owns its LiteLLM proxy and stops it when the launcher
+returns. Because the workers are detached, the current wrapper does not keep
+that proxy alive for their full run. Do not report an `openai_proxy` full launch
+as healthy unless a separately supervised compatible proxy remains available.
+Do not pre-write entries to `artifacts/index.yaml`; the scripts own launcher
+archiving.
 
 ## Step 6 - Report and monitor
 
