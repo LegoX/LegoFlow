@@ -15,6 +15,11 @@ The root block can operate the whole block tree with the same plugin-skill lifec
 
 Run this first. It validates the root and all subblocks: config schema, human-provided inputs, inter-block dependencies, repo pins, environments, remote resources, and live LLM endpoints. Fix every reported issue before launching a long run.
 
+Root orchestration does not collect Curator PRs. Before the first production
+run, execute `/curator:collect-prs` and wait for its background process to
+finish. Both `/curator:run` and the root Curator launcher consume the existing
+files under `artifacts/collected_prs/`.
+
 ```text
 /root:run start the data pipeline
 ```
@@ -36,7 +41,11 @@ You can also ask the root block to operate a specific subblock:
 /root:run curator
 ```
 
-This is equivalent to using `/curator:check` and `/curator:run`, but keeps the interaction anchored at the root. It is useful when you are debugging one stage while still relying on the root block to resolve paths and dependencies.
+Root targeting is not identical to the Curator-specific skills:
+`/root:run curator` launches Curator's all-language `start.sh`, while
+`/curator:run` can select smoke, single-language, or full mode.
+`/curator:check` also includes Curator's mandatory real-completion probe. Use
+the block-specific skills when those controls matter.
 
 ## Inspect Results
 

@@ -6,8 +6,9 @@ description: >
   driven by `config.yaml -> runtime_info.input.pr_collection`
   (languages, repo_num, max_prs_per_repo, output_dir, token_limit, and the
   global filter thresholds), which `scripts/load_runtime_env.sh` exports as
-  `SWEGEN_COLLECT_*` / `SWEGEN_PR_*` / `COLLECT_TOKEN_LIMIT`. Collection tokens
-  come from `gh_token.txt` (one per line), never from `config.yaml`.
+  `SWEGEN_COLLECT_*` / `SWEGEN_PR_*` / `COLLECT_TOKEN_LIMIT`. The collector
+  combines tokens from its token file with `GITHUB_TOKENS` / `GITHUB_TOKEN`;
+  tokens never come from `config.yaml`.
   Long-running for a full multi-language pass; supports a small first-run
   sample. This is the PR-collection stage that precedes `/curator:run`.
   Triggers on phrases like "collect PRs", "gather PRs", "run PR collection",
@@ -25,7 +26,7 @@ stage; `/curator:run` (task generation) consumes its output. Run only from
 Validate:
 
 1. Current directory is `subblock/curator/`.
-2. `config.yaml` parses and has `meta_info.name == "swegen"`.
+2. `config.yaml` parses and has `meta_info.name == "curator"`.
 3. `repos/swegen/tools/collect_prs_wo_image.py` exists (submodule initialized;
    if missing, tell the user to run `/curator:setup`).
 4. `scripts/collect_all_bg.sh` and `scripts/load_runtime_env.sh` exist.
@@ -35,18 +36,24 @@ Read `config.yaml -> runtime_info.input.pr_collection` and `CLAUDE.md`
 
 ## Step 1 - Resolve collection tokens
 
-The collector reads tokens **only** from `gh_token.txt` (one token per line),
-resolved as `repos/swegen/gh_token.txt` unless `COLLECT_GITHUB_TOKEN_FILE`
-overrides it. `GITHUB_TOKENS` / `GITHUB_TOKEN` are intentionally ignored here.
+The collector first reads `repos/swegen/gh_token.txt` (one token per line)
+unless `COLLECT_GITHUB_TOKEN_FILE` overrides that path, then merges
+`GITHUB_TOKENS` and `GITHUB_TOKEN`. `scripts/load_runtime_env.sh` imports those
+environment variables from the interactive shell (including `~/.bashrc`) and
+may hydrate `GITHUB_TOKENS` from block/home token files.
 
 ```bash
+source scripts/load_runtime_env.sh
+load_runtime_env
 COLLECT_GITHUB_TOKEN_FILE="${COLLECT_GITHUB_TOKEN_FILE:-repos/swegen/gh_token.txt}"
-test -s "$COLLECT_GITHUB_TOKEN_FILE" && wc -l < "$COLLECT_GITHUB_TOKEN_FILE"
+test -s "$COLLECT_GITHUB_TOKEN_FILE" || \
+  test -n "${GITHUB_TOKENS:-}${GITHUB_TOKEN:-}"
 ```
 
-If no token file is present, stop and ask the user to provide one. Never print
-token values. `COLLECT_TOKEN_LIMIT` (from `pr_collection.token_limit`) caps how
-many of those tokens this collector uses (`0` = all).
+If neither the file nor environment channels contain a token, stop and ask the
+user to provide one. Never print token values. `COLLECT_TOKEN_LIMIT` (from
+`pr_collection.token_limit`) caps the combined, deduplicated token set
+(`0` = all).
 
 ## Step 2 - Refuse duplicate live collectors
 
@@ -63,7 +70,7 @@ report the PID and the log under `artifacts/logs/collect_all_*.log`.
 
 | Scope | Use when | How |
 | --- | --- | --- |
-| `sample` | First run, "quick", "just a few", smoke before a full pass. | One language, small `repo_num` (e.g. 2) and `max_prs_per_repo` (e.g. 10) via env overrides — enough to feed a `/curator:run` smoke. |
+| `sample` | First run, "quick", "just a few", smoke before a full pass. | One language, small `repo_num` (e.g. 2) and `max_prs_per_repo` (e.g. 10) via env overrides. This creates a small block-local pool; `/curator:run` smoke uses a different bundled sample file. |
 | `single-language` | User names one language. | `LANGUAGES=<lang>` override; other knobs from config. |
 | `full` | All languages / no narrower scope. | Everything from `config.yaml -> pr_collection`. |
 
@@ -88,11 +95,13 @@ This exports, from `config.yaml -> runtime_info.input.pr_collection`:
   `SWEGEN_PR_MIN_ISSUE_BODY_LENGTH`, `SWEGEN_PR_MIN_FILES_CHANGED`,
   `SWEGEN_PR_MAX_FILES_CHANGED`, `SWEGEN_PR_MAX_LINES_CHANGED`
 
-Only vars still unset after env + `.env` are filled, so a shell/`.env` value
-wins over `config.yaml`. Per-language threshold overrides live in the
-collector's `LANGUAGE_OVERRIDES` and take precedence over the globals.
+Only vars still unset after the interactive environment and block `.env` are
+filled from `config.yaml`; the block `.env` is sourced after the interactive
+environment. Per-language threshold overrides live in the collector's
+`LANGUAGE_OVERRIDES` and take precedence over the globals.
 
-Print a compact summary and get explicit confirmation before a full run:
+Print a compact summary and get explicit confirmation before a full or
+single-language run:
 
 ```text
 swegen collect-prs plan
@@ -101,13 +110,13 @@ swegen collect-prs plan
   repo_num     : <SWEGEN_COLLECT_REPO_NUM>
   max_prs/repo : <SWEGEN_COLLECT_MAX_PRS_PER_REPO>
   output_dir   : <SWEGEN_COLLECT_OUTPUT_DIR>
-  token_limit  : <COLLECT_TOKEN_LIMIT> (of <N> in gh_token.txt)
+  token_limit  : <COLLECT_TOKEN_LIMIT> (of <N> unique file + env tokens)
   filters      : stars>=.. merged>=.. lang%>=.. files<=.. lines<=..
   logs         : artifacts/logs/collect_all_<stamp>.log
 ```
 
-A full multi-language pass is long-running and consumes GitHub API quota;
-never launch it without a "yes".
+Full and single-language passes are long-running and consume GitHub API quota;
+never launch either without a "yes".
 
 ## Step 5 - Launch
 
@@ -136,25 +145,28 @@ python3 repos/swegen/tools/collect_prs_wo_image.py \
 ```
 
 Output is `<output_dir>/{language}_pr_ids.txt`, one `owner/repo:pr-NUMBER`
-per line — the input to `swegen create` / `/curator:run`.
+per line. `/curator:run` consumes these files automatically only when
+`output_dir` is `artifacts/collected_prs`.
 
 ## Step 6 - Report and hand off
 
 After launch print:
 
 - background PID and `artifacts/logs/collect_all_<stamp>.log` (or foreground result)
-- output path and, once files appear, `wc -l artifacts/collected_prs/*_pr_ids.txt`
+- output path and, once files appear, `wc -l <output_dir>/*_pr_ids.txt`
 - how to stop (`kill <PID>`) or tail the log
-- next step: `/curator:run` to generate tasks from the collected PR ids
+- next step after the collector exits successfully: `/curator:run`
 
 For a background full run, poll once after a short delay to confirm the
-process started and is writing to the log.
+process started and is writing to the log. Do not start `/curator:run` merely
+because the output files have appeared: `swegen create` snapshots its input
+file at startup, so PR IDs appended later are not included in that run.
 
 ## Guardrails
 
 - Never run two collectors concurrently in the same block.
-- Never write GitHub tokens or API keys into `config.yaml`, `.env`, or logs;
-  collection tokens stay in `gh_token.txt`.
+- Never write GitHub tokens or API keys into `config.yaml` or logs; use shell
+  environment variables or ignored local token/env files.
 - Do not edit `repos/swegen/` source while collecting.
 - Per-run parameter changes go through env overrides shown to the user, not
   silent `config.yaml` edits.

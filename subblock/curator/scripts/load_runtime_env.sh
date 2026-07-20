@@ -24,7 +24,8 @@ load_runtime_env() {
     fi
 
     # Last-resort hydration from config.yaml.runtime_info.input.llm_api:
-    # only fills vars still unset after env + .env, so priority stays env > .env > config.yaml.
+    # only fills exported vars still unset after interactive-shell import and
+    # the subsequently sourced .env.
     local hydrate_py=""
     if [[ -x "${block_root}/artifacts/envs/swegen-env/bin/python" ]]; then
         hydrate_py="${block_root}/artifacts/envs/swegen-env/bin/python"

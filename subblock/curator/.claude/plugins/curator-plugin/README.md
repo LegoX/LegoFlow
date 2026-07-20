@@ -11,11 +11,11 @@ new blocks are only ever created at the root level), see
 
 | Command | What it does |
 | --- | --- |
-| `/curator:setup`     | Bootstrap: install `repos/swegen/` editable, verify env vars (GITHUB_TOKENS, OPENAI_API_*), prepare `gh_token.txt`. |
-| `/curator:check`     | Preflight: schema + env vars + GitHub API reachability + LLM endpoint `/models` + docker daemon + dryrun. Read-only. |
-| `/curator:collect-prs` | Collect GitHub PRs per `config.yaml -> runtime_info.input.pr_collection` into `artifacts/collected_prs/{lang}_pr_ids.txt`. |
+| `/curator:setup`     | Bootstrap: install `repos/swegen/` editable, verify GitHub/LLM env vars, prepare an optional `gh_token.txt`. |
+| `/curator:check`     | Preflight: schema + env vars + GitHub API reachability + a real LLM completion + docker daemon + dryrun. Read-only. |
+| `/curator:collect-prs` | Start the separate GitHub PR collector, which writes `artifacts/collected_prs/{lang}_pr_ids.txt`; wait for it to finish before generation. |
 | `/curator:dashboard` | Show progress per language: PRs collected, tasks generated, verifiable rate. |
-| `/curator:run`       | Launch the full pipeline (`scripts/start.sh`) — PR fetch → task generation → NOP/Oracle verification. |
+| `/curator:run`       | Launch task generation and NOP/Oracle verification from existing PR ID files. It does not collect PRs. |
 
 Per the block plugin guidelines, **no `/curator:create`** — new blocks are
 only created via `/root:create`.

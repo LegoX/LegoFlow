@@ -23,6 +23,11 @@ loads, then:
 /curator:dashboard    # local preview or Cloudflare Pages sync
 ```
 
+`collect-prs` and `run` are separate commands. Wait for the background
+collector to finish before running production generation; `run` reads existing
+PR ID files and never starts collection. Its smoke mode is independent and uses
+a sample PR file bundled in `repos/swegen`.
+
 The knobs these commands read live in `config.yaml` — LLM endpoint under
 `runtime_info.input.llm_api`, PR collection under
 `runtime_info.input.pr_collection`, and per-language generation params under
@@ -85,13 +90,13 @@ export OPENAI_MODEL="openai/MiniMax-M2.7"
 export ANTHROPIC_MODEL="claude-sonnet-4-6"
 ```
 
-`GITHUB_TOKEN` may also be derived from the first entry in `GITHUB_TOKENS`.
-Do not commit tokens or local env files. Keep the OpenAI-compatible and
-Anthropic-compatible variables aligned with the same provider setup you intend
-to use for the run. If your shell already contains old `ANTHROPIC_API_KEY` or
-`ANTHROPIC_BASE_URL` values, overwrite or unset them before launching
-generation; stale Anthropic-compatible variables can make the Claude SDK stage
-use the wrong endpoint or key.
+The pinned collector accepts both `GITHUB_TOKENS` and `GITHUB_TOKEN` and
+combines them with `repos/swegen/gh_token.txt` (or
+`COLLECT_GITHUB_TOKEN_FILE`). `scripts/load_runtime_env.sh` imports variables
+from the interactive shell, including `~/.bashrc`, then sources the block's
+ignored `.env`. Do not commit tokens or local env files. Keep the
+OpenAI-compatible and Anthropic-compatible variables aligned with the same
+provider setup you intend to use for the run.
 
 > **Important — the `ANTHROPIC_BASE_URL` path also drives verification.**
 > It runs task completion *and* the step that writes `verifiable_tasks.txt`.
@@ -124,8 +129,10 @@ dependencies. Fix dry-run failures before launching generation.
 
 ## 5. Run a smoke generation
 
-For a small first pass, use a direct `swegen create` command with explicit
-limits and shared output paths:
+For a small first pass against a block-local PR pool, first complete
+`/curator:collect-prs`, then use a direct `swegen create` command with explicit
+limits and shared output paths. This differs from `/curator:run` smoke mode,
+which uses the submodule's bundled sample:
 
 ```bash
 swegen create \
@@ -142,9 +149,8 @@ swegen create \
   --docker-prune-batch 0
 ```
 
-The language scripts are intended for production batches and read concurrency
-from `config.yaml`; prefixing `N_CONCURRENT=1` may not override their configured
-defaults.
+The language scripts are intended for production batches and assign concurrency
+from `config.yaml`, so prefixing `N_CONCURRENT=1` is overwritten.
 
 For the full multi-language run:
 
@@ -152,8 +158,13 @@ For the full multi-language run:
 bash scripts/create_all_bg.sh
 ```
 
-Per-language scripts are available for `py`, `js`, `ts`, `go`, `c`, `cpp`,
-`java`, and `rust`.
+This starts all eight language scripts with `nohup`, ignores their `enabled`
+values, and returns immediately. Per-language scripts are available for `py`,
+`js`, `ts`, `go`, `c`, `cpp`, `java`, and `rust`; invoke them individually to
+limit the language set. If `cc_provider_mode` is `openai_proxy`, keep a
+compatible proxy alive for the detached workers—the current
+`start_with_openai_api.sh` wrapper stops its owned proxy when the launcher
+returns.
 
 ## 6. Resume after moving nodes
 

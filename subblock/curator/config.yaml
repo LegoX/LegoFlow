@@ -28,7 +28,9 @@ meta_info:
 
 runtime_info:
   input:
-    github_tokens: human              # Comma-separated GitHub API tokens, or place them in gh_token.txt
+    # External-input contract marker only. Runtime scripts read GITHUB_TOKENS /
+    # GITHUB_TOKEN and local token files; they do not hydrate tokens from here.
+    github_tokens: human
 
     # =========================================================================
     # PR collection - the first stage of the pipeline. `swegen create` consumes
@@ -39,17 +41,18 @@ runtime_info:
     # default). Per-language threshold overrides still live in the collector's
     # LANGUAGE_OVERRIDES and are intentionally NOT surfaced here.
     #
-    # GitHub tokens for collection come from gh_token.txt (one per line), NOT
-    # from github_tokens above - keep real tokens out of this file.
+    # The collector combines repos/swegen/gh_token.txt (or
+    # COLLECT_GITHUB_TOKEN_FILE) with GITHUB_TOKENS / GITHUB_TOKEN. Keep real
+    # tokens out of this file.
     # =========================================================================
     pr_collection:
-      enabled: true
+      enabled: true                    # informational; wrappers do not gate on this value
       # Languages to collect PRs for. Comma-joined into --languages.
       languages: [c, cpp, go, java, javascript, typescript, python, rust]
       repo_num: 100                   # repos WITH qualifying PRs to collect per language
       max_prs_per_repo: 50            # max qualifying PRs kept per repository
       output_dir: artifacts/collected_prs   # {language}_pr_ids.txt written here
-      token_limit: 32                 # first N tokens from gh_token.txt (0 = use all)
+      token_limit: 32                 # first N combined file + env tokens (0 = use all)
       # Global filtering thresholds. Each maps to a SWEGEN_PR_* env var; leave a
       # value null/absent to keep the collector's built-in default. Per-language
       # overrides in the collector take precedence over these globals.
@@ -123,8 +126,10 @@ runtime_info:
       cc_proxy_port: 4010                     # openai_proxy only: local LiteLLM proxy port
 
     # Per-language parameters consumed by scripts/read_params.py + scripts/create_<lang>.sh.
-    # Set enabled:false to skip a language. Live status/metrics are NOT stored here
-    # (config.yaml is one-shot); look at artifacts/index.yaml for run state.
+    # `enabled` is used by checks/dashboard only; create_all_bg.sh currently starts all
+    # eight scripts. Run a specific create_<lang>.sh to limit generation. Live
+    # status/metrics are NOT stored here (config.yaml is one-shot); look at worker
+    # logs/batch state for progress.
     languages:
       py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 20 } }
       js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }

@@ -3,7 +3,8 @@
 # verification path when llm_api.cc_provider_mode == openai_proxy.
 #
 # Why this exists separately from scripts/start_with_openai_api.sh: that launcher
-# starts the proxy and then delegates to start.sh (the FULL pipeline, all langs).
+# starts the proxy and then delegates to start.sh (all-language generation; PR
+# collection is separate).
 # The smoke drivers (.github/scripts/smoke_run.sh and tests/smoke/10_pr_demo.sh)
 # build their own narrow `swegen create` command, so they must own the proxy
 # lifecycle themselves. This lib gives them the same proxy-start logic without
