@@ -19,10 +19,10 @@ root `subblock/tracer/`, inside a named tmux session on the host named by
 `meta_info.resources.ip` (currently `local` → this host) so the job survives
 disconnects.
 
-`/root:run tracer` runs the generic preflight, executes `scripts/start.sh`, and
-archives the run via the EXIT trap. This block-local skill documents the
-tracer-specific layer that `start.sh` orchestrates, plus the manual post-run
-steps that keep the task-consumption contract correct.
+`/root:run tracer` delegates to this skill and waits for it. This block-local
+skill owns preflight, `scripts/start.sh` execution and archiving, the
+tracer-specific layer that `start.sh` orchestrates, and the post-run steps that
+keep the task-consumption contract correct.
 
 ## Step 1 — Preflight
 

@@ -85,7 +85,7 @@ You don't operate blocks by hand. A Claude Code plugin at `.claude/plugins/root-
 
 - **`/root:create`** — scaffold a new block with the correct structure (config.yaml, scripts, dashboard, artifacts index, optional submodules).
 - **`/root:check`** — recursively sanity-check every block under the current directory: schema, filled inputs, dependency wiring, remote-resource reachability, and live availability of any LLM endpoint declared in `runtime_info.input`. Read-only.
-- **`/root:run`** — preflight every input and dependency for the target block, then execute its `scripts/start.sh` (locally, or in a tmux session over SSH if it's a remote-resource block) and archive the result under `artifacts/archives/run_NNN/`.
+- **`/root:run`** — delegate an explicitly selected subblock to its own `/<name>:run` skill and wait. With no selected target, a parent dispatches to its child run skills; only a leaf invoked from its own directory may execute its `scripts/start.sh`.
 
 Both `/root:check` and `/root:run` take a free-form natural-language argument. The agent reads the whole string and infers the target block (by literal name or unambiguous paraphrase, using each block's `CLAUDE.md` for context); if no block is mentioned it targets the root, and ambiguity (multiple blocks named) triggers a clarification question rather than a guess.
 
@@ -139,14 +139,18 @@ Re-run `/root:check` until it prints `All blocks healthy — safe to /root:run.`
 
 ### 4. Run the pipeline
 
-Invoke `/root:run <block_name>` from the repo root, or `cd` into the subblock and invoke `/root:run` with no args. Both forms are equivalent. Preflight matches `/root:check`; execution runs locally or over SSH + tmux when `meta_info.resources.ip` is set. Each run archives under `artifacts/archives/run_NNN/` automatically — `start.sh`'s EXIT trap fires `scripts/archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM).
+Invoke `/root:run <block_name>` from the repo root to delegate to that block's
+`/<block_name>:run` skill and wait for it. The child skill owns preflight,
+confirmation, local or remote execution, and archiving. Invoking `/root:run`
+with no args from inside a leaf block is the generic direct path; only that form
+may execute the leaf's own `scripts/start.sh`.
 
 **1. curator** — generate and validate SWE tasks:
 
 ```text
-/root:run curator        # from repo root
-# or, equivalently:
-cd subblock/curator && /root:run
+/root:run curator        # delegates to the /curator:run compatibility adapter
+# direct Curator users should choose the canonical command:
+cd subblock/curator && /curator:create-tasks
 ```
 
 **2. tracer** — run the agent on verified tasks (after curator has entries in `verifiable_tasks.txt`):
@@ -170,10 +174,11 @@ cd subblock/curator && /root:run
 You can also run the **root orchestrator** to launch the data stage (curator + tracer on the configured remote node) as one step:
 
 ```text
-/root:run              # equivalent to: bash scripts/start.sh
+/root:run              # dispatch configured subblocks through their run skills
 ```
 
-`bash scripts/start.sh` directly also works and accepts `--curator-only` / `--tracer-only` for selective launching.
+`bash scripts/start.sh` remains a separate manual launcher and accepts
+`--curator-only` / `--tracer-only` for selective launching.
 
 ### 5. Monitor
 

@@ -59,6 +59,8 @@ The Claude Code plugin at `.claude/plugins/root-plugin/` that operates any block
 
 - **`/root:create`** — scaffold a new block with the full directory tree wired to the contract.
 - **`/root:check`** — recursively sanity-check schema, inputs, dependencies, remote-resource reachability, and LLM endpoints. Read-only.
-- **`/root:run`** — preflight, then execute `scripts/start.sh` (locally, or in tmux over SSH) and archive the result.
+- **`/root:run`** — delegate an explicit subblock target to its `/<name>:run`
+  skill and wait. With no target, a parent dispatches to child run skills; only
+  a leaf invoked from its own directory may execute `scripts/start.sh`.
 
 Both `/root:check` and `/root:run` take a free-form argument. The agent resolves the target block by name or unambiguous paraphrase; ambiguity triggers a clarification question rather than a guess.

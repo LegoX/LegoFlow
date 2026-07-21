@@ -1,12 +1,20 @@
 ---
 name: run
 description: >
-  Preflight and execute the block in the current working directory. Reads the bundled BLOCK_DEFINITION.md to recall the contract, then validates that the block in CWD is ready to run — config.yaml is well-formed, every runtime_info.input is filled, every inter-block dependency declared in meta_info.subblocks[].dependencies resolves to a non-null output of the named sibling block, repos under repos/ are present and at their pinned commits, the environment (venv_path) exists, and scripts/start.sh is present and executable. Only if all checks pass does it run scripts/start.sh — locally when meta_info.resources.ip is absent, null, or "local"; inside a tmux+SSH session on the named host when meta_info.resources.ip is a real remote IP. Each run is archived automatically by scripts/archive_run.sh (installed by start.sh's EXIT trap). Triggers on phrases like "run this block", "execute the block", "kick off start.sh", "fire the block", "run /root:run".
+  Resolve and execute a block through the block protocol. An explicitly
+  selected subblock delegates to that block's `/<name>:run` skill and waits
+  for it. With no selected subblock, preflight the block in the current
+  working directory: a parent dispatches to its children, while a leaf may
+  execute its own `scripts/start.sh` locally or through SSH+tmux according to
+  `meta_info.resources.ip`. Triggers on phrases like "run this block",
+  "execute the block", "kick off start.sh", "fire the block", "run /root:run".
 ---
 
 # /root:run
 
-Preflight the target block, then execute its `scripts/start.sh`. Refuse to execute if any prerequisite is missing — a missing input is the user's signal to fill it, never a signal to invent a value.
+Resolve the target and preserve each block's run boundary. Explicit subblock
+targets delegate to their own run skill. Direct `start.sh` execution is reserved
+for a leaf block invoked from inside that block.
 
 ## Arguments
 
@@ -16,14 +24,15 @@ The args string is free-form natural language (may be empty). The agent reads th
 
 List `./subblock/` to get the set of valid block names, then read the args string and decide:
 
-- **Single block clearly identified** (literal name or unambiguous paraphrase — consult each block's `CLAUDE.md` when the user uses a description) → `TARGET_DIR=./subblock/<name>/`.
+- **Single block clearly identified** (literal name or unambiguous paraphrase — consult each block's `CLAUDE.md` when the user uses a description) → set `block_name=<name>` and `TARGET_DIR=./subblock/<name>/`.
 - **Multiple blocks mentioned, or genuinely ambiguous** → ask the user which one. Do not guess.
 - **No block mentioned** (empty, generic, or refers to the whole pipeline) → `TARGET_DIR=CWD` (the root). The root may lack its own `config.yaml`; treat that as a warning, not an abort.
 - **Block inferred but `./subblock/<name>/` doesn't exist** → abort with the actual `./subblock/` listing and ask the user to pick. Never fall back to root silently.
 
 ### Confirmation
 
-- Args empty, or names a block with no extra instruction → run directly.
+- Args empty → run the block in CWD. A named block with no extra instruction
+  delegates immediately to `/<name>:run`.
 - Instruction implies a config edit or flag injection → propose the concrete change (file path, old → new value, or flag to inject) and confirm before applying.
 - Ambiguous target → ask before proceeding.
 
@@ -33,21 +42,25 @@ Never silently mutate `runtime_info` or `meta_info` fields. A user instruction i
 
 | Args | Target | Behavior |
 | ---- | ------ | -------- |
-| *(empty)* | root | run root `start.sh` directly |
-| `curator` | curator | run directly |
-| `curator only 32 verified tasks` | curator | propose config/flag change, confirm, run |
+| *(empty)* | root | dispatch root children through their run skills |
+| `curator` | curator | invoke `/curator:run` and wait |
+| `curator only 32 verified tasks` | curator | propose config/flag change, confirm, then invoke `/curator:run` |
 | `run curator with 32 tasks` | curator | same — name embedded in text |
 | `run the trajectory generator` | tracer | resolved via paraphrase + `CLAUDE.md` |
 | `run curator and tracer` | ambiguous | ask which block |
-| `start the data pipeline` | root | run root `start.sh` directly |
+| `start the data pipeline` | root | dispatch root children through their run skills |
 | `run frobnicator` | abort | print valid list, ask user to pick |
 
-Every step below operates on `TARGET_DIR`. Where the rest of this document says "this block" or "CWD", read it as `TARGET_DIR`.
+An explicitly named target follows Step 0a and then returns. Every later step
+operates directly on CWD because no `block_name` was selected.
 
 **IMPORTANT: Before executing, the agent MUST:**
-1. Run `/root:check` (or this skill's built-in preflight) to validate all prerequisites.
-2. Present the check results and run configuration summary to the user.
-3. **Wait for explicit user confirmation** before launching `scripts/start.sh`. Never auto-launch — training runs consume GPUs for hours and are hard to reverse once started.
+1. For an explicitly selected subblock, delegate to its run skill; that skill
+   owns preflight, the run summary, and confirmation.
+2. For direct CWD execution, run `/root:check` (or this skill's built-in
+   preflight), present the summary, and **wait for explicit user confirmation**.
+3. Never auto-launch — training runs consume GPUs for hours and are hard to
+   reverse once started.
 
 ## Step 0 — Orient
 
@@ -58,17 +71,32 @@ Read `resources/BLOCK_DEFINITION.md` bundled in this plugin (sibling of the `ski
 - The **remote-execution rule**: `meta_info.resources.ip: local` (or null/absent) means run on the current host — no SSH. Only a real remote IP triggers SSH+tmux. Never attempt to SSH to the literal value `local`.
 - The **archiving rule**: after each run, create `artifacts/archives/run_NNN/` with `metadata.yaml` (id, block, timestamps, status, exit_code, repo commit SHAs), snapshot `config.yaml`, snapshot `scripts/`, `session.log`, `monitor.md`; then append one entry to `artifacts/index.yaml` with `archive: artifacts/archives/run_NNN/`. Note: repo trees are **not** copied — only commit SHAs are recorded in `metadata.yaml`.
 
+## Step 0a — Delegate an explicitly selected subblock
+
+If `block_name` is set by target resolution:
+
+1. Invoke `/<name>:run`, forwarding any remaining user intent that the selected
+   block needs to choose its supported mode, and wait for it to complete.
+2. The selected block's run skill owns its preflight, confirmation gate,
+   execution, remote-resource decision, and archiving.
+3. If it fails or the user declines confirmation, return that outcome verbatim.
+
+The root skill MUST NOT execute the selected subblock's `scripts/start.sh`,
+shell into its directory, or duplicate its run implementation. Do not continue
+to Step 1 after delegation completes.
+
 ## Step 1 — Load this block
 
-The "current block" is `TARGET_DIR` (CWD when `block_name` is unset; `./subblock/<block_name>/` when set). Read, in order:
+This direct path is reached only when `block_name` is unset. The current block
+is the current working directory. Read, in order:
 
-1. `<TARGET_DIR>/config.yaml`:
-   - If `block_name` is **set**, this file is required — abort with "Missing `config.yaml` under `subblock/<block_name>/`." if absent.
-   - If `block_name` is **unset** (root mode) and the file is absent, that's the SWE-Lego-Live coordinator pattern: skip config-driven preflight (Step 3 checks #3–#7 are scoped to subblocks via their own configs) and proceed. Emit a warning so the user knows the root config is missing intentionally.
-2. `<TARGET_DIR>/CLAUDE.md` — read it; honor any block-specific rules it states.
-3. `<TARGET_DIR>/dashboard/overview.mdx` — useful context, not load-bearing.
+1. `./config.yaml`. If it is absent, treat CWD as the SWE-Lego-Live
+   coordinator pattern: skip config-driven checks and emit a warning.
+2. `./CLAUDE.md` — read it; honor any block-specific rules it states.
+3. `./dashboard/overview.mdx` — useful context, not load-bearing.
 
-If `config.yaml` is required but absent (subblock target), go back to user and ask them to double check this really is a block.
+If CWD is intended to be a leaf block but lacks `config.yaml`, stop and ask the
+user to confirm the working directory.
 
 ## Step 2 — Load subblocks
 
@@ -89,8 +117,8 @@ Walk through every check below. Collect failures. Only after the full pass, deci
 
 | # | Check | Failure message |
 | - | ----- | ---------------- |
-| 1 | `./scripts/start.sh` exists. | "Missing `scripts/start.sh`." |
-| 2 | `./scripts/start.sh` is executable. If not, `chmod +x` it and emit a warning (not a failure). | warning only |
+| 1 | If this direct CWD target is a leaf, `./scripts/start.sh` exists. Parent coordinators do not require one. | "Missing `scripts/start.sh`." |
+| 2 | For a direct leaf, `./scripts/start.sh` is executable. If not, `chmod +x` it and emit a warning (not a failure). | warning only |
 | 3 | Every key under `runtime_info.input` has a non-null, non-empty value. | "Input `<key>` is unfilled. Edit `config.yaml` and set it." |
 | 4 | For each `child` in `meta_info.subblocks`, for each `dep_key: dep_value` in `subblocks[child].dependencies`: if `dep_value` is the literal `human`, then `runtime_info.input.<dep_key>` (on the parent — this block) must be non-null. Otherwise `dep_value` parses as `<src>.output.<key>` and `subblock/<src>/config.yaml`'s `runtime_info.output.<key>` must be non-null. | "Subblock `<child>` dependency `<dep_key>` is unresolved: `<dep_value>` is null/missing." |
 | 5 | For each entry under `meta_info.repos`: `./repos/<name>/` exists. If a `commit_id` is pinned, the checked-out HEAD of that submodule matches it. | "Repo `<name>` missing under `repos/`." or "Repo `<name>` HEAD `<actual>` does not match pinned `<commit_id>`." |
@@ -99,13 +127,19 @@ Walk through every check below. Collect failures. Only after the full pass, deci
 
 If any check fails, print all failures in one message and stop. Do **not** invent values or skip checks just because the user said "just run it" — they need to know what is missing.
 
-## Step 4 — Execute
+## Step 4 — Execute the direct CWD target
 
-The execution model depends on whether `TARGET_DIR` is a **leaf block** (no entries under `meta_info.subblocks`) or a **parent block** (has subblocks declared).
+Step 0a already handled every explicitly selected subblock. This execution
+model applies only to the block in the current working directory.
 
 ### Step 4a — Parent block: dispatch to children, never to their `start.sh`
 
-**Rule (non-negotiable):** when `TARGET_DIR` has subblocks, this skill's job is *orchestration only*. It MUST invoke each child block's own `/<child>:run` skill (via the slash-command surface), in the dependency-resolved order declared under `meta_info.subblocks`. It MUST NOT reach into `subblock/<child>/scripts/start.sh` directly, MUST NOT shell out into the child's directory, and MUST NOT duplicate the child's preflight logic.
+**Rule (non-negotiable):** when CWD has subblocks, this skill's job is
+*orchestration only*. It MUST invoke each child block's own `/<child>:run` skill
+(via the slash-command surface), in the dependency-resolved order declared under
+`meta_info.subblocks`. It MUST NOT reach into `subblock/<child>/scripts/start.sh`
+directly, MUST NOT shell out into the child's directory, and MUST NOT duplicate
+the child's preflight logic.
 
 Rationale: each block owns its own contract (preflight, confirmation, archiving, remote-execution decision). Bypassing the child skill bypasses those guarantees and breaks the recursion model — the parent would silently inherit responsibility for things the child is supposed to enforce.
 
@@ -116,11 +150,13 @@ Procedure at a parent:
 3. If a child fails or the user aborts at its confirmation gate, stop the parent's dispatch immediately — do not run downstream children. Report which child stopped the pipeline and surface its failure verbatim.
 4. The parent block does not have its own `scripts/start.sh` to execute; it has nothing to run beyond dispatching children. If the user explicitly asks for "just the root" (no children), there is nothing to do — say so and exit.
 
-### Step 4b — Leaf block: run `scripts/start.sh`
+### Step 4b — Direct leaf invocation: run `scripts/start.sh`
 
-Only leaf blocks (no subblocks declared) run their own `start.sh`. Parent blocks never do — see 4a.
+Only when `block_name` is unset and the current working directory is a leaf
+block (no subblocks declared) may this skill run that leaf's own `start.sh`.
+Parent blocks and explicitly selected subblocks never do — see Step 0a and 4a.
 
-- **Local execution** (no `meta_info.resources.ip`, or it is `local`/null): `cd <TARGET_DIR>` then run `bash ./scripts/start.sh`, streaming stdout/stderr. Optionally capture the session to a file you'd move into the archive as `session.log`.
+- **Local execution** (no `meta_info.resources.ip`, or it is `local`/null): run `bash ./scripts/start.sh` in CWD, streaming stdout/stderr. Optionally capture the session to a file you'd move into the archive as `session.log`.
 - **Remote execution** (`meta_info.resources.ip` is a real IP):
   1. Open a local tmux window named after this block (`tmux new-window -n <meta_info.name>`).
   2. Inside it, `ssh <resources.ip>` (using credentials from `resources.pwd` per the contract).
