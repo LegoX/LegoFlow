@@ -21,7 +21,8 @@ files = [
     block / "memory/quick-verify.md",
     block / "tests/smoke/verify.sh",
 ]
-files.extend(sorted((block / "docs/content/docs").glob("*.mdx")))
+docs_pages = sorted((block / "docs/content/docs").glob("*.mdx"))
+files.extend(docs_pages)
 
 stale = []
 for path in files:
@@ -29,6 +30,16 @@ for path in files:
         stale.append(str(path.relative_to(root)))
 if stale:
     raise SystemExit("FAIL: stale public /curator:run references: " + ", ".join(stale))
+
+stale_pages_project = []
+for path in docs_pages:
+    if "swe-curator-docs" in path.read_text(encoding="utf-8"):
+        stale_pages_project.append(str(path.relative_to(root)))
+if stale_pages_project:
+    raise SystemExit(
+        "FAIL: stale Curator docs Pages project references: "
+        + ", ".join(stale_pages_project)
+    )
 
 deploy = (block / "docs/deploy_cloudflare_pages.sh").read_text(encoding="utf-8")
 readme = (block / "docs/README.md").read_text(encoding="utf-8")
