@@ -103,3 +103,12 @@ credentials to run either a smoke test or a real batch.
 - **Never modify `repos/terminal-lego/`** — it is a pinned read-only dependency.
 - Do not run the generator, validator, or Docker cleanup from setup; leave
   execution to `/terminalgen:check` or `/terminalgen:run`.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **so_api_key**: supplied via `$SO_API_KEY` (10000 req/day with a key, 300 shared without) — the config field stays `""`.
+- **llm_api**: terminal-lego's generator reads the endpoint from `--api-base`; `create_domain.sh` passes `api_base_url` through. Keep `gen_model` resolvable on the endpoint. The real key flows via `$OPENAI_API_KEY` / .env — replace the `human` marker, never commit it.
+- **domains**: the 13 domains are terminal-lego's 54 tags bucketed per arXiv 2606.03461 Table 11; `tag_filter` drives scrape bucketing (a question enters a domain if its tags intersect the filter).
+- **Live counters**: per-domain success/failure counters live in `artifacts/domain_status.yaml`, not in config.yaml (one-shot rule).

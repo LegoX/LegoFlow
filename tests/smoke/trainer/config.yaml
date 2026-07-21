@@ -23,7 +23,7 @@ meta_info:
   subblocks: {}
   dependencies:
     # ROOT: consume the CONVERTED reward==1 LF (not raw trajectories).
-    training_data: tracer.output.sft_data_dir
+    source.upstream_lf_dir: tracer.output.sft_data_dir
 
   resources:
     ip: 47.79.124.13
@@ -149,11 +149,3 @@ runtime_info:
       description: Final training metrics from LLaMA-Factory
       value: null
 
-evolving:
-  description: SFT training pipeline with tunable hyperparameters.
-  tunable_params:
-    learning_rate: "Learning rate (1e-5 to 1e-3)"
-    num_train_epochs: "Number of training epochs"
-    per_device_train_batch_size: "Batch size per GPU"
-    gradient_accumulation_steps: "Gradient accumulation steps"
-    max_instances: "Maximum training instances"

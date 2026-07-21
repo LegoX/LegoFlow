@@ -1,3 +1,9 @@
+# trainer block config — one-shot per run; live state lives in artifacts/index.yaml.
+# Fill rules: `human` = you must set this before a run; "" = auto-derived or env-supplied;
+# everything else is a working default. Validate: python3 ../../scripts/validate_config.py --block .
+# Field reference & worked examples: /trainer:setup · Gotchas & preflight: /trainer:check
+# runtime_info.output is written back by scripts/train.sh STEP 3 after a successful run.
+
 meta_info:
   name: trainer
   label: "Trainer"
@@ -5,7 +11,9 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    trajectories_dir: tracer.output.raw_trajectories_dir  # path: subblock/tracer/artifacts/jobs
+    source.job_dir:
+      from: tracer.output.raw_trajectories_dir
+      when: {source.type: harbor_job}
 
   resources:
     ip: null
@@ -36,29 +44,24 @@ meta_info:
 
 runtime_info:
   input:
+    # source.type mode matrix (which fields apply per mode): /trainer:setup reference
     source:
-      type: hf_lf                 # choices: harbor_job | hf_lf | local_lf
-      # --- harbor_job: convert raw Harbor trajectories into LF data (default; unused while type=hf_lf) ---
-      scaffold: openhands-sdk     # choices: openhands-sdk | claude-code | open-code | terminus2
-      job_dir: ""                 # set a Harbor job dir here when type=harbor_job
-      # --- hf_lf: load a ready-made LF/ShareGPT dataset from the HuggingFace Hub (skips conversion) ---
+      type: hf_lf                 # harbor_job | hf_lf | local_lf
+      scaffold: openhands-sdk     # harbor_job only: openhands-sdk | claude-code | open-code | terminus2
+      job_dir: ""                 # harbor_job only: Harbor job dir (wired from tracer)
       hf_hub_url: "SWE-Lego/samples_for_llama_factory_sft"
-      hf_file_name: "jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json"  # optional exact repo file; empty loads the full dataset config
-      hf_subset: ""              # optional dataset config/subset name; ignored when hf_file_name is set
-      hf_split: "train"          # optional split (default: train); exact files are registered as train
-      # --- local_lf: use an existing local LF/ShareGPT json (skips conversion) ---
-      lf_path: ""                # absolute or block-relative path to an LF json
+      hf_file_name: "jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json"  # empty = full dataset config
+      hf_subset: ""               # ignored when hf_file_name is set
+      hf_split: "train"
+      lf_path: ""                 # local_lf only: path to an LF json
 
-    conversion:
-      # Only used when source.type == harbor_job. For hf_lf / local_lf, conversion
-      # is skipped; data_name is still used as the registered dataset key, and
-      # max_instances (if > 0) becomes the dataset's num_samples (random subsample).
-      max_instances: 0            # 0 = use all 512 samples (>0 would random-subsample via num_samples)
+    conversion:                   # harbor_job only; for hf_lf/local_lf just data_name + max_instances apply
+      max_instances: 0            # 0 = all samples; >0 = random subsample via num_samples
       exclude_repos_file: artifacts/data/excluded_repos.txt
       data_name: "glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5"
 
     dataset:
-      name: ""                      # auto-derived from conversion.data_name
+      name: ""                    # auto-derived from conversion.data_name
 
     model:
       model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base
@@ -70,7 +73,7 @@ runtime_info:
       deepspeed: artifacts/training_config/deepspeed/ds_z3_config.json
       template: qwen3_5
       cutoff_len: 131072
-      rope_scaling: null            # Qwen3.5 already supports this 128K cutoff natively
+      rope_scaling: null          # Qwen3.5 supports 128K natively
       max_samples: 1000000
       preprocessing_num_workers: 16
       dataloader_num_workers: 4
@@ -78,7 +81,7 @@ runtime_info:
       logging_steps: 1
       save_strategy: steps
       save_steps: 200
-      overwrite_output_dir: false   # use a new output_dir; explicit env override required to replace an existing run
+      overwrite_output_dir: false # explicit env override required to replace an existing run
       save_only_model: true
       resume_from_checkpoint: null
       per_device_train_batch_size: 1
@@ -99,13 +102,13 @@ runtime_info:
       n_gpus_per_node: 8
 
     experiment:
-      run_name: ""
+      run_name: ""                # "" = auto-derived
       wandb_mode: offline
-      wandb_run_id: ""
+      wandb_run_id: ""            # "" = auto-assigned
 
     credentials:
-      wandb_api_key: ""
-      hf_token: ""                  # HuggingFace token, required only for private source.type=hf_lf datasets
+      wandb_api_key: ""           # via $WANDB_API_KEY
+      hf_token: ""                # via $HF_TOKEN; needed only for private hf_lf datasets
 
   output:
     checkpoint_path:
@@ -121,11 +124,3 @@ runtime_info:
     training_metrics:
       description: Final training metrics from LLaMA-Factory
       value: null
-evolving:
-  description: SFT training pipeline with tunable hyperparameters for learning rate, batch size, epochs, and model architecture.
-  tunable_params:
-    learning_rate: "Learning rate (1e-5 to 1e-3)"
-    num_train_epochs: "Number of training epochs"
-    per_device_train_batch_size: "Batch size per GPU"
-    gradient_accumulation_steps: "Gradient accumulation steps"
-    max_instances: "Maximum training instances"

@@ -176,3 +176,11 @@ invocation. Never auto-launch.
   no env builds, no proxy start. All checks are read-only and fast.
 - Fixing failures: this skill only diagnoses. Repo/env/runtime fixes
   belong in `/evaluator:setup`.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **job_analysis.tag_llm** needs a model that returns CLEAN JSON. A reasoning model that emits `<think>` into content (e.g. Qwen3.5-35B-A3B served with thinking on) produces unparseable output and tagging fails. Empty tag_llm values fall back to `llm_api` — flag that combination when llm_api points at a reasoning model. Runtime overrides: `PREP_TAG_BASE_URL` / `PREP_TAG_MODEL` / `PREP_TAG_API_KEY`.
+- **agent.runtime_host_path**: if the dir is empty, the agent falls back to an in-container install step (curl claude.ai/install.sh, pip for openhands-sdk) which 403s/times out on isolated networks — verify the extraction exists (see /evaluator:setup reference).
+- **env_extra.LITELLM_STICKY_ROUTING_ALIASES: ""** is a workaround for Harbor's serve_litellm.sh dereferencing it under `set -u` when CONFIG_NAME != "litellm_config" — keep the key present even when empty.

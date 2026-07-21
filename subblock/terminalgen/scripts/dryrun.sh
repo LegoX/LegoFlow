@@ -16,6 +16,14 @@ load_runtime_env
 echo "=== terminalgen dryrun ==="
 RC=0
 
+# --- shared block-contract validation (schema, deps, fill markers) ------------
+REPO_ROOT="$(cd ../.. && pwd)"
+if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
+  python3 "$REPO_ROOT/scripts/validate_config.py" --block "$(pwd)" || RC=1
+else
+  echo "WARN: shared validator not found — skipping contract validation"
+fi
+
 # 1) config.yaml parses and identity is correct (needs PyYAML in the active python).
 python3 -c "import yaml" 2>/dev/null || { echo "ERROR: PyYAML missing in active python — run: pip install -r requirements.txt"; echo "=== dryrun complete (rc=1) ==="; exit 1; }
 python3 - <<'PY' || RC=1

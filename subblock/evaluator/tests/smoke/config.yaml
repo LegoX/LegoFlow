@@ -75,6 +75,12 @@ runtime_info:
       max_turns: 50                     # SMOKE: was 200
       temperature: 1.0
 
+    env_extra:
+      HARBOR_EXCLUDE_TASKS: ""
+      LITELLM_STICKY_ROUTING_ALIASES: ""
+      # SMOKE: force a single uvicorn worker (skip gunicorn's 30s boot timeout).
+      LITELLM_NUM_WORKERS: "1"
+
   output:
     eval_results_dir:
       description: Harbor job directories containing per-task evaluation results and LiteLLM trajectory logs
@@ -84,18 +90,3 @@ runtime_info:
       results_summary_format: "artifacts/jobs/smoke/<job>/result.json"
       consumer_block: null
 
-environment:
-  extra:
-    HARBOR_EXCLUDE_TASKS: ""
-    LITELLM_STICKY_ROUTING_ALIASES: ""
-    # SMOKE: force a single uvicorn worker (skip gunicorn's 30s boot timeout).
-    LITELLM_NUM_WORKERS: "1"
-
-evolving:
-  description: Runs evaluation benchmarks via Harbor.
-  tunable_params:
-    temperature: "Agent sampling temperature (0.0-1.0)"
-    max_turns: "Maximum agent turns per task"
-    n_concurrent: "Harbor concurrent tasks"
-    timeout_multiplier: "Task timeout multiplier"
-    n_tasks: "Smoke-run cap on number of tasks (null = full benchmark)"

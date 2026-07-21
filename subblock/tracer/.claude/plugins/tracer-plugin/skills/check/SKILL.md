@@ -61,7 +61,7 @@ escalating).
   registry-auth surprises surface now.
 
 - **ledger leak**: every entry with `status: done|failed|skipped` MUST
-  also appear in `environment.extra.HARBOR_EXCLUDE_TASKS`. If dryrun
+  also appear in `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`. If dryrun
   reports leaks, Harbor will re-run them — fix the exclude list
   before running.
 
@@ -89,3 +89,11 @@ must run AND the user must explicitly confirm before any
   no `git clone`. All checks are < 30 s in aggregate.
 - Fixing failures: this skill only diagnoses. Setup fixes belong in
   `/tracer:setup`.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **LiteLLM proxy port**: 4001 is squatted by an unowned stale LiteLLM and 4002 is reserved for the host-wide root-owned LiteLLM — that is why `litellm_proxy.port` defaults to 4003. Flag a config that moves back onto 4001/4002.
+- **Smoke overlays**: test/smoke runs use their own configs — `tests/smoke/config.yaml` (per-block) and `<repo_root>/tests/smoke/tracer/config.yaml` (root chain) — never the production config.yaml.
+- **agent.runtime_host_path** must be pre-extracted from `runtime_image` via `docker cp` and user-owned: gpufs root_squash blocks docker-daemon writes to root-owned dirs.

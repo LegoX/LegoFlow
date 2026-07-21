@@ -58,6 +58,12 @@ missing = [k for k in REQUIRED if get(cfg, k) in (None, "")]
 if missing:
     for k in missing: print(f"FAIL: missing or empty: {k}", file=sys.stderr)
     sys.exit(1)
+
+# meta_info.dependencies must be an explicit mapping (leaf-declared wiring contract).
+deps = get(cfg, "meta_info.dependencies")
+if not isinstance(deps, dict):
+    print("FAIL: meta_info.dependencies must be an explicit mapping (use {} when no upstream)", file=sys.stderr)
+    sys.exit(1)
 if get(cfg, "meta_info.name") != "tracer":
     print(f"FAIL: meta_info.name != 'tracer'", file=sys.stderr); sys.exit(1)
 prov = get(cfg, "runtime_info.input.task_source.provider")
@@ -83,3 +89,13 @@ if dataset_path and not under(dataset_path, "artifacts/tasks"):
 
 print("PASS: config.yaml schema")
 PY
+
+# Shared block-contract validator (schema-only: `human` fill markers are
+# expected on a fresh clone and downgraded to warnings here).
+REPO_ROOT="$(cd "$BLOCK_DIR/../.." && pwd)"
+if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
+  python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" --config "$CONFIG" --schema-only \
+    || { echo "FAIL: validate_config.py reported schema failures"; exit 1; }
+else
+  echo "WARN: shared validator not found — skipping contract validation"
+fi

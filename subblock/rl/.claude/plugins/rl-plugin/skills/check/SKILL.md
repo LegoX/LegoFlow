@@ -216,3 +216,11 @@ If `NNODES > 1`, add one italic line under the table:
 - call LiteLLM for anything beyond `/health/liveliness`
 - `kill` a process — surface the conflict, let the user decide
 - SSH to worker nodes — `/rl:check` is head-node only
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **docker_host security**: `tcp://<ip>:2375` is the unencrypted Docker daemon port — anyone who can reach it has root-equivalent access to that host. Acceptable only on isolated test networks; production/shared setups need TLS (`tcp://<ip>:2376`, dockerd --tlsverify). `""` = not exported → local unix socket.
+- **vllm.gen_tp** must divide the model's `num_key_value_heads` (dryrun validates; e.g. TP=4 matches Qwen3-30B-A3B's 4 KV heads). A mismatch surfaces later as `CUDA error: an illegal memory access`.
+- **infrastructure.anthropic_api_key: sk-dummy** is a functional shim for LiteLLM's Anthropic surface (proxied to local vLLM) — it is not a real key and must not be flagged as a placeholder.

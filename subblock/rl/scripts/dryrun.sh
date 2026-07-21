@@ -36,6 +36,19 @@ check() {
 # FAIL is counted like MISSING; WARN is informational and never blocks.
 pass_line() { echo "  OK       $1"; ok=$((ok+1)); }
 fail_line() { echo "  FAIL     $1"; missing=$((missing+1)); }
+
+# --- shared block-contract validation (schema, deps, fill markers) ------------
+REPO_ROOT="$(cd "$BLOCK_DIR/../.." && pwd)"
+if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
+  if VAL_OUT="$(python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" 2>&1)"; then
+    echo "  OK       validate_config: block contract OK"; ok=$((ok+1))
+  else
+    echo "$VAL_OUT" | sed 's/^/    /'
+    fail_line "validate_config reported failures (see lines above)"
+  fi
+else
+  echo "  WARN     shared validator not found — skipping contract validation"
+fi
 warn_line() { echo "  WARN     $1"; }
 
 echo "[rl/dryrun] config.yaml is parseable..."

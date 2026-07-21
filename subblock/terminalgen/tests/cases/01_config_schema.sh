@@ -28,7 +28,6 @@ REQUIRED = [
     "meta_info.environment.requirements",
     "meta_info.repos.terminal-lego",
     "meta_info.repos.terminal-lego.commit_id",
-    "runtime_info.input.so_api_key",
     "runtime_info.input.llm_api.api_key",
     "runtime_info.input.llm_api.api_base_url",
     "runtime_info.input.llm_api.gen_model",
@@ -50,6 +49,12 @@ if missing:
         print(f"FAIL: missing or empty: {k}", file=sys.stderr)
     sys.exit(1)
 
+
+# meta_info.dependencies must be an explicit mapping (leaf-declared wiring contract).
+deps = get(cfg, "meta_info.dependencies")
+if not isinstance(deps, dict):
+    print("FAIL: meta_info.dependencies must be an explicit mapping (use {} when no upstream)", file=sys.stderr)
+    sys.exit(1)
 name = get(cfg, "meta_info.name")
 if name != "terminalgen":
     print(f"FAIL: meta_info.name == {name!r}, expected 'terminalgen'", file=sys.stderr)
@@ -86,3 +91,13 @@ if bad:
 
 print("PASS: config.yaml schema")
 PY
+
+# Shared block-contract validator (schema-only: `human` fill markers are
+# expected on a fresh clone and downgraded to warnings here).
+REPO_ROOT="$(cd "$BLOCK_DIR/../.." && pwd)"
+if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
+  python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" --config "$CONFIG" --schema-only \
+    || { echo "FAIL: validate_config.py reported schema failures"; exit 1; }
+else
+  echo "WARN: shared validator not found — skipping contract validation"
+fi

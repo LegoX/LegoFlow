@@ -1,45 +1,62 @@
+# Block config template. Two top-level sections only: meta_info, runtime_info.
+# (Legacy status:/evolving: sections and a top-level environment: are validation
+# failures — live state belongs in artifacts/index.yaml.)
+# Fill-marker convention for runtime_info.input:
+#   human  -> user MUST replace this before a run (validator fails on it)
+#   ""     -> auto-derived at runtime or supplied via an env/file channel; never edit to run
+#   null   -> semantic unset/default
+#   anything else is a real working default
+# Validate with: python3 <repo_root>/scripts/validate_config.py --block <block_dir>
+
 meta_info:
   name: <block_name>
   label: <Human Readable Label>
   description: "<one sentence: what does this block do?>"
   parent: <parent_block_name or null>
 
-  subblocks:
-    <child_name>:
-      role: "<one phrase: what does this child do?>"
-      dependencies:
-        # Keys are input names this child needs; values are where they come from.
-        # Use dot-notation to reference another block's output: <block>.output.<key>
-        # Use "human" for values filled manually before a run.
-        # Example:
-        #   dataset_path: curator.output.verified_tasks_dir
-        #   api_key: human
+  subblocks: {}
+    # Parent blocks list children here with a role one-liner ONLY — wiring lives
+    # in each child's own meta_info.dependencies, never here.
+    # <child_name>:
+    #   role: "<one phrase: what does this child do?>"
+
+  dependencies: {}
+    # This block's OWN upstream hand-offs (mandatory key; {} when no upstream).
+    # Key   = dot-path into this block's runtime_info.input that receives the value.
+    # Value = "<src>.output.<key>", or a mapping for conditional/optional deps:
+    # <input.dot.path>: <src>.output.<key>
+    # <input.dot.path>:
+    #   from: <src>.output.<key>
+    #   when: {<input.dot.path>: <expected value>}   # enforced only while matching
+    #   required: false                              # null producer output -> warn, not fail
 
   environment:
     venv_name: # the virtual env to be used
     venv_path: # the path to this virtual env
     requirements: # from where the virtual env is built
-    description: 
+    description:
 
   resources:
-    ip: <ip or null>
-    pwd: <pwd or null>
-    directory: <null> # by default it's the current directory if this is not on another server
+    ip: local # 'local'/null = current host; a real remote IP = SSH + tmux
+    pwd: null
+    directory: null # by default the current directory when running locally
     description: # the server where you should by default work at ${directory}
     public_storage: # shared storage path for outputs
 
 runtime_info:
-  # Only list values that come from OUTSIDE the block tree:
-  # API keys, human decisions, external dataset paths, hyperparameters set by a human.
-  # Inter-block values are wired through subblocks[].dependencies above — do not repeat them here.
+  # Only values that come from OUTSIDE the block tree: API keys, human decisions,
+  # external dataset paths. Inter-block values are wired via meta_info.dependencies
+  # above — the dep key names which input path here receives them.
   input:
-    <input_name>: null  # <description>
+    <input_name>: human  # <description>; use the fill markers documented in the header
+    env_extra: {}        # optional: extra env vars exported for the run (e.g. HARBOR_EXCLUDE_TASKS)
 
   output:
-    # Values this block produces for other blocks or downstream consumers.
-    <output_name>: null  # <description>
-
-evolving:
-  description: <what is this block trying to optimize?>
-  tunable_params:
-    # <param_name>: null  # range: <min>–<max>, step <step>
+    # Values this block produces for downstream consumers. Each key is a mapping:
+    #   path:  static location fixed at authoring time (block-relative), and/or
+    #   value: run-produced — null until the block's run script writes it back.
+    # Consumers resolve value first, then path.
+    <output_name>:
+      description: "<what this output is>"
+      path: <block-relative path>   # static outputs
+      # value: null                 # run-produced outputs

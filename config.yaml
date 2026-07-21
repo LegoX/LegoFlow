@@ -1,0 +1,34 @@
+# Root block config — orchestration identity only. Inter-block wiring is declared
+# by each leaf block in its own meta_info.dependencies (see
+# .claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md §3.1).
+# Fill rules: `human` = must fill before a run; "" = auto-derived or env-supplied.
+# Validate the whole tree with: python3 scripts/validate_config.py --root .
+
+meta_info:
+  name: swe_lego_live
+  label: "SWE Lego Live"
+  description: Root orchestration block for the self-evolving LLM pipeline (task curation -> trajectories -> SFT -> RL; evaluation standalone).
+  parent: null
+  subblocks:
+    curator:
+      role: "Convert GitHub PRs into verified SWE tasks (task source)"
+    terminalgen:
+      role: "Convert StackExchange Q&A into verified terminal tasks (task source, parallel to curator)"
+    tracer:
+      role: "Generate agent trajectories from verified tasks via Harbor"
+    trainer:
+      role: "SFT on trajectories via LLaMA-Factory + DeepSpeed"
+    rl:
+      role: "Online RL (verl + Harbor) on the SFT checkpoint"
+    evaluator:
+      role: "Run registered benchmarks via Harbor (standalone; no upstream dep)"
+  dependencies: {}
+  resources:
+    ip: local
+    directory: null
+    description: Orchestrator — runs wherever the tree is checked out.
+    public_storage: null
+
+runtime_info:
+  input: {}    # all external inputs are per-block; root owns none
+  output: {}   # pipeline outputs are read from leaf configs (e.g. rl.output.checkpoint_path)

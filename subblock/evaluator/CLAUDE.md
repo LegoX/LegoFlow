@@ -28,7 +28,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 - `runtime_info.input.task_source`: benchmark selection — `provider: harbor_registry`, `dataset_name` (one of `swebench-verified`, `swebench-verified-100`, `swebench_multilingual`, `swebench_multilingual-100`, `swebenchpro`, `swebenchpro-100`, `terminal-bench`, `aider-polyglot`, `livecodebench`, `humanevalfix`, `bigcodebench-hard-complete`), `version`, and `registry_path` pointing at `repos/harbor/registry.json`
 - `runtime_info.input.harbor_job`: jobs directory, concurrency, retries, timeout multiplier, optional `n_tasks` smoke cap
 - `runtime_info.input.agent`: agent name, version, runtime image, max turns, temperature
-- `environment.extra.HARBOR_EXCLUDE_TASKS`: space-separated list of task IDs Harbor must skip (prior timeouts/OOMs)
+- `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`: space-separated list of task IDs Harbor must skip (prior timeouts/OOMs)
 
 **Outputs** (written to `config.yaml` → `runtime_info.output`):
 - `eval_results_dir`: Harbor job directories with per-task evaluation outputs at `artifacts/jobs/<job>/<task>/{agent,verifier}/`, plus LiteLLM trajectory logs at `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`

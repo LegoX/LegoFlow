@@ -187,3 +187,10 @@ A skipped smoke does not block unless the user explicitly requested smoke.
 - Do not launch `scripts/start.sh` or `swegen create`; that is `/curator:create-tasks`.
 - Do not hide credential or provider errors. Quote the provider error
   message, but never print secret values.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **Silent verification failure**: the Claude Code path (task_model / cc_provider_mode / anthropic_base_url) is what writes `verifiable_tasks.txt`. If the mode is wrong for the provider, verification fails **silently** — task skeletons stay templates, no task is verified, yet batch state still reports success. Always verify the CC path end-to-end, not just the OpenAI path.
+- **pr_collection.filters**: a null/absent filter is not an error — it means "use the collector's built-in default". Only flag values that are set but out of range.

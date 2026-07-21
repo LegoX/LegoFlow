@@ -158,3 +158,9 @@ unless the user explicitly requested smoke.
 - Do not launch `scripts/start.sh` or the generator; that is `/terminalgen:run`.
 - Do not hide credential or provider errors. Quote the provider error message,
   but never print secret values.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **val_timeout on slow networks**: terminal-lego's test.sh bootstraps uv over the network at test time; on throttled egress the uv binary download alone can take 200-600s+. Keep `val_timeout >= 900` on slow networks (param_bounds allow 120-1800).

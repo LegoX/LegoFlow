@@ -78,7 +78,7 @@ read-only worktree, run `uv sync`, and re-lock on EXIT.
 
 ### 4. Config
 
-Walk `runtime_info.input` and prompt only for unset fields:
+Walk `runtime_info.input` and prompt only for unset fields (the literal `human` marker always counts as unset; `""` fields are env/auto-supplied — do not prompt for those):
 
 - `llm_api.{api_key, api_base_url, model}` — pick the configured upstream
   (e.g. `https://az.gptplus5.com/v1` with `openai/deepseek-v4-flash`).
@@ -134,3 +134,24 @@ zero, point the user at `/tracer:run`. Setup is done.
   block currently uses `local` / the named cpu node).
 - Run inside a named tmux session on the host named by `meta_info.resources.ip`
   so long clones/syncs survive disconnects.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+### task_source
+
+Production runs use `provider: local` pointing at curator's verified tasks — the dependency is declared in `meta_info.dependencies` (`task_source.dataset_name: {from: curator.output.swe_tasks_dir, when: {task_source.provider: local}}`). `prepare_tasks.sh` filters the source dir through its `verifiable_tasks.txt` manifest before copying into `artifacts/tasks/`.
+
+Alternative — verified TERMINAL tasks from the terminalgen block (terminal-lego v1.0 schema, parallel to curator):
+```yaml
+task_source:
+  provider: terminalgen
+  dataset_name: ../terminalgen/artifacts/terminal_tasks
+  split: train
+```
+Filter by per-domain `../terminalgen/artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt` (or the optional flat `../terminalgen/artifacts/merged_terminal_tasks/verifiable_tasks.txt`). Switching provider = edit the dep's `when:` mode and the `task_source` input together.
+
+### sft_conversion
+
+`scaffold: auto` derives the converter scaffold from `agent.name` (choices: claude_code | open_code | openhands_sdk | terminus2). `exclude_repos_file: ""` uses the repo default `artifacts/excluded_repos.txt`.

@@ -24,7 +24,7 @@ Each unit of work — `curator`, `tracer`, `trainer`, `rl` — is a self-contain
 - `config.yaml` declares the block's inputs, outputs, children, dependencies between children, and (optionally) a remote node it must run on. It is **one-shot per run** — every key is configuration; no live state is stored here.
 - `scripts/start.sh`, `dryrun.sh`, `clean.sh`, `archive_run.sh` are how it actually executes. `start.sh` installs an EXIT trap that fires `archive_run.sh` on completion (success, failure, or signal), producing a `artifacts/archives/run_NNN/` snapshot and appending one entry to `artifacts/index.yaml`.
 - `artifacts/index.yaml` is the live state: the newest entry's `status` field (`completed | failed | interrupted`) tells you what the block last did.
-- Blocks can nest — a parent declares its children under `meta_info.subblocks`, and outputs of one child are wired into another child's inputs via `meta_info.subblocks[].dependencies`. The full specification is in [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md).
+- Blocks can nest — a parent lists its children under `meta_info.subblocks` (roles only), and each child wires the outputs it consumes into its own inputs via its `meta_info.dependencies`. The full specification is in [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md).
 
 
 
@@ -126,11 +126,11 @@ Pass a subblock name (e.g. `/root:check tracer`) when you're iterating on one bl
 
 ### 3. Fill the gaps
 
-Edit each `config.yaml` flagged in step 2, setting only keys under `runtime_info.input`. These are external values the block cannot derive — upstream block outputs are wired via `meta_info.dependencies` (or `meta_info.subblocks[].dependencies` on parent blocks) and you do **not** copy paths by hand.
+Edit each `config.yaml` flagged in step 2, setting only keys under `runtime_info.input` (replace every `human` marker; `""` fields are supplied via env/file channels). Upstream block outputs are wired via each block's `meta_info.dependencies` and you do **not** copy paths by hand.
 
 | Block | What to fill (see that block's `CLAUDE.md` for the full list) |
 |-------|------------------------------------------------------------------|
-| **curator** | Keep `github_tokens` as the external-input marker; provide `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored token file; fill `llm_api` (api_key, api_base_url, pr_model, task_model) |
+| **curator** | Provide PR-collection tokens via `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored token file (never in config.yaml); fill `llm_api` (api_key, api_base_url, pr_model, task_model) |
 | **tracer** | `llm_api` (api_key, api_base_url, model); task source comes from swegen dependency |
 | **trainer** | `source` (provider, scaffold, job_dir / trajs_dir); `conversion`; `model`; `training`; `infrastructure`; `credentials` (WandB if online) |
 | **rl** | `model`; `infrastructure` (nodes, GPUs, K8s); `training`; `data` (parquet + Harbor task dirs); `experiment`; `credentials` |

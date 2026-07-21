@@ -13,6 +13,7 @@ meta_info:
   description: Converts StackOverflow Q&A into verified terminal-bench tasks. Smoke mode runs against a committed 2-question SO sample.
   parent: swe_lego_live
   subblocks: {}
+  dependencies: {}
 
   repos:
     terminal-lego:
@@ -32,12 +33,12 @@ meta_info:
 
 runtime_info:
   input:
-    so_api_key: human
+    so_api_key: ""                   # via $SO_API_KEY
 
     # Smoke uses az.gptplus5.com / deepseek-v4-flash (matches production
     # terminalgen config).
     llm_api:
-      api_key: REPLACE_ME            # set via OPENAI_API_KEY env / .env (never commit it)
+      api_key: human                 # set via OPENAI_API_KEY env / .env (never commit it)
       api_base_url: https://az.gptplus5.com/v1
       gen_model: deepseek-v4-flash
 

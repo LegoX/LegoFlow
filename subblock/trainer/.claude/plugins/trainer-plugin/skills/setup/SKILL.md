@@ -120,9 +120,11 @@ filesystems. Suppress it with `export UV_LINK_MODE=copy` if it's noisy.
 
 ## Step 4 — Fill `runtime_info.input` (prompt only for gaps)
 
-Walk these keys; for each that is empty, `null`, or an obvious placeholder
-(a path that doesn't exist on this host), prompt with the current value as
-default. Write accepted values back into `config.yaml`, preserving comments
+Walk these keys; for each that is the literal `human` (the must-fill marker —
+always prompt for these), or an obvious placeholder (a path that doesn't exist
+on this host), prompt with the current value as default. `""` fields are
+env/auto-supplied and `null` is a semantic default — do not prompt for those
+unless their inline comment says otherwise. Write accepted values back into `config.yaml`, preserving comments
 and formatting (read–edit–write carefully; keep the inline `# choices: …`
 comments).
 
@@ -169,3 +171,17 @@ doesn't exist on this host (model dir, `job_dir`) — fix those, not the env.
   Never write a real key into tracked `config.yaml`.
 - Never run training or data conversion here — that's `/trainer:run`.
 - Local block: don't SSH anywhere (`meta_info.resources.ip: null`).
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+### source.type mode matrix
+
+| mode | uses | ignores | conversion |
+|---|---|---|---|
+| `harbor_job` | `scaffold`, `job_dir` (wired from tracer via `meta_info.dependencies`) | `hf_*`, `lf_path` | full trajectory → LF conversion |
+| `hf_lf` | `hf_hub_url`, `hf_file_name` (exact repo file; empty = full dataset config), `hf_subset` (ignored when hf_file_name set), `hf_split` | `scaffold`, `job_dir`, `lf_path` | skipped |
+| `local_lf` | `lf_path` (absolute or block-relative LF json) | `scaffold`, `job_dir`, `hf_*` | skipped |
+
+For `hf_lf` / `local_lf`, `conversion.data_name` is still used as the registered dataset key, and `conversion.max_instances` (>0) becomes the dataset's `num_samples` (random subsample). `dataset.name: ""` auto-derives from `conversion.data_name`.

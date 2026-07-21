@@ -53,8 +53,11 @@ if not swe_subdir:
     errs.append("curator: smoke.output_subdir must be set (where verified tasks land)")
 
 # --- tracer: consume the curator subdir; convert reward==1 -------------------
-if get(trj, "meta_info.dependencies.task_source_dir") != "curator.output.swe_tasks_dir":
-    errs.append("tracer: meta_info.dependencies.task_source_dir must be curator.output.swe_tasks_dir")
+trj_dep = get(trj, "meta_info.dependencies") or {}
+trj_dep_val = trj_dep.get("task_source.dataset_name")
+trj_dep_from = trj_dep_val.get("from") if isinstance(trj_dep_val, dict) else trj_dep_val
+if trj_dep_from != "curator.output.swe_tasks_dir":
+    errs.append("tracer: meta_info.dependencies['task_source.dataset_name'] must reference curator.output.swe_tasks_dir")
 prov = get(trj, "runtime_info.input.task_source.provider")
 if prov != "local":
     errs.append(f"tracer: task_source.provider={prov!r} — root smoke must be 'local' (consume the curator handoff, not a HF slice)")
@@ -69,8 +72,11 @@ if get(trj, "runtime_info.input.sft_conversion.reward_min") != 1:
     errs.append("tracer: sft_conversion.reward_min must be 1 (reward==1 focus)")
 
 # --- trainer: combine 512 fixture + tracer reward==1 LF, persist checkpoint -----
-if get(trainer, "meta_info.dependencies.training_data") != "tracer.output.sft_data_dir":
-    errs.append("trainer: meta_info.dependencies.training_data must be tracer.output.sft_data_dir")
+tr_dep = get(trainer, "meta_info.dependencies") or {}
+tr_dep_val = tr_dep.get("source.upstream_lf_dir")
+tr_dep_from = tr_dep_val.get("from") if isinstance(tr_dep_val, dict) else tr_dep_val
+if tr_dep_from != "tracer.output.sft_data_dir":
+    errs.append("trainer: meta_info.dependencies['source.upstream_lf_dir'] must reference tracer.output.sft_data_dir")
 if get(trainer, "runtime_info.input.source.type") != "combined_lf":
     errs.append("trainer: source.type must be 'combined_lf' (512 fixture + tracer reward==1 LF)")
 fixture = str(get(trainer, "runtime_info.input.source.fixture_lf", ""))
@@ -83,8 +89,11 @@ if str(get(trainer, "runtime_info.input.training.output_dir", "")).startswith("_
     errs.append("trainer: training.output_dir is a throwaway _smoke dir — root smoke must PERSIST the checkpoint for evaluator")
 
 # --- evaluator: evaluate trainer's checkpoint on swebench-verified, 100 tasks ---------
-if get(ev, "meta_info.dependencies.model_checkpoint") != "trainer.output.checkpoint_path":
-    errs.append("evaluator: meta_info.dependencies.model_checkpoint must be trainer.output.checkpoint_path")
+ev_dep = get(ev, "meta_info.dependencies") or {}
+ev_dep_val = ev_dep.get("llm_api.api_base_url")
+ev_dep_from = ev_dep_val.get("from") if isinstance(ev_dep_val, dict) else ev_dep_val
+if ev_dep_from != "trainer.output.checkpoint_path":
+    errs.append("evaluator: meta_info.dependencies['llm_api.api_base_url'] must reference trainer.output.checkpoint_path")
 ds = get(ev, "runtime_info.input.task_source.dataset_name")
 if ds != "swebench-verified":
     errs.append(f"evaluator: task_source.dataset_name={ds!r}, expected 'swebench-verified'")

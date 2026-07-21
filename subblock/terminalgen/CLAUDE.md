@@ -177,11 +177,11 @@ artifacts/
 
 ### Overview
 
-You (the AI agent) monitor and tune the terminal-gen pipeline. Configuration and per-domain status live in `config.yaml` under `runtime_info.input.domains.<domain>` and `runtime_info.input.global`.
+You (the AI agent) monitor and tune the terminal-gen pipeline. Tuning configuration lives in `config.yaml` under `runtime_info.input.domains.<domain>` and `runtime_info.input.global`; the live per-domain counters live in `artifacts/domain_status.yaml` (config.yaml is one-shot per run and holds no live state).
 
 ### Monitoring Cycle (every 30 minutes)
 
-1. **Collect status**: Count verified tasks from `artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt`. Count failures from `validation_report.json` under each `{domain}-tl/`. Update `config.yaml` → `runtime_info.input.domains.<domain>.status` fields.
+1. **Collect status**: Count verified tasks from `artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt`. Count failures from `validation_report.json` under each `{domain}-tl/`. Update the per-domain counters in `artifacts/domain_status.yaml`.
 2. **Decide tuning**: If `success_rate < 0.15` for 2 consecutive cycles, increase `val_timeout` (+60). If `success_rate > 0.4` and `gen_workers < 12`, increase `gen_workers` (+1). If `success_rate >= 0.25`, do nothing.
 3. **Check question pool**: If `question_pool_remaining < 100`, run `bash scripts/scrape_so_questions.sh <next_round> 200`, then re-bucket and dedup against processed questions.
 
@@ -210,7 +210,7 @@ echo $GEN_WORKERS $VAL_WORKERS $VAL_TIMEOUT
 
 When updating this block:
 - read `dashboard/overview.mdx` first for current state
-- read `config.yaml` for inputs: identity (`meta_info`), resources, runtime I/O (`runtime_info.input`/`output`), and per-domain tunable params (`runtime_info.input.domains.<domain>` and `.global`). `config.yaml` is one-shot per run — for live state look at `artifacts/index.yaml`.
+- read `config.yaml` for inputs: identity (`meta_info`), resources, runtime I/O (`runtime_info.input`/`output`), and per-domain tunable params (`runtime_info.input.domains.<domain>` and `.global`). `config.yaml` is one-shot per run — run state lives in `artifacts/index.yaml`, adaptive per-domain counters in `artifacts/domain_status.yaml`.
 - treat `artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt` as the authoritative output manifest — never have downstream blocks read raw task dirs without filtering through it
 - NEVER modify `repos/terminal-lego/`; it is a pinned read-only upstream dependency
 - after every run, archive params, metrics, inputs, and log into `artifacts/archives/run_NNN/` and append to `artifacts/index.yaml`

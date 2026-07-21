@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CI test 08: consumption_ledger.yaml parses and every done/failed/skipped
-# entry's task_id appears in environment.extra.HARBOR_EXCLUDE_TASKS.
+# entry's task_id appears in runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS.
 
 set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -18,7 +18,7 @@ except ImportError:
 
 doc = yaml.safe_load(open(os.environ["LEDGER_PATH"], encoding="utf-8"))
 cfg = yaml.safe_load(open(os.environ["CONFIG_PATH"], encoding="utf-8")) or {}
-exclude_raw = (cfg.get("environment",{}).get("extra",{}).get("HARBOR_EXCLUDE_TASKS") or "")
+exclude_raw = (cfg.get("runtime_info",{}).get("input",{}).get("env_extra",{}).get("HARBOR_EXCLUDE_TASKS") or "")
 exclude = set(exclude_raw.split())
 
 if not isinstance(doc, dict) or not isinstance(doc.get("runs"), list):

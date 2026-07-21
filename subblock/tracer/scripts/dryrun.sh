@@ -12,6 +12,19 @@ WARN=0
 ok()   { echo "  [OK]   $1"; PASS=$((PASS+1)); }
 fail() { echo "  [FAIL] $1"; FAIL=$((FAIL+1)); }
 warn() { echo "  [WARN] $1"; WARN=$((WARN+1)); }
+
+# --- shared block-contract validation (schema, deps, fill markers) ------------
+REPO_ROOT="$(cd "$BLOCK_DIR/../.." && pwd)"
+if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
+  if VAL_OUT="$(python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" 2>&1)"; then
+    ok "validate_config: block contract OK"
+  else
+    echo "$VAL_OUT" | sed 's/^/    /'
+    fail "validate_config reported failures (see lines above)"
+  fi
+else
+  warn "shared validator not found at <repo_root>/scripts/validate_config.py — skipping contract validation"
+fi
 info() { echo "  [INFO] $1"; }
 
 cfg() {
@@ -782,7 +795,7 @@ SFT_DATA_DIR_OUT="$(cfg runtime_info.output.sft_data_dir.path)"
 echo ""
 echo "--- 8c. Consumption ledger ---"
 LEDGER_PATH="$BLOCK_DIR/artifacts/consumption_ledger.yaml"
-EXCLUDE_TASKS_RAW="$(cfg environment.extra.HARBOR_EXCLUDE_TASKS)"
+EXCLUDE_TASKS_RAW="$(cfg runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS)"
 if [[ ! -f "$LEDGER_PATH" ]]; then
   fail "artifacts/consumption_ledger.yaml is missing — initialise with: printf 'description: %s\nruns: []\n' \"Tracer task consumption ledger\" > '$LEDGER_PATH'"
 else

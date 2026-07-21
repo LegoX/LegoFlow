@@ -52,13 +52,14 @@ repos:
 
 ## 4. Runtime Inputs (required)
 
-What values does this block need before it can run? Include API keys, dataset paths, hyperparameters, and values produced by other blocks.
+What values does this block need before it can run? Include API keys, dataset paths, hyperparameters, and values produced by other blocks. Values produced by a sibling block become entries in the new block's `meta_info.dependencies` (`<input.dot.path>: <src>.output.<key>`); purely external values go straight into `runtime_info.input` (marked `human` until the user fills them).
 
 ```yaml
 inputs:
   - name:         # short snake_case identifier
     description:  # what is it?
     required:     # true or false
+    from:         # optional: <sibling>.output.<key> when wired from another block
 ```
 
 ---
@@ -87,17 +88,3 @@ resources:
   model: null   # LLM model name if applicable
 ```
 
----
-
-## 7. Evolving (optional)
-
-What parameters can be tuned between runs, and what results should the agent observe to decide how to adjust them?
-
-```yaml
-evolving:
-  description:    # what is this block trying to optimize?
-  tunable_params:
-    - name:       # parameter name
-      range:      # e.g. 4–32, step 4
-      description:
-```

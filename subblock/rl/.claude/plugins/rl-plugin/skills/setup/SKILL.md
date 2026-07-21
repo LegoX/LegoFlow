@@ -125,9 +125,11 @@ namespace shadowing: a `docker/` directory on `sys.path` (e.g.
 
 ## Step 4 — Fill `runtime_info.input` (prompt only for gaps)
 
-Walk these keys; for each that is empty, `null`, or an obvious placeholder
-(a path that doesn't exist on this host), prompt with the current value as
-default. Write accepted values back into `config.yaml`, preserving comments
+Walk these keys; for each that is the literal `human` (the must-fill marker —
+always prompt for these), or an obvious placeholder (a path that doesn't exist
+on this host), prompt with the current value as default. `""` fields are
+env/auto-supplied and `null` is a semantic default — do not prompt for those
+unless their inline comment says otherwise. Write accepted values back into `config.yaml`, preserving comments
 and formatting. Do **not** invent a model path, data index, or kubeconfig —
 a missing input is the user's signal to provide one, never a signal to
 fabricate a path.
@@ -169,3 +171,16 @@ kubeconfig) — fix those, not the venv.
 - Never run training, launch LiteLLM/Ray, or call `start.sh` — that's
   `/rl:run`.
 - Local block: don't SSH anywhere (`meta_info.resources.ip` is null/local).
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+### UPSTREAM-FIXED sections
+
+`runtime_info.input.vllm`, `.training`, and `.algorithm` are documentation-only mirrors of the hardcoded values in `repos/harbor-verl-train/scripts/sync_1node_cc.sh` (only `test_freq` is env-driven). **Editing them in config.yaml does NOT change the run** — to override, edit the upstream script (or fork it). Keep the mirror in sync when the upstream script changes so config.yaml documents the live state.
+
+### environment.venv_path
+
+Empty → the default `repos/harbor-verl-train/.venv` (built by `setup_env.sh` on first `scripts/start.sh`). Point it at an existing venv (absolute or block-relative) to skip bootstrap — but the venv MUST have harbor / verl / harbor-verl-train installed **editable from this tree**; mismatched editable paths silently run the wrong code. Verify with:
+`$VENV_PATH/bin/python -c "import harbor, verl, verl_patch; print(harbor.__file__)"`

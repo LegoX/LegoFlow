@@ -19,7 +19,7 @@ This document is organized as four sections, in the order an agent typically nee
 
 Each block is operated by a dedicated agent. The agent reads `CLAUDE.md` for its contract and `config.yaml` for inputs, outputs, resources, and tree position. Agents coordinate through two mechanisms, both detailed in §3:
 
-- **Inter-block wiring** — `meta_info.subblocks[].dependencies` (the primary channel).
+- **Inter-block wiring** — each consumer block's own `meta_info.dependencies` (the primary channel).
 - **External inputs** — `runtime_info.input` (values that originate outside the block tree).
 
 Each agent maintains its block's `memory/` and `artifacts/` independently. **Live run state lives in `artifacts/index.yaml`** (the newest entry's `status` field, written automatically by `archive_run.sh`) — never in `config.yaml`. This invariant is referenced throughout the rest of this document.
@@ -30,16 +30,17 @@ A canonical example block is shipped at [`example_block/`](./example_block/) (si
 
 ### 1.3 `config.yaml`
 
-The authoritative schema lives in [`config.template.yaml`](./config.template.yaml) (sibling of this file). Read the template for the exact field set, inline comments, and default conventions. Do not duplicate the schema here.
+The authoritative schema lives in [`config.template.yaml`](./config.template.yaml) (sibling of this file). Read the template for the exact field set, inline comments, and default conventions. Do not duplicate the schema here. The schema is **enforced** by `<repo_root>/scripts/validate_config.py` (`--root <repo_root>` for the whole tree, `--block <block_dir>` for one block) — every block's `dryrun.sh`, the CI schema tests, and the `:check` skills run it.
 
 Key invariants the template encodes:
 
-- Top-level sections: `meta_info`, `runtime_info`, `evolving`.
-- Inter-block wiring goes in `meta_info.subblocks[<child>].dependencies` (`<src>.output.<key>` or literal `human`); see §3.1. **Never** put inter-block values in `runtime_info.input`.
-- `runtime_info.input` holds only values originating outside the block tree (API keys, human decisions, external paths). `runtime_info.output` holds values this block produces for siblings/consumers.
+- Top-level sections: `meta_info` and `runtime_info` — nothing else. Legacy `status:` and `evolving:` sections and a top-level `environment:` are validation failures (live state lives in `artifacts/index.yaml`; per-run env vars live in `runtime_info.input.env_extra`).
+- Inter-block wiring goes in the **consumer block's own** `meta_info.dependencies` (see §3.1). **Never** put inter-block values in `runtime_info.input` — the dependency entry names which `runtime_info.input` path receives the wired value.
+- `runtime_info.input` holds only values originating outside the block tree (API keys, human decisions, external paths). Fill markers are standardized: `human` = the user must replace this before a run (the validator fails on it); `""` = auto-derived at runtime or supplied via an env/file channel (never edit to run); `null` = semantic unset/default; anything else is a real working default.
+- `runtime_info.output` holds values this block produces for siblings/consumers. Each output key is a mapping with `path:` (a static location fixed at authoring time) and/or `value:` (run-produced — `null` until the block's run script writes it back, e.g. trainer's `train.sh` STEP 3). Consumers resolve `value` first, then `path`.
 - `meta_info.resources.ip`: `local` / null / absent → run on the current host. A real remote IP → SSH + tmux per §2.3.
 
-`config.yaml` is **one-shot per run**: every key is configuration the block reads at launch time. Live state lives in `artifacts/index.yaml` (§1.1, §2.2), not in `config.yaml`.
+`config.yaml` is **one-shot per run**: every key is configuration the block reads at launch time (run-produced `output.value` write-backs are the single exception). Live state lives in `artifacts/index.yaml` (§1.1, §2.2), not in `config.yaml`.
 
 ### 1.4 File roles
 
@@ -112,18 +113,32 @@ If `meta_info.resources.ip` is a real remote IP (not `local`, null, or absent), 
 
 ### 3.1 Inter-block wiring
 
-Subblock dependencies are declared in `meta_info.subblocks[].dependencies`. This is the authoritative wiring between blocks — never `runtime_info`. Example:
+Every block declares its **own upstream** dependencies in a flat `meta_info.dependencies` mapping — the consumer owns the wiring, the parent does not. The mapping is mandatory: a block with no upstream declares an explicit `dependencies: {}`.
+
+- **Key** — a dot-path into this block's own `runtime_info.input` naming the input that receives the hand-off (e.g. `task_source.dataset_name`). The path must exist; freeform labels are a validation failure.
+- **Value** — either the string `<src>.output.<key>` (a required reference to a sibling block's `runtime_info.output` key), or a mapping for conditional/optional hand-offs:
 
 ```yaml
-subblocks:
-  tracer:
-    role: Generate trajectories from verified SWE instances
-    dependencies:
-      verified_tasks_dir: curator.output.verified_tasks_dir  # from sibling block
-      api_key: human                                         # filled manually
+# subblock/tracer/config.yaml — consumer declares its upstream
+meta_info:
+  dependencies:
+    task_source.dataset_name:
+      from: curator.output.swe_tasks_dir
+      when: {task_source.provider: local}   # enforced only while these inputs hold these values
+
+# subblock/rl/config.yaml — optional upstream (null producer output → warning, not failure)
+meta_info:
+  dependencies:
+    model.model_path:
+      from: trainer.output.checkpoint_path
+      required: false
 ```
 
-`runtime_info.input` is reserved for values that originate outside the block tree entirely.
+Resolution reads the producer's `runtime_info.output.<key>`: a non-null `value` first, else `path`. A dangling reference (producer block or output key missing) is always a validation failure, even when the dependency is inactive or optional. `scripts/validate_config.py` enforces all of this.
+
+The **root block's** `config.yaml` lists its children under `meta_info.subblocks` with a `role:` one-liner each — no wiring there; a `dependencies` key under a `subblocks` entry is a validation failure.
+
+`runtime_info.input` is reserved for values that originate outside the block tree entirely; human-supplied values live there directly (marked `human` until filled) — the literal `human` is **not** part of the dependency grammar.
 
 ### 3.2 Parent dispatches to children — never to `start.sh`
 

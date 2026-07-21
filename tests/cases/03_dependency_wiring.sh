@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Root case 03: inter-block dependency wiring resolves.
-# Per BLOCK_DEFINITION.md, inter-block values live in
-# meta_info.subblocks[].dependencies (root) or meta_info.dependencies /
-# meta_info.subblocks[].dependencies (child), as `<block>.output.<key>` (or the
-# literal `human`). Every such reference must name a real sibling block that
-# actually declares that output key under runtime_info.output. A dangling
-# reference means a downstream block reads a value its producer never emits.
+# Per BLOCK_DEFINITION.md, each consumer block declares its upstream in its own
+# meta_info.dependencies: `<input.dot.path>: <block>.output.<key>` or the dict
+# form `{from: <block>.output.<key>, when: {...}, required: bool}`. Every such
+# reference must name a real sibling block that actually declares that output
+# key under runtime_info.output. A dangling reference means a downstream block
+# reads a value its producer never emits.
 
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -53,10 +53,12 @@ errs = []
 checked = 0
 for b in BLOCKS:
     for label, ref in collect_deps(cfgs[b]):
-        if ref in (None, "", "human"):
+        if isinstance(ref, dict):
+            ref = ref.get("from")
+        if ref in (None, ""):
             continue
         if not isinstance(ref, str) or ".output." not in ref:
-            errs.append(f"subblock/{b}: {label} = {ref!r} is not `<block>.output.<key>` or `human`")
+            errs.append(f"subblock/{b}: {label} = {ref!r} is not `<block>.output.<key>` (string or dict `from:`)")
             continue
         src_block, _, rest = ref.partition(".output.")
         out_key = rest.split(".")[0]

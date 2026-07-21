@@ -19,7 +19,7 @@ A self-contained directory that owns one stage of the pipeline. Every block has 
 
 ## Root block / subblock
 
-The repo is a **tree of blocks**. The repo root is the **root block**; every directory under `subblock/` is a child block. A parent block declares its children under `meta_info.subblocks` and wires the children together by name. Children can have children — the abstraction nests.
+The repo is a **tree of blocks**. The repo root is the **root block**; every directory under `subblock/` is a child block. A parent block lists its children under `meta_info.subblocks` (with a role one-liner each); each child declares its own upstream hand-offs in its `meta_info.dependencies`. Children can have children — the abstraction nests.
 
 ## `config.yaml`
 
@@ -35,7 +35,7 @@ The values a block publishes once it has run, for downstream blocks to consume �
 
 ## Dependency
 
-Inter-block values are wired in `meta_info.subblocks[].dependencies` as `<source_block>.output.<key>` (or the literal `human` for things only a person can decide). `/root:check` resolves every dependency at preflight time; an unresolvable dependency fails the check before anything heavy runs.
+Inter-block values are wired in the **consumer block's own** `meta_info.dependencies`: the key is the dot-path in that block's `runtime_info.input` that receives the value, and the value is `<source_block>.output.<key>` (with optional `when:`/`required:` modifiers for conditional or optional hand-offs). `scripts/validate_config.py` — run by every dryrun and by `/root:check` — resolves every dependency at preflight time; an unresolvable dependency fails the check before anything heavy runs.
 
 ## Repo
 

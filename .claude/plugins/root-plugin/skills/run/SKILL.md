@@ -1,7 +1,7 @@
 ---
 name: run
 description: >
-  Preflight and execute the block in the current working directory. Reads the bundled BLOCK_DEFINITION.md to recall the contract, then validates that the block in CWD is ready to run — config.yaml is well-formed, every runtime_info.input is filled, every inter-block dependency declared in meta_info.subblocks[].dependencies resolves to a non-null output of the named sibling block, repos under repos/ are present and at their pinned commits, the environment (venv_path) exists, and scripts/start.sh is present and executable. Only if all checks pass does it run scripts/start.sh — locally when meta_info.resources.ip is absent, null, or "local"; inside a tmux+SSH session on the named host when meta_info.resources.ip is a real remote IP. Each run is archived automatically by scripts/archive_run.sh (installed by start.sh's EXIT trap). Triggers on phrases like "run this block", "execute the block", "kick off start.sh", "fire the block", "run /root:run".
+  Preflight and execute the block in the current working directory. Reads the bundled BLOCK_DEFINITION.md to recall the contract, then validates that the block in CWD is ready to run — config.yaml is well-formed, every runtime_info.input is filled, every inter-block dependency declared in the block's own meta_info.dependencies resolves against the named sibling block's runtime_info.output, repos under repos/ are present and at their pinned commits, the environment (venv_path) exists, and scripts/start.sh is present and executable. Only if all checks pass does it run scripts/start.sh — locally when meta_info.resources.ip is absent, null, or "local"; inside a tmux+SSH session on the named host when meta_info.resources.ip is a real remote IP. Each run is archived automatically by scripts/archive_run.sh (installed by start.sh's EXIT trap). Triggers on phrases like "run this block", "execute the block", "kick off start.sh", "fire the block", "run /root:run".
 ---
 
 # /root:run
@@ -53,8 +53,8 @@ Every step below operates on `TARGET_DIR`. Where the rest of this document says 
 
 Read `resources/BLOCK_DEFINITION.md` bundled in this plugin (sibling of the `skills/` folder containing this file). It is the contract. Pay particular attention to:
 
-- The `meta_info` / `runtime_info` / `evolving` schema (config.yaml is one-shot per run — no live status field).
-- The **wiring rule**: inter-block values live only in `meta_info.subblocks[<child>].dependencies` (formatted `<source_block>.output.<key>` or the literal `human`), never in `runtime_info.input`. `runtime_info.input` is exclusively for values that originate **outside** the block tree (API keys, external dataset paths, human decisions).
+- The `meta_info` / `runtime_info` schema (two top-level sections only; config.yaml is one-shot per run — no live status field, no `evolving:` section).
+- The **wiring rule**: each consumer block declares its own upstream in a flat `meta_info.dependencies` (keys are dot-paths into that block's `runtime_info.input`; values are `<source_block>.output.<key>` strings or `{from, when, required}` mappings), never in `runtime_info.input`. `runtime_info.input` is exclusively for values that originate **outside** the block tree (API keys, external dataset paths, human decisions), with `human` as the must-fill marker.
 - The **remote-execution rule**: `meta_info.resources.ip: local` (or null/absent) means run on the current host — no SSH. Only a real remote IP triggers SSH+tmux. Never attempt to SSH to the literal value `local`.
 - The **archiving rule**: after each run, create `artifacts/archives/run_NNN/` with `metadata.yaml` (id, block, timestamps, status, exit_code, repo commit SHAs), snapshot `config.yaml`, snapshot `scripts/`, `session.log`, `monitor.md`; then append one entry to `artifacts/index.yaml` with `archive: artifacts/archives/run_NNN/`. Note: repo trees are **not** copied — only commit SHAs are recorded in `metadata.yaml`.
 
@@ -64,7 +64,7 @@ The "current block" is `TARGET_DIR` (CWD when `block_name` is unset; `./subblock
 
 1. `<TARGET_DIR>/config.yaml`:
    - If `block_name` is **set**, this file is required — abort with "Missing `config.yaml` under `subblock/<block_name>/`." if absent.
-   - If `block_name` is **unset** (root mode) and the file is absent, that's the SWE-Lego-Live coordinator pattern: skip config-driven preflight (Step 3 checks #3–#7 are scoped to subblocks via their own configs) and proceed. Emit a warning so the user knows the root config is missing intentionally.
+   - If `block_name` is **unset** (root mode), the root `config.yaml` is expected to exist (orchestration identity + `meta_info.subblocks` roster). If it is absent, fall back to the pseudo-root pattern: skip config-driven preflight (Step 3 checks #3–#7 are scoped to subblocks via their own configs) and proceed, emitting a warning.
 2. `<TARGET_DIR>/CLAUDE.md` — read it; honor any block-specific rules it states.
 3. `<TARGET_DIR>/dashboard/overview.mdx` — useful context, not load-bearing.
 
@@ -91,8 +91,8 @@ Walk through every check below. Collect failures. Only after the full pass, deci
 | - | ----- | ---------------- |
 | 1 | `./scripts/start.sh` exists. | "Missing `scripts/start.sh`." |
 | 2 | `./scripts/start.sh` is executable. If not, `chmod +x` it and emit a warning (not a failure). | warning only |
-| 3 | Every key under `runtime_info.input` has a non-null, non-empty value. | "Input `<key>` is unfilled. Edit `config.yaml` and set it." |
-| 4 | For each `child` in `meta_info.subblocks`, for each `dep_key: dep_value` in `subblocks[child].dependencies`: if `dep_value` is the literal `human`, then `runtime_info.input.<dep_key>` (on the parent — this block) must be non-null. Otherwise `dep_value` parses as `<src>.output.<key>` and `subblock/<src>/config.yaml`'s `runtime_info.output.<key>` must be non-null. | "Subblock `<child>` dependency `<dep_key>` is unresolved: `<dep_value>` is null/missing." |
+| 3 | Run `python3 <repo_root>/scripts/validate_config.py --block <TARGET_DIR>` (or `--root <repo_root>` in root mode). Any `[FAIL]` line — unfilled `human` markers (`input:unfilled`), legacy placeholders, schema drift, or dependency failures (`dep:bad-key` / `dep:bad-ref` / `dep:unresolved`) — is a preflight failure; quote the validator's message verbatim. | validator `[FAIL]` lines |
+| 4 | (covered by check #3 — the validator resolves each `meta_info.dependencies` entry against the producer's `runtime_info.output`, honoring `when:` gates and `required: false`.) | — |
 | 5 | For each entry under `meta_info.repos`: `./repos/<name>/` exists. If a `commit_id` is pinned, the checked-out HEAD of that submodule matches it. | "Repo `<name>` missing under `repos/`." or "Repo `<name>` HEAD `<actual>` does not match pinned `<commit_id>`." |
 | 6 | If `meta_info.environment.venv_path` is set: that path exists on the host that will run the script (local for local execution; the remote node for remote). | "Virtual env `<path>` not found." |
 | 7 | If `meta_info.resources.ip` is set: `ssh -o BatchMode=yes -o ConnectTimeout=5 <ip> true` succeeds. Also, before executing, ask the user once: "Code at `<directory>` on remote — already in sync, or should I rsync the current tree first?" (per BLOCK_DEFINITION's remote-execution rule). | "Cannot SSH to `<ip>`." |
@@ -111,7 +111,7 @@ Rationale: each block owns its own contract (preflight, confirmation, archiving,
 
 Procedure at a parent:
 
-1. Topologically sort `meta_info.subblocks` by the `dependencies` graph (a child that consumes `<src>.output.<key>` must run after `<src>`). Break ties by declaration order.
+1. Topologically sort the children by the dependency graph read from **each child's own** `meta_info.dependencies` (`subblock/<name>/config.yaml`): a child that consumes `<src>.output.<key>` must run after `<src>`. Edges that are conditionally inactive (`when:` not matching) or optional (`required: false`) still order the sort but do not block execution. Break ties by the declaration order in the root's `meta_info.subblocks`.
 2. For each child in that order, invoke `/<child>:run` and wait for it to complete. The child skill is responsible for its own preflight, confirmation, execution, and archiving.
 3. If a child fails or the user aborts at its confirmation gate, stop the parent's dispatch immediately — do not run downstream children. Report which child stopped the pipeline and surface its failure verbatim.
 4. The parent block does not have its own `scripts/start.sh` to execute; it has nothing to run beyond dispatching children. If the user explicitly asks for "just the root" (no children), there is nothing to do — say so and exit.

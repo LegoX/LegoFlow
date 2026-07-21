@@ -60,7 +60,6 @@ If going the chat route, collect the following in a single conversational messag
 7. **Outputs** — values produced after a run. For each: name and description.
 8. **Resources** — remote node IP, credentials, storage path (null = local execution)
 9. **Repos** — code repos attached to this block (name, URL or local path, commit ID, role)
-10. **Evolving** — what parameters can be tuned between runs, and what results to observe
 
 If the user says "just scaffold it" or seems in a hurry, fill in sensible placeholders and proceed.
 
@@ -76,11 +75,14 @@ meta_info:
   label: <human-readable label, title-case of name>
   description: <role sentence>
   parent: <parent or null>
-  subblocks:
-    <child1>:
-      role:
-      dependencies: []
-    # repeat for each child; omit section if no children
+  subblocks: {}
+    # parent blocks: one entry per child with a role one-liner ONLY — no wiring here
+    # <child1>: {role: "<one phrase>"}
+
+  dependencies: {}
+    # this block's OWN upstream hand-offs; keep {} when the block has no upstream
+    # <input.dot.path>: <src>.output.<key>
+    # <input.dot.path>: {from: <src>.output.<key>, when: {<input.dot.path>: <value>}, required: false}
 
   repos:
     # omit section if no repos
@@ -104,17 +106,13 @@ meta_info:
 
 runtime_info:
   input:
-    <input_name>: null   # <description>
+    <input_name>: human  # <description>; `human` = user must fill, "" = env/auto-supplied
     # one entry per declared input; omit section if none
 
   output:
-    <output_name>: null  # <description>
-    # one entry per declared output; omit section if none
-
-evolving:
-  description: <evolving description or null>
-  tunable_params:
-    # <param>: null
+    <output_name>:       # one entry per declared output; omit section if none
+      description: <description>
+      path: <block-relative path>   # static outputs; use `value: null` for run-produced ones
 ```
 
 ### `CLAUDE.md`
@@ -127,7 +125,7 @@ Concise agent contract, under 60 lines. Include:
 - Repos: list any repos under `repos/` and their purpose; note each is a git submodule pinned to a specific commit
 - How to run: `scripts/start.sh` to execute, `scripts/dryrun.sh` to validate. Mention that `/root:run` (from the `block` plugin) preflights and executes this contract.
 - Artifact archiving rule: each run is archived automatically by `scripts/archive_run.sh`, which `start.sh` invokes via an EXIT trap. The helper writes `artifacts/archives/run_NNN/` (metadata.yaml + config snapshot + scripts copy + repo SHAs) and appends one entry to `artifacts/index.yaml`. Agent may optionally drop `session.log` or `monitor.md` into the archive after the run.
-- Inter-block wiring: values from other blocks are declared in `meta_info.subblocks[].dependencies` — do not duplicate them in `runtime_info.input`. Only external values (API keys, human decisions) go in `runtime_info.input`.
+- Inter-block wiring: values from sibling blocks are declared in this block's own `meta_info.dependencies` (key = the `runtime_info.input` dot-path that receives the value) — do not duplicate them in `runtime_info.input`. Only external values (API keys, human decisions) go in `runtime_info.input`.
 - One-shot config: `config.yaml` is configuration for one run; do not edit it during execution to track progress. Live state lives in `artifacts/index.yaml`.
 - Remote execution rule: if `meta_info.resources.ip` is set, open a local tmux window, SSH into the remote node, attach to a tmux session there, and run scripts inside it — never run a remote-resource block locally
 

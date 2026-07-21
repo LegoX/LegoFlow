@@ -9,7 +9,10 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    task_source_dir: curator.output.swe_tasks_dir
+    # SMOKE: task_source.provider is huggingface, so the curator dep is inactive.
+    task_source.dataset_name:
+      from: curator.output.swe_tasks_dir
+      when: {task_source.provider: local}
 
   resources:
     ip: local
@@ -88,6 +91,12 @@ runtime_info:
       max_instances: null
       exclude_repos_file: ""
 
+    env_extra:
+      # SMOKE: same exclusion list as production — task IDs known to fail.
+      HARBOR_EXCLUDE_TASKS: elastic__elasticsearch-py-3329 elastic__elasticsearch-py-3332 cartography-cncf__cartography-1673 agentscope-ai__agentscope-885 agentscope-ai__agentscope-1342 aider-ai__aider-4146 agentscope-ai__agentscope-964 django-guardian__django-guardian-677 567-labs__instructor-1897 cartography-cncf__cartography-1751 cartography-cncf__cartography-2031
+      # SMOKE: force a single uvicorn worker (skip gunicorn's 30s boot timeout).
+      LITELLM_NUM_WORKERS: "1"
+
   output:
     raw_trajectories_dir:
       description: Harbor job directories with LiteLLM trajectory logs
@@ -101,24 +110,3 @@ runtime_info:
       trajectory_format: "artifacts/sft_data/<job>/lf.json"
       consumer_block: trainer
 
-environment:
-  extra:
-    # SMOKE: same exclusion list as production — task IDs known to fail.
-    HARBOR_EXCLUDE_TASKS: elastic__elasticsearch-py-3329 elastic__elasticsearch-py-3332 cartography-cncf__cartography-1673 agentscope-ai__agentscope-885 agentscope-ai__agentscope-1342 aider-ai__aider-4146 agentscope-ai__agentscope-964 django-guardian__django-guardian-677 567-labs__instructor-1897 cartography-cncf__cartography-1751 cartography-cncf__cartography-2031
-    # SMOKE: force a single uvicorn worker (skip gunicorn's 30s boot timeout).
-    LITELLM_NUM_WORKERS: "1"
-
-status:
-  phase: idle
-  progress: "Smoke run."
-  next_steps: null
-  blockers: null
-  last_updated: null
-
-evolving:
-  description: Generates agent trajectories using Harbor.
-  tunable_params:
-    temperature: "Agent sampling temperature (0.0-1.0)"
-    max_turns: "Maximum agent turns per task"
-    n_concurrent: "Harbor concurrent tasks"
-    timeout_multiplier: "Task timeout multiplier"

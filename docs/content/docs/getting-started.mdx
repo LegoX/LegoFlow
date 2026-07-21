@@ -23,46 +23,75 @@ If you cloned without `--recurse-submodules`, run `git submodule update --init -
 
 ## Step 2: Fill in `config.yaml`
 
-Every block is driven by a `config.yaml`. The file declares what the block is, where it runs, which repositories and child blocks it depends on, what values a user must provide, and what outputs the block will publish after a run.
+Every block is driven by a `config.yaml`. The file declares what the block is, where it runs, which repositories it pins, which sibling blocks it consumes, what values a user must provide, and what outputs the block publishes after a run.
 
-The schema has three main parts:
+The schema has two top-level sections:
 
-- `meta_info` describes the block identity, pinned repositories, execution environment, resources, and subblock wiring.
-- `runtime_info.input` contains values that come from outside the block tree, such as API keys, model names, GitHub tokens, dataset paths, or human choices.
-- `runtime_info.output` contains values produced by the block, such as verified task directories, trajectory directories, checkpoint paths, or evaluator reports.
+- `meta_info` — block identity, pinned repositories, execution environment, resources, and this block's **own upstream dependencies**.
+- `runtime_info.input` / `runtime_info.output` — values that come from outside the block tree (API keys, model names, dataset paths, human choices) and values the block produces (verified task directories, trajectory directories, checkpoint paths).
 
-For example, a root block can wire `curator` into `tracer` by declaring that `tracer` receives its tasks from `curator.output.verified_tasks_dir`, while values like API keys are still marked as `human`:
+### Fill rules
+
+Every field in `runtime_info.input` follows one convention, so you can tell at a glance what needs your attention:
+
+| Marker | Meaning |
+| --- | --- |
+| `human` | **You must replace this before a run.** Validation fails until you do. |
+| `""` (empty string) | Auto-derived at runtime or supplied via an env/file channel (the inline comment names it, e.g. `# via $WANDB_API_KEY`). Never edit to run. |
+| `null` | Semantic "unset / use default / all" — leave as is unless you want the non-default. |
+| anything else | A real working default. Change it only if you know why. |
+
+So filling a block config means exactly: **replace every `human`, and export the env vars named in `""` comments.** Everything else can be left as is.
+
+### Dependencies between blocks
+
+Each block declares the values it consumes from sibling blocks in its own `meta_info.dependencies`. The key is the dot-path in that block's `runtime_info.input` that receives the value; the value names the producer's output:
 
 ```yaml
+# subblock/tracer/config.yaml — tracer consumes curator's verified tasks
 meta_info:
-  name: root
-  subblocks:
-    curator:
-      role: generate verified SWE tasks
-      dependencies:
-        github_tokens: human
-        llm_api: human
-    tracer:
-      role: roll out agent trajectories
-      dependencies:
-        task_source: curator.output.verified_tasks_dir
-        llm_api: human
+  dependencies:
+    task_source.dataset_name:
+      from: curator.output.swe_tasks_dir
+      when: {task_source.provider: local}   # only enforced in this mode
 
-runtime_info:
-  input:
-    github_tokens: human
-    llm_api:
-      api_base_url: "https://api.example.com/v1"
-      api_key: "sk-..."
-      model: "gpt-4.1"
-  output: {}
+# subblock/rl/config.yaml — optional upstream (warns instead of failing while absent)
+meta_info:
+  dependencies:
+    model.model_path:
+      from: trainer.output.checkpoint_path
+      required: false
 ```
 
-For Curator, `github_tokens` is an external-input contract marker, not a secret
-storage field. Export `GITHUB_TOKENS` or `GITHUB_TOKEN`, or use an ignored local
-token file.
+A block with no upstream declares an explicit `dependencies: {}`. You normally never edit these — they document and enforce the pipeline's hand-offs.
 
-When filling a block config, start with all `human` dependencies and all non-null `runtime_info.input` fields. Leave `runtime_info.output` empty before the first run; block scripts fill it after successful execution. Then run `/<block>:check` to catch missing tokens, unresolved dependencies, missing repos, or unreachable remote resources before launching a long job.
+### A worked example
+
+Curator's LLM section ships as:
+
+```yaml
+llm_api:
+  api_key: human                          # never commit a real key; prefer env/.env
+  api_base_url: human                     # OpenAI-compatible endpoint
+  pr_model: Qwen3.6-35B-A3B
+  task_model: claude-sonnet-4-6
+  cc_provider_mode: openai_proxy          # native | openai_proxy
+  anthropic_base_url: http://127.0.0.1:4010
+  cc_proxy_port: 4010
+```
+
+Replace the two `human` fields with your endpoint and key, keep the rest, and you are done — `pr_model`, `cc_provider_mode`, and the proxy settings are working defaults you only touch when switching providers. (GitHub tokens are never stored in `config.yaml`: export `GITHUB_TOKENS` / `GITHUB_TOKEN` or use an ignored local token file.)
+
+### Verify
+
+Leave `runtime_info.output` untouched — static `path` entries are pre-declared, and run-produced `value` entries are written back by the block's scripts after a successful run. Then validate:
+
+```bash
+python3 scripts/validate_config.py --root .          # whole tree: schema, deps, unfilled markers
+python3 scripts/validate_config.py --block subblock/tracer   # one block
+```
+
+or run `/<block>:check`, which wraps the validator plus live probes (tokens, endpoints, Docker, GPUs) before you commit to a long job.
 
 
 ## Step 3: Running with Plugin Skills
