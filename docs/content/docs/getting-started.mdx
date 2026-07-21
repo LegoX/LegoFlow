@@ -82,6 +82,21 @@ llm_api:
 
 Replace the two `human` fields with your endpoint and key, keep the rest, and you are done — `pr_model`, `cc_provider_mode`, and the proxy settings are working defaults you only touch when switching providers. (GitHub tokens are never stored in `config.yaml`: export `GITHUB_TOKENS` / `GITHUB_TOKEN` or use an ignored local token file.)
 
+### What to fill, per block
+
+Every path below is under that block's `config.yaml → runtime_info.input`. Everything not listed is a working default. Each block's `/<block>:setup` skill carries the full field reference with worked examples.
+
+| Block | Must fill (`human`) | Supplied via env / file | Commonly adjusted |
+| --- | --- | --- | --- |
+| **curator** | `llm_api.api_key`, `llm_api.api_base_url` | GitHub tokens: `GITHUB_TOKENS` / `GITHUB_TOKEN` / `gh_token.txt` | `llm_api.cc_provider_mode` (`native` vs `openai_proxy` — must match your provider or verification fails silently), `pr_model` / `task_model`, `pr_collection.*` scale knobs |
+| **terminalgen** | `llm_api.api_key` | StackExchange key: `$SO_API_KEY` (optional; 300 req/day without) | `llm_api.api_base_url` + `gen_model`, `domains.<d>.enabled` / `params` |
+| **tracer** | — (ships working defaults) | — | `llm_api.*` (point at your endpoint; `dummy-cf` works for proxied ones), `task_source.provider` (`local` = curator hand-off, `terminalgen`, `huggingface`), `harbor_job.n_tasks` / `n_concurrent` |
+| **trainer** | — (ships a working `hf_lf` source) | `$WANDB_API_KEY`, `$HF_TOKEN` (private datasets only) | `source.type` (`harbor_job` consumes tracer via the wired dep), `model.model_name_or_path`, `training.output_dir` + hyperparameters |
+| **rl** | — | `$WANDB_API_KEY` (or `credentials.wandb_mode: disabled`) | `model.model_path` (base model, or wired from trainer's checkpoint), `data.*` parquet indexes, `harbor_agent.environment_import_path` + `docker_host` / `k8s.kubeconfig` (backend), `harbor_runtime.num_workers` |
+| **evaluator** | — (ships a MODE B local-vLLM example) | — | `llm_api.*` (MODE A remote API vs MODE B local vLLM), `task_source.dataset_name` + `version` (benchmark), `agent.*` preset (switch all four fields together) |
+
+After editing any block, run `python3 scripts/validate_config.py --block subblock/<name>` — it fails on every remaining `human` marker and on any dependency you broke, so an incomplete config can't reach a launch.
+
 ### Verify
 
 Leave `runtime_info.output` untouched — static `path` entries are pre-declared, and run-produced `value` entries are written back by the block's scripts after a successful run. Then validate:
