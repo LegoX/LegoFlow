@@ -10,7 +10,7 @@ description: >
   combines tokens from its token file with `GITHUB_TOKENS` / `GITHUB_TOKEN`;
   tokens never come from `config.yaml`.
   Long-running for a full multi-language pass; supports a small first-run
-  sample. This is the PR-collection stage that precedes `/curator:run`.
+  sample. This is the PR-collection stage that precedes `/curator:create-tasks`.
   Triggers on phrases like "collect PRs", "gather PRs", "run PR collection",
   "collect github prs for swegen", "refresh pr_ids".
 ---
@@ -18,7 +18,7 @@ description: >
 # /curator:collect-prs
 
 Collect qualifying GitHub PRs per language. This is the **first** pipeline
-stage; `/curator:run` (task generation) consumes its output. Run only from
+stage; `/curator:create-tasks` (task generation) consumes its output. Run only from
 `subblock/curator/`.
 
 ## Step 0 - Orient
@@ -70,7 +70,7 @@ report the PID and the log under `artifacts/logs/collect_all_*.log`.
 
 | Scope | Use when | How |
 | --- | --- | --- |
-| `sample` | First run, "quick", "just a few", smoke before a full pass. | One language, small `repo_num` (e.g. 2) and `max_prs_per_repo` (e.g. 10) via env overrides. This creates a small block-local pool; `/curator:run` smoke uses a different bundled sample file. |
+| `sample` | First run, "quick", "just a few", smoke before a full pass. | One language, small `repo_num` (e.g. 2) and `max_prs_per_repo` (e.g. 10) via env overrides. This creates a small block-local pool; `/curator:create-tasks` smoke uses a different bundled sample file. |
 | `single-language` | User names one language. | `LANGUAGES=<lang>` override; other knobs from config. |
 | `full` | All languages / no narrower scope. | Everything from `config.yaml -> pr_collection`. |
 
@@ -145,7 +145,7 @@ python3 repos/swegen/tools/collect_prs_wo_image.py \
 ```
 
 Output is `<output_dir>/{language}_pr_ids.txt`, one `owner/repo:pr-NUMBER`
-per line. `/curator:run` consumes these files automatically only when
+per line. `/curator:create-tasks` consumes these files automatically only when
 `output_dir` is `artifacts/collected_prs`.
 
 ## Step 6 - Report and hand off
@@ -155,12 +155,12 @@ After launch print:
 - background PID and `artifacts/logs/collect_all_<stamp>.log` (or foreground result)
 - output path and, once files appear, `wc -l <output_dir>/*_pr_ids.txt`
 - how to stop (`kill <PID>`) or tail the log
-- next step after the collector exits successfully: `/curator:run`
+- next step after the collector exits successfully: `/curator:create-tasks`
 
 For a background full run, poll once after a short delay to confirm the
-process started and is writing to the log. Do not start `/curator:run` merely
-because the output files have appeared: `swegen create` snapshots its input
-file at startup, so PR IDs appended later are not included in that run.
+process started and is writing to the log. Do not start `/curator:create-tasks`
+merely because the output files have appeared: `swegen create` snapshots its
+input file at startup, so PR IDs appended later are not included in that run.
 
 ## Guardrails
 

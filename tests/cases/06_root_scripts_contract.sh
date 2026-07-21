@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Root case 06: the root smoke harness ships its expected scripts, executable.
-# tests/run.sh, the chain orchestrator, the chain verifier, and the remote
-# vLLM-serve helper must all exist and be runnable — otherwise `--with-smoke`
-# dies at the first missing file.
+# Root case 06: root execution surfaces keep their static contracts.
+# The smoke harness scripts must exist, and explicit `/root:run <subblock>`
+# targeting must execute the selected block's `scripts/start.sh` directly.
 
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT_RUN="$ROOT_DIR/.claude/plugins/root-plugin/skills/run/SKILL.md"
 
 REQUIRED=(
   tests/run.sh
@@ -28,3 +28,24 @@ if [[ ${#missing[@]} -gt 0 ]]; then
 fi
 for n in "${nonexec[@]}"; do echo "INFO: not marked executable (chmod +x recommended): $n"; done
 echo "PASS: root smoke harness scripts present (${#REQUIRED[@]})"
+
+python3 - "$ROOT_RUN" <<'PY'
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+
+targeting = text.split("### Target resolution", 1)[1].split("## Step 0", 1)[0]
+if "`TARGET_DIR=./subblock/<name>/`" not in targeting:
+    raise SystemExit("FAIL: /root:run does not map a selected subblock to TARGET_DIR")
+if "Every step below operates on `TARGET_DIR`" not in targeting:
+    raise SystemExit("FAIL: selected subblock does not use the generic direct-run path")
+if "Delegate an explicitly selected subblock" in text:
+    raise SystemExit("FAIL: selected subblock still uses non-operational skill delegation")
+
+leaf = text.split("### Step 4b — Leaf block: run `scripts/start.sh`", 1)[1]
+if "`cd <TARGET_DIR>` then run `bash ./scripts/start.sh`" not in leaf:
+    raise SystemExit("FAIL: selected leaf does not execute TARGET_DIR/scripts/start.sh")
+
+print("PASS: root selected-subblock direct execution")
+PY

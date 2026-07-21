@@ -12,7 +12,7 @@ description: >
   verified task (NOP/Oracle expected to print `reward=0` / `reward=1`).
   Runs `scripts/dryrun.sh` if present. Read-only. Reports all failures
   in one consolidated message with a run-configuration summary.
-  **Mandatory before `:run`.** Triggers on phrases like "check curator",
+  **Mandatory before `:create-tasks`.** Triggers on phrases like "check curator",
   "preflight curator", "is curator ready", "diagnose curator",
   "validate curator config".
 ---
@@ -78,7 +78,7 @@ failure for real runs and a warning for pure dashboard inspection.
 
 ## Step 3 - LLM endpoint
 
-This check is mandatory before `/curator:run`; do not skip it just because
+This check is mandatory before `/curator:create-tasks`; do not skip it just because
 `scripts/dryrun.sh` passes. Use the installed SWEgen package, not an ad hoc
 request:
 
@@ -184,6 +184,6 @@ A skipped smoke does not block unless the user explicitly requested smoke.
 
 - Read-only except for the optional Harbor smoke jobs directory.
 - Do not edit `config.yaml`, `.env`, token files, or `artifacts/index.yaml`.
-- Do not launch `scripts/start.sh` or `swegen create`; that is `/curator:run`.
+- Do not launch `scripts/start.sh` or `swegen create`; that is `/curator:create-tasks`.
 - Do not hide credential or provider errors. Quote the provider error
   message, but never print secret values.

@@ -16,17 +16,17 @@ you. Launch Claude from inside `subblock/curator/` so the block-local plugin
 loads, then:
 
 ```text
-/curator:setup        # init submodule, build venv, install swegen, dryrun
-/curator:check        # preflight: config, GitHub tokens, LLM endpoint, docker
-/curator:collect-prs  # collect GitHub PRs -> artifacts/collected_prs/{lang}_pr_ids.txt
-/curator:run          # generate + verify tasks -> verifiable_tasks.txt
-/curator:dashboard    # local preview or Cloudflare Pages sync
+/curator:setup          # init submodule, build venv, install swegen, dryrun
+/curator:check          # preflight: config, GitHub tokens, LLM endpoint, docker
+/curator:collect-prs    # collect PR IDs and wait for completion
+/curator:create-tasks   # generate and verify tasks from existing PR IDs
+/curator:dashboard      # local preview or Cloudflare Pages sync
 ```
 
-`collect-prs` and `run` are separate commands. Wait for the background
-collector to finish before running production generation; `run` reads existing
-PR ID files and never starts collection. Its smoke mode is independent and uses
-a sample PR file bundled in `repos/swegen`.
+`collect-prs` and `create-tasks` are separate commands. Wait for the background
+collector to finish before running production generation; `create-tasks` reads
+existing PR ID files and never starts collection. Its smoke mode is independent
+and uses a sample PR file bundled in `repos/swegen`.
 
 The knobs these commands read live in `config.yaml` — LLM endpoint under
 `runtime_info.input.llm_api`, PR collection under
@@ -131,8 +131,8 @@ dependencies. Fix dry-run failures before launching generation.
 
 For a small first pass against a block-local PR pool, first complete
 `/curator:collect-prs`, then use a direct `swegen create` command with explicit
-limits and shared output paths. This differs from `/curator:run` smoke mode,
-which uses the submodule's bundled sample:
+limits and shared output paths. This differs from `/curator:create-tasks` smoke
+mode, which uses the submodule's bundled sample:
 
 ```bash
 swegen create \

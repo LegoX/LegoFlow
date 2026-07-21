@@ -112,4 +112,4 @@ credentials to run either a smoke test or a real batch.
 - Do not edit `config.yaml` unless the user asks for a specific config
   change.
 - Do not run `swegen create`, `swegen validate`, or Docker cleanup from
-  setup; leave execution to `/curator:check` or `/curator:run`.
+  setup; leave execution to `/curator:check` or `/curator:create-tasks`.

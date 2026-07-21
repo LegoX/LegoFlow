@@ -5,7 +5,7 @@
     {
       "name": "curator",
       "source": "./curator-plugin",
-      "description": "curator block skills — setup, check, dashboard, run."
+      "description": "curator block skills — setup, check, collect-prs, create-tasks, dashboard; run is a uniform-interface compatibility adapter."
     }
   ]
 }

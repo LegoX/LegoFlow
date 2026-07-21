@@ -139,14 +139,14 @@ Re-run `/root:check` until it prints `All blocks healthy — safe to /root:run.`
 
 ### 4. Run the pipeline
 
-Invoke `/root:run <block_name>` from the repo root, or `cd` into the subblock and invoke `/root:run` with no args. Both forms are equivalent. Preflight matches `/root:check`; execution runs locally or over SSH + tmux when `meta_info.resources.ip` is set. Each run archives under `artifacts/archives/run_NNN/` automatically — `start.sh`'s EXIT trap fires `scripts/archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM).
+Invoke `/root:run <block_name>` from the repo root, or `cd` into the subblock and invoke `/root:run` with no args. Both forms directly execute the selected block's `scripts/start.sh`. Preflight matches `/root:check`; execution runs locally or over SSH + tmux when `meta_info.resources.ip` is set. Each run archives under `artifacts/archives/run_NNN/` automatically — `start.sh`'s EXIT trap fires `scripts/archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM).
 
 **1. curator** — generate and validate SWE tasks:
 
 ```text
-/root:run curator        # from repo root
-# or, equivalently:
-cd subblock/curator && /root:run
+/root:run curator                         # all-language scripts/start.sh
+# for Curator smoke, single-language, or full mode selection:
+cd subblock/curator && /curator:create-tasks
 ```
 
 **2. tracer** — run the agent on verified tasks (after curator has entries in `verifiable_tasks.txt`):

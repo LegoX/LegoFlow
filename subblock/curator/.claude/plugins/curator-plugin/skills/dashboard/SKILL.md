@@ -114,7 +114,7 @@ Flag these conditions:
 - `verifiable_tasks.txt` lists a task id whose task directory is missing.
 
 Do not change parameters from dashboard. Suggest `/curator:check` for
-environment failures and `/curator:run` for new generation.
+environment failures and `/curator:create-tasks` for new generation.
 
 ## Guardrails
 
