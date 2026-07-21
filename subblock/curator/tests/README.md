@@ -32,6 +32,8 @@ Per-test exit codes: `0` pass · `77` skip · anything else fail.
 | 04 | LLM endpoint | cross-provider hydration succeeds and a real `chat.completions.create` returns content | ~20 s |
 | 05 | Docker | daemon reachable via configured `DOCKER_HOST` | <1 s |
 | 06 | Harbor smoke | known verified task `tox-dev__tox-3813` still produces NOP=0, Oracle=1 (SKIPs if fixture absent) | ~2–5 min |
+| 07 | create-tasks command surface | canonical skill, compatibility adapter, and plugin manifest stay wired correctly | <1 s |
+| 08 | create-tasks public docs | public Curator docs use the canonical command and the production Pages target | <1 s |
 | 10 | **10-PR demo** *(smoke)* | `swegen create --max-pr 1` over the 10-PR quick-verify fixture produces ≥1 verified task within 60 min | up to 60 min |
 
 The 10-PR demo runs only with `--with-smoke` and is gated to `push` events on
@@ -66,6 +68,8 @@ cases/                cheap deterministic checks
   04_llm_endpoint.sh
   05_docker_daemon.sh
   06_harbor_smoke.sh
+  07_create_tasks_skill.sh
+  08_create_tasks_docs.sh
 smoke/                expensive end-to-end runs (--with-smoke gates them)
   10_pr_demo.sh
   fixtures/python_pr_ids.txt
@@ -134,6 +138,21 @@ the result doesn't depend on the runner shell's env).
 If `artifacts/swe_tasks/py-cc/tox-dev__tox-3813/` exists, runs
 `swegen validate … --task tox-dev__tox-3813 --env docker` and asserts the
 output contains both `NOP reward=0` and `Oracle reward=1`. Otherwise SKIPs.
+</details>
+
+<details>
+<summary><code>cases/07_create_tasks_skill.sh</code> — static command-surface contract</summary>
+
+Checks that `/curator:create-tasks` is the canonical generation skill, the
+root-protocol compatibility adapter delegates without duplicating generation
+logic, and the plugin manifest advertises the canonical command.
+</details>
+
+<details>
+<summary><code>cases/08_create_tasks_docs.sh</code> — public-documentation contract</summary>
+
+Checks that public Curator guidance recommends `/curator:create-tasks` and that
+the maintained docs deploy to `swe-swegen-docs`.
 </details>
 
 <details>

@@ -13,18 +13,18 @@ and calls `swegen create`.
 From a Claude session started inside `subblock/curator/`:
 
 ```text
-/curator:collect-prs   # collect PRs per config.yaml -> runtime_info.input.pr_collection
-/curator:run           # generate + verify tasks per runtime_info.input.languages
-/curator:dashboard     # monitor progress
+/curator:collect-prs    # collect PR IDs and wait for completion
+/curator:create-tasks   # generate and verify tasks from existing PR IDs
+/curator:dashboard      # monitor progress
 ```
 
 `/curator:collect-prs` reads its scope and filters from
-`config.yaml -> runtime_info.input.pr_collection`; `/curator:run` reads
-per-language `timeout` / `cc_timeout` / `n_concurrent` from
+`config.yaml -> runtime_info.input.pr_collection`; `/curator:create-tasks`
+reads per-language `timeout` / `cc_timeout` / `n_concurrent` from
 `runtime_info.input.languages`. Edit `config.yaml`, then re-run the command.
-These are separate stages: `/curator:run` never starts the collector. Wait for
-the background collector to exit before running generation. Production create
-scripts read fixed paths under `artifacts/collected_prs/`; changing
+These are separate stages: `/curator:create-tasks` never starts the collector.
+Wait for the background collector to exit before running generation. Production
+create scripts read fixed paths under `artifacts/collected_prs/`; changing
 `pr_collection.output_dir` requires a corresponding manual `swegen create`
 input path. The sections below document the raw commands those skills run.
 
@@ -92,7 +92,7 @@ artifacts/collected_prs/python_pr_ids.txt
 
 A full multi-language pass takes a long time and consumes GitHub API quota.
 Use the smaller command above for collector validation. It does not feed
-`/curator:run` smoke mode, which uses the sample PR file bundled in
+`/curator:create-tasks` smoke mode, which uses the sample PR file bundled in
 `repos/swegen`.
 
 ## Run one language

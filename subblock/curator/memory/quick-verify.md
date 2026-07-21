@@ -6,7 +6,7 @@ tell whether a problem is in the environment, the LLM, Docker/Harbor, or the
 SWEgen code itself.
 
 This is a manual block-local verification flow. It is distinct from
-`/curator:run` smoke mode, which reads the bundled PR list under
+`/curator:create-tasks` smoke mode, which reads the bundled PR list under
 `repos/swegen/artifacts/` and writes under `artifacts/experiments/quick-verify/`.
 
 ## Goal

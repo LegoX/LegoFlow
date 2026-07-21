@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the Curator docs (fumadocs/Next.js static export) and deploy to a
 # dedicated Cloudflare Pages project. Independent of the data dashboard project
-# (swe-databoard); this one defaults to swe-curator-docs.
+# (swe-databoard); this one publishes at swe-swegen-docs.
 #
 # Required credentials:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
@@ -12,7 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PROJECT_NAME="${PROJECT_NAME:-swe-curator-docs}"
+PROJECT_NAME="${PROJECT_NAME:-swe-swegen-docs}"
 BRANCH_NAME="${BRANCH_NAME:-swegen}"
 OUT_DIR="${OUT_DIR:-out}"
 WRANGLER_PKG="${WRANGLER_PKG:-wrangler@latest}"

@@ -17,8 +17,9 @@ Run this first. It validates the root and all subblocks: config schema, human-pr
 
 Root orchestration does not collect Curator PRs. Before the first production
 run, execute `/curator:collect-prs` and wait for its background process to
-finish. Both `/curator:run` and the root Curator launcher consume the existing
-files under `artifacts/collected_prs/`.
+finish. Direct Curator users should choose `/curator:create-tasks`. Root
+orchestration reaches the internal `/curator:run` compatibility adapter, and
+both paths consume the existing files under `artifacts/collected_prs/`.
 
 ```text
 /root:run start the data pipeline
@@ -42,9 +43,10 @@ You can also ask the root block to operate a specific subblock:
 ```
 
 Root targeting is not identical to the Curator-specific skills:
-`/root:run curator` launches Curator's all-language `start.sh`, while
-`/curator:run` can select smoke, single-language, or full mode.
-`/curator:check` also includes Curator's mandatory real-completion probe. Use
+`/root:run curator` reaches the internal `/curator:run` compatibility adapter,
+which delegates to `/curator:create-tasks` in full mode. Direct users should
+choose `/curator:create-tasks`, which can also select smoke or single-language
+mode. `/curator:check` includes Curator's mandatory real-completion probe. Use
 the block-specific skills when those controls matter.
 
 ## Inspect Results

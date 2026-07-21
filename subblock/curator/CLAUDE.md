@@ -100,21 +100,21 @@ docker run --rm hello-world
 The recommended way to operate this block is through its Claude plugin
 (`curator-plugin`). Launch Claude from inside `subblock/curator/` and use the
 slash commands for their documented preflight and confirmation steps. Only
-`/curator:run` full mode passes through `start.sh` and creates an archive;
+`/curator:create-tasks` full mode passes through `start.sh` and creates an archive;
 smoke and single-language modes do not:
 
 | Command | Wraps | Purpose |
 |---|---|---|
 | `/curator:setup` | submodule init, venv, `pip install -e`, dryrun | Bootstrap the block |
 | `/curator:check` | `scripts/dryrun.sh` + token/LLM/docker probes | Read-only preflight |
-| `/curator:collect-prs` | `scripts/collect_all_bg.sh` / collector | PR collection (Step 1 below) |
-| `/curator:run` | Full: `scripts/start_with_*.sh` → `create_all_bg.sh`; smoke/single: direct command | Task generation + verification (Step 2) |
+| `/curator:collect-prs` | `scripts/collect_all_bg.sh` / collector | Collect PR IDs and wait for completion (Step 1 below) |
+| `/curator:create-tasks` | Full: `scripts/start_with_*.sh` → `create_all_bg.sh`; smoke/single: direct command | Generate and verify tasks from existing PR IDs (Step 2) |
 | `/curator:dashboard` | `dashboard/` generator + Cloudflare sync | Progress monitoring |
 
-`/curator:run` does not invoke `/curator:collect-prs`. For production modes,
+`/curator:create-tasks` does not invoke `/curator:collect-prs`. For production modes,
 wait for collection to finish before starting generation; the create scripts
-read fixed files under `artifacts/collected_prs/`. The run skill's smoke mode is
-an exception and uses a sample PR file bundled in `repos/swegen`.
+read fixed files under `artifacts/collected_prs/`. The create-tasks skill's smoke
+mode is an exception and uses a sample PR file bundled in `repos/swegen`.
 
 The knobs each command reads live in `config.yaml`: LLM under
 `runtime_info.input.llm_api`, PR collection under
