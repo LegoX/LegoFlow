@@ -2,9 +2,9 @@
 
 Packages the tracer block's detailed operating procedures into slash
 commands. These complement the repo-wide [`root-plugin`](../../../../../.claude/plugins/root-plugin/)
-plugin (`/root:create`, `/root:check`, `/root:run`): `root` resolves and
-delegates block targets; this plugin owns Tracer preflight, execution,
-archiving, and tracer-specific operating details.
+plugin (`/root:create`, `/root:check`, `/root:run`): `root` handles the
+generic block contract (preflight, execute `start.sh`, archive); this plugin
+holds the tracer-specific know-how that the generic commands cannot infer.
 
 The block's `CLAUDE.md` references these commands instead of inlining every
 procedure, so the contract stays short and the detail lives here.
@@ -20,10 +20,11 @@ procedure, so the contract stays short and the detail lives here.
 
 ## Relationship to `/root:run`
 
-`/root:run tracer` delegates to `/tracer:run` and waits for it. The block-owned
-skill performs preflight, executes and archives `scripts/start.sh`, and handles
-the tracer-specific layer (LiteLLM proxy lifecycle, task-exclusion wiring, and
-post-run ledger bookkeeping).
+`/root:run tracer` runs the generic preflight then executes `scripts/start.sh`
+and archives the result. `/tracer:run` documents the tracer-specific layer
+that `start.sh` orchestrates (LiteLLM proxy lifecycle, task-exclusion wiring,
+post-run ledger bookkeeping). Use `/root:run` to execute; consult
+`/tracer:run` for the operating detail and the manual post-run steps.
 
 Per the block plugin guidelines, **no `/tracer:create`** — new blocks are
 only created via `/root:create`.

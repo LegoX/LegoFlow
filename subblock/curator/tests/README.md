@@ -144,8 +144,9 @@ output contains both `NOP reward=0` and `Oracle reward=1`. Otherwise SKIPs.
 <summary><code>cases/07_create_tasks_skill.sh</code> — static command-surface contract</summary>
 
 Checks that `/curator:create-tasks` is the canonical generation skill, the
-root-protocol compatibility adapter delegates without duplicating generation
-logic, and the plugin manifest advertises the canonical command.
+uniform-interface compatibility adapter delegates without duplicating
+generation logic, current root targeting bypasses that adapter, and plugin
+metadata advertises the canonical command.
 </details>
 
 <details>

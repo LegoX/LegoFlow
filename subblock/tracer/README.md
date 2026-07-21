@@ -64,7 +64,7 @@ Run from the repo root with the `block` plugin loaded, or from this directory.
 ```text
 /root:check tracer     # preflight: config, repos, envs, tasks, LLM endpoint
 /tracer:setup           # clone/update repos, build uv envs, run dryrun
-/root:run tracer       # delegate to /tracer:run and wait
+/root:run tracer       # execute scripts/start.sh (proxy + Harbor) and archive
 /tracer:dashboard       # view progress locally or sync online
 ```
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Root case 06: root execution surfaces keep their static contracts.
 # The smoke harness scripts must exist, and explicit `/root:run <subblock>`
-# targeting must delegate through the selected block's run skill.
+# targeting must execute the selected block's `scripts/start.sh` directly.
 
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -33,27 +33,19 @@ python3 - "$ROOT_RUN" <<'PY'
 import sys
 from pathlib import Path
 
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
 
-marker = "## Step 0a — Delegate an explicitly selected subblock"
-if marker not in text:
-    raise SystemExit("FAIL: /root:run lacks an explicit selected-subblock delegation path")
+targeting = text.split("### Target resolution", 1)[1].split("## Step 0", 1)[0]
+if "`TARGET_DIR=./subblock/<name>/`" not in targeting:
+    raise SystemExit("FAIL: /root:run does not map a selected subblock to TARGET_DIR")
+if "Every step below operates on `TARGET_DIR`" not in targeting:
+    raise SystemExit("FAIL: selected subblock does not use the generic direct-run path")
+if "Delegate an explicitly selected subblock" in text:
+    raise SystemExit("FAIL: selected subblock still uses non-operational skill delegation")
 
-selected = text.split(marker, 1)[1].split("## Step 1", 1)[0]
-if "`/<name>:run`" not in selected:
-    raise SystemExit("FAIL: selected subblock does not delegate to /<name>:run")
-if "wait for it to complete" not in selected:
-    raise SystemExit("FAIL: selected subblock delegation does not wait")
-if "`scripts/start.sh`" not in selected or "MUST NOT" not in selected:
-    raise SystemExit("FAIL: selected subblock path does not forbid direct start.sh execution")
+leaf = text.split("### Step 4b — Leaf block: run `scripts/start.sh`", 1)[1]
+if "`cd <TARGET_DIR>` then run `bash ./scripts/start.sh`" not in leaf:
+    raise SystemExit("FAIL: selected leaf does not execute TARGET_DIR/scripts/start.sh")
 
-leaf_marker = "### Step 4b — Direct leaf invocation: run `scripts/start.sh`"
-if leaf_marker not in text:
-    raise SystemExit("FAIL: /root:run does not isolate direct leaf execution")
-leaf = text.split(leaf_marker, 1)[1].split("## Step 5", 1)[0]
-if "`block_name` is unset" not in leaf or "current working directory" not in leaf:
-    raise SystemExit("FAIL: start.sh execution is not limited to direct leaf invocation")
-
-print("PASS: root selected-subblock run delegation")
+print("PASS: root selected-subblock direct execution")
 PY

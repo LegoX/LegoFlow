@@ -83,8 +83,7 @@ If you operate the block through its Claude plugin, the same lifecycle maps to s
 ```text
 /root:check tracer     # preflight: config, repos, envs, tasks, LLM endpoint
 /tracer:setup           # update repos, build envs, run dryrun
-/root:run tracer       # delegate to /tracer:run and wait
-# or invoke the same block-owned run skill directly:
+/root:run tracer       # execute scripts/start.sh (proxy + Harbor) and archive
 /tracer:run             # tracer-specific run procedure + post-run bookkeeping
 /tracer:dashboard       # view progress locally or sync online
 ```

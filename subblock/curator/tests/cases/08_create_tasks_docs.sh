@@ -12,6 +12,7 @@ block = Path(sys.argv[1])
 root = Path(sys.argv[2])
 
 files = [
+    root / "README.md",
     block / "CLAUDE.md",
     block / ".claude/plugins/curator-plugin/README.md",
     block / ".claude/plugins/curator-plugin/skills/check/SKILL.md",
@@ -21,8 +22,10 @@ files = [
     block / "memory/quick-verify.md",
     block / "tests/smoke/verify.sh",
 ]
-docs_pages = sorted((block / "docs/content/docs").glob("*.mdx"))
-files.extend(docs_pages)
+curator_docs_pages = sorted((block / "docs/content/docs").glob("*.mdx"))
+root_docs_pages = sorted((root / "docs/content/docs").glob("*.mdx"))
+files.extend(curator_docs_pages)
+files.extend(root_docs_pages)
 
 stale = []
 for path in files:
@@ -31,8 +34,17 @@ for path in files:
 if stale:
     raise SystemExit("FAIL: stale public /curator:run references: " + ", ".join(stale))
 
+example_usage = (root / "docs/content/docs/example-usages.mdx").read_text(
+    encoding="utf-8"
+)
+example_words = " ".join(example_usage.split())
+if "directly executes Curator's all-language `scripts/start.sh`" not in example_words:
+    raise SystemExit("FAIL: root docs do not describe direct Curator start.sh execution")
+if "/curator:create-tasks" not in example_usage:
+    raise SystemExit("FAIL: root docs omit the canonical direct Curator command")
+
 stale_pages_project = []
-for path in docs_pages:
+for path in curator_docs_pages:
     if "swe-curator-docs" in path.read_text(encoding="utf-8"):
         stale_pages_project.append(str(path.relative_to(root)))
 if stale_pages_project:

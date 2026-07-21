@@ -17,6 +17,10 @@ new blocks are only ever created at the root level), see
 | `/curator:create-tasks` | Launch task generation and NOP/Oracle verification from existing PR ID files. It does not collect PRs. |
 | `/curator:dashboard` | Show progress per language: PRs collected, tasks generated, verifiable rate. |
 
+The unlisted `run/SKILL.md` is a uniform-interface compatibility adapter for
+the repository's standard plugin layout. Root targeting does not invoke it;
+`/root:run curator` directly executes Curator's all-language `scripts/start.sh`.
+
 Per the block plugin guidelines, **no `/curator:create`** — new blocks are
 only created via `/root:create`.
 
@@ -35,5 +39,5 @@ curator-plugin/
     ├── collect-prs/SKILL.md    # /curator:collect-prs
     ├── create-tasks/SKILL.md   # /curator:create-tasks
     ├── dashboard/SKILL.md      # /curator:dashboard
-    └── run/SKILL.md            # root compatibility adapter
+    └── run/SKILL.md            # uniform-interface compatibility adapter
 ```

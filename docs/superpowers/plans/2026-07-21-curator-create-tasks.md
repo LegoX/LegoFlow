@@ -2,17 +2,36 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `/curator:create-tasks` the canonical task-generation command, retain a thin `/curator:run` root-protocol adapter, and publish the updated Curator docs at `swe-swegen-docs.pages.dev`.
+**Goal:** Make `/curator:create-tasks` the canonical task-generation command, retain a thin `/curator:run` uniform-interface compatibility adapter, and publish the updated Curator docs at `swe-swegen-docs.pages.dev`.
 
-**Architecture:** The existing full run skill moves unchanged in behavior to a new `create-tasks` skill. A minimal `run` skill remains only to preserve the uniform `/<block>:run` contract used by `/root:run`; it delegates all arguments and decisions to the canonical skill. Maintained Fumadocs source stays under `subblock/curator/docs`, whose deploy target changes to the existing `swe-swegen-docs` Pages project.
+**Architecture:** The existing full run skill moves unchanged in behavior to a new `create-tasks` skill. A minimal `run` skill remains only to preserve the repository's uniform `/<block>:run` plugin layout; it delegates all arguments and decisions to the canonical skill. Root targeting is independent and directly executes the selected block's `scripts/start.sh`. Maintained Fumadocs source stays under `subblock/curator/docs`, whose deploy target changes to the existing `swe-swegen-docs` Pages project.
 
 **Tech Stack:** Claude Code plugin skills (Markdown frontmatter), Bash contract tests, Fumadocs/Next.js, Cloudflare Pages/Wrangler, GitHub CLI.
+
+## Final-Review Decision Record (2026-07-21)
+
+The original Task 1 rationale assumed `/root:run curator` would invoke the thin
+run adapter. Commit `2ba2a7e` attempted to implement that assumption, but final
+review found it non-operational because child skills require block-local CWD and
+plugin loading. The commit is reverted. The final architecture is:
+
+- `/root:run curator` directly executes Curator's all-language
+  `scripts/start.sh`.
+- Direct Curator users invoke `/curator:create-tasks` for smoke,
+  single-language, or full selection.
+- `/curator:run` remains only as a uniform-interface compatibility adapter
+  required by the repository's standard plugin layout; root targeting does not
+  invoke it.
+
+Any historical task wording below that describes the adapter as part of root
+dispatch is superseded by this decision record.
 
 ## Global Constraints
 
 - The current namespace is `/curator:*`; do not restore `subblock/swegen` or `/swegen:*`.
 - `/curator:create-tasks` is the only user-facing task-generation command.
-- `/curator:run` remains only as a compatibility adapter for `/root:run`.
+- `/curator:run` remains only as a uniform-interface compatibility adapter.
+- `/root:run <subblock>` directly executes the selected block's `scripts/start.sh`.
 - Do not change task-generation scripts, PR collection behavior, or artifact formats.
 - Keep all documentation in English and make only command/documentation/deployment changes required by the design.
 - The prior PR #60 is merged; delivery uses the same `swegen` branch in a new follow-up PR to `dev`.
@@ -31,7 +50,8 @@
 - Modify: `subblock/curator/.claude/plugins/curator-plugin/README.md`
 
 **Interfaces:**
-- Consumes: root dispatch through `/curator:run`, with arbitrary natural-language arguments.
+- Consumes: the repository's uniform `/<block>:run` command shape, independently
+  of root target execution.
 - Produces: canonical `/curator:create-tasks`; compatibility `/curator:run` forwards the request without its own workflow.
 
 - [ ] **Step 1: Write the failing command-surface test**
@@ -127,15 +147,17 @@ Create `subblock/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md`:
 ---
 name: run
 description: >
-  Compatibility entry point for the root block's uniform `/<block>:run`
-  protocol. Forward the user's complete request to `/curator:create-tasks`
-  without changing arguments or duplicating its workflow.
+  Uniform-interface compatibility adapter retained so every block plugin has a
+  `/<block>:run` skill. Forward the user's complete request to
+  `/curator:create-tasks` without changing arguments or duplicating its
+  workflow.
 ---
 
 # /curator:run (compatibility)
 
-This command exists only so `/root:run` can dispatch Curator through the
-repository-wide `/<block>:run` interface.
+This adapter preserves the repository-wide `/<block>:run` interface.
+`/root:run curator` does not invoke it; root targeting directly executes
+Curator's all-language `scripts/start.sh`.
 
 Immediately invoke `/curator:create-tasks` with the user's complete request and
 arguments. Do not repeat preflight, confirmation, mode selection, launch, or
@@ -147,22 +169,23 @@ For direct Curator operation, tell users to invoke `/curator:create-tasks`.
 - [ ] **Step 5: Update plugin command metadata**
 
 Make the manifest description enumerate `/curator:create-tasks` as the public
-generation command and describe `/curator:run` as root compatibility:
+generation command and describe `/curator:run` as uniform-interface
+compatibility:
 
 ```json
-"description": "curator block skills — env/venv bootstrap, preflight, separate PR collection, task creation + verification, dashboard, and a root-protocol run adapter. Provides /curator:setup, /curator:check, /curator:collect-prs, /curator:create-tasks, /curator:dashboard; /curator:run is compatibility-only."
+"description": "curator block skills — env/venv bootstrap, preflight, separate PR collection, task creation + verification, dashboard, and a uniform-interface compatibility adapter. Provides /curator:setup, /curator:check, /curator:collect-prs, /curator:create-tasks, /curator:dashboard; /curator:run is compatibility-only."
 ```
 
 Change the marketplace description to:
 
 ```json
-"description": "curator block skills — setup, check, collect-prs, create-tasks, dashboard; run is a root compatibility adapter."
+"description": "curator block skills — setup, check, collect-prs, create-tasks, dashboard; run is a uniform-interface compatibility adapter."
 ```
 
 Update the plugin README command table to list `create-tasks` as the generation
 workflow and omit `run` from the public command table. In the layout, label
-`run/SKILL.md` as the root compatibility adapter without presenting it as a
-direct user command.
+`run/SKILL.md` as the uniform-interface compatibility adapter without
+presenting it as a direct user command.
 
 - [ ] **Step 6: Run command-surface and root-contract tests**
 
@@ -278,8 +301,8 @@ phrases:
 
 Update check/setup/dashboard hand-offs and smoke wording to name
 `create-tasks`. In `docs/content/docs/example-usages.mdx`, explain that
-`/root:run curator` reaches the internal `/curator:run` compatibility adapter,
-while direct users should choose `/curator:create-tasks`.
+`/root:run curator` directly executes Curator's all-language `scripts/start.sh`,
+while direct users should choose `/curator:create-tasks` for mode selection.
 
 - [ ] **Step 4: Point the maintained web source at the existing Pages project**
 
@@ -362,11 +385,12 @@ docs/superpowers/specs/2026-07-20-curator-create-tasks-design.md
 docs/superpowers/plans/2026-07-21-curator-create-tasks.md
 subblock/curator/.claude/plugins/curator-plugin/.claude-plugin/plugin.json
 subblock/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md
-docs/content/docs/example-usages.mdx
+subblock/curator/tests/cases/07_create_tasks_skill.sh
+subblock/curator/tests/cases/08_create_tasks_docs.sh
 ```
 
-Inspect each match to confirm it explicitly describes compatibility rather than
-recommending the old command.
+Inspect each match to confirm it is internal compatibility/history/test material
+rather than a public recommendation.
 
 - [ ] **Step 2: Run static and syntax verification**
 
@@ -471,7 +495,7 @@ PR_URL="$(gh pr create --base dev --head swegen \
   --body "$(cat <<'EOF'
 ## Summary
 - add `/curator:create-tasks` as the canonical generation command
-- retain a thin `/curator:run` adapter for root orchestration
+- retain a thin `/curator:run` adapter for the uniform plugin interface
 - publish maintained Curator docs through the `swe-swegen-docs` project
 
 ## Test plan

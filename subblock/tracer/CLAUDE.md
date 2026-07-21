@@ -51,9 +51,7 @@ Do not edit repo sources here. Use `scripts/update_repos.sh` to clone/fetch/chec
 
 ## How to run
 
-Generic lifecycle via the repo-wide `root` plugin: `/root:check tracer` to
-preflight, then `/root:run tracer` to delegate to `/tracer:run` and wait.
-Tracer-specific procedures live in this block's `.claude/` plugin:
+Generic lifecycle via the repo-wide `root` plugin: `/root:check tracer` to preflight, `/root:run tracer` to execute `scripts/start.sh` and archive. Tracer-specific procedures live in this block's `.claude/` plugin:
 
 | Skill | Wraps | Purpose |
 |---|---|---|

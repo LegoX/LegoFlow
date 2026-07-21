@@ -88,8 +88,7 @@ If you operate the block through its Claude plugin, the same lifecycle maps to s
 ```text
 /root:check trainer     # preflight: config, repos, env, source data, GPUs
 /trainer:setup           # build the uv environment and validate the config
-/root:run trainer       # delegate to /trainer:run and wait
-# or invoke the same block-owned run skill directly:
+/root:run trainer       # execute scripts/start.sh and archive
 /trainer:run             # trainer-specific run procedure + post-run bookkeeping
 /trainer:dashboard       # launch / summarize the training dashboard
 ```

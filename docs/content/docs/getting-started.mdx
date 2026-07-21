@@ -114,15 +114,12 @@ skill for monitoring details.
 
 ## Working with Root
 
-`/root:check` and `/root:run` apply the same lifecycle across the whole tree,
-with a free-form argument that selects the target block. An explicit
-`/root:run <name>` delegates to `/<name>:run` and waits instead of bypassing the
-block-owned skill:
+`/root:check` and `/root:run` recursively apply the same lifecycle across the whole tree, with a free-form argument that selects the target block:
 
 ```text
 /root:check                         # check root + every subblock
 /root:check curator                  # one block at a time
-/root:run tracer                     # delegates to /tracer:run and waits
+/root:run tracer                   # directly executes tracer/scripts/start.sh
 /root:run start the data pipeline   # paraphrased; resolves to the root orchestrator
 ```
 

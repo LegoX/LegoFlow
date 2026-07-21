@@ -3,19 +3,32 @@
 ## Context
 
 The current block is named `curator`; the legacy `subblock/swegen` path and
-`/swegen:*` namespace were renamed before the latest `dev`. The task-generation
-skill is still exposed publicly as `/curator:run`, although its only domain
-operation is creating and verifying tasks from existing PR ID files.
+`/swegen:*` namespace were renamed before the latest `dev`. Before this design
+was implemented, the task-generation skill was exposed publicly as
+`/curator:run`, although its only domain operation was creating and verifying
+tasks from existing PR ID files.
 
-The root block protocol expects every child to expose `/<block>:run`, so removing
-that command outright would break `/root:run`. The public documentation site at
-<https://swe-swegen-docs.pages.dev/> still serves legacy SWEgen content, while
-the maintained site source now lives under `subblock/curator/docs`.
+The repository's uniform plugin layout keeps a `/<block>:run` skill in every
+block, so Curator retains that slot as a thin compatibility adapter. Root target
+resolution is separate: `/root:run curator` directly executes Curator's
+all-language `scripts/start.sh` and does not invoke the adapter. The public
+documentation site at <https://swe-swegen-docs.pages.dev/> still serves legacy
+SWEgen content, while the maintained site source now lives under
+`subblock/curator/docs`.
+
+## Final-Review Architecture Decision (2026-07-21)
+
+Commit `2ba2a7e` attempted to make explicit root targets delegate to block-local
+run skills. Final review established that this is not operational because those
+skills depend on block-local working-directory context and plugin loading. That
+commit is reverted. The compatibility adapter remains only for the uniform
+plugin interface; current root targeting does not use it.
 
 ## Goals
 
 - Make `/curator:create-tasks` the canonical user-facing task-generation command.
-- Keep root orchestration working without adding a Curator special case.
+- Preserve the repository's uniform run-skill layout without changing root
+  target execution.
 - Replace user-facing `/curator:run` references across plugin, block, root, test,
   and web documentation.
 - Publish the maintained Curator documentation to the existing
@@ -38,11 +51,11 @@ The full current run workflow moves to:
 Its skill directory, frontmatter name, title, trigger phrases, examples, and
 cross-references use `create-tasks`.
 
-`/curator:run` remains as a minimal compatibility adapter for `/root:run`. It
+`/curator:run` remains as a minimal uniform-interface compatibility adapter. It
 must forward the original request and arguments to `/curator:create-tasks`
 without duplicating preflight, confirmation, mode selection, or launch logic.
 User-facing command tables and tutorials advertise only `create-tasks`; the
-compatibility command is documented only where the root protocol is explained.
+compatibility command is documented only in internal plugin-interface material.
 
 ## Documentation and Website
 
@@ -70,7 +83,7 @@ verify the live site contains `/curator:create-tasks` and no longer recommends
 ## Validation
 
 - Search tracked text for stale user-facing `/curator:run` references; allow
-  only the compatibility skill and explicit root-protocol explanation.
+  only the compatibility skill and clearly labeled design/plan history.
 - Validate plugin JSON, YAML, and shell syntax.
 - Run the root static contract suite and Curator schema test.
 - Build both the root and Curator documentation sites.

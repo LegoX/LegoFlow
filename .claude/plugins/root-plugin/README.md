@@ -10,7 +10,7 @@ A **block** is the basic collaboration unit in a block-structured project: a sel
 | --- | --- |
 | `/root:create` | Interview-driven scaffolding of a new block — produces the full directory tree per `BLOCK_DEFINITION.md`. Accepts a filled-in `BLOCK_INTAKE.md` or a chat description. |
 | `/root:check` | Recursively sanity-check every block at and beneath the current directory: `config.yaml` schema, `runtime_info.input` completeness, inter-block dependency resolution, repo pin matches, environment + remote-resource reachability, and live availability of every OpenAI-compatible LLM endpoint declared in any block's input (probes `GET /models` — no chat completion calls). Read-only; reports every failure in one pass. |
-| `/root:run` | Run through block-owned skill boundaries. An explicit subblock target delegates to `/<name>:run` and waits; a parent in CWD dispatches to its child run skills. Only a leaf invoked directly from its own directory may execute its `scripts/start.sh`. |
+| `/root:run` | Resolve and preflight the selected block, then execute that block's `scripts/start.sh` directly (locally, or in a tmux+SSH session if `meta_info.resources.ip` is set). Archives the run on completion. |
 
 ## Install
 
