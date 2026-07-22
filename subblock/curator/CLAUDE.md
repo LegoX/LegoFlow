@@ -84,8 +84,14 @@ skeletons stay as templates, no task is verified, yet batch state still reports
 
 ### Install
 
+`/curator:setup` does this for you (submodule init, venv, `pip install -e`,
+dryrun). To do it by hand, create the venv at the path the scripts and skills
+expect — `config.yaml`'s `meta_info.environment.venv_path`
+(`artifacts/envs/swegen-env`); `dryrun.sh` and `load_runtime_env.sh` look for it
+there:
+
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv artifacts/envs/swegen-env && source artifacts/envs/swegen-env/bin/activate
 pip install -e repos/swegen/
 ```
 
