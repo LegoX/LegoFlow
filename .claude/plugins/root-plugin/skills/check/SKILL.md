@@ -132,50 +132,72 @@ Walk every block's `runtime_info.input` and identify entries that look like an L
 
 Do **not** issue chat-completion or embeddings calls — `/models` is sufficient and free. If you can't tell whether an input object is an LLM endpoint (different shape, non-OpenAI-compatible provider), record it as `api:skipped` with the keys you saw, and let the user confirm.
 
-## Step 5 — Report
+## Step 5 — The report (always the last thing you print)
 
-Print one consolidated report. Lead with the tree shape, then per-block status, then dryrun configuration summary, then overall summary, then concrete next steps. Use this layout:
+The report **is** the deliverable. Print it every single time — even on
+an abort (then: heading + a `NO` verdict whose reason is the abort
+message, nothing else). Fill this template exactly; drop only truly
+inapplicable rows. Each per-block row set mirrors the same
+Layer/Check/Status/Detail shape that block's own `:check` skill uses,
+so a `/root:check` report and a `/<block>:check` report never disagree
+on glyphs or wording — this is a rollup, not a second opinion.
 
-```
-Block tree (CWD = <path>):
-  <path>            (no config.yaml — pseudo-root)
+````
+## root block check — CWD=<path>
+
+**SAFE TO RUN: <✅ YES | ❌ NO>** — <R> required · <A> advisory · <W> warnings, across <N> blocks
+
+Block tree:
+  <path>            (no config.yaml — pseudo-root, or root config.yaml)
   └─ subblock/curator
-      ✓ all checks
-      ✓ dryrun passed
-      ✓ api(llm_api) → https://endpoint/v1   models: pr_model, task_model present
+  └─ subblock/tracer
   └─ subblock/trainer
-      ✓ schema + inputs
-      ✗ dryrun:missing     WANDB_API_KEY not set
-      ⚠ dryrun:warn        port 2375 is unencrypted
+  └─ subblock/evaluator
 
-Run Configuration (subblock/trainer):
-================================================================
+| Block | Layer | Check | Status | Detail |
+|-------|-------|-------|:------:|--------|
+| curator  | det | schema · inputs · repos · dryrun | ✓ | ok=<N> |
+| tracer   | det | <each FAIL/WARN check> | <✗/⚠> | <verbatim validator/dryrun line> |
+| trainer  | det | dryrun:missing | ✗ | WANDB_API_KEY not set |
+| trainer  | det | dryrun:warn | ⚠ | port 2375 is unencrypted |
+| *        | det | api(<key>) → <url> | <✓/⚠/✗> | <models: <fields> present \| auth-failed \| unreachable> |
+
+**Run configuration** (one block per fenced block, only for blocks with a dryrun Run Configuration Summary)
+```
+subblock/trainer:
   Model:        /mnt/public/models/Qwen3-30B-A3B-Instruct-2507
   Backend:      Docker (tcp://192.168.35.240:2375)
   Parallelism:  16 workers
   Batch size:   64 × 8 = 512 trials/step
   Algorithm:    grpo / gspo  lr=1e-06
-  ...
-================================================================
-
-Summary: 2 blocks checked · 1 healthy · 1 with 1 failure + 1 warning.
-
-Next steps:
-  1. Export WANDB_API_KEY in your shell, or set wandb_mode: disabled in config.yaml.
-  2. Re-run /root:check.
-  3. Once all checks pass → confirm to proceed with /root:run.
 ```
 
-Rules for the report:
+**Next steps**
+1. <one per failure, required first; quote the validator/dryrun line verbatim>
+2. Re-run `/root:check`.
+3. Once **SAFE TO RUN: ✅ YES** → confirm to proceed with `/root:run`.
+````
 
-- One row per failure; collapse passes into a single ✓ line per block when nothing is wrong.
+**The three invariants:**
+
+1. **Verdict** — `✅ YES` iff `R == 0` across every checked block, where
+   `R` = the sum of each block's own required-failure count (`schema:*`,
+   `dep:*` unresolved, `dryrun:missing`/`dryrun:failed`, `api:auth-failed`,
+   `api:unreachable`, `api:model-missing`). Warnings (`scripts:no-start`,
+   `api:no-models-endpoint`, `dryrun:warn`, `env:cloudflare-config`,
+   `env:docker-auth`) *never* change it.
+2. **Glyphs** — `✓` pass · `✗` blocks · `⚠` advisory/warning · `·` skipped.
+3. **Collapse** — fold all passing checks into one ✓ row per block; add
+   a row only for each check that is `✗` or `⚠`, or for a resolved
+   `api:*` endpoint (always shown once per endpoint, pass or fail).
+
+Additional rules:
+
 - For `api:*` failures, include the URL and the HTTP status / error string verbatim so the user can paste it into their endpoint dashboard.
 - For `dep:*` findings, name both the consumer (`subblock/<block>` + the `runtime_info.input` dot-path) and the producer (`subblock/<src>.output.<key>`) — the validator's message already contains both.
 - For `dryrun:*` failures/warnings, include the exact line from dryrun.sh output.
-- Warnings (e.g. `scripts:no-start`, `api:no-models-endpoint`, `dryrun:warn`) print as `⚠` and do **not** count toward the failure total.
 - If a block's `dryrun.sh` printed a Run Configuration Summary, include it verbatim in the report so the user can review the full configuration before confirming.
-- If every block is clean, end with: `All blocks healthy. Please confirm to proceed with /root:run.` **Do NOT auto-proceed — always wait for explicit user confirmation.**
-- If there are failures, end with actionable fix steps and: `Fix the above, then re-run /root:check.`
+- **Never proceed to `/root:run` without explicit user confirmation**, even when the verdict is `✅ YES`.
 
 ## Step 6 — What this skill must NOT do
 

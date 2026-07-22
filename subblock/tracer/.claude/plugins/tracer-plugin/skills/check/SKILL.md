@@ -31,8 +31,57 @@ escalating).
    probe, HF dataset auth probe, port-4001 ownership, Docker image
    presence, ledger validity, and the ledger↔`HARBOR_EXCLUDE_TASKS`
    cross-check.
-2. Report PASS / WARN / FAIL counts and a structured summary back to
-   the user. Use the dryrun's section headings.
+2. Fold every `dryrun.sh` line into the Step 3 report below — never
+   re-run a probe or overrule an `OK`.
+
+## Step 3 — The report (always the last thing you print)
+
+The report **is** the deliverable. Print it every single time — even
+on an abort (then: heading + a `NO` verdict whose reason is the abort
+message, nothing else). Fill this template exactly; drop only truly
+inapplicable rows.
+
+````
+## tracer block check — CWD=<relative path>
+
+**SAFE TO RUN: <✅ YES | ❌ NO>** — <R> required · <A> advisory · <W> warnings
+
+| Layer | Check | Status | Detail |
+|-------|-------|:------:|--------|
+| det  | schema · repos/commits · harbor-uv · litellm-venv · swe-data-process-uv | ✓ | ok=<N> |
+| det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim dryrun line> |
+| det  | llm endpoint          | <✓/⚠/✗> | <GET /models 2xx \| CF-gated 401 (WARN) \| unreachable> |
+| det  | hf dataset auth       | <✓/⚠/✗/·> | <reachable \| 401/403 \| skipped (not a huggingface source)> |
+| det  | litellm port 4001     | <✓/✗>   | <free \| held by pid <P>> |
+| det  | agent runtime_image   | <✓/⚠>   | <present \| not pulled locally> |
+| det  | consumption ledger    | <✓/✗>   | <clean \| leak: <task_id> not in HARBOR_EXCLUDE_TASKS> |
+
+**Run configuration**
+```
+task_source: <provider> / <dataset_name or local task dir>
+llm:         <api_base_url> / <model>
+litellm:     port <port>, proxy config <template>
+harbor_job:  jobs_dir=<jobs_dir> concurrency=<n> retries=<n> timeout_mult=<x>
+agent:       <agent.name>@<agent.version>, image <runtime_image>
+sft:         <sft_conversion.enabled> → out_dir=<out_dir>
+excluded:    <n> task ids in HARBOR_EXCLUDE_TASKS
+```
+
+**Next steps**
+1. <one per failure, required first; quote the dryrun line verbatim>
+2. ...
+Re-run `/tracer:check`.
+````
+
+**The three invariants:**
+
+1. **Verdict** — `✅ YES` iff `R == 0`, where `R` = dryrun `FAIL` count
+   **+** any unresolved ledger leak **+** a held litellm port. Advisory
+   items (agent image not pulled, HF network blip) and warnings *never*
+   change it.
+2. **Glyphs** — `✓` pass · `✗` blocks · `⚠` advisory/warning · `·` skipped.
+3. **Collapse** — fold all passing `det` checks into the first row; add
+   a row only for each `det` check that is `✗` or `⚠`.
 
 ## Interpreting results
 
