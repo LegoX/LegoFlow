@@ -143,14 +143,6 @@ zero, point the user at `/tracer:run`. Setup is done.
 
 Production runs use `provider: local` pointing at curator's verified tasks — the dependency is declared in `meta_info.dependencies` (`task_source.dataset_name: {from: curator.output.swe_tasks_dir, when: {task_source.provider: local}}`). `prepare_tasks.sh` filters the source dir through its `verifiable_tasks.txt` manifest before copying into `artifacts/tasks/`.
 
-Alternative — verified TERMINAL tasks from the terminalgen block (terminal-lego v1.0 schema, parallel to curator):
-```yaml
-task_source:
-  provider: terminalgen
-  dataset_name: ../terminalgen/artifacts/terminal_tasks
-  split: train
-```
-Filter by per-domain `../terminalgen/artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt` (or the optional flat `../terminalgen/artifacts/merged_terminal_tasks/verifiable_tasks.txt`). Switching provider = edit the dep's `when:` mode and the `task_source` input together.
 
 ### sft_conversion
 

@@ -10,9 +10,7 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    task_source.dataset_name:
-      from: curator.output.swe_tasks_dir
-      when: {task_source.provider: local}
+    task_source.dataset_name: curator.output.swe_tasks_dir
 
   resources:
     ip: local        # CPU-only; runs on any node with Docker available
@@ -63,7 +61,7 @@ runtime_info:
       master_key: dummy-key-cf         # functional dummy
 
     task_source:
-      provider: local                  # local (curator) | terminalgen | huggingface — see /tracer:setup reference
+      provider: local                  # local (curator) | huggingface — see /tracer:setup reference
       dataset_name: ../curator/artifacts/swe_tasks/py-cc
       split: train
 

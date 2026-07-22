@@ -87,7 +87,7 @@ Then run the checks the validator cannot judge. **Never abort early** — collec
 | 3 | If `meta_info.resources.ip` is set to a non-local host: `ssh -o BatchMode=yes -o ConnectTimeout=5 <ip> true` succeeds. If `meta_info.resources.directory` is also set, also verify `ssh <ip> test -d <directory>`. If `meta_info.resources.ip` is absent or equal to `local`, treat the block as local and do **not** perform SSH reachability checks. | `resource:ssh-unreachable` / `resource:dir-missing` |
 | 4 | `scripts/start.sh` exists (warning, not failure — a block may be a coordinator-only parent). | `scripts:no-start` (warning) |
 | 5 | **Cloudflare deploy credentials** (root scope only; the root `scripts/dryrun.sh` runs this): `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` available in the environment or in `~/.config/trajgen_progress_cloudflare.env`. Missing → warning: dashboard/docs deploys (`docs/deploy_cloudflare_pages.sh`, `subblock/*/dashboard/run_cloudflare_pages_sync.sh`) will fail. | `env:cloudflare-config` (warning) |
-| 6 | **Docker Hub login** (root scope only; the root `scripts/dryrun.sh` runs this): `~/.docker/config.json` has a docker.io auth entry or a credential store. Anonymous pulls are capped at **100 per 6h per IP**; tracer/evaluator/rl pull task + agent-runtime images and can hit the cap mid-job, surfacing as agent/verifier failures. Missing → warning, but **escalate it to the top of the report whenever tracer, evaluator, or rl is in scope** — advise `docker login` before launching. | `env:docker-auth` (warning) |
+| 6 | **Docker Hub login** (root scope only; the root `scripts/dryrun.sh` runs this): `~/.docker/config.json` has a docker.io auth entry or a credential store. Anonymous pulls are capped at **100 per 6h per IP**; tracer/evaluator pull task + agent-runtime images and can hit the cap mid-job, surfacing as agent/verifier failures. Missing → warning, but **escalate it to the top of the report whenever tracer or evaluator is in scope** — advise `docker login` before launching. | `env:docker-auth` (warning) |
 
 ## Step 3 — Block-specific dryrun (scripts/dryrun.sh)
 
@@ -143,12 +143,12 @@ Block tree (CWD = <path>):
       ✓ all checks
       ✓ dryrun passed
       ✓ api(llm_api) → https://endpoint/v1   models: pr_model, task_model present
-  └─ subblock/rl
+  └─ subblock/trainer
       ✓ schema + inputs
       ✗ dryrun:missing     WANDB_API_KEY not set
       ⚠ dryrun:warn        port 2375 is unencrypted
 
-Run Configuration (subblock/rl):
+Run Configuration (subblock/trainer):
 ================================================================
   Model:        /mnt/public/models/Qwen3-30B-A3B-Instruct-2507
   Backend:      Docker (tcp://192.168.35.240:2375)

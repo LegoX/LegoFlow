@@ -64,7 +64,6 @@ docs/
 │   │   ├── curator.mdx
 │   │   ├── tracer.mdx
 │   │   ├── trainer.mdx
-│   │   └── rl.mdx
 │   └── reference/         #   config-schema, artifacts
 ├── src/                   # app shell (docs route, layouts, source loader)
 ├── public/_redirects      # Cloudflare Pages root redirect (/ -> /docs)

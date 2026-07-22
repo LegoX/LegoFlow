@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # SWE Lego Live
 
-Root orchestration block for the self-evolving LLM development pipeline. Coordinates data curation (curator), trajectory generation (tracer), supervised fine-tuning (trainer), and reinforcement learning (rl) in sequence.
+Root orchestration block for the self-evolving LLM development pipeline. Coordinates data curation (curator), trajectory generation (tracer), and supervised fine-tuning (trainer) in sequence, with a standalone evaluator.
 
 ## Block System
 
@@ -53,7 +53,7 @@ If — and only if — `meta_info.resources.ip` is set to a real remote IP, the 
 
 - **Name**: swe_lego_live
 - **Parent**: none
-- **Children**: curator → tracer → trainer → rl
+- **Children**: curator → tracer → trainer (+ evaluator, standalone)
 
 ## What To Read First
 
@@ -76,7 +76,6 @@ The root block does not consume external inputs directly (`runtime_info.input: {
 
 **Outputs** (downstream-consumable artifacts):
 - `curator.output.swe_tasks_dir`: verified SWE tasks under `subblock/curator/artifacts/swe_tasks/{lang}-cc/`. The authoritative manifest is `{lang}-cc/verifiable_tasks.txt` — only task IDs in that file have passed NOP/Oracle validation.
-- `terminalgen.output.terminal_tasks_dir`: verified **terminal** tasks (terminal-lego v1.0) under `subblock/terminalgen/artifacts/terminal_tasks/{domain}-tl/`, with per-domain manifests `verifiable_tasks.txt`. `extract_verified_tasks.py` optionally flattens them into `merged_terminal_tasks/` (same format). terminalgen is a task source **parallel to curator** — tracer can consume either via its `task_source.provider` selector.
 - `tracer.output.raw_trajectories_dir`: raw agent trajectories under `subblock/tracer/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
 - `tracer.output.sft_data_dir`: LLaMA-Factory LF-format SFT JSON converted from those trajectories at `subblock/tracer/artifacts/sft_data/<job>/lf.json` (produced by `subblock/tracer/scripts/convert_trajectories.sh`, which runs the `swe_data_process` converters under their own uv env at `subblock/tracer/artifacts/env/swe-data-process-uv`)
 
@@ -103,10 +102,8 @@ All subblocks run **locally** by default (`meta_info.resources.ip: local`). Over
 | Block | Execution | Key tool | Status |
 |---|---|---|---|
 | `subblock/curator/` | Local (CPU + Docker) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
-| `subblock/terminalgen/` | Local (CPU + Docker) | `terminal-lego` pipeline + StackExchange API | Adaptive per-domain terminal task generation (parallel to curator) |
 | `subblock/tracer/` | Local (CPU + Docker) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
 | `subblock/trainer/` | Local (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
-| `subblock/rl/` | Local (needs 8× GPU) | Harbor + vLLM + verl | Online RL on Qwen3-30B |
 
 Each subblock has its own `CLAUDE.md` with its full agent contract.
 

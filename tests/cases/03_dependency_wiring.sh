@@ -18,7 +18,7 @@ except ImportError:
     print("FAIL: PyYAML not installed", file=sys.stderr); sys.exit(1)
 
 root = sys.argv[1]
-BLOCKS = ["curator", "tracer", "trainer", "rl", "evaluator"]
+BLOCKS = ["curator", "tracer", "trainer", "evaluator"]
 
 cfgs = {}
 for b in BLOCKS:

@@ -1,6 +1,6 @@
 # SWE-Lego-Live
 
-A self-evolving LLM development pipeline. It generates coding-agent training data from real GitHub PRs, runs agent trajectories, and feeds the results into SFT and RL training — all coordinated by an AI agent that monitors progress and tunes parameters automatically.
+A self-evolving LLM development pipeline. It generates coding-agent training data from real GitHub PRs, runs agent trajectories, and feeds the results into SFT training and benchmark evaluation — all coordinated by an AI agent that monitors progress and tunes parameters automatically.
 
 
 
@@ -11,15 +11,13 @@ This entire project is built on a **block** abstraction. The pipeline consists o
 | Block | Role | Primary output |
 |-------|------|----------------|
 | `subblock/curator/` | Converts GitHub PRs → verified SWE tasks | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` |
-| `subblock/terminalgen/` | Converts StackOverflow Q&A → verified terminal tasks (parallel to curator, via terminal-lego) | `artifacts/terminal_tasks/{domain}-tl/verifiable_tasks.txt` (terminal-lego v1.0) |
 | `subblock/tracer/` | Runs an agent on SWE tasks → raw trajectories | `artifacts/jobs/<job>/` (Harbor job dirs) |
 | `subblock/trainer/` | Converts trajectories → sharegpt data, trains with LLaMA-Factory | `artifacts/model/<run>/` (checkpoints) |
-| `subblock/rl/` | Online RL (GRPO/GSPO) on SWE-bench via Harbor + vLLM + verl | `repos/harbor-verl-train/outputs/` (actor checkpoints) |
 
 
 ### What is a Block?
 
-Each unit of work — `curator`, `tracer`, `trainer`, `rl` — is a self-contained directory with the same fixed structure:
+Each unit of work — `curator`, `tracer`, `trainer`, `evaluator` — is a self-contained directory with the same fixed structure:
 
 - `config.yaml` declares the block's inputs, outputs, children, dependencies between children, and (optionally) a remote node it must run on. It is **one-shot per run** — every key is configuration; no live state is stored here.
 - `scripts/start.sh`, `dryrun.sh`, `clean.sh`, `archive_run.sh` are how it actually executes. `start.sh` installs an EXIT trap that fires `archive_run.sh` on completion (success, failure, or signal), producing a `artifacts/archives/run_NNN/` snapshot and appending one entry to `artifacts/index.yaml`.
@@ -34,9 +32,9 @@ Each unit of work — `curator`, `tracer`, `trainer`, `rl` — is a self-contain
 GitHub PRs
     │
     ▼
-┌────────┐  SWE tasks  ┌─────────┐  trajectories  ┌─────┐  ┌────┐
-│ curator │ ──────────► │ tracer │ ─────────────► │ trainer │─►│ rl │
-└────────┘             └─────────┘                └─────┘  └────┘
+┌────────┐  SWE tasks  ┌─────────┐  trajectories  ┌─────────┐  ckpt  ┌───────────┐
+│ curator │ ──────────► │ tracer  │ ─────────────► │ trainer │ ─────► │ evaluator │
+└────────┘             └─────────┘                └─────────┘        └───────────┘
 ```
 
 
@@ -58,16 +56,14 @@ SWE-Lego-Live/
 │   └── archives/run_NNN/      # per-run snapshots (metadata.yaml + config.yaml + scripts/)
 └── subblock/
     ├── curator/                # SWE task generation block (same scripts/ + artifacts/ layout)
-    ├── terminalgen/           # terminal task generation block (parallel to curator; wraps terminal-lego)
     ├── tracer/               # trajectory generation block
     ├── trainer/                   # SFT training block
-    └── rl/                    # RL training block
 ```
 
 
 ## Quick Start
 
-Run the pipeline block by block in order: **curator → tracer → trainer → rl**. Each step produces artifacts the next block depends on. You can also run blocks individually once their inputs and upstream dependencies are satisfied.
+Run the pipeline block by block in order: **curator → tracer → trainer**, then evaluate with **evaluator**. Each step produces artifacts the next block depends on. You can also run blocks individually once their inputs and upstream dependencies are satisfied.
 
 ### Prerequisites
 
@@ -75,9 +71,8 @@ Run the pipeline block by block in order: **curator → tracer → trainer → r
 - **curator**: GitHub token(s) with `repo` read scope; OpenAI-compatible LLM API; Docker on the run host
 - **tracer**: OpenAI-compatible LLM API; Docker; verified tasks from swegen (wired via `meta_info.dependencies`)
 - **trainer**: Multi-GPU node (typically 8× GPU); conda env and model paths per `subblock/trainer/CLAUDE.md`; trajectory source (from tracer or an existing job dir)
-- **rl**: Multi-GPU node; Kubernetes access for Harbor task execution; vLLM + Ray; paths to SWE-bench parquet/task data per `subblock/rl/CLAUDE.md`; optional WandB key
 
-Root `scripts/start.sh` only automates the **data** stage (curator + tracer on the configured remote node). **trainer** and **rl** are started from their own directories via `/root:run` or `scripts/start.sh`.
+Root `scripts/start.sh` only automates the **data** stage (curator + tracer on the configured remote node). **trainer** and **evaluator** are started from their own directories via `/root:run` or `scripts/start.sh`.
 
 ### The `Block` Plugin
 
@@ -133,7 +128,6 @@ Edit each `config.yaml` flagged in step 2, setting only keys under `runtime_info
 | **curator** | Provide PR-collection tokens via `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored token file (never in config.yaml); fill `llm_api` (api_key, api_base_url, pr_model, task_model) |
 | **tracer** | `llm_api` (api_key, api_base_url, model); task source comes from swegen dependency |
 | **trainer** | `source` (provider, scaffold, job_dir / trajs_dir); `conversion`; `model`; `training`; `infrastructure`; `credentials` (WandB if online) |
-| **rl** | `model`; `infrastructure` (nodes, GPUs, K8s); `training`; `data` (parquet + Harbor task dirs); `experiment`; `credentials` |
 
 Re-run `/root:check` until it prints `All blocks healthy — safe to /root:run.`
 
@@ -161,10 +155,10 @@ cd subblock/curator && /curator:create-tasks
 /root:run trainer
 ```
 
-**4. rl** — online RL from the SFT checkpoint (after trainer writes `runtime_info.output.checkpoint_path`):
+**4. evaluator** — benchmark the trained checkpoint (after trainer writes `runtime_info.output.checkpoint_path`):
 
 ```text
-/root:run rl
+/root:run evaluator
 ```
 
 You can also run the **root orchestrator** to launch the data stage (curator + tracer on the configured remote node) as one step:

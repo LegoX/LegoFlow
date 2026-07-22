@@ -126,7 +126,7 @@ meta_info:
       from: curator.output.swe_tasks_dir
       when: {task_source.provider: local}   # enforced only while these inputs hold these values
 
-# subblock/rl/config.yaml — optional upstream (null producer output → warning, not failure)
+# optional upstream (null producer output → warning, not failure)
 meta_info:
   dependencies:
     model.model_path:
@@ -192,7 +192,7 @@ Termination is intentionally not a skill — see §2.1. Each block ships a `scri
 
 Naming rules:
 
-- Plugin manifest `name` MUST equal the block name (`root`, `rl`, `curator`, …). The slash-command namespace is `/<name>:`.
+- Plugin manifest `name` MUST equal the block name (`root`, `curator`, `tracer`, …). The slash-command namespace is `/<name>:`.
 - Marketplace `name` in `marketplace.json` MUST equal the key used in `settings.json` `extraKnownMarketplaces` (e.g. `curator-local`).
 - Directory name follows `<block_name>-plugin/` for grep-friendliness; the source path in `marketplace.json` (`./<block_name>-plugin`) must match.
 

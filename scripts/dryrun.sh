@@ -114,11 +114,11 @@ else
 fi
 
 # Docker Hub login — anonymous pulls are limited to 100 per 6h per IP;
-# tracer/evaluator/rl pull task + agent-runtime images and can hit the limit
+# tracer/evaluator pull task + agent-runtime images and can hit the limit
 # mid-job (manifest errors that surface as agent/verifier failures).
 DOCKER_CFG="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
 if ! command -v docker >/dev/null 2>&1; then
-  warn "docker: CLI not found — skipping registry-auth check (required by curator/terminalgen/tracer/evaluator)"
+  warn "docker: CLI not found — skipping registry-auth check (required by curator/tracer/evaluator)"
 elif [[ -f "$DOCKER_CFG" ]] && python3 - "$DOCKER_CFG" <<'PY'
 import json, sys
 cfg = json.load(open(sys.argv[1]))
@@ -132,7 +132,7 @@ PY
 then
   ok "docker: Docker Hub login found in $DOCKER_CFG"
 else
-  warn "docker: no Docker Hub login in $DOCKER_CFG — anonymous pulls are capped at 100/6h per IP; run \`docker login\` to avoid mid-job pull failures in tracer/evaluator/rl"
+  warn "docker: no Docker Hub login in $DOCKER_CFG — anonymous pulls are capped at 100/6h per IP; run \`docker login\` to avoid mid-job pull failures in tracer/evaluator"
 fi
 
 # ── 4. SSH reachability ───────────────────────────────────────────────────────

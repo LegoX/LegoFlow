@@ -1,34 +1,41 @@
 {
   "extraKnownMarketplaces": {
     "root-block": {
-      "source": { "source": "directory", "path": ".claude/plugins" }
+      "source": {
+        "source": "directory",
+        "path": ".claude/plugins"
+      }
     },
     "curator-block": {
-      "source": { "source": "directory", "path": "subblock/curator/.claude/plugins" }
-    },
-    "terminalgen-block": {
-      "source": { "source": "directory", "path": "subblock/terminalgen/.claude/plugins" }
+      "source": {
+        "source": "directory",
+        "path": "subblock/curator/.claude/plugins"
+      }
     },
     "tracer": {
-      "source": { "source": "directory", "path": "subblock/tracer/.claude/plugins" }
+      "source": {
+        "source": "directory",
+        "path": "subblock/tracer/.claude/plugins"
+      }
     },
     "trainer-block": {
-      "source": { "source": "directory", "path": "subblock/trainer/.claude/plugins" }
-    },
-    "rl-block": {
-      "source": { "source": "directory", "path": "subblock/rl/.claude/plugins" }
+      "source": {
+        "source": "directory",
+        "path": "subblock/trainer/.claude/plugins"
+      }
     },
     "evaluator-block": {
-      "source": { "source": "directory", "path": "subblock/evaluator/.claude/plugins" }
+      "source": {
+        "source": "directory",
+        "path": "subblock/evaluator/.claude/plugins"
+      }
     }
   },
   "enabledPlugins": {
     "root@root-block": true,
     "curator@curator-block": true,
-    "terminalgen@terminalgen-block": true,
     "tracer@tracer": true,
     "trainer@trainer-block": true,
-    "rl@rl-block": true,
     "evaluator@evaluator-block": true
   }
 }
