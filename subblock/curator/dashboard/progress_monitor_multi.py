@@ -343,7 +343,6 @@ def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bo
 <div class="ds-panel{' active' if active else ''}" data-ds="{ds_id}">
   <div class="cards">
     <div class="card"><div class="k">Total tasks</div><div class="v">{fmt_int(total)}</div></div>
-    <div class="card"><div class="k">Tagged (LLM)</div><div class="v">{fmt_int(tagged)} <small>{tag_pct:.1f}%</small></div></div>
     <div class="card"><div class="k">Mean difficulty</div><div class="v">{fmt_float(stats['mean'], 2)}</div></div>
     <div class="card"><div class="k">Median difficulty</div><div class="v">{fmt_float(stats['median'], 1)}</div></div>
     <div class="card"><div class="k">Avg patch lines</div><div class="v">{fmt_float(data['patch']['avg_lines'], 1)}</div></div>
@@ -377,21 +376,25 @@ def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bo
 
   <div class="grid2">
     <section class="tag-card"><h3>Score bins</h3>{bin_rows}</section>
-    <section class="tag-card"><h3>Languages <span>{tagged} tagged</span></h3>{lang_rows}</section>
+    <section class="tag-card"><h3>Languages</h3>{lang_rows}</section>
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Area / tier <span>{tagged} tagged</span></h3>{area_rows}</section>
-    <section class="tag-card"><h3>Top topics <span>{data['tasks_with_topic']} tagged</span></h3>{topic_rows}</section>
+    <section class="tag-card"><h3>Area / tier</h3>{area_rows}</section>
+    <section class="tag-card"><h3>Top topics</h3>{topic_rows}</section>
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes <span>{data['tasks_with_bug_class']} tagged</span></h3>{bug_rows}</section>
-    <section class="tag-card"><h3>Tag schema <span>harbor task_analysis</span></h3>
-      <div class="muted" style="line-height:1.7;">Every task is tagged with the 4-tuple<br>
-      <code>[language, area, topic, bug_class]</code><br>
-      area &isin; {{backend, frontend, fullstack, cli, library, framework}}.<br>
-      Difficulty is a 5-dimension weighted score (1&ndash;10).</div>
+    <section class="tag-card"><h3>Bug classes</h3>{bug_rows}</section>
+    <section class="tag-card"><h3>Methodology <span>harbor task_analysis</span></h3>
+      <div class="muted" style="line-height:1.7;">
+      <strong>Difficulty:</strong> 5-dimension weighted, log-scaled score (1&ndash;10) based on patch scope (0.30),
+      logic complexity (0.25), context breadth (0.20), test complexity (0.15), and instruction complexity (0.10).
+      Labels: easy (&le;4.0), medium (4.1&ndash;7.0), hard (&gt;7.0).<br><br>
+      <strong>Tags:</strong> LLM assigns the 4-tuple <code>[language, area, topic, bug_class]</code> where
+      area &isin; {{backend, frontend, fullstack, cli, library, framework}}. The tagger is
+      <code>repos/swegen/tools/tag_task_metadata.py</code>.
+      </div>
     </section>
   </div>
 </div>
@@ -414,7 +417,7 @@ def render_html(datasets: list[dict[str, Any]], output_path: Path) -> str:
         ds_nav.append(
             f'<button class="ds-item{" active" if active else ""}" data-ds="{ds_id}" onclick="switchDs(\'{ds_id}\')">'
             f'<span class="ds-name">{html.escape(display)}</span>'
-            f'<span class="ds-count">{fmt_int(data["total"])} tasks · {fmt_int(data["tagged"])} tagged</span>'
+            f'<span class="ds-count">{fmt_int(data["total"])} tasks</span>'
             f'</button>'
         )
         panels.append(render_panel(meta, data, active))
@@ -424,7 +427,6 @@ def render_html(datasets: list[dict[str, Any]], output_path: Path) -> str:
       <div class="section-label">Global</div>
       <div class="sidebar-stat"><span class="l">Datasets</span><span class="v">{len(datasets)}</span></div>
       <div class="sidebar-stat"><span class="l">Total tasks</span><span class="v">{fmt_int(grand_total)}</span></div>
-      <div class="sidebar-stat"><span class="l">Total tagged</span><span class="v">{fmt_int(grand_tagged)}</span></div>
     """
 
     doc = f"""<!DOCTYPE html>
