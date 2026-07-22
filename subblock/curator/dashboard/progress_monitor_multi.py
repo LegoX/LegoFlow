@@ -5,10 +5,10 @@
 (difficulty_score / difficulty_label / tags / bug_class)，
 聚合出统计信息并渲染成单页 HTML，支持在 4 个数据集间切换：
 
-  - self_made            自造数据集 (Self-Made)
-  - scale_swe            Scale-SWE
-  - swe_rebench_filtered SWE-rebench (filtered)
-  - swe_rebench_test     SWE-rebench (test)
+  - self_made         SWE-Lego-Live-Instances
+  - swe_rebench        SWE-rebench (nebius/SWE-rebench)
+  - openswe_filtered   OpenSWE-filtered (SWE-Lego/openswe_filtered_for_rl)
+  - scale_swe          Scale-SWE (AweAI-Team/Scale-SWE)
 
 所有数据集使用同一套 LLM 打标口径，保证可比性。
 """
@@ -26,12 +26,12 @@ DASHBOARD_ROOT = Path(__file__).parent
 DATASETS_DIR = DASHBOARD_ROOT / "datasets"
 DEFAULT_OUTPUT = DASHBOARD_ROOT / "site" / "index.html"
 
-# (id, 显示名, 简介)
+# (id, display name, description)
 DATASETS = [
-    ("self_made", "Self-Made", "swegen 自造数据集 (non-top5k 260301-260721 + top5k 260301-260622)"),
-    ("scale_swe", "Scale-SWE", "开源数据集 AweAI-Team/Scale-SWE"),
-    ("swe_rebench_filtered", "SWE-rebench (filtered)", "开源数据集 nebius/SWE-rebench (filtered)"),
-    ("swe_rebench_test", "SWE-rebench (test)", "开源数据集 nebius/SWE-rebench (test)"),
+    ("self_made", "SWE-Lego-Live-Instances", "Curator self-made instances (swegen-selfmade non-top5k + top5k)"),
+    ("swe_rebench", "SWE-rebench", "Open-source dataset nebius/SWE-rebench"),
+    ("openswe_filtered", "OpenSWE-filtered", "Open-source dataset SWE-Lego/openswe_filtered_for_rl"),
+    ("scale_swe", "Scale-SWE", "Open-source dataset AweAI-Team/Scale-SWE"),
 ]
 
 def percentile(values: list[float], q: float) -> float:

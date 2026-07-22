@@ -37,7 +37,7 @@ import requests
 DASHBOARD_ROOT = Path(__file__).parent
 DATASETS_DIR = DASHBOARD_ROOT / "datasets"
 
-DATASET_IDS = ["self_made", "scale_swe", "swe_rebench_filtered", "swe_rebench_test"]
+DATASET_IDS = ["self_made", "swe_rebench", "openswe_filtered", "scale_swe"]
 
 AREA_TAGS = {"backend", "frontend", "fullstack", "cli", "library", "framework"}
 TAG_COUNT = 4
