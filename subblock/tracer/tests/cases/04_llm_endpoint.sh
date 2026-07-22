@@ -33,6 +33,15 @@ PY
 
 [[ -n "$MODEL_API_BASE_URL" && -n "$MODEL_API_MODEL" ]] || { echo "FAIL: api_base_url or model not configured"; exit 1; }
 
+# `human` is the fill-marker for "must be filled in before a run" (see
+# BLOCK_DEFINITION.md's fill-marker convention) — not a real URL. Treat it
+# as unfilled config and SKIP, same as 05_hf_dataset.sh does for a
+# non-huggingface provider, instead of probing a garbage URL.
+if [[ "$MODEL_API_BASE_URL" == "human" || "$MODEL_API_KEY" == "human" || "$MODEL_API_MODEL" == "human" ]]; then
+  echo "SKIP: llm_api still has an unfilled \`human\` placeholder — fill runtime_info.input.llm_api before this check can probe it"
+  exit 77
+fi
+
 RESULT="$(MODEL_API_BASE_URL="$MODEL_API_BASE_URL" MODEL_API_KEY="$MODEL_API_KEY" MODEL_API_MODEL="$MODEL_API_MODEL" python3 - <<'PY'
 import json, os, sys, time, urllib.request, urllib.error
 base = os.environ["MODEL_API_BASE_URL"].rstrip("/")

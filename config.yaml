@@ -1,17 +1,17 @@
 meta_info:
   name: swe_lego_live
   label: "SWE Lego Live"
-  description: Root orchestration block for the self-evolving LLM pipeline (task curation -> trajectories -> SFT; evaluation standalone).
+  description: Root orchestration block for the SWE-Lego-Live data pipeline.
   parent: null
   subblocks:
     curator:
-      role: "Convert GitHub PRs into verified SWE tasks (task source)"
+      role: "Collect GitHub PRs, and turn them into verified SWE tasks"
     tracer:
-      role: "Generate agent trajectories from verified tasks via Harbor"
+      role: "Generate LLM trajectories from verified tasks via Harbor"
     trainer:
       role: "SFT on trajectories via LLaMA-Factory + DeepSpeed"
     evaluator:
-      role: "Run registered benchmarks via Harbor (standalone; no upstream dep)"
+      role: "Run registered benchmarks via Harbor"
   dependencies:
     from: {}
     to: {}
