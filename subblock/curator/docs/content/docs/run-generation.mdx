@@ -76,7 +76,7 @@ pr_collection:
   repo_num: 100                    # repos per language
   max_prs_per_repo: 50
   output_dir: artifacts/collected_prs
-  token_limit: 32                  # parallel GitHub API workers
+  token_limit: 32                  # first N combined file + env GitHub tokens (0 = use all)
   filters:
     min_stars: 30
     min_merged_prs: 5
@@ -96,10 +96,10 @@ languages:
   js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
   ts:   { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }
   go:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-  java: { enabled: true,  params: { timeout: 4000, cc_timeout: 3000, n_concurrent: 12 } }
+  java: { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
   c:    { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-  cpp:  { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 12 } }
-  rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 12 } }
+  cpp:  { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
+  rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }
 ```
 
 - `timeout`: whole PR case timeout (seconds)

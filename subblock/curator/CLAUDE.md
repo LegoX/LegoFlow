@@ -229,11 +229,21 @@ tasks — no need to wait for the full run.
 swegen validate ./artifacts/swe_tasks/py-cc --max-parallel 8
 ```
 
-### Step 4: Score Tasks
+### Step 4: Difficulty + metadata tagging
+
+Difficulty is scored inline during `swegen create` (via `swegen.scoring`), so a
+separate batch scoring pass is no longer required. Dataset-level difficulty +
+the 4-tag `[language, area, topic, bug_class]` metadata (used by the databoard)
+are produced by the **single canonical tagger**,
+`repos/swegen/tools/tag_task_metadata.py`, over unified JSONL datasets:
 
 ```bash
-python repos/swegen/tools/score_tasks.py --dir artifacts/swe_tasks/py-cc --update-toml
+# from subblock/curator/dashboard/ (datasets exported to datasets/<id>/tasks.jsonl)
+python3 ../repos/swegen/tools/tag_task_metadata.py \
+  --datasets-dir datasets --dataset all --jobs 64 --retries 3
 ```
+
+See `dashboard/README.md` for dataset export and endpoint configuration.
 
 ### Step 5: Extract Verified Tasks
 
@@ -268,7 +278,7 @@ Each task directory contains:
 ```
 repos/swegen/         # Core Python package + tools
   src/swegen/         # Python package (CLI, task generation, validation, scoring)
-  tools/              # Standalone scripts (PR collection, batch scoring)
+  tools/              # Standalone scripts (PR collection; tag_task_metadata.py difficulty + 4-tag tagging)
 scripts/              # Per-language create scripts and the two mode-specific launchers
 artifacts/
   collected_prs/      # PR ID lists (input to swegen create)

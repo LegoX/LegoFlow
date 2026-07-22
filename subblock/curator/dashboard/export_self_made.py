@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""导出自造数据集(Self-Made)为统一 JSONL 格式，供 tag_datasets.py 用同一套 LLM 打标。
+"""导出自造数据集(Self-Made)为统一 JSONL 格式，供 tag_task_metadata.py 用同一套 LLM 打标。
 
 Self-Made = 以下两个 HuggingFace 数据集的并集：
   1. SWE-Lego/swegen-selfmade-260301-260721-non-top5k

@@ -10,10 +10,10 @@ same pipeline for every task.
 
 | id | Display | Source |
 | --- | --- | --- |
-| `self_made` | Self-Made | Curator `swegen-selfmade` (non-top5k 260301-260721 + top5k 260301-260622) |
+| `self_made` | SWE-Lego-Live-Instances | Curator `swegen-selfmade` (non-top5k 260301-260721 + top5k 260301-260622) |
+| `swe_rebench` | SWE-rebench | `nebius/SWE-rebench` |
+| `openswe_filtered` | OpenSWE-filtered | `SWE-Lego/openswe_filtered_for_rl` |
 | `scale_swe` | Scale-SWE | `AweAI-Team/Scale-SWE` |
-| `swe_rebench_filtered` | SWE-rebench (filtered) | `nebius/SWE-rebench` |
-| `swe_rebench_test` | SWE-rebench (test) | `nebius/SWE-rebench` |
 
 Each dataset lives under `datasets/<id>/` as:
 
@@ -23,19 +23,29 @@ Each dataset lives under `datasets/<id>/` as:
 ## Pipeline
 
 ```text
-export_self_made.py   -> datasets/self_made/tasks.jsonl   (from local HF tarballs)
-tag_task_metadata.py  -> datasets/<id>/tags.jsonl          (difficulty + 4 tags via LLM)
-progress_monitor_multi.py -> site/index.html              (multi-dataset HTML)
+export_self_made.py             -> datasets/self_made/tasks.jsonl   (from local HF tarballs)
+repos/swegen/tools/tag_task_metadata.py -> datasets/<id>/tags.jsonl (difficulty + 4 tags via LLM)
+progress_monitor_multi.py       -> site/index.html                 (multi-dataset HTML)
 ```
 
-### 1. Export the self-made dataset
+Tagging is done by the **canonical** `tag_task_metadata.py`, which lives in the
+`swegen` submodule (`repos/swegen/tools/tag_task_metadata.py`) so the dashboard
+and the SWE-gen pipeline share one implementation.
 
-`self_made` is the union of two HuggingFace datasets, read directly from the
-local export tarballs under `~/SWE-gen/exports_hf/`:
+### 1. Export each dataset to `datasets/<id>/tasks.jsonl`
 
-```bash
-python3 export_self_made.py
-```
+Each dataset needs a `datasets/<id>/tasks.jsonl` before tagging. Export methods
+differ per source:
+
+| Dataset | How `tasks.jsonl` is produced |
+| --- | --- |
+| `self_made` | `python3 export_self_made.py` — union of two local HF export tarballs under `~/SWE-gen/exports_hf/` |
+| `openswe_filtered` | `python3 export_openswe_filtered.py` — downloads `SWE-Lego/openswe_filtered_for_rl` from HuggingFace |
+| `swe_rebench` | Prepared externally from `nebius/SWE-rebench` (no export script in-repo); drop the normalized JSONL at `datasets/swe_rebench/tasks.jsonl` |
+| `scale_swe` | Prepared externally from `AweAI-Team/Scale-SWE` (no export script in-repo); drop the normalized JSONL at `datasets/scale_swe/tasks.jsonl` |
+
+All exporters normalize to the same record schema consumed by the tagger:
+`{instance_id, problem_statement, patch, test_patch, repo, language, dataset_source}`.
 
 ### 2. Difficulty + tag generation
 
@@ -46,7 +56,10 @@ score (1-10 → easy/medium/hard). Tags are the 4-tuple
 `area ∈ {backend, frontend, fullstack, cli, library, framework}`.
 
 ```bash
-python3 tag_task_metadata.py --dataset all --jobs 64 --retries 3
+# run from subblock/curator/dashboard/ ; --datasets-dir points the shared
+# tagger at this dashboard's datasets/ directory
+python3 ../repos/swegen/tools/tag_task_metadata.py \
+  --datasets-dir datasets --dataset all --jobs 64 --retries 3
 ```
 
 Defaults target the shared endpoint (override with flags or env vars):
@@ -56,6 +69,7 @@ Defaults target the shared endpoint (override with flags or env vars):
 | `--model` | `TAGGING_MODEL` | `Qwen3.6-35B-A3B` |
 | `--api-key` | `TAGGING_API_KEY` | `dummy-cf` |
 | `--base-url` | `TAGGING_API_BASE_URL` | `http://llm.jierungogogo.com/v1` |
+| `--datasets-dir` | `TAGGING_DATASETS_DIR` | `./datasets` |
 | `--jobs` | — | `64` |
 
 The run is resumable: already-tagged `instance_id`s are skipped, and failed

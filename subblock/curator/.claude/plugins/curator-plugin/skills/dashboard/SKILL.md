@@ -43,8 +43,9 @@ Read, without modifying:
 - Generated task count from task directories that contain `tests/test.sh`.
 - Verified count from `<task-dir>/verifiable_tasks.txt`.
 - Batch state from hidden SWEgen state directories when present.
-- Difficulty score files such as `difficulty_scores.jsonl` or
-  `difficulty_scores_all.jsonl` when present.
+- Difficulty from each task's `task.toml` (scored inline during `swegen
+  create`); dataset-level difficulty + tags live in
+  `dashboard/datasets/<id>/tags.jsonl` when present.
 - Latest create logs under `artifacts/logs/swegen-create/`.
 - Latest run entry from `artifacts/index.yaml`.
 - Block status from `config.yaml -> status`.

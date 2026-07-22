@@ -18,7 +18,6 @@ import html
 import json
 import math
 from collections import Counter
-from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -274,58 +273,56 @@ code, pre, .mono { font-family: var(--font-mono); }
 .sidebar-logo { padding: 16px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: 10px; }
 .logo-mark { width: 38px; height: 32px; border-radius: 8px; background: var(--c-accent);
   display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 14px; }
-.logo-title { font-size: 16px; font-weight: 600; }
-.logo-sub { font-size: 12px; color: var(--c-fg-mute); }
+.logo-title { font-size: 18px; font-weight: 600; }
 .ds-nav { padding: 10px 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 3px; }
 .ds-item { background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
-  padding: 9px 12px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 14px;
+  padding: 9px 12px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 18px;
   display: flex; flex-direction: column; gap: 2px; width: 100%; }
 .ds-item:hover { background: #1e293b40; color: var(--c-fg); }
 .ds-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #c7d2fe; }
 [data-theme="light"] .ds-item.active { color: var(--c-accent); }
-.ds-item .ds-name { font-weight: 600; font-size: 15px; }
-.ds-item .ds-count { font-size: 12px; color: var(--c-fg-mute); }
+.ds-item .ds-name { font-weight: 600; font-size: 18px; }
+.ds-item .ds-count { font-size: 16px; color: var(--c-fg-mute); }
 .sidebar-section { padding: 12px 8px 8px; flex: 1; overflow: auto; }
-.section-label { text-transform: uppercase; font-size: 12px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 600; }
-.sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 14px; }
+.section-label { text-transform: uppercase; font-size: 16px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 600; }
+.sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 18px; }
 .sidebar-stat .l { color: var(--c-fg-mute); }
 .sidebar-stat .v { font-weight: 600; font-family: var(--font-mono); }
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { padding: 14px 24px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; justify-content: space-between; }
 .topbar h1 { font-size: 20px; margin: 0; font-weight: 650; }
-.topbar .sub { font-size: 13px; color: var(--c-fg-mute); margin-top: 2px; }
 .theme-btn { background: var(--c-bg-2); border: 1px solid var(--c-border); color: var(--c-fg-dim);
-  border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 17px; }
 .content { flex: 1; overflow: auto; padding: 24px; }
 .ds-panel { display: none; }
 .ds-panel.active { display: block; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 22px; }
 .card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px 18px; }
-.card .k { font-size: 13px; color: var(--c-fg-mute); }
+.card .k { font-size: 17px; color: var(--c-fg-mute); }
 .card .v { font-size: 26px; font-weight: 700; font-family: var(--font-mono); margin-top: 4px; }
-.card .v small { font-size: 14px; color: var(--c-fg-mute); font-weight: 500; }
+.card .v small { font-size: 18px; color: var(--c-fg-mute); font-weight: 500; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
 .panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 18px 20px; margin-bottom: 18px; }
-.panel h2 { font-size: 15px; margin: 0 0 14px; font-weight: 600; letter-spacing: .01em; }
-.panel h2 span { color: var(--c-fg-mute); font-weight: 400; font-size: 13px; margin-left: 6px; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.panel h2 { font-size: 19px; margin: 0 0 14px; font-weight: 600; letter-spacing: .01em; }
+.panel h2 span { color: var(--c-fg-mute); font-weight: 400; font-size: 17px; margin-left: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 18px; }
 th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--c-border); }
 th:first-child, td:first-child { text-align: left; }
-th { color: var(--c-fg-mute); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+th { color: var(--c-fg-mute); font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .04em; }
 td strong { font-weight: 600; }
 .stacked { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #1e293b; min-width: 120px; }
-.stacked.empty { color: var(--c-fg-mute); font-size: 12px; background: transparent; }
+.stacked.empty { color: var(--c-fg-mute); font-size: 16px; background: transparent; }
 .seg.easy { background: var(--c-good); } .seg.medium { background: var(--c-warn); } .seg.hard { background: var(--c-bad); }
-.mini { font-size: 11px; color: var(--c-fg-mute); margin-top: 3px; font-family: var(--font-mono); }
-.tag-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 13px; }
-.tag-name { flex: 0 0 190px; font-family: var(--font-mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini { font-size: 15px; color: var(--c-fg-mute); margin-top: 3px; font-family: var(--font-mono); }
+.tag-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 17px; }
+.tag-name { flex: 0 0 220px; font-family: var(--font-mono); font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag-track { flex: 1; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
 .tag-fill { display: block; height: 100%; background: var(--c-accent); }
-.tag-count { flex: 0 0 120px; text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 12px; }
+.tag-count { flex: 0 0 140px; text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 16px; }
 .tag-card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px 18px; }
-.tag-card h3 { font-size: 14px; margin: 0 0 12px; font-weight: 600; }
-.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 12px; margin-left: 6px; }
-.muted { color: var(--c-fg-mute); font-size: 13px; }
+.tag-card h3 { font-size: 18px; margin: 0 0 12px; font-weight: 600; }
+.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 16px; margin-left: 6px; }
+.muted { color: var(--c-fg-mute); font-size: 17px; }
 """
 
 
@@ -403,7 +400,6 @@ def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bo
 
 def render_html(datasets: list[dict[str, Any]], output_path: Path) -> str:
     by_id = {d["id"]: d for d in datasets}
-    updated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     grand_total = sum(d["total"] for d in datasets)
     grand_tagged = sum(d["tagged"] for d in datasets)
 
@@ -444,7 +440,7 @@ def render_html(datasets: list[dict[str, Any]], output_path: Path) -> str:
   <aside class="sidebar">
     <div class="sidebar-logo">
       <div class="logo-mark">SL</div>
-      <div><div class="logo-title">SWE Databoard</div><div class="logo-sub">multi-dataset · LLM-tagged</div></div>
+      <div><div class="logo-title">SWE Databoard</div></div>
     </div>
     <div class="ds-nav">
       <div class="section-label">Datasets</div>
@@ -456,7 +452,6 @@ def render_html(datasets: list[dict[str, Any]], output_path: Path) -> str:
     <div class="topbar">
       <div>
         <h1>Dataset Analytics</h1>
-        <div class="sub">统一 LLM 打标 (difficulty · tags · bug class) · updated {updated}</div>
       </div>
       <button class="theme-btn" onclick="toggleTheme()">Theme</button>
     </div>
