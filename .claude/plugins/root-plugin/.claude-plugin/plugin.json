@@ -1,6 +1,6 @@
 {
   "name": "root",
-  "description": "Scaffold, check, and run blocks in a block-structured project (per BLOCK_DEFINITION.md). Provides /root:create, /root:check, and /root:run.",
-  "version": "0.2.0",
+  "description": "Scaffold, check, run, set up, and monitor blocks in a block-structured project (per BLOCK_DEFINITION.md). Provides /root:create, /root:check, /root:run, /root:setup, and /root:dashboard.",
+  "version": "0.3.0",
   "author": { "name": "haoli" }
 }
