@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""多数据集 Dashboard 生成器。
+"""Multi-dataset dashboard generator.
 
-从每个数据集的 datasets/<id>/tags.jsonl 读取 LLM 打标结果
-(difficulty_score / difficulty_label / tags / bug_class)，
-聚合出统计信息并渲染成单页 HTML，支持在 4 个数据集间切换：
+Read LLM tagging results from each dataset's datasets/<id>/tags.jsonl
+(difficulty_score / difficulty_label / tags / bug_class),
+aggregate statistics and render a single-page HTML, supporting switching between 4 datasets:
 
   - self_made         SWE-Lego-Live-Instances
   - swe_rebench        SWE-rebench (nebius/SWE-rebench)
   - openswe_filtered   OpenSWE-filtered (SWE-Lego/openswe_filtered_for_rl)
   - scale_swe          Scale-SWE (AweAI-Team/Scale-SWE)
 
-所有数据集使用同一套 LLM 打标口径，保证可比性。
+All datasets use the same LLM tagging scheme for comparability.
 """
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def score_bins(values: list[float]) -> dict[str, int]:
 
 
 def aggregate_dataset(dataset_id: str) -> dict[str, Any]:
-    """从 tags.jsonl 聚合一个数据集的统计信息。"""
+    """Aggregate one dataset's statistics from tags.jsonl."""
     tags_file = DATASETS_DIR / dataset_id / "tags.jsonl"
     tasks_file = DATASETS_DIR / dataset_id / "tasks.jsonl"
 
@@ -139,7 +139,7 @@ def aggregate_dataset(dataset_id: str) -> dict[str, Any]:
                 patch_hunks += int(ps.get("hunks") or 0)
                 patch_files += int(ps.get("files") or 0)
 
-    # 数据集总量（tasks.jsonl 行数）
+    # Total dataset size (tasks.jsonl line count)
     total = 0
     if tasks_file.exists():
         with tasks_file.open("r", encoding="utf-8") as f:
@@ -428,7 +428,7 @@ def render_html(datasets: list[dict[str, Any]], output_path: Path) -> str:
     """
 
     doc = f"""<!DOCTYPE html>
-<html lang="zh" data-theme="dark">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -482,12 +482,12 @@ if (location.hash) {{ switchDs(location.hash.slice(1)); }}
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="生成多数据集 Dashboard")
+    parser = argparse.ArgumentParser(description="Generate multi-dataset dashboard")
     parser.add_argument("--output-html", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 
     print(f"{'='*70}")
-    print("生成多数据集 Dashboard")
+    print("Generate multi-dataset dashboard")
     print(f"{'='*70}")
 
     datasets = []
@@ -499,7 +499,7 @@ def main():
 
     render_html(datasets, args.output_html)
     print(f"{'='*70}")
-    print(f"✓ 已生成: {args.output_html}  ({args.output_html.stat().st_size/1024:.0f} KB)")
+    print(f"✓ generated: {args.output_html}  ({args.output_html.stat().st_size/1024:.0f} KB)")
     print(f"{'='*70}")
 
 

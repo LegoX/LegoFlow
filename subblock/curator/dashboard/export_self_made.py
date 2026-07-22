@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""导出自造数据集(Self-Made)为统一 JSONL 格式，供 tag_task_metadata.py 用同一套 LLM 打标。
+"""Export the Self-Made dataset to a unified JSONL format for tag_task_metadata.py to tag with the same LLM scheme.
 
-Self-Made = 以下两个 HuggingFace 数据集的并集：
+Self-Made = the union of the following two HuggingFace datasets:
   1. SWE-Lego/swegen-selfmade-260301-260721-non-top5k
   2. SWE-Lego/swegen-selfmade-260301-260622-top5k
 
-直接从两个数据集的 tasks.tar.gz 读取每个任务的 instruction.md (problem statement)
-和 solution/fix.patch (patch)，保证导出内容精确等于这两块数据。
+Read each task's instruction.md (problem statement) and solution/fix.patch (patch)
+directly from the two datasets' tasks.tar.gz, ensuring the exported content
+exactly equals these two datasets.
 """
 import json
 import os
@@ -22,13 +23,13 @@ HOME_DIR = Path(os.environ.get("SWEGEN_HOME", str(Path.home())))
 REPO_ROOT = Path(os.environ.get("SWEGEN_DATA_ROOT", str(HOME_DIR / "SWE-gen")))
 EXPORTS_ROOT = Path(os.environ.get("SWEGEN_EXPORTS_ROOT", str(REPO_ROOT / "exports_hf")))
 
-# 组成 self_made 的两个数据集 tarball
+# The two dataset tarballs that make up self_made
 SOURCE_TARBALLS = [
     EXPORTS_ROOT / "swegen-selfmade-260301-260721-non-top5k" / "tasks.tar.gz",
     EXPORTS_ROOT / "swegen-selfmade-260301-260622-top5k" / "tasks.tar.gz",
 ]
 
-# 代码文件扩展名 -> 语言(用于按 patch 推断语言，仅用于 dashboard 分组展示)
+# Code file extension -> language (used to infer language from patch, for dashboard grouping only)
 EXT_TO_LANG = {
     ".c": "c", ".h": "c",
     ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".hh": "cpp", ".hpp": "cpp", ".hxx": "cpp",
@@ -42,7 +43,7 @@ EXT_TO_LANG = {
 
 
 def infer_language_from_patch(patch: str) -> str:
-    """从 fix.patch 的 diff 文件扩展名推断主要语言。"""
+    """Infer the primary language from fix.patch diff file extensions."""
     counts: Counter = Counter()
     for line in patch.splitlines():
         if line.startswith("diff --git "):
@@ -65,10 +66,10 @@ def export():
     output_jsonl = OUTPUT_DIR / "tasks.jsonl"
 
     print(f"{'='*80}")
-    print(f"导出自造数据集 (Self-Made)")
+    print(f"Export the Self-Made dataset")
     for tb in SOURCE_TARBALLS:
-        print(f"  源: {tb}  {'✓' if tb.exists() else '✗ 缺失'}")
-    print(f"输出: {output_jsonl}")
+        print(f"  source: {tb}  {'✓' if tb.exists() else '✗ missing'}")
+    print(f"output: {output_jsonl}")
     print(f"{'='*80}")
 
     count = 0
@@ -79,15 +80,15 @@ def export():
     with output_jsonl.open("w", encoding="utf-8") as out:
         for tarball in SOURCE_TARBALLS:
             if not tarball.exists():
-                print(f"WARN: 跳过缺失的 tarball: {tarball}")
+                print(f"WARN: skipping missing tarball: {tarball}")
                 continue
 
-            print(f"\n处理 {tarball.parent.name} ...")
+            print(f"\nprocessing {tarball.parent.name} ...")
             src_count = 0
 
             with tarfile.open(tarball, "r:gz") as tar:
-                # 按 task_id 组织：instruction.md + solution/fix.patch
-                # tarball 内布局: tasks/<task_id>/instruction.md, tasks/<task_id>/solution/fix.patch
+                # organize by task_id: instruction.md + solution/fix.patch
+                # layout inside tarball: tasks/<task_id>/instruction.md, tasks/<task_id>/solution/fix.patch
                 pending: dict[str, dict] = {}
 
                 for member in tar:
@@ -111,7 +112,7 @@ def export():
 
                 for task_id, data in pending.items():
                     if task_id in seen_ids:
-                        continue  # 两个数据集去重（理论上不重叠）
+                        continue  # dedup across the two datasets (should not overlap in theory)
                     patch = data.get("patch", "")
                     if not patch:
                         skipped += 1
@@ -133,11 +134,11 @@ def export():
                     count += 1
                     src_count += 1
 
-            print(f"  -> {src_count} 个任务")
+            print(f"  -> {src_count} tasks")
 
     print(f"{'='*80}")
-    print(f"✓ 导出完成: {count} 个任务 (跳过 {skipped} 个无 patch)")
-    print(f"语言分布:")
+    print(f"✓ export complete: {count} tasks (skipped {skipped} with no patch)")
+    print(f"language distribution:")
     for lang, n in lang_counts.most_common():
         print(f"  {lang:12s}: {n}")
     print(f"{'='*80}")

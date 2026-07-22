@@ -49,9 +49,9 @@ def infer_language_from_patch(patch: str) -> str:
 
 def export():
     token = os.environ.get("HF_TOKEN")
-    print(f"{'='*80}\n导出 OpenSWE-filtered 数据集\n源: {HF_REPO}/{HF_FILE}\n{'='*80}")
+    print(f"{'='*80}\nExport the OpenSWE-filtered dataset\nsource: {HF_REPO}/{HF_FILE}\n{'='*80}")
     src = hf_hub_download(HF_REPO, HF_FILE, repo_type="dataset", token=token)
-    print(f"下载: {src}")
+    print(f"download: {src}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = OUTPUT_DIR / "tasks.jsonl"
@@ -79,7 +79,7 @@ def export():
             fout.write(json.dumps(unified, ensure_ascii=False) + "\n")
             count += 1
 
-    print(f"{'='*80}\n✓ 导出完成: {count} 个任务 (跳过 {skipped} 个无 patch)\n输出: {out_path}\n{'='*80}")
+    print(f"{'='*80}\n✓ export complete: {count} tasks (skipped {skipped} with no patch)\noutput: {out_path}\n{'='*80}")
 
 
 if __name__ == "__main__":
