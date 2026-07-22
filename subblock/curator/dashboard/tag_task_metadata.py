@@ -213,13 +213,20 @@ def _sanitize_for_openai(text: str) -> str:
     return text.replace("\x00", "")
 
 
-def build_tag_prompt(record: dict[str, Any]) -> str:
-    instruction = (record.get("problem_statement") or "")[:MAX_INSTRUCTION_CHARS]
+def build_tag_prompt(
+    record: dict[str, Any],
+    *,
+    max_instruction: int = MAX_INSTRUCTION_CHARS,
+    max_patch: int = MAX_PATCH_CHARS,
+    max_test: int = MAX_TEST_CHARS,
+    max_files: int = 100,
+) -> str:
+    instruction = (record.get("problem_statement") or "")[:max_instruction]
     patch_text = record.get("patch") or ""
-    if len(patch_text) > MAX_PATCH_CHARS:
-        patch_text = patch_text[:MAX_PATCH_CHARS] + "\n... (truncated)"
-    changed_files = _patch_changed_files(patch_text)
-    test_text = (record.get("test_patch") or "")[:MAX_TEST_CHARS]
+    if len(patch_text) > max_patch:
+        patch_text = patch_text[:max_patch] + "\n... (truncated)"
+    changed_files = _patch_changed_files(patch_text)[:max_files]
+    test_text = (record.get("test_patch") or "")[:max_test]
 
     return _sanitize_for_openai(
         "\n".join(
@@ -242,6 +249,19 @@ def build_tag_prompt(record: dict[str, Any]) -> str:
             ]
         )
     )
+
+
+# Progressive truncation levels for the tag prompt. Some endpoints hang on
+# mid-size prompts (4-12 KB) even though the same task tags fine with a shorter
+# excerpt; when a normal-size prompt fails we retry with tighter caps. The final
+# level is an aggressive floor for tasks whose patch/tests are very large.
+TRUNCATION_LEVELS = [
+    {"max_instruction": MAX_INSTRUCTION_CHARS, "max_patch": MAX_PATCH_CHARS, "max_test": MAX_TEST_CHARS, "max_files": 100},
+    {"max_instruction": 1500, "max_patch": 3000, "max_test": 1500, "max_files": 40},
+    {"max_instruction": 800, "max_patch": 1200, "max_test": 600, "max_files": 20},
+    {"max_instruction": 500, "max_patch": 500, "max_test": 0, "max_files": 10},
+    {"max_instruction": 400, "max_patch": 400, "max_test": 0, "max_files": 5},
+]
 
 
 def _strip_code_fence(content: str) -> str:
@@ -362,16 +382,30 @@ def _with_retries(config: TaggerConfig, operation: Callable[[], T]) -> T:
 
 
 def generate_tags_for_record(record: dict[str, Any], config: TaggerConfig) -> list[str]:
-    def _once() -> list[str]:
-        content = _chat_completion_content(config, TAG_SYSTEM_PROMPT, build_tag_prompt(record))
-        parsed = json.loads(_extract_json(content))
-        if isinstance(parsed, list):
-            return normalize_tags(parsed)
-        if isinstance(parsed, dict):
-            return normalize_tags(parsed.get("tags"))
-        raise RuntimeError("LLM response is neither an object nor a tag list")
+    """Generate 4 tags, falling back to progressively shorter prompts.
 
-    return _with_retries(config, _once)
+    The first level uses the full-size excerpt. If the endpoint fails (e.g. it
+    hangs on a mid-size prompt), each subsequent level truncates the patch,
+    instruction, and test text further so the request can still complete.
+    """
+    last_error: Exception | None = None
+    for level in TRUNCATION_LEVELS:
+        prompt = build_tag_prompt(record, **level)
+
+        def _once() -> list[str]:
+            content = _chat_completion_content(config, TAG_SYSTEM_PROMPT, prompt)
+            parsed = json.loads(_extract_json(content))
+            if isinstance(parsed, list):
+                return normalize_tags(parsed)
+            if isinstance(parsed, dict):
+                return normalize_tags(parsed.get("tags"))
+            raise RuntimeError("LLM response is neither an object nor a tag list")
+
+        try:
+            return _with_retries(config, _once)
+        except Exception as exc:
+            last_error = exc
+    raise last_error or RuntimeError("tag generation failed at all truncation levels")
 
 
 def tag_one_record(record: dict[str, Any], config: TaggerConfig) -> dict[str, Any]:

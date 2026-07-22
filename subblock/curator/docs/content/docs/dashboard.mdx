@@ -79,6 +79,13 @@ The tagger disables the model's thinking mode so it returns a strict JSON
 object, validates the 4-tuple (including the closed `area` vocabulary), and
 retries on malformed output. Runs are resumable and idempotent.
 
+Very large or awkward tasks can make the endpoint hang on a full-size prompt.
+The tagger handles these with **progressive truncation**: if a request fails,
+it retries with a shorter patch/instruction/test excerpt (and fewer changed
+files), stepping down through several levels until the request completes. This
+guarantees every task receives tags without discarding context for normal-size
+tasks.
+
 ## Regenerating the databoard
 
 From `subblock/curator/dashboard/`:
