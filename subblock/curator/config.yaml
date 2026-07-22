@@ -4,11 +4,17 @@ meta_info:
   description: Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages (Python, JavaScript, TypeScript, Go, C, C++, Java, Rust).
   parent: swe_lego_live
   subblocks: {}
+  dependencies:
+    from: {}   # task source block; no upstream
+    to:
+      swe_tasks_dir:
+        to: tracer.input.task_source.dataset_name
+        when: {tracer.input.task_source.provider: local}
 
   repos:
     swegen:
       name: swegen
-      commit_id: null # latest
+      commit_id: null   # latest
       role: core pipeline - CLI, task generation, validation, scoring
 
   environment:
@@ -28,67 +34,27 @@ meta_info:
 
 runtime_info:
   input:
-    github_tokens: human              # Comma-separated GitHub API tokens, or place them in gh_token.txt
-
-    # =========================================================================
-    # PR collection - the first stage of the pipeline. `swegen create` consumes
-    # the PR-id files this stage produces. Collection is run by
-    # tools/collect_prs_wo_image.py (in repos/swegen); the values below are the
-    # user-facing knobs. scripts/load_runtime_env.sh exports them as SWEGEN_PR_*
-    # / COLLECT_* env vars, which the collector reads (empty -> its built-in
-    # default). Per-language threshold overrides still live in the collector's
-    # LANGUAGE_OVERRIDES and are intentionally NOT surfaced here.
-    #
-    # GitHub tokens for collection come from gh_token.txt (one per line), NOT
-    # from github_tokens above - keep real tokens out of this file.
-    # =========================================================================
+    # Knobs for tools/collect_prs_wo_image.py, exported by scripts/load_runtime_env.sh
+    # as SWEGEN_COLLECT_* / SWEGEN_PR_* / COLLECT_TOKEN_LIMIT. Null filter = collector default.
     pr_collection:
       enabled: true
-      # Languages to collect PRs for. Comma-joined into --languages.
       languages: [c, cpp, go, java, javascript, typescript, python, rust]
-      repo_num: 100                   # repos WITH qualifying PRs to collect per language
-      max_prs_per_repo: 50            # max qualifying PRs kept per repository
-      output_dir: artifacts/collected_prs   # {language}_pr_ids.txt written here
-      token_limit: 32                 # first N tokens from gh_token.txt (0 = use all)
-      # Global filtering thresholds. Each maps to a SWEGEN_PR_* env var; leave a
-      # value null/absent to keep the collector's built-in default. Per-language
-      # overrides in the collector take precedence over these globals.
+      repo_num: 100                   # repos WITH qualifying PRs per language
+      max_prs_per_repo: 50
+      output_dir: artifacts/collected_prs
+      token_limit: 32                 # first N combined file + env tokens (0 = all)
       filters:
-        min_stars: 30                 # min repo stars
-        min_merged_prs: 5             # min merged PRs in repo
-        min_language_percentage: 0.4  # target language must be > this fraction of the codebase
-        max_days_since_push: 1095     # skip repos not pushed within this many days
-        min_issue_body_length: 10     # min linked-issue description length
-        min_files_changed: 1          # min files changed in the PR
-        max_files_changed: 25         # max files changed in the PR
-        max_lines_changed: 1500       # max (additions + deletions) in the PR
+        min_stars: 30
+        min_merged_prs: 5
+        min_language_percentage: 0.4
+        max_days_since_push: 1095
+        min_issue_body_length: 10
+        min_files_changed: 1
+        max_files_changed: 25
+        max_lines_changed: 1500
 
-    # =========================================================================
-    # LLM configuration - the main thing a user edits before a run.
-    #
-    # swegen calls the LLM over TWO different API paths. Set both correctly or
-    # task verification fails SILENTLY (no verifiable_tasks.txt is written, yet
-    # batch state still shows success - see CLAUDE.md "LLM provider modes").
-    #
-    #   1. OpenAI-compatible path (api_base_url + pr_model):
-    #        PR evaluation and task-instruction generation.
-    #   2. Claude Code path (Anthropic /v1/messages, task_model):
-    #        task completion AND the verification step that writes
-    #        verifiable_tasks.txt.
-    #
-    # cc_provider_mode selects how the Claude Code path reaches your provider:
-    #   native       - provider already speaks the Anthropic Messages API
-    #                  (real Claude, or a gateway exposing /v1/messages).
-    #                  anthropic_base_url points straight at the provider.
-    #                  Launch with: bash scripts/start_with_anthropic_api.sh
-    #   openai_proxy - provider is OpenAI-only (Qwen / GLM / sglang / vLLM and
-    #                  most self-hosted endpoints, which reject role:system on
-    #                  /v1/messages with HTTP 400). A local LiteLLM proxy
-    #                  translates Anthropic -> OpenAI. anthropic_base_url must
-    #                  point at that proxy. REQUIRED for OpenAI-only providers.
-    #                  Launch with: bash scripts/start_with_openai_api.sh
-    #
-    # ----- Example A: NON-Anthropic model (e.g. local Qwen via openai_proxy) -----
+    # Two LLM API Modes:
+    # ----- Mode A: NON-Anthropic model (e.g. local Qwen via openai_proxy) -----
     # Tested end-to-end (NOP=0/Oracle=1) with these exact values:
     # llm_api:
     #   api_key: dummy-cf
@@ -99,7 +65,7 @@ runtime_info:
     #   anthropic_base_url: http://127.0.0.1:4010
     #   cc_proxy_port: 4010
     #
-    # ----- Example B: Anthropic-format model (e.g. claude-opus-4-6 via gateway) -----
+    # ----- Mode B: Anthropic-format model (e.g. claude-opus-4-6 via gateway) -----
     # Tested end-to-end (NOP=0/Oracle=1) with these exact values:
     # llm_api:
     #   api_key: <YOUR_KEY>
@@ -111,20 +77,15 @@ runtime_info:
     #   # cc_proxy_port not used in native mode
     # =========================================================================
     llm_api:
-      # --- OpenAI-compatible path ---
-      api_key: <YOUR_API_KEY>                 # never commit a real key; prefer env/.env
-      api_base_url: https://your-endpoint/v1
+      api_key: human                          # never commit a real key; prefer env/.env
+      api_base_url: human                     # OpenAI-compatible endpoint (PR eval + instruction gen)
       pr_model: Qwen3.6-35B-A3B
-
-      # --- Claude Code path (task completion + verification) ---
-      task_model: claude-sonnet-4-6           # for openai_proxy this is just the proxy alias
+      task_model: claude-sonnet-4-6           # Claude Code path (task completion + verification)
       cc_provider_mode: openai_proxy          # native | openai_proxy
-      anthropic_base_url: http://127.0.0.1:4010  # native: provider URL | openai_proxy: local proxy URL
-      cc_proxy_port: 4010                     # openai_proxy only: local LiteLLM proxy port
+      anthropic_base_url: http://127.0.0.1:4010   # native: provider URL | openai_proxy: local proxy URL
+      cc_proxy_port: 4010                     # openai_proxy only
 
-    # Per-language parameters consumed by scripts/read_params.py + scripts/create_<lang>.sh.
-    # Set enabled:false to skip a language. Live status/metrics are NOT stored here
-    # (config.yaml is one-shot); look at artifacts/index.yaml for run state.
+    # Per-language knobs read by scripts/read_params.py + scripts/create_<lang>.sh.
     languages:
       py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 20 } }
       js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
@@ -148,15 +109,5 @@ runtime_info:
       extract_command: python scripts/extract_verified_tasks.py
 
     logs:
-      dir: artifacts/logs/swegen-create
+      path: artifacts/logs/swegen-create
       description: "Per-language create logs: cc_<lang>_March.txt"
-
-status:
-  phase: idle
-  progress: "Ready for the next SWE task generation run."
-  next_steps: |
-    1. Set runtime_info.input.llm_api (especially cc_provider_mode) before a run.
-    2. Run scripts/dryrun.sh to preflight env, package, Docker, and the CC proxy.
-    3. Use memory/quick-verify.md for a small end-to-end check when changing the runtime.
-  blockers: null
-  last_updated: null

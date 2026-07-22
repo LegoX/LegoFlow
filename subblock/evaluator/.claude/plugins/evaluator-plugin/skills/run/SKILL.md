@@ -101,7 +101,7 @@ the confirm step.
   together and re-running `/evaluator:check` (so the runtime-extraction check
   re-runs). Don't inject agent overrides via args.
 - **Excluded tasks come from `HARBOR_EXCLUDE_TASKS`.** Record them in
-  `config.yaml`'s `environment.extra.HARBOR_EXCLUDE_TASKS` so they
+  `config.yaml`'s `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` so they
   survive across runs and appear in archives — don't pass exclusions via
   skill args.
 - **One LiteLLM proxy per run.** If `:check` flagged the port as held by

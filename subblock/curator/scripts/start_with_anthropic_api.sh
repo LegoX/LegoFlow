@@ -9,7 +9,7 @@
 # For OpenAI-only providers (Qwen / GLM / sglang / vLLM), use the sibling
 # launcher start_with_openai_api.sh instead.
 #
-# Pipeline: dryrun -> create_all_bg (8 langs in background) -> archive on exit.
+# Pipeline: create_all_bg (8 langs in background) -> archive launcher exit.
 set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$BLOCK_DIR"

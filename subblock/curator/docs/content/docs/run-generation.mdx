@@ -1,41 +1,82 @@
 ---
 title: Run Generation
-description: Prepare PR pools, run create scripts, and monitor generation
+description: Launch SWE task generation using Claude plugin commands
 ---
 
-SWE-gen generation is driven by the block's Claude plugin, which wraps the
-language-specific shell scripts in `subblock/curator/scripts/`. Each script
-activates the environment, loads runtime variables from `config.yaml`,
-configures Docker cache paths, and calls `swegen create`.
+SWE task generation is driven by Curator's Claude plugin. The plugin provides
+slash commands that handle preflight checks, configuration loading, and
+workflow orchestration automatically.
 
-## Plugin lifecycle (recommended)
+## Recommended Workflow
 
 From a Claude session started inside `subblock/curator/`:
 
 ```text
-/curator:collect-prs   # collect PRs per config.yaml -> runtime_info.input.pr_collection
-/curator:run           # generate + verify tasks per runtime_info.input.languages
-/curator:dashboard     # monitor progress
+/curator:collect-prs    # collect PR IDs and wait for completion
+/curator:create-tasks   # generate and verify tasks from existing PR IDs
+/curator:dashboard      # monitor progress
 ```
 
-`/curator:collect-prs` reads its scope and filters from
-`config.yaml -> runtime_info.input.pr_collection`; `/curator:run` reads
-per-language `timeout` / `cc_timeout` / `n_concurrent` from
-`runtime_info.input.languages`. Edit `config.yaml`, then re-run the command.
-The sections below document the raw commands those skills run.
+These commands read all configuration from `config.yaml`:
+- `/curator:collect-prs` uses `runtime_info.input.pr_collection` for scope and filters
+- `/curator:create-tasks` uses `runtime_info.input.languages` for per-language timeouts and concurrency
+- Both use `runtime_info.input.llm_api` for LLM endpoint configuration
 
-## Collect PRs
+Edit `config.yaml` to adjust parameters, then re-run the command.
 
-PR collection is configured under `config.yaml -> runtime_info.input.pr_collection`:
+**Important:** These are separate stages. `/curator:create-tasks` never starts
+the collector. Wait for the background collector to finish before running
+generation.
+
+
+## Configuration Guide
+
+All generation parameters live in `config.yaml` under `runtime_info.input`.
+
+### LLM API Configuration
+
+Two provider modes are supported:
+
+**Mode 1: Native Anthropic-compatible endpoint** (recommended)
+```yaml
+llm_api:
+  api_key: <YOUR_API_KEY>
+  api_base_url: https://yunwu.ai/v1              # OpenAI-compatible endpoint
+  pr_model: claude-opus-4-6
+  task_model: claude-opus-4-6
+  cc_provider_mode: native
+  anthropic_base_url: https://yunwu.ai           # Anthropic-compatible endpoint (no /v1)
+```
+
+**Mode 2: OpenAI-compatible model with local proxy**
+```yaml
+llm_api:
+  api_key: <YOUR_API_KEY>
+  api_base_url: https://your-openai-endpoint/v1
+  pr_model: Qwen3.6-35B-A3B
+  task_model: claude-sonnet-4-6                  # proxy alias
+  cc_provider_mode: openai_proxy
+  anthropic_base_url: http://127.0.0.1:4010      # local LiteLLM proxy
+  cc_proxy_port: 4010
+```
+
+Mode `native` is simpler: both PR evaluation and task completion use the same
+provider. Mode `openai_proxy` is for OpenAI-only models: it starts a local
+LiteLLM proxy to translate Anthropic calls to OpenAI format.
+
+**Never commit real API keys to config.yaml.** Use environment variables or
+`.env` files instead.
+
+### PR Collection Configuration
 
 ```yaml
 pr_collection:
   enabled: true
   languages: [c, cpp, go, java, javascript, typescript, python, rust]
-  repo_num: 100
+  repo_num: 100                    # repos per language
   max_prs_per_repo: 50
   output_dir: artifacts/collected_prs
-  token_limit: 32
+  token_limit: 32                  # parallel GitHub API workers
   filters:
     min_stars: 30
     min_merged_prs: 5
@@ -47,26 +88,83 @@ pr_collection:
     max_lines_changed: 1500
 ```
 
-`scripts/load_runtime_env.sh` exports these as `SWEGEN_COLLECT_*` /
-`SWEGEN_PR_*` / `COLLECT_TOKEN_LIMIT`, which the collector reads. GitHub
-collection tokens come from `gh_token.txt` (one per line), never from
-`config.yaml`. Per-language threshold overrides live in the collector's
-`LANGUAGE_OVERRIDES` and take precedence over the global `filters` above.
+### Per-Language Generation Parameters
 
-The config-driven wrapper runs the full or single-language collection:
-
-```bash
-# full: languages from config
-bash scripts/collect_all_bg.sh
-
-# single language, other knobs from config
-LANGUAGES=python bash scripts/collect_all_bg.sh
+```yaml
+languages:
+  py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 20 } }
+  js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
+  ts:   { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }
+  go:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
+  java: { enabled: true,  params: { timeout: 4000, cc_timeout: 3000, n_concurrent: 12 } }
+  c:    { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
+  cpp:  { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 12 } }
+  rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 12 } }
 ```
 
-For a quick smoke, call the collector directly with small overrides (filters
-still come from config/defaults):
+- `timeout`: whole PR case timeout (seconds)
+- `cc_timeout`: Claude Code task completion timeout (seconds)
+- `n_concurrent`: parallel PR workers per language
+
+### GitHub Tokens
+
+Place tokens in `repos/swegen/gh_token.txt` (one per line) or set
+`GITHUB_TOKEN` / `GITHUB_TOKENS` environment variables. The collector combines
+all sources.
+
+## Command Reference
+
+### /curator:collect-prs
+
+Runs background PR collection for configured languages. Outputs:
+```
+artifacts/collected_prs/{language}_pr_ids.txt
+```
+
+This is a separate background job. Wait for it to finish before running
+`/curator:create-tasks`.
+
+### /curator:create-tasks
+
+Three modes:
+
+| Mode | When to use | What it does |
+|------|-------------|--------------|
+| **smoke** | First run, quick verify | Generates 1 task from sample PR file (takes ~5 minutes) |
+| **single-language** | Testing one language | Runs `scripts/create_<lang>.sh` for specified language |
+| **full** | Production | Runs all 8 languages in background, outputs to `artifacts/swe_tasks/` |
+
+The plugin runs preflight checks automatically:
+- Config validation
+- GitHub token availability
+- LLM endpoint connectivity
+- Docker daemon access
+
+### /curator:dashboard
+
+Generates live progress view and optionally syncs to Cloudflare Pages. Shows:
+- Per-language progress (success/total PRs)
+- Recent failures
+- Estimated completion time
+
+---
+
+## Advanced: Manual Commands
+
+For debugging or custom workflows, you can run the underlying commands directly.
+These are what the plugin wraps:
+
+<details>
+<summary>Manual PR collection (click to expand)</summary>
 
 ```bash
+# Full collection using config
+bash scripts/collect_all_bg.sh
+
+# Single language override
+LANGUAGES=python bash scripts/collect_all_bg.sh
+
+# Direct collector call for smoke test
 source scripts/load_runtime_env.sh && load_runtime_env
 python repos/swegen/tools/collect_prs_wo_image.py \
   --languages python \
@@ -76,20 +174,15 @@ python repos/swegen/tools/collect_prs_wo_image.py \
   --disable_progress_bar
 ```
 
-The output file is:
+Output: `artifacts/collected_prs/python_pr_ids.txt`
 
-```text
-artifacts/collected_prs/python_pr_ids.txt
-```
+</details>
 
-A full multi-language pass takes a long time and consumes GitHub API quota.
-Use the smaller command above for smoke tests and node validation.
-
-## Run one language
-
-Start with an explicit one-task command when validating a new node:
+<details>
+<summary>Manual task generation (click to expand)</summary>
 
 ```bash
+# Single task for validation
 swegen create \
   --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
   --max-pr 1 \
@@ -102,113 +195,33 @@ swegen create \
   --min-source-files 1 \
   --max-source-files 10 \
   --docker-prune-batch 0
-```
 
-The command writes tasks to:
-
-```text
-artifacts/swe_tasks/py-cc
-```
-
-For production Python generation, use the language script:
-
-```bash
+# Production: single language
 bash scripts/create_py.sh
-```
 
-The script reads runtime parameters from `config.yaml`, including concurrency.
-Setting `N_CONCURRENT=1` in front of the script may not override the configured
-value. Script logs are written to:
-
-```text
-artifacts/logs/swegen-create/cc_py_March.txt
-```
-
-## Run all languages
-
-After the smoke test is healthy:
-
-```bash
+# Production: all languages
 bash scripts/create_all_bg.sh
 ```
 
-The script launches the configured language create scripts in the background.
-Use `tmux` or a process supervisor for long production runs.
+Scripts read parameters from `config.yaml` automatically.
 
-## Tuned parameters
+</details>
 
-Each language has its own defaults:
+---
 
-- `N_CONCURRENT` controls parallel PR cases.
-- `--timeout` controls the whole case timeout.
-- `--cc-timeout` controls the task completion model timeout.
-- `--min-source-files` and `--max-source-files` filter PR scope.
-- `--docker-prune-batch` controls Docker cleanup cadence.
+## Production Checklist
 
-You can override `N_CONCURRENT` at launch:
+Before running a large-scale generation:
 
-```bash
-N_CONCURRENT=8 bash scripts/create_rust.sh
-```
-
-If the script loads concurrency from `config.yaml`, update the config value
-instead of relying only on a shell prefix.
-
-## LLM and Claude SDK notes
-
-`swegen create` uses both OpenAI-compatible and Anthropic-compatible environment
-variables. On shared machines, clear stale values before a run, or set both
-provider families explicitly:
-
-```bash
-export OPENAI_API_KEY="..."
-export ANTHROPIC_API_KEY="$OPENAI_API_KEY"
-export OPENAI_API_BASE_URL="https://your-openai-compatible-endpoint/v1"
-export ANTHROPIC_BASE_URL="https://your-anthropic-compatible-endpoint"
-export OPENAI_MODEL="..."
-export ANTHROPIC_MODEL="..."
-```
-
-For reproducible task completion, prefer a clean Claude Code config directory:
-
-```bash
-export CLAUDE_CONFIG_DIR="$PWD/artifacts/claude-config/swegen-clean"
-mkdir -p "$CLAUDE_CONFIG_DIR"
-```
-
-The current pinned CLI performs a small OpenAI-compatible preflight before
-generation. If your endpoint rejects that tiny response limit, first verify the
-same key, base URL, and model with a manual API call using a slightly larger
-`max_tokens` value, then use a compatible model/base combination for generation
-or update the pinned CLI before a production run.
-
-## Docker and local caches
-
-Generation builds and validates Docker images. The scripts route Docker config,
-buildx state, and cloned repo cache away from shared filesystems when possible.
-These caches are performance state, not dataset state. They do not need to be
-committed or copied between nodes.
-
-## Resume behavior
-
-Re-running a create script resumes from:
-
-- `artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt`
-- `artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/*.json`
-- the optional `.swegen-*` task state directory
-
-The resume logic reconciles successful batch entries against the verified task
-manifest, so stale success flags do not count unless the task files are present
-and the manifest lists the task ID.
-
-## Operational loop
-
-A typical production loop is:
-
-1. Keep PR pools full.
-2. Run language create scripts.
-3. Monitor `verifiable_tasks.txt` growth and batch-state failures.
-4. Tune concurrency and timeouts.
-5. Export verified tasks or let downstream blocks read manifests directly.
+1. ✅ Verify `config.yaml` has correct LLM endpoint and credentials
+2. ✅ Ensure GitHub tokens are fresh (check `repos/swegen/gh_token.txt`)
+3. ✅ Run smoke test: `/curator:create-tasks` → choose "smoke"
+4. ✅ Verify smoke generates 1 task in `artifacts/experiments/quick-verify/`
+5. ✅ Check Docker daemon is running: `docker ps`
+6. ✅ Ensure sufficient disk space for state and artifacts
+7. ✅ Start collection: `/curator:collect-prs`
+8. ✅ Wait for collection to finish (monitor logs)
+9. ✅ Start generation: `/curator:create-tasks` → choose "full"
+10. ✅ Monitor progress: `/curator:dashboard`
 
 Open the [Dashboard](/docs/dashboard) for the live progress view.

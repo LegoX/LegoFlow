@@ -15,6 +15,19 @@ WARN=0
 ok()   { echo "  [OK]   $1"; PASS=$((PASS+1)); }
 fail() { echo "  [FAIL] $1"; FAIL=$((FAIL+1)); }
 warn() { echo "  [WARN] $1"; WARN=$((WARN+1)); }
+
+# --- shared block-contract validation (schema, deps, fill markers) ------------
+REPO_ROOT="$(cd "$BLOCK_DIR/../.." && pwd)"
+if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
+  if VAL_OUT="$(python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" 2>&1)"; then
+    ok "validate_config: block contract OK"
+  else
+    echo "$VAL_OUT" | sed 's/^/    /'
+    fail "validate_config reported failures (see lines above)"
+  fi
+else
+  warn "shared validator not found at <repo_root>/scripts/validate_config.py — skipping contract validation"
+fi
 info() { echo "  [INFO] $1"; }
 
 cfg() {

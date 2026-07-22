@@ -274,8 +274,8 @@ if want curator; then
   else
     mkdir -p "$SB/$C_OUT" "$SB/$BASE/$SUB" "$SB/$BASE/$STATE"
     log "from-scratch PR collection ($C_LANG), best-effort budget ${C_BUDGET}s"
-    # The collector imports the swegen package and reads its OWN gh_token.txt
-    # (it ignores GITHUB_TOKENS), and can futex-stall at init (0 sockets,
+    # The collector imports the swegen package and combines its token file with
+    # GITHUB_TOKENS / GITHUB_TOKEN. It can futex-stall at init (0 sockets,
     # wchan=futex_wait_queue) — PYTHONUNBUFFERED=1 is the documented fix. It
     # writes pr_ids incrementally but resumes only per-QUALIFYING-REPO (not the
     # in-flight candidate scan), so a progress-cap retry would loop forever.

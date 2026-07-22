@@ -66,5 +66,8 @@ The model-serving layer for a local checkpoint is **vLLM only**. `start.sh` alre
 </Callout>
 
 <Callout title="set -u workaround" type="info">
-Harbor's `serve_litellm.sh` dereferences `LITELLM_STICKY_ROUTING_ALIASES` without a default under `set -u`. The block defaults it to an empty string via `environment.extra.LITELLM_STICKY_ROUTING_ALIASES` in `config.yaml`, so leave that key in place.
+Harbor's `serve_litellm.sh` dereferences `LITELLM_STICKY_ROUTING_ALIASES`
+without a default under `set -u`. The block defaults it to an empty string via
+`runtime_info.input.env_extra.LITELLM_STICKY_ROUTING_ALIASES` in `config.yaml`,
+so leave that key in place.
 </Callout>

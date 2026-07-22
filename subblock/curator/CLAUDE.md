@@ -35,14 +35,16 @@ vars by hand. The mapping is:
 | `anthropic_base_url` | `ANTHROPIC_BASE_URL` | Claude Code path endpoint (task completion + verification) |
 | `cc_provider_mode` | `SWEGEN_CC_PROVIDER_MODE` | `native` or `openai_proxy` (see below) |
 | `cc_proxy_port` | `SWEGEN_CC_PROXY_PORT` | local LiteLLM proxy port (openai_proxy only) |
-| `github_tokens` (top-level input) | `GITHUB_TOKENS` | comma-separated GitHub tokens |
 
-**Priority is env > `.env` > `config.yaml`** — hydration only fills vars that are
-not already set, so a stale value in your shell will *override* config.yaml. If a
-run ignores your config, unset the conflicting `OPENAI_*` / `ANTHROPIC_*` shell
-vars (or put the intended values in the block's `.env`). Keep real keys out of
-`config.yaml`; prefer `.env` or the shell. GitHub tokens may instead go in
-`gh_token.txt` (one per line) at the project root or `~/gh_token.txt`.
+GitHub tokens are never stored in `config.yaml`: runtime tokens come from
+`GITHUB_TOKENS`, `GITHUB_TOKEN`, or local token files (`gh_token.txt`).
+
+`scripts/load_runtime_env.sh` imports selected variables from the interactive
+shell, then sources the block's `.env`, so `.env` overrides the imported shell
+values. `config.yaml` only fills still-unset exported variables. Keep real keys
+out of `config.yaml`; prefer the shell or an ignored `.env`. The collector also
+combines `GITHUB_TOKENS` / `GITHUB_TOKEN` with
+`repos/swegen/gh_token.txt` (or `COLLECT_GITHUB_TOKEN_FILE`).
 
 ### LLM provider modes (read this before your first run)
 
@@ -99,15 +101,22 @@ docker run --rm hello-world
 
 The recommended way to operate this block is through its Claude plugin
 (`curator-plugin`). Launch Claude from inside `subblock/curator/` and use the
-slash commands; each performs preflight, confirmation, and archiving for you:
+slash commands for their documented preflight and confirmation steps. Only
+`/curator:create-tasks` full mode passes through `start.sh` and creates an archive;
+smoke and single-language modes do not:
 
 | Command | Wraps | Purpose |
 |---|---|---|
 | `/curator:setup` | submodule init, venv, `pip install -e`, dryrun | Bootstrap the block |
 | `/curator:check` | `scripts/dryrun.sh` + token/LLM/docker probes | Read-only preflight |
-| `/curator:collect-prs` | `scripts/collect_all_bg.sh` / collector | PR collection (Step 1 below) |
-| `/curator:run` | `scripts/start_with_*.sh` → `create_all_bg.sh` | Task generation + verification (Step 2) |
+| `/curator:collect-prs` | `scripts/collect_all_bg.sh` / collector | Collect PR IDs and wait for completion (Step 1 below) |
+| `/curator:create-tasks` | Full: `scripts/start_with_*.sh` → `create_all_bg.sh`; smoke/single: direct command | Generate and verify tasks from existing PR IDs (Step 2) |
 | `/curator:dashboard` | `dashboard/` generator + Cloudflare sync | Progress monitoring |
+
+`/curator:create-tasks` does not invoke `/curator:collect-prs`. For production modes,
+wait for collection to finish before starting generation; the create scripts
+read fixed files under `artifacts/collected_prs/`. The create-tasks skill's smoke
+mode is an exception and uses a sample PR file bundled in `repos/swegen`.
 
 The knobs each command reads live in `config.yaml`: LLM under
 `runtime_info.input.llm_api`, PR collection under
@@ -127,8 +136,8 @@ global `filters`). `scripts/load_runtime_env.sh` exports these as
 `SWEGEN_COLLECT_*` / `SWEGEN_PR_*` / `COLLECT_TOKEN_LIMIT`; the collector reads
 them, falling back to its built-in defaults. Per-language threshold overrides
 live in the collector's `LANGUAGE_OVERRIDES` and win over the global `filters`.
-Collection tokens come from `gh_token.txt` (one per line), **not** from
-`config.yaml`.
+Collection tokens come from the collector's token file plus
+`GITHUB_TOKENS` / `GITHUB_TOKEN`, never from `config.yaml`.
 
 Config-driven wrapper (reads `pr_collection` via `load_runtime_env.sh`):
 
@@ -172,7 +181,7 @@ swegen create \
 
 Output: task directories under `artifacts/swe_tasks/{lang}-cc/`. Verified task IDs appended to `verifiable_tasks.txt`.
 
-`--min-source-files` controls the yield/difficulty tradeoff: `1` keeps the most PRs (including small fixes, highest throughput), `2`–`3` keep only larger changes (harder tasks, lower yield). Use `1` for maximum data; the per-language scripts default to `2`–`3`.
+`--min-source-files` controls the yield/difficulty tradeoff: `1` keeps the most PRs (including small fixes, highest throughput), while higher values keep only larger changes. Use `1` for maximum data; every current per-language script uses `2`.
 
 Per-language scripts with tuned parameters: `bash scripts/create_{lang}.sh` where lang = py, js, ts, go, c, cpp, java, rust.
 
@@ -191,6 +200,13 @@ bash scripts/start_with_anthropic_api.sh
 # the pipeline. Fill scripts/litellm_cc_proxy.example.yaml placeholders first.
 bash scripts/start_with_openai_api.sh
 ```
+
+`create_all_bg.sh` starts all eight language workers with `nohup` and returns
+immediately; it does not consult each language's `enabled` value or wait for
+workers. Consequently, `start.sh` archives launcher completion, not worker
+completion. In `openai_proxy` mode the wrapper also stops its LiteLLM proxy when
+the launcher returns, so the current wrapper does not supervise that proxy for
+the detached workers' full lifetime.
 
 ### Scaled parallel runs (proven recipe)
 
@@ -261,7 +277,7 @@ artifacts/
 
 | File | Purpose |
 |------|---------|
-| `config.yaml` | Single source of truth for inputs: identity, resources, runtime I/O, per-language params (`languages.<lang>.params`). One-shot per run — no live state (live state lives in `artifacts/index.yaml`). |
+| `config.yaml` | Single source of truth for inputs: identity, resources, runtime I/O, per-language params (`languages.<lang>.params`). One-shot per run; worker progress lives in logs and batch state. |
 | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` | Authoritative manifest of validated task IDs per language. Consumers (e.g. tracer) must filter by this file. |
 | `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/` | Per-batch state JSON used by `swegen create` for resume/dedup. |
 | `scripts/extract_verified_tasks.py` | Optional: merges all verified tasks into a flat `artifacts/merged_swe_tasks/` directory. |
@@ -284,6 +300,8 @@ artifacts/
 | `n_concurrent` | concurrent task workers |
 
 `scripts/create_<lang>.sh` reads these via `scripts/read_params.py` before launching `swegen create`. Edit them in `config.yaml`; no auto-tuning is performed.
+The current all-language launcher ignores `enabled`; invoke only the desired
+`scripts/create_<lang>.sh` files to limit the language set.
 
 ```bash
 eval $(python scripts/read_params.py --lang py --config-yaml config.yaml)
@@ -296,7 +314,8 @@ echo $TIMEOUT $CC_TIMEOUT $N_CONCURRENT
 collection). `scripts/load_runtime_env.sh` exports each key as an env var that
 `repos/swegen/tools/collect_prs_wo_image.py` and `scripts/collect_all_bg.sh`
 read; unset/empty values fall back to the collector's built-in defaults.
-Priority stays **env > `.env` > `config.yaml`**.
+The block `.env` is sourced after the imported interactive environment, and
+`config.yaml` fills only still-unset exported values.
 
 | config key | env var | Meaning |
 |---|---|---|
@@ -304,7 +323,7 @@ Priority stays **env > `.env` > `config.yaml`**.
 | `repo_num` | `SWEGEN_COLLECT_REPO_NUM` | repos with qualifying PRs per language |
 | `max_prs_per_repo` | `SWEGEN_COLLECT_MAX_PRS_PER_REPO` | max qualifying PRs kept per repo |
 | `output_dir` | `SWEGEN_COLLECT_OUTPUT_DIR` | where `{lang}_pr_ids.txt` is written |
-| `token_limit` | `COLLECT_TOKEN_LIMIT` | first N tokens from `gh_token.txt` (0 = all) |
+| `token_limit` | `COLLECT_TOKEN_LIMIT` | first N combined file + environment tokens (0 = all) |
 | `filters.min_stars` | `SWEGEN_PR_MIN_STARS` | min repo stars |
 | `filters.min_merged_prs` | `SWEGEN_PR_MIN_MERGED_PRS` | min merged PRs in repo |
 | `filters.min_language_percentage` | `SWEGEN_PR_MIN_LANGUAGE_PERCENTAGE` | min fraction of codebase in target language |
@@ -317,14 +336,15 @@ Priority stays **env > `.env` > `config.yaml`**.
 The `filters` are **global** thresholds. Per-language overrides remain in the
 collector's `LANGUAGE_OVERRIDES` dict and take precedence over these globals —
 they are intentionally not surfaced in `config.yaml`. GitHub collection tokens
-come from `gh_token.txt`, never `config.yaml`.
+come from the collector's token file plus `GITHUB_TOKENS` / `GITHUB_TOKEN`,
+never `config.yaml`.
 
 ## Collaboration Rules
 
 When updating this block:
 - read `dashboard/overview.mdx` first for current state
-- read `config.yaml` for inputs: identity (`meta_info`), resources, runtime I/O (`runtime_info.input`/`output`), and per-language params (`runtime_info.input.languages.<lang>`). `config.yaml` is one-shot per run — for live state look at `artifacts/index.yaml`.
+- read `config.yaml` for inputs: identity (`meta_info`), resources, runtime I/O (`runtime_info.input`/`output`), and per-language params (`runtime_info.input.languages.<lang>`). `config.yaml` is one-shot per run; use logs, batch state, and `verifiable_tasks.txt` for worker progress.
 - treat `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` as the authoritative output manifest — never have downstream blocks read raw task dirs without filtering through it
-- after every run, archive params, metrics, inputs, and log into `artifacts/archives/run_NNN/` and append to `artifacts/index.yaml`
+- treat `artifacts/index.yaml` entries from `start.sh` as launcher archives; detached worker completion is reported by logs, batch state, and `verifiable_tasks.txt`
 - use `dashboard/memory.mdx` (or `memory/`) for long-form context, experiment logs, and decisions
 - use `subblock/` for nested child blocks

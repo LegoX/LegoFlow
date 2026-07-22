@@ -16,12 +16,17 @@ you. Launch Claude from inside `subblock/curator/` so the block-local plugin
 loads, then:
 
 ```text
-/curator:setup        # init submodule, build venv, install swegen, dryrun
-/curator:check        # preflight: config, GitHub tokens, LLM endpoint, docker
-/curator:collect-prs  # collect GitHub PRs -> artifacts/collected_prs/{lang}_pr_ids.txt
-/curator:run          # generate + verify tasks -> verifiable_tasks.txt
-/curator:dashboard    # local preview or Cloudflare Pages sync
+/curator:setup          # init submodule, build venv, install swegen, dryrun
+/curator:check          # preflight: config, GitHub tokens, LLM endpoint, docker
+/curator:collect-prs    # collect PR IDs and wait for completion
+/curator:create-tasks   # generate and verify tasks from existing PR IDs
+/curator:dashboard      # local preview or Cloudflare Pages sync
 ```
+
+`collect-prs` and `create-tasks` are separate commands. Wait for the background
+collector to finish before running production generation; `create-tasks` reads
+existing PR ID files and never starts collection. Its smoke mode is independent
+and uses a sample PR file bundled in `repos/swegen`.
 
 The knobs these commands read live in `config.yaml` — LLM endpoint under
 `runtime_info.input.llm_api`, PR collection under
@@ -85,13 +90,13 @@ export OPENAI_MODEL="openai/MiniMax-M2.7"
 export ANTHROPIC_MODEL="claude-sonnet-4-6"
 ```
 
-`GITHUB_TOKEN` may also be derived from the first entry in `GITHUB_TOKENS`.
-Do not commit tokens or local env files. Keep the OpenAI-compatible and
-Anthropic-compatible variables aligned with the same provider setup you intend
-to use for the run. If your shell already contains old `ANTHROPIC_API_KEY` or
-`ANTHROPIC_BASE_URL` values, overwrite or unset them before launching
-generation; stale Anthropic-compatible variables can make the Claude SDK stage
-use the wrong endpoint or key.
+The pinned collector accepts both `GITHUB_TOKENS` and `GITHUB_TOKEN` and
+combines them with `repos/swegen/gh_token.txt` (or
+`COLLECT_GITHUB_TOKEN_FILE`). `scripts/load_runtime_env.sh` imports variables
+from the interactive shell, including `~/.bashrc`, then sources the block's
+ignored `.env`. Do not commit tokens or local env files. Keep the
+OpenAI-compatible and Anthropic-compatible variables aligned with the same
+provider setup you intend to use for the run.
 
 > **Important — the `ANTHROPIC_BASE_URL` path also drives verification.**
 > It runs task completion *and* the step that writes `verifiable_tasks.txt`.
@@ -124,36 +129,34 @@ dependencies. Fix dry-run failures before launching generation.
 
 ## 5. Run a smoke generation
 
-For a small first pass, use a direct `swegen create` command with explicit
-limits and shared output paths:
+Use the plugin for a small first pass:
 
-```bash
-swegen create \
-  --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
-  --max-pr 1 \
-  --n-concurrent 1 \
-  --output artifacts/swe_tasks/py-cc \
-  --state-dir scripts/.swegen-py \
-  --timeout 2400 \
-  --cc-timeout 1800 \
-  --no-require-issue \
-  --min-source-files 1 \
-  --max-source-files 10 \
-  --docker-prune-batch 0
+```text
+/curator:create-tasks    # choose "smoke" when prompted
 ```
 
-The language scripts are intended for production batches and read concurrency
-from `config.yaml`; prefixing `N_CONCURRENT=1` may not override their configured
-defaults.
+Smoke mode uses a sample PR file bundled in `repos/swegen` and does not
+require `/curator:collect-prs` first. Success means
+`artifacts/experiments/quick-verify/swe_tasks/py-cc/verifiable_tasks.txt`
+contains at least one verified task ID.
+
+For a smoke pass against your own collected PR pool instead, run
+`/curator:collect-prs` first, then `/curator:create-tasks` and choose
+`single-language` with a small language scope.
 
 For the full multi-language run:
 
-```bash
-bash scripts/create_all_bg.sh
+```text
+/curator:create-tasks    # choose "full" when prompted
 ```
 
-Per-language scripts are available for `py`, `js`, `ts`, `go`, `c`, `cpp`,
-`java`, and `rust`.
+This starts all eight language workers in the background. Per-language
+generation parameters (concurrency, timeouts) come from `config.yaml` — edit
+that file, not the scripts, to tune a run. Monitor progress with
+`/curator:dashboard`.
+
+See [Run Generation](/docs/run-generation) for the full command reference,
+config.yaml schema, and manual (non-plugin) commands for debugging.
 
 ## 6. Resume after moving nodes
 

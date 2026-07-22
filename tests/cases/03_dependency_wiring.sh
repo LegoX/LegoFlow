@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Root case 03: inter-block dependency wiring resolves.
-# Per BLOCK_DEFINITION.md, inter-block values live in
-# meta_info.subblocks[].dependencies (root) or meta_info.dependencies /
-# meta_info.subblocks[].dependencies (child), as `<block>.output.<key>` (or the
-# literal `human`). Every such reference must name a real sibling block that
-# actually declares that output key under runtime_info.output. A dangling
-# reference means a downstream block reads a value its producer never emits.
+# Root case 03: inter-block dependency wiring resolves, both directions.
+# Per BLOCK_DEFINITION.md, meta_info.dependencies has two keys, `from` and `to`.
+# `from` (this block's own upstream): `<input.dot.path>: <block>.output.<key>`
+# or the dict form `{from: <block>.output.<key>, when: {...}, required: bool}`.
+# `to` (this block's own downstream, the mirror): `<output_key>: <block>.input.<path>`
+# or the dict form `{to: <block>.input.<path>, when: {...}}`. Every `from` reference
+# must name a real sibling block that declares that output key under
+# runtime_info.output; every `to` reference must name a real sibling block that
+# has that input path under runtime_info.input. A dangling reference means one
+# side reads/sends a value the other end never emits/receives.
 
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -18,7 +21,7 @@ except ImportError:
     print("FAIL: PyYAML not installed", file=sys.stderr); sys.exit(1)
 
 root = sys.argv[1]
-BLOCKS = ["curator", "tracer", "trainer", "rl", "evaluator"]
+BLOCKS = ["curator", "tracer", "trainer", "evaluator"]
 
 cfgs = {}
 for b in BLOCKS:
@@ -32,31 +35,33 @@ def output_keys(cfg):
     out = (cfg.get("runtime_info") or {}).get("output") or {}
     return set(out.keys()) if isinstance(out, dict) else set()
 
-def collect_deps(cfg):
-    """Yield (label, ref) for every dependency reference in a block config."""
-    meta = cfg.get("meta_info") or {}
-    deps = []
-    md = meta.get("dependencies")
-    if isinstance(md, dict):
-        for k, v in md.items():
-            deps.append((f"meta_info.dependencies.{k}", v))
-    subs = meta.get("subblocks")
-    if isinstance(subs, dict):
-        for child, spec in subs.items():
-            cd = (spec or {}).get("dependencies") if isinstance(spec, dict) else None
-            if isinstance(cd, dict):
-                for k, v in cd.items():
-                    deps.append((f"meta_info.subblocks.{child}.dependencies.{k}", v))
-    return deps
+def dot_get(mapping, dotted):
+    node = mapping
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    return True
+
+def input_path_exists(cfg, dotted):
+    inp = (cfg.get("runtime_info") or {}).get("input") or {}
+    return dot_get(inp, dotted)
 
 errs = []
 checked = 0
 for b in BLOCKS:
-    for label, ref in collect_deps(cfgs[b]):
-        if ref in (None, "", "human"):
+    deps = (cfgs[b].get("meta_info") or {}).get("dependencies")
+    if not isinstance(deps, dict) or set(deps.keys()) != {"from", "to"}:
+        errs.append(f"subblock/{b}: meta_info.dependencies must have exactly `from` and `to` keys")
+        continue
+
+    for dep_key, dep_val in (deps.get("from") or {}).items():
+        ref = dep_val.get("from") if isinstance(dep_val, dict) else dep_val
+        label = f"meta_info.dependencies.from.{dep_key}"
+        if ref in (None, ""):
             continue
         if not isinstance(ref, str) or ".output." not in ref:
-            errs.append(f"subblock/{b}: {label} = {ref!r} is not `<block>.output.<key>` or `human`")
+            errs.append(f"subblock/{b}: {label} = {ref!r} is not `<block>.output.<key>` (string or dict `from:`)")
             continue
         src_block, _, rest = ref.partition(".output.")
         out_key = rest.split(".")[0]
@@ -69,8 +74,25 @@ for b in BLOCKS:
             continue
         checked += 1
 
+    for out_key, to_val in (deps.get("to") or {}).items():
+        ref = to_val.get("to") if isinstance(to_val, dict) else to_val
+        label = f"meta_info.dependencies.to.{out_key}"
+        if ref in (None, ""):
+            continue
+        if not isinstance(ref, str) or ".input." not in ref:
+            errs.append(f"subblock/{b}: {label} = {ref!r} is not `<block>.input.<path>` (string or dict `to:`)")
+            continue
+        consumer, _, path = ref.partition(".input.")
+        if consumer not in cfgs:
+            errs.append(f"subblock/{b}: {label} -> unknown block {consumer!r}")
+            continue
+        if not input_path_exists(cfgs[consumer], path):
+            errs.append(f"subblock/{b}: {label} -> {consumer}.input.{path} not declared")
+            continue
+        checked += 1
+
 if errs:
     for e in errs: print("FAIL:", e, file=sys.stderr)
     sys.exit(1)
-print(f"PASS: {checked} inter-block dependency reference(s) resolve to declared outputs")
+print(f"PASS: {checked} inter-block dependency reference(s) resolve (from + to)")
 PY

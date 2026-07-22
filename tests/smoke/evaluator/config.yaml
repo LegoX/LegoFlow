@@ -17,8 +17,12 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    # ROOT: the model under test is sft's persisted checkpoint.
-    model_checkpoint: trainer.output.checkpoint_path
+    from:
+      # ROOT: the model under test is the trainer's persisted checkpoint —
+      # run_pipeline.sh serves it (serve_checkpoint.sh) and rewrites
+      # llm_api.api_base_url to the resulting vLLM endpoint at launch.
+      llm_api.api_base_url: trainer.output.checkpoint_path
+    to: {}
 
   resources:
     ip: local                          # eval orchestration + Harbor containers run on the CI host
@@ -111,6 +115,12 @@ runtime_info:
       max_turns: 100
       temperature: 0.0                       # ROOT: deterministic eval of the trained model
 
+    env_extra:
+      HARBOR_EXCLUDE_TASKS: ""
+      LITELLM_STICKY_ROUTING_ALIASES: ""
+      LITELLM_NUM_WORKERS: "1"
+
+
   output:
     eval_results_dir:
       description: Harbor job directories containing per-task evaluation results and LiteLLM trajectory logs
@@ -118,19 +128,4 @@ runtime_info:
       job_layout: "artifacts/jobs/<job>/<task>/{agent,evaluation}/"
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
       results_summary_format: "artifacts/jobs/<job>/results.json"
-      consumer_block: null
 
-environment:
-  extra:
-    HARBOR_EXCLUDE_TASKS: ""
-    LITELLM_STICKY_ROUTING_ALIASES: ""
-    LITELLM_NUM_WORKERS: "1"
-
-evolving:
-  description: Runs evaluation benchmarks via Harbor.
-  tunable_params:
-    temperature: "Agent sampling temperature (0.0-1.0)"
-    max_turns: "Maximum agent turns per task"
-    n_concurrent: "Harbor concurrent tasks"
-    timeout_multiplier: "Task timeout multiplier"
-    n_tasks: "Smoke-run cap on number of tasks (null = full benchmark)"

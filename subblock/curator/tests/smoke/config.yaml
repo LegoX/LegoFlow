@@ -13,6 +13,9 @@ meta_info:
   description: Converts GitHub PRs into verified SWE-Bench tasks. Smoke mode runs against a committed PR list.
   parent: swe_lego_live
   subblocks: {}
+  dependencies:
+    from: {}
+    to: {}
 
   repos:
     swegen:
@@ -31,8 +34,6 @@ meta_info:
 
 runtime_info:
   input:
-    github_tokens: human
-
     # Reliable OpenAI-only endpoint (llm12 / Qwen3.6-35B-A3B) reached through a
     # local LiteLLM CC proxy — verified cleanly by 10_pr_demo.sh. The smoke
     # runner (.github/scripts/smoke_run.sh) starts the proxy on cc_proxy_port.

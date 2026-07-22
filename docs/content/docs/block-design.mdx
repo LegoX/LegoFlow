@@ -1,64 +1,263 @@
 ---
 title: Block Design
-description: The abstraction the whole pipeline is built on
+description: Understand a block's files, configuration, and plugin skills
 ---
 
-A **block** is the unit of work in SWE-Lego-Live. Every stage of the pipeline — data curation, trajectory generation, training, and evaluator measurement — is a block, with the same shape and the same three skills (`:setup`, `:check`, `:run`). This page is the long-form design: the vocabulary, the schema, the dependency rules, and the archive format.
+A block is the smallest self-contained unit in SWE-Lego-Live. Curator, Tracer,
+Trainer, and Evaluator solve different problems, but they share the same
+structure, configuration contract, and operational lifecycle. Once you
+understand one block, the others should feel familiar.
+
+
+## 1. Block Structure
+
+The diagram below shows the block boundary and the information that moves
+through it. Configuration and pinned repositories describe a reproducible run;
+scripts perform the work; artifacts and dashboards make the result observable.
 
 ![Anatomy of a SWE-Lego-Live block](/figures/block-definition-editable.png)
 
-The diagram shows the block boundary. A block is not just a script directory: it is a package around one unit of work. `config.yaml` is the declaration layer; it names the block, pins code repositories, declares child blocks and dependencies, and separates runtime inputs from runtime outputs. The rest of the block is defined by that declaration.
+A typical block uses the following layout. Some blocks add domain-specific
+scripts or documentation, but each directory keeps the same responsibility.
 
-Inside the block, `repos/` holds pinned code dependencies, **plugin skills** expose the block's setup/check/run operations, and `memory/` keeps the context and traces an agent needs while operating the block. `scripts/` contains the concrete dry run, smoke test, and run entrypoints; `dashboard/` turns logs, metrics, and state into an inspectable surface; `subblocks/` lets the same shape nest, so a block can be a leaf task or a parent pipeline.
+```text
+<block-name>/
+├── CLAUDE.md                         # Operating contract and block-specific rules
+├── config.yaml                       # Identity, resources, inputs, outputs, and wiring
+│
+├── .claude/
+│   ├── settings.json                 # Enables the block's local plugin
+│   └── plugins/
+│       └── <block-name>-plugin/
+│           ├── .claude-plugin/
+│           │   └── plugin.json       # Plugin name, description, and version
+│           ├── README.md             # Human-readable plugin documentation
+│           ├── resources/            # Optional templates and reference material
+│           └── skills/
+│               ├── setup/SKILL.md    # Bootstrap the block
+│               ├── check/SKILL.md    # Validate readiness without launching a run
+│               ├── dashboard/SKILL.md # Inspect progress and results
+│               └── run/SKILL.md      # Confirm and execute the block
+│
+├── repos/                            # Pinned, vendored repositories; do not edit casually
+├── memory/                           # Durable notes, decisions, and operating context
+├── scripts/
+│   ├── dryrun.sh                     # Side-effect-free preflight checks
+│   ├── start.sh                      # Leaf block's executable entry point
+│   ├── archive_run.sh                # Snapshots a completed, failed, or interrupted run
+│   ├── clean.sh                      # Removes block-owned generated state when requested
+│   └── ...                           # Block-specific helpers such as training or conversion
+│
+├── dashboard/                        # Text or web views over logs, metrics, and artifacts
+├── artifacts/
+│   ├── index.yaml                    # Append-only history; newest entry is latest recorded state
+│   └── archives/
+│       └── run_NNN/                  # Frozen config, scripts, metadata, and optional logs
+│
+└── subblock/                         # Child blocks, present only when this block is a parent
+    └── <child-name>/
+```
 
-The side panels are part of the contract too. Code repos are pinned outside the block logic but referenced by config; the config schema declares what the block is allowed to depend on and publish. A run then produces `artifacts/`: logs, archives, cache, output, and environment snapshots. That gives the root block something stable to inspect before execution and something durable to review after the run finishes.
+The root of this repository is itself a parent block. It lists Curator,
+Tracer, Trainer, and Evaluator as children, then delegates work to each child's
+own plugin skill. A leaf block has no children and runs its own
+`scripts/start.sh`.
 
-## Block
+Three rules keep this layout dependable:
 
-A self-contained directory that owns one stage of the pipeline. Every block has the same shape: a `config.yaml` for inputs and outputs, a `scripts/` set for execution, an `artifacts/` tree for results, an optional `repos/` for vendored dependencies, and a `CLAUDE.md` that documents the agent contract.
+- Files under `repos/` are pinned dependencies. Fixes normally belong upstream
+  or in the block's own scripts, not as unrecorded edits to vendored code.
+- `config.yaml` describes one run. Do not write live progress into it; the
+  newest entry in `artifacts/index.yaml` is the source of truth for run status.
+- Parent blocks coordinate children through plugin skills. They do not bypass
+  a child's checks by invoking the child's shell scripts directly.
 
-## Root block / subblock
 
-The repo is a **tree of blocks**. The repo root is the **root block**; every directory under `subblock/` is a child block. A parent block declares its children under `meta_info.subblocks` and wires the children together by name. Children can have children — the abstraction nests.
+## 2. Configuration File Template
 
-## `config.yaml`
+Every root block and subblock has a `config.yaml` with exactly two top-level
+sections: `meta_info` and `runtime_info`. The following generic template shows
+where each value belongs and what you are expected to fill.
 
-Every block's `config.yaml` is **one-shot per run**: every key is configuration. Live state — running, completed, failed — does not live here. It lives in `artifacts/index.yaml`. See [Reference / config.yaml](/docs/reference/config-schema) for the full schema.
+```yaml
+meta_info:
+  # Stable identity. name should match the block's directory name.
+  name: example_block
+  label: Example Block
+  description: "One sentence describing the work this block owns."
+  parent: swe_lego_live               # null for the root block
 
-## `runtime_info.input`
+  # Parent blocks list direct children and their roles here.
+  # This is a roster only; dependency wiring does not belong here.
+  subblocks: {}
+  # child_block:
+  #   role: "One phrase describing the child's responsibility."
 
-The values a block needs that originate **outside** the block tree: API keys, GitHub tokens, model names, human decisions. These are the only values you fill by hand.
+  # This block declares every data handoff in both directions.
+  # Keep both mappings, even when one or both are empty.
+  dependencies:
+    from: {}
+      # Consumer-owned upstream edge:
+      # <this input path>: <producer>.output.<producer output key>
+      # task_source.dataset_name: curator.output.swe_tasks_dir
+    to: {}
+      # Producer-owned downstream edge, mirroring the consumer's from edge:
+      # <this output key>: <consumer>.input.<consumer input path>
+      # swe_tasks_dir: tracer.input.task_source.dataset_name
 
-## `runtime_info.output`
+  # Repositories used by this block are checked out under repos/ and pinned.
+  repos: {}
+  # harbor:
+  #   commit_id: <full commit SHA>
+  #   role: "Runs tasks in reproducible environments."
 
-The values a block publishes once it has run, for downstream blocks to consume — e.g. `curator.output.swe_tasks_dir`. Downstream blocks reference these through `dependencies`, never by hand.
+  # Host-local environment used by scripts in this block.
+  environment:
+    venv_name: example
+    venv_path: artifacts/env/example
+    requirements: requirements.txt
+    description: "Python environment for this block."
 
-## Dependency
+  # local or null means the current machine. A real host means SSH and tmux.
+  resources:
+    ip: local
+    directory: null                   # remote working directory when ip is remote
+    description: "Where this block runs."
+    public_storage: null              # optional shared output location
 
-Inter-block values are wired in `meta_info.subblocks[].dependencies` as `<source_block>.output.<key>` (or the literal `human` for things only a person can decide). `/root:check` resolves every dependency at preflight time; an unresolvable dependency fails the check before anything heavy runs.
+runtime_info:
+  # Values that originate outside the block tree. Users fill only these values.
+  input:
+    api_base_url: human               # required: replace before checking or running
+    api_key: ""                       # supplied through an environment or ignored file
+    optional_filter: null             # intentionally unset; use the default behavior
+    batch_size: 8                     # working default; change only when needed
+    env_extra: {}                     # optional environment variables exported for the run
 
-## Repo
+  # Values produced by this block. Consumers resolve value first, then path.
+  output:
+    result_dir:
+      description: "Directory containing this block's results."
+      path: artifacts/results         # static, block-relative output
+    selected_checkpoint:
+      description: "Checkpoint chosen after training."
+      value: null                     # written by the run script when known
+```
 
-A vendored, pinned dependency under a block's `repos/` directory (e.g. `tracer/repos/harbor/`). Pinned by commit SHA in `config.yaml` under `meta_info.repositories.<name>`. Editing files under `repos/` is forbidden — auth/env fixes belong in `scripts/` or `config.yaml`.
+### How to fill the template
 
-## Resources
+Start with `runtime_info.input`. The marker tells you whether a field needs
+attention:
 
-`meta_info.resources.ip` declares where a block runs. `local` (or null) means the current host. A real remote IP means the agent SSHes into that node and runs inside a tmux session, with `meta_info.resources.directory` as the working directory.
+| Value | What it means | What you should do |
+| --- | --- | --- |
+| `human` | A required decision or external value | Replace it before running; validation fails while it remains |
+| `""` | Supplied automatically, through an environment variable, or through a local file | Leave it empty and follow the field's comment or block setup guide |
+| `null` | Intentionally unset, default, or all | Leave it unless you want to opt into another behavior |
+| Any other value | A real working default | Keep it unless your run needs a different value |
 
-## Archive
+Do not place secrets in committed configuration. API keys, GitHub tokens, and
+similar credentials should use the environment variables or ignored local
+files named by the owning block's setup guide.
 
-Every run is archived to `artifacts/archives/run_NNN/`: a snapshot of the config, the scripts as they were, the repo SHAs, and a `metadata.yaml` with timestamps and exit code. The EXIT trap installed by `scripts/start.sh` fires `archive_run.sh` regardless of how the run ended, so the timeline is always complete. See [Reference / Artifacts](/docs/reference/artifacts).
+Leave `runtime_info.output` alone before a run. A static `path` is part of the
+block contract; a run-produced `value` starts as `null` and is written by the
+block's scripts after the output exists.
 
-## Live state
+### How dependencies work
 
-The newest entry of `artifacts/index.yaml`. Status is one of `completed | failed | interrupted`, derived from `scripts/start.sh`'s exit code. Always read live state from here — never from `config.yaml`.
+Dependencies connect an output from one block to an input in another without
+copying paths by hand. Each edge is declared twice so both block owners can see
+the same handoff:
 
-## `root` plugin
+```yaml
+# Consumer: subblock/tracer/config.yaml
+meta_info:
+  dependencies:
+    from:
+      task_source.dataset_name:
+        from: curator.output.swe_tasks_dir
+        when: {task_source.provider: local}
+    to: {}
 
-The Claude Code plugin at `.claude/plugins/root-plugin/` that operates any block in the tree. Three skills:
+# Producer: subblock/curator/config.yaml
+meta_info:
+  dependencies:
+    from: {}
+    to:
+      swe_tasks_dir:
+        to: tracer.input.task_source.dataset_name
+        when: {tracer.input.task_source.provider: local}
+```
 
-- **`/root:create`** — scaffold a new block with the full directory tree wired to the contract.
-- **`/root:check`** — recursively sanity-check schema, inputs, dependencies, remote-resource reachability, and LLM endpoints. Read-only.
-- **`/root:run`** — preflight, then execute `scripts/start.sh` (locally, or in tmux over SSH) and archive the result.
+Read this edge as: “when Tracer uses a local task source, fill Tracer's
+`task_source.dataset_name` input with Curator's `swe_tasks_dir` output.” The
+consumer owns `from`; the producer owns the matching `to`.
 
-Both `/root:check` and `/root:run` take a free-form argument. The agent resolves the target block by name or unambiguous paraphrase; ambiguity triggers a clarification question rather than a guess.
+Use `required: false` on a `from` mapping when a missing producer value should
+warn instead of fail. Use `when` when the handoff applies only in a particular
+mode. Even optional or conditional edges must reference real blocks, inputs,
+and outputs.
+
+Validate one block or the complete tree after editing:
+
+```bash
+python3 scripts/validate_config.py --block subblock/tracer
+python3 scripts/validate_config.py --root .
+```
+
+The validator checks the schema, fill markers, referenced paths, and the two
+sides of every dependency. See [Configuration Schema](/docs/reference/config-schema)
+for the complete validation contract.
+
+
+## 3. Plugin Skills
+
+A block plugin turns the directory contract into a consistent set of Claude
+Code commands. The namespace is always the block name, and the verb describes
+one clear lifecycle action:
+
+```text
+/<block-name>:<action>
+```
+
+For example, Tracer exposes `/tracer:setup`, `/tracer:check`,
+`/tracer:dashboard`, and `/tracer:run`. The directory and manifest follow the
+same identity: `tracer-plugin` and `name: tracer`.
+
+### Shared lifecycle skills
+
+| Command pattern | Purpose | Changes run state? |
+| --- | --- | --- |
+| `/<block>:setup` | Install or verify tools, sync pinned repositories, build environments, and help fill missing external inputs. It is idempotent and should bring the block to the point where its check can pass. | May update setup files and environments, but never launches the workload |
+| `/<block>:check` | Run read-only preflight checks for configuration, dependencies, repositories, credentials, endpoints, Docker, GPUs, and the block's dry run. It is mandatory before a run. | No |
+| `/<block>:dashboard` | Summarize the latest state, metrics, logs, and artifacts; optionally start the block's web dashboard. | No |
+| `/<block>:run` | Repeat preflight, show the run configuration, wait for explicit confirmation, and execute. A leaf invokes its own start script; a parent dispatches child run skills in dependency order. | Yes |
+
+The root plugin follows the same lifecycle and adds `/root:create`, which
+scaffolds a new block from the canonical structure and registers it with its
+parent. Creation is a root responsibility, so leaf plugins do not expose this
+command.
+
+### Naming principles
+
+- Use the block name as the namespace: `/curator:...`, `/tracer:...`,
+  `/trainer:...`, and `/evaluator:...`. This makes ownership immediately clear.
+- Keep the four lifecycle verbs consistent across blocks. A user who knows how
+  to check one block should know how to check any block.
+- Give a domain-specific operation a concrete, action-oriented name only when
+  it represents a meaningful workflow of its own. Curator therefore exposes
+  `/curator:collect-prs` and `/curator:create-tasks`; its `/curator:run`
+  remains the common lifecycle entry point and delegates to the appropriate
+  workflow.
+- Use lowercase kebab-case for multiword actions, and keep the skill directory
+  name identical to the command action, such as `collect-prs/SKILL.md`.
+- Put confirmation and interpretation in the skill, but keep deterministic
+  execution in `scripts/`. This separation makes the command approachable
+  without hiding the reproducible shell entry points.
+
+This shared naming is an interface, not a claim that every block does the same
+work. Each skill still owns the checks and safeguards that matter to its block:
+Curator verifies task creation, Tracer checks rollout infrastructure, Trainer
+checks GPUs and checkpoint safety, and Evaluator checks its benchmark and
+model endpoint.

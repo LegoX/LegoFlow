@@ -33,7 +33,7 @@ OUTPUT="$BLOCK_DIR/$BASE/$SUBDIR"
 MANIFEST="$OUTPUT/verifiable_tasks.txt"
 
 if [[ ! -d "$OUTPUT" ]]; then
-  echo "SKIP: no $OUTPUT — claude /curator:run smoke didn't get to the create step"
+  echo "SKIP: no $OUTPUT — claude /curator:create-tasks smoke didn't get to the create step"
   exit 77
 fi
 

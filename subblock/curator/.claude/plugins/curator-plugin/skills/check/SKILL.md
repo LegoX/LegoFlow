@@ -12,7 +12,7 @@ description: >
   verified task (NOP/Oracle expected to print `reward=0` / `reward=1`).
   Runs `scripts/dryrun.sh` if present. Read-only. Reports all failures
   in one consolidated message with a run-configuration summary.
-  **Mandatory before `:run`.** Triggers on phrases like "check curator",
+  **Mandatory before `:create-tasks`.** Triggers on phrases like "check curator",
   "preflight curator", "is curator ready", "diagnose curator",
   "validate curator config".
 ---
@@ -78,7 +78,7 @@ failure for real runs and a warning for pure dashboard inspection.
 
 ## Step 3 - LLM endpoint
 
-This check is mandatory before `/curator:run`; do not skip it just because
+This check is mandatory before `/curator:create-tasks`; do not skip it just because
 `scripts/dryrun.sh` passes. Use the installed SWEgen package, not an ad hoc
 request:
 
@@ -156,34 +156,63 @@ Run `bash scripts/dryrun.sh` and include its OK/WARN/FAIL lines in the
 report. This script verifies the installed package, YAML parsing, key env
 vars, the Claude Code proxy endpoint, and Docker availability.
 
-## Step 6 - Final report
+## Step 6 - The report (always the last thing you print)
 
-Always end with a compact summary:
+The report **is** the deliverable. Print it every single time — even
+on an abort (then: heading + a `NO` verdict whose reason is the abort
+message, nothing else). Fill this template exactly; drop only truly
+inapplicable rows.
 
-```text
-curator check - <CWD>
-  config          : <ok|fail>
-  repos/swegen    : <sha or missing>
-  github          : <N tokens ok, total remaining K>
-  llm (openai)    : <base> / <model> / <ok|fail>
-  cc path         : <mode> / <anthropic_base_url> / <ok|down|native>
-  docker          : <server version> at <DOCKER_HOST or unset>
-  languages       : <enabled list with timeout/cc_timeout/n_concurrent>
-  swe tasks       : <per-language generated + verified counts>
-  dryrun          : <pass|warn|fail>
-  smoke           : <skipped|pass|fail>
+````
+## curator block check — CWD=<relative path>
 
-SAFE TO RUN: <YES|NO>
+**SAFE TO RUN: <✅ YES | ❌ NO>** — <R> required · <A> advisory · <W> warnings
+
+| Layer | Check | Status | Detail |
+|-------|-------|:------:|--------|
+| det  | config · repos/swegen pin · scripts present | ✓ | ok=<N> |
+| det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim detail> |
+| det  | github tokens   | <✓/✗>   | <N tokens ok, total remaining K> |
+| det  | llm (openai)    | <✓/✗>   | <base> / <model> |
+| det  | cc path         | <✓/⚠/✗> | <mode> / <anthropic_base_url> / <ok/down/native> |
+| det  | docker          | <✓/✗>   | <server version> at <DOCKER_HOST or unset> |
+| det  | dryrun          | <✓/⚠/✗> | <pass/warn/fail> |
+| live | smoke           | <✓/·/✗> | <skipped \| NOP=0 Oracle=1 \| fail: <detail>> |
+
+**Run configuration**
+```
+languages:  <enabled list with timeout/cc_timeout/n_concurrent>
+swe tasks:  <per-language generated + verified counts>
+pr_ids:     <artifacts/collected_prs/{lang}_pr_ids.txt present? counts>
 ```
 
-`SAFE TO RUN` is `NO` if config, package install, GitHub, LLM, Docker, or
-dryrun failed, or if `cc_provider_mode=openai_proxy` and the CC proxy is down.
-A skipped smoke does not block unless the user explicitly requested smoke.
+**Next steps**
+1. <one per failure, required first; quote the underlying error verbatim>
+2. ...
+Re-run `/curator:check`.
+````
+
+**The three invariants:**
+
+1. **Verdict** — `✅ YES` iff `R == 0`, where `R` = config/GitHub/LLM/Docker/
+   dryrun `FAIL` count **+** a down CC proxy when
+   `cc_provider_mode=openai_proxy`. A skipped smoke never changes it unless
+   the user explicitly requested smoke and it failed.
+2. **Glyphs** — `✓` pass · `✗` blocks · `⚠` advisory/warning · `·` skipped.
+3. **Collapse** — fold all passing `det` checks into the first row; add
+   a row only for each `det` check that is `✗` or `⚠`.
 
 ## Guardrails
 
 - Read-only except for the optional Harbor smoke jobs directory.
 - Do not edit `config.yaml`, `.env`, token files, or `artifacts/index.yaml`.
-- Do not launch `scripts/start.sh` or `swegen create`; that is `/curator:run`.
+- Do not launch `scripts/start.sh` or `swegen create`; that is `/curator:create-tasks`.
 - Do not hide credential or provider errors. Quote the provider error
   message, but never print secret values.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **Silent verification failure**: the Claude Code path (task_model / cc_provider_mode / anthropic_base_url) is what writes `verifiable_tasks.txt`. If the mode is wrong for the provider, verification fails **silently** — task skeletons stay templates, no task is verified, yet batch state still reports success. Always verify the CC path end-to-end, not just the OpenAI path.
+- **pr_collection.filters**: a null/absent filter is not an error — it means "use the collector's built-in default". Only flag values that are set but out of range.

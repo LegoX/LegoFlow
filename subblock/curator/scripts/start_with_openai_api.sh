@@ -11,8 +11,8 @@
 # For real Claude or an Anthropic-format gateway, use the sibling launcher
 # start_with_anthropic_api.sh instead.
 #
-# Pipeline: read config -> start LiteLLM proxy -> wait for /health -> dryrun
-#           -> create_all_bg -> archive on exit -> stop proxy.
+# Pipeline: read config -> start LiteLLM proxy -> wait for /health
+#           -> create_all_bg -> archive launcher exit -> stop proxy.
 set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$BLOCK_DIR"

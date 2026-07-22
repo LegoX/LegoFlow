@@ -7,16 +7,22 @@ The live operational state of the block is not kept in these docs — it lives i
 
 ## Source of truth
 
-- **`config.yaml` -> `status`** — the current `phase`, `progress`, `next_steps`, and `blockers`.
-- **`artifacts/index.yaml`** — archived run records (one entry per run).
+- **`artifacts/jobs/<job>/`** — the active job's task results and logs.
+- **`artifacts/index.yaml`** — append-only run records; the newest entry is the
+  block's terminal state for its latest run.
 - **[dashboard](/docs/dashboard)** — a live visual view of jobs and SFT stats.
 
-Read `config.yaml` -> `status` for what is happening now, and `artifacts/index.yaml` for run history.
+`config.yaml` is launch configuration, not a status document. Do not edit it
+while a run is active.
 
 ## Time convention
 
-`started_at` and `last_updated` are recorded in UTC. Existing job directory names may include the local launch timestamp (`UTC+8`) so they continue to match the actual artifact path.
+Archive timestamps are recorded in UTC. Existing job directory names may
+include the local launch timestamp (`UTC+8`) so they continue to match the
+actual artifact path.
 
 ## During a run
 
-While a job is active, monitor `artifacts/jobs/<job>` and update the `status` block in `config.yaml` after inspection. Use `status.next_steps` as the live operator checklist.
+While a job is active, monitor `artifacts/jobs/<job>/` or use the dashboard.
+When the run exits, `scripts/archive_run.sh` appends its completed, failed, or
+interrupted state to `artifacts/index.yaml`.

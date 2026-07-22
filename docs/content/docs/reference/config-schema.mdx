@@ -1,61 +1,139 @@
 ---
-title: config.yaml schema
-description: The fixed schema every block's config.yaml follows
+title: config.yaml Schema
+description: The fixed schema every block configuration follows
 ---
 
-Every block in the tree — root or subblock — has a `config.yaml` with the same top-level shape. Live state is **not** stored here; that lives in `artifacts/index.yaml`.
+Every block in the tree, including the root, has a `config.yaml` with the same
+top-level shape. Live state is not stored here; it belongs in
+`artifacts/index.yaml`. The schema is enforced by
+`scripts/validate_config.py`, every block's dry run, CI schema tests, and the
+check skills.
 
 ## Top-level structure
 
 ```yaml
 meta_info:
-  name:                 # short identifier, kebab-case
+  name:                 # short identifier; matches the directory for subblocks
   label:                # human-friendly title
   description:          # one-sentence purpose
-  parent:               # parent block's `name`, or null for the root
-  subblocks:            # one entry per child block (optional)
-    <child_name>:
-      role:             # one-line purpose of the child
-      dependencies:     # input wiring — see "Wiring rule" below
-        <input_key>: <source_block>.output.<key>     # or: human
-  repos: {}             # name → {commit_id, role}; pinned vendored deps under repos/
+  parent:               # parent block name, or null for the root
+  subblocks:            # parent only: children with role one-liners; no wiring
+    <child_name>: {role: "<one phrase>"}
+  dependencies:         # this block's upstream and downstream edges
+    from:
+      <input.dot.path>: <source_block>.output.<key>
+    to:
+      <output_key>: <consumer_block>.input.<their.dot.path>
+  repos: {}             # name to {commit_id, role}; pinned dependencies under repos/
   resources:
-    ip:                 # 'local' (default) or null = current host; remote IP = SSH+tmux
-    directory:          # working directory on the remote node (when ip is remote)
+    ip:                 # local or null = current host; real host = SSH and tmux
+    directory:          # working directory on a remote host
 
 runtime_info:
-  input: {}             # ONLY values originating outside the block tree
+  input: {}             # values originating outside the block tree
   output: {}            # values produced for downstream blocks
-
-evolving:
-  tunable_params: {}    # auto-tuned parameters with bounds (optional)
 ```
+
+These are the only two top-level sections. Legacy `status` and `evolving`
+sections and a top-level `environment` fail validation. Per-run environment
+variables belong in `runtime_info.input.env_extra`, and live state belongs in
+`artifacts/index.yaml`.
 
 ## Wiring rule
 
-This is the rule the whole pipeline depends on:
+`meta_info.dependencies` contains exactly two keys, `from` and `to`. A block
+with no edges still declares `dependencies: {from: {}, to: {}}`. Root
+`subblocks` entries contain roles only and never contain dependency wiring.
 
-> Inter-block values go in `meta_info.subblocks[].dependencies`, never in `runtime_info.input`. Only values originating **outside** the block tree go in `runtime_info.input`.
+The consumer declares `from`. Its key is a dot-path into its own
+`runtime_info.input`; its value names the producer's output. Use the string
+form for a required dependency:
 
-That keeps every path/handle that connects two blocks resolvable at preflight time — and means you never copy paths by hand. `/root:check` validates that every `subblocks[].dependencies` entry resolves to a non-null `output` of the named sibling.
+```yaml
+from:
+  task_source.dataset_name: curator.output.swe_tasks_dir
+```
 
-## `runtime_info.input` vs `runtime_info.output`
+Use the mapping form for a conditional or optional dependency:
 
-- `input` is what you (or another tool) must fill before the block can run. Examples: API keys, GitHub tokens, human decisions about model names.
-- `output` is what the block promises to publish once it has run. Examples: a directory of verified tasks, a checkpoint path. Downstream blocks reference these via `dependencies`.
+```yaml
+from:
+  source.job_dir:
+    from: tracer.output.raw_trajectories_dir
+    when: {source.type: harbor_job}
+    required: false
+```
 
-## `resources.ip`
+The producer declares the matching `to`. Its key is one of its own
+`runtime_info.output` keys, and its value names the exact consumer input:
 
-- `local` or `null` → run on the current host (default; no SSH).
-- Real remote IP → the agent must SSH into that node and run inside a tmux session, with `meta_info.resources.directory` as the working directory.
+```yaml
+to:
+  swe_tasks_dir: tracer.input.task_source.dataset_name
+```
 
-Do **not** "restore" an old remote IP from git history. The local default is intentional.
+A conditional producer edge uses fully qualified keys in `when`, because the
+condition lives on the consumer:
 
-## `evolving.tunable_params`
+```yaml
+to:
+  swe_tasks_dir:
+    to: tracer.input.task_source.dataset_name
+    when: {tracer.input.task_source.provider: local}
+```
 
-Optional. When set, the orchestrator may adjust these within bounds across runs as part of the self-evolving loop. Leave empty if the block is not tuned.
+The same edge is declared once by the consumer and once by the producer. The
+validator cross-checks them and reports `dep:link-mismatch` when the two sides
+drift apart.
 
-## Where to read more
+Resolution reads the producer's `runtime_info.output.<key>` and prefers a
+non-null `value` over `path`. A dangling block or field reference always fails,
+even when the dependency is inactive or optional. The validator also reports
+`dep:path-mismatch` when a configured consumer path does not lie under the
+producer's declared output path.
 
-- The canonical contract: `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`.
-- A worked example scaffold: `.claude/plugins/root-plugin/references/example_block/`.
+## Fill markers
+
+| Marker | Meaning | Validator behavior |
+| --- | --- | --- |
+| `human` | User must replace the value before a run | Fails with `input:unfilled` |
+| `""` | Auto-derived or supplied through an environment or file channel | Accepted; do not edit merely to run |
+| `null` | Semantic unset, default, or all | Accepted |
+| Anything else | Real working default | Accepted |
+| `<...>`, `REPLACE_ME`, `YOUR_API_KEY`, `changeme` | Retired placeholder formats | Fails with `input:placeholder` |
+
+## Output shape
+
+Each output key is a mapping with `path`, `value`, or both:
+
+- `path` is a static, block-relative location fixed when the config is written.
+- `value` is produced by a run and remains `null` until the block writes it
+  back.
+
+Consumers resolve `value` first, then fall back to `path`.
+
+## Resource location
+
+- `local`, `null`, or an absent `resources.ip` runs on the current host.
+- A real hostname or IP runs through SSH and tmux, using
+  `resources.directory` as the remote working directory.
+
+Do not restore an old remote IP from Git history. The local default is
+intentional.
+
+## Validation
+
+```bash
+python3 scripts/validate_config.py --root .
+python3 scripts/validate_config.py --block subblock/tracer
+python3 scripts/validate_config.py --block subblock/tracer --config tests/smoke/config.yaml
+```
+
+The validator prints stable `[OK]`, `[WARN]`, and `[FAIL]` findings. Its exit
+code is non-zero when any failure is present.
+
+The canonical machine-facing resources live in the root plugin:
+
+- `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`
+- `.claude/plugins/root-plugin/resources/config.template.yaml`
+- `.claude/plugins/root-plugin/resources/example_block/`

@@ -45,7 +45,10 @@ artifacts/archives/run_NNN/
 └── monitor.md      # monitor output
 ```
 
-and one entry is appended to `artifacts/index.yaml`. Use `artifacts/index.yaml` for archived run history and `config.yaml` → `status` for the current operational snapshot (see [Status](/docs/reference/status)).
+and one entry is appended to `artifacts/index.yaml`. During a run, inspect the
+active job directory or dashboard. After it exits, the newest index entry is
+the source of truth for the run's terminal state (see
+[Status](/docs/reference/status)).
 
 ## Cleaning up
 
