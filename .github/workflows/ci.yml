@@ -157,11 +157,15 @@ jobs:
   curator-smoke:
     name: curator tests (smoke)
     needs: [detect-changes, curator-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because curator-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # curator-cases FAILURE; only a SKIP (no diff) is tolerated.
     if: |
-      needs.detect-changes.outputs.curator == 'true' &&
+      always() && needs.curator-cases.result != 'failure' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        (needs.detect-changes.outputs.curator == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 70
@@ -306,11 +310,15 @@ jobs:
   tracer-smoke:
     name: tracer tests (smoke)
     needs: [detect-changes, tracer-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because tracer-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # tracer-cases FAILURE; only a SKIP (no diff) is tolerated.
     if: |
-      needs.detect-changes.outputs.tracer == 'true' &&
+      always() && needs.tracer-cases.result != 'failure' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        (needs.detect-changes.outputs.tracer == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 55
@@ -462,11 +470,15 @@ jobs:
   evaluator-smoke:
     name: evaluator tests (smoke)
     needs: [detect-changes, evaluator-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because evaluator-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # evaluator-cases FAILURE; only a SKIP (no diff) is tolerated.
     if: |
-      needs.detect-changes.outputs.evaluator == 'true' &&
+      always() && needs.evaluator-cases.result != 'failure' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        (needs.detect-changes.outputs.evaluator == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 55
@@ -598,11 +610,15 @@ jobs:
   trainer-smoke:
     name: trainer tests (smoke)
     needs: [detect-changes, trainer-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because trainer-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # trainer-cases FAILURE; only a SKIP (no diff) is tolerated.
     if: |
-      needs.detect-changes.outputs.trainer == 'true' &&
+      always() && needs.trainer-cases.result != 'failure' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        (needs.detect-changes.outputs.trainer == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     # The swe-lego-ci runner orchestrates either a configured remote GPU host
     # (private sft-remote.env) or a local GPU. Missing/failed prerequisites are
