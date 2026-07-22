@@ -31,8 +31,57 @@ escalating).
    probe, HF dataset auth probe, port-4001 ownership, Docker image
    presence, ledger validity, and the ledger↔`HARBOR_EXCLUDE_TASKS`
    cross-check.
-2. Report PASS / WARN / FAIL counts and a structured summary back to
-   the user. Use the dryrun's section headings.
+2. Fold every `dryrun.sh` line into the Step 3 report below — never
+   re-run a probe or overrule an `OK`.
+
+## Step 3 — The report (always the last thing you print)
+
+The report **is** the deliverable. Print it every single time — even
+on an abort (then: heading + a `NO` verdict whose reason is the abort
+message, nothing else). Fill this template exactly; drop only truly
+inapplicable rows.
+
+````
+## tracer block check — CWD=<relative path>
+
+**SAFE TO RUN: <✅ YES | ❌ NO>** — <R> required · <A> advisory · <W> warnings
+
+| Layer | Check | Status | Detail |
+|-------|-------|:------:|--------|
+| det  | schema · repos/commits · harbor-uv · litellm-venv · swe-data-process-uv | ✓ | ok=<N> |
+| det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim dryrun line> |
+| det  | llm endpoint          | <✓/⚠/✗> | <GET /models 2xx \| CF-gated 401 (WARN) \| unreachable> |
+| det  | hf dataset auth       | <✓/⚠/✗/·> | <reachable \| 401/403 \| skipped (not a huggingface source)> |
+| det  | litellm port 4001     | <✓/✗>   | <free \| held by pid <P>> |
+| det  | agent runtime_image   | <✓/⚠>   | <present \| not pulled locally> |
+| det  | consumption ledger    | <✓/✗>   | <clean \| leak: <task_id> not in HARBOR_EXCLUDE_TASKS> |
+
+**Run configuration**
+```
+task_source: <provider> / <dataset_name or local task dir>
+llm:         <api_base_url> / <model>
+litellm:     port <port>, proxy config <template>
+harbor_job:  jobs_dir=<jobs_dir> concurrency=<n> retries=<n> timeout_mult=<x>
+agent:       <agent.name>@<agent.version>, image <runtime_image>
+sft:         <sft_conversion.enabled> → out_dir=<out_dir>
+excluded:    <n> task ids in HARBOR_EXCLUDE_TASKS
+```
+
+**Next steps**
+1. <one per failure, required first; quote the dryrun line verbatim>
+2. ...
+Re-run `/tracer:check`.
+````
+
+**The three invariants:**
+
+1. **Verdict** — `✅ YES` iff `R == 0`, where `R` = dryrun `FAIL` count
+   **+** any unresolved ledger leak **+** a held litellm port. Advisory
+   items (agent image not pulled, HF network blip) and warnings *never*
+   change it.
+2. **Glyphs** — `✓` pass · `✗` blocks · `⚠` advisory/warning · `·` skipped.
+3. **Collapse** — fold all passing `det` checks into the first row; add
+   a row only for each `det` check that is `✗` or `⚠`.
 
 ## Interpreting results
 
@@ -61,7 +110,7 @@ escalating).
   registry-auth surprises surface now.
 
 - **ledger leak**: every entry with `status: done|failed|skipped` MUST
-  also appear in `environment.extra.HARBOR_EXCLUDE_TASKS`. If dryrun
+  also appear in `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`. If dryrun
   reports leaks, Harbor will re-run them — fix the exclude list
   before running.
 
@@ -89,3 +138,11 @@ must run AND the user must explicitly confirm before any
   no `git clone`. All checks are < 30 s in aggregate.
 - Fixing failures: this skill only diagnoses. Setup fixes belong in
   `/tracer:setup`.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **LiteLLM proxy port**: 4001 is squatted by an unowned stale LiteLLM and 4002 is reserved for the host-wide root-owned LiteLLM — that is why `litellm_proxy.port` defaults to 4003. Flag a config that moves back onto 4001/4002.
+- **Smoke overlays**: test/smoke runs use their own configs — `tests/smoke/config.yaml` (per-block) and `<repo_root>/tests/smoke/tracer/config.yaml` (root chain) — never the production config.yaml.
+- **agent.runtime_host_path** must be pre-extracted from `runtime_image` via `docker cp` and user-owned: gpufs root_squash blocks docker-daemon writes to root-owned dirs.

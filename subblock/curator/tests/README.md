@@ -88,7 +88,6 @@ Skip this section unless you're debugging a specific case or about to change one
 Parses `config.yaml` with PyYAML and asserts every key the runtime contract
 depends on is present and non-empty: `meta_info.name == "curator"`,
 `meta_info.environment.{venv_path, requirements}`, `meta_info.repos.swegen`,
-`runtime_info.input.github_tokens`,
 `runtime_info.input.llm_api.{api_key, api_base_url, pr_model, task_model}`,
 `runtime_info.output.swe_tasks_dir.path`. Pure-Python check, no I/O.
 </details>

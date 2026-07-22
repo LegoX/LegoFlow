@@ -22,7 +22,7 @@ so a run can always be reproduced from its own snapshot.
 
 ## Tunable parameters
 
-The block declares the parameters safe to auto-tune under `evolving.tunable_params` in `config.yaml`. For eval, the **primary lever is benchmark selection** (`task_source.dataset_name`); the rest mirror tracer:
+The knobs worth tuning between runs all live under `runtime_info.input` in `config.yaml`. For eval, the **primary lever is benchmark selection** (`task_source.dataset_name`); the rest mirror tracer:
 
 | Parameter | Meaning |
 | --- | --- |

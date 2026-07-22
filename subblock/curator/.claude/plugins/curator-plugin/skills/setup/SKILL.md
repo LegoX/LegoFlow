@@ -113,3 +113,51 @@ credentials to run either a smoke test or a real batch.
   change.
 - Do not run `swegen create`, `swegen validate`, or Docker cleanup from
   setup; leave execution to `/curator:check` or `/curator:create-tasks`.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+### llm_api — two API paths, fill order
+
+swegen calls the LLM over TWO paths; set both correctly or task verification fails silently (see /curator:check reference):
+1. **OpenAI-compatible path** (`api_base_url` + `pr_model`): PR evaluation and task-instruction generation.
+2. **Claude Code path** (Anthropic /v1/messages, `task_model`): task completion AND the verification step that writes `verifiable_tasks.txt`.
+
+`cc_provider_mode` selects how the Claude Code path reaches the provider:
+- `native` — provider already speaks the Anthropic Messages API (real Claude, or a gateway exposing /v1/messages). `anthropic_base_url` points straight at the provider. Launch: `bash scripts/start_with_anthropic_api.sh`.
+- `openai_proxy` — provider is OpenAI-only (Qwen / GLM / sglang / vLLM; these reject role:system on /v1/messages with HTTP 400). A local LiteLLM proxy translates Anthropic → OpenAI; `anthropic_base_url` points at that proxy. REQUIRED for OpenAI-only providers. Launch: `bash scripts/start_with_openai_api.sh`.
+
+Fill `llm_api` first; `cc_provider_mode` decides which launcher to use.
+
+**Example A — non-Anthropic model (local Qwen via openai_proxy), tested end-to-end (NOP=0/Oracle=1):**
+```yaml
+llm_api:
+  api_key: dummy-cf
+  api_base_url: https://llm.jierungogogo.com/v1
+  pr_model: Qwen3.6-35B-A3B
+  task_model: claude-sonnet-4-6        # any claude-* alias; proxy maps it to pr_model
+  cc_provider_mode: openai_proxy
+  anthropic_base_url: http://127.0.0.1:4010
+  cc_proxy_port: 4010
+```
+
+**Example B — Anthropic-format model via gateway, tested end-to-end (NOP=0/Oracle=1):**
+```yaml
+llm_api:
+  api_key: <YOUR_KEY>
+  api_base_url: https://yunwu.ai/v1            # OpenAI-compatible side of the same gateway
+  pr_model: claude-opus-4-6
+  task_model: claude-opus-4-6
+  cc_provider_mode: native
+  anthropic_base_url: https://yunwu.ai         # provider Anthropic root, no /v1
+  # cc_proxy_port not used in native mode
+```
+
+### pr_collection knobs
+
+`enabled` is informational (wrappers do not gate on it). `filters` are global thresholds mapped to `SWEGEN_PR_*` env vars — null/absent keeps the collector's built-in default; per-language overrides live in the collector's `LANGUAGE_OVERRIDES` and win over these globals. The collector combines `gh_token.txt` (or `COLLECT_GITHUB_TOKEN_FILE`) with `GITHUB_TOKENS` / `GITHUB_TOKEN` — real tokens never go in config.yaml.
+
+### languages
+
+`languages.<lang>.params` (timeout / cc_timeout / n_concurrent) are read by `scripts/read_params.py` + `scripts/create_<lang>.sh`. `enabled` is used by checks/dashboard only; `create_all_bg.sh` starts all eight scripts — run a specific `create_<lang>.sh` to limit generation.

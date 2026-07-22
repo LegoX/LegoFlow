@@ -21,7 +21,7 @@ Read from `config.yaml` → `runtime_info.input`:
 | `experiment` | WandB mode and run name | external |
 | `credentials` | WandB API key, `hf_token` (private `hf_lf` datasets) | external |
 
-When `source.type` is `harbor_job` (the default), `source.job_dir` is the handoff from tracer, wired via `meta_info.dependencies.trajectories_dir` (`tracer.output.raw_trajectories_dir`). For `hf_lf`, setting `hf_file_name` downloads and registers only that file; leaving it empty loads the Hub dataset config/split at train time. `local_lf` registers `lf_path` directly. See [Input sources](/docs/data-pipeline#input-sources).
+When `source.type` is `harbor_job`, `source.job_dir` is the handoff from tracer, wired via `meta_info.dependencies.from.source.job_dir` (`tracer.output.raw_trajectories_dir`), mirrored by tracer's own `dependencies.to.raw_trajectories_dir`. For `hf_lf`, setting `hf_file_name` downloads and registers only that file; leaving it empty loads the Hub dataset config/split at train time. `local_lf` registers `lf_path` directly. See [Input sources](/docs/data-pipeline#input-sources).
 
 ## Active runtime values
 

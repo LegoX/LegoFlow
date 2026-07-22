@@ -17,6 +17,15 @@ load_runtime_env
 
 echo "=== curator dryrun ==="
 
+# --- shared block-contract validation (schema, deps, fill markers) ------------
+REPO_ROOT="$(cd ../.. && pwd)"
+if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
+  python3 "$REPO_ROOT/scripts/validate_config.py" --block "$(pwd)" \
+    || { echo "ERROR: config contract validation failed (see lines above)"; exit 1; }
+else
+  echo "WARN: shared validator not found — skipping contract validation"
+fi
+
 python -c "import swegen; print('swegen: OK')" || { echo "ERROR: run pip install -e repos/swegen/"; exit 1; }
 python -c "import yaml; yaml.safe_load(open('config.yaml')); print('config.yaml: OK')"
 

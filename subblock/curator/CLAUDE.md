@@ -35,7 +35,9 @@ vars by hand. The mapping is:
 | `anthropic_base_url` | `ANTHROPIC_BASE_URL` | Claude Code path endpoint (task completion + verification) |
 | `cc_provider_mode` | `SWEGEN_CC_PROVIDER_MODE` | `native` or `openai_proxy` (see below) |
 | `cc_proxy_port` | `SWEGEN_CC_PROXY_PORT` | local LiteLLM proxy port (openai_proxy only) |
-| `github_tokens` (top-level input) | none | External-input contract marker; runtime tokens come from `GITHUB_TOKENS`, `GITHUB_TOKEN`, or local token files. |
+
+GitHub tokens are never stored in `config.yaml`: runtime tokens come from
+`GITHUB_TOKENS`, `GITHUB_TOKEN`, or local token files (`gh_token.txt`).
 
 `scripts/load_runtime_env.sh` imports selected variables from the interactive
 shell, then sources the block's `.env`, so `.env` overrides the imported shell

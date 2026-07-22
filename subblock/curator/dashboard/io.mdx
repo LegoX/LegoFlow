@@ -9,7 +9,7 @@ See `config.yaml` for the full dependency schema.
 | `runtime_info.input.pr_collection.*` | Collector languages, scale, output path, token limit, and filters |
 | `runtime_info.input.llm_api.*` | OpenAI-compatible and Claude Code provider settings |
 | `runtime_info.input.languages.<lang>.params` | Per-language timeout, cc_timeout, and n_concurrent |
-| `runtime_info.input.github_tokens` | External-input marker only; secrets come from environment variables or ignored token files |
+| *(GitHub tokens)* | Never stored in config.yaml; provided via `GITHUB_TOKENS` / `GITHUB_TOKEN` env vars or ignored token files |
 
 `config.yaml` does not hold live metrics. Read worker progress from create logs,
 `.swegen-create-batch/`, and `verifiable_tasks.txt`.

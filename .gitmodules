@@ -13,21 +13,6 @@
 	path = subblock/trainer/repos/LLaMA-Factory
 	url = https://github.com/SWE-Lego/LLaMA-Factory.git
 	branch = main
-[submodule "subblock/rl/repos/harbor-verl-train"]
-	path = subblock/rl/repos/harbor-verl-train
-	url = https://github.com/Elvin-Yiming-Du/harbor-verl-train.git
-	branch = ydu_dev
-[submodule "subblock/rl/repos/verl"]
-	path = subblock/rl/repos/verl
-	url = https://github.com/verl-project/verl.git
-[submodule "subblock/rl/repos/harbor"]
-	path = subblock/rl/repos/harbor
-	url = https://github.com/SWE-Lego/harbor.git
-	branch = ydu_dev
 [submodule "subblock/evaluator/repos/harbor"]
 	path = subblock/evaluator/repos/harbor
 	url = git@github.com:SWE-Lego/harbor.git
-[submodule "subblock/terminalgen/repos/terminal-lego"]
-	path = subblock/terminalgen/repos/terminal-lego
-	url = https://github.com/SWE-Lego/terminal-lego.git
-	branch = main

@@ -13,7 +13,7 @@ A **trajectory** is the complete, replayable log of one agent rollout — the ra
 artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
 ```
 
-trainer does not author trajectories — it consumes a `job_dir` of them, wired from the upstream `tracer` block via `meta_info.dependencies`.
+trainer does not author trajectories — it consumes a `job_dir` of them, wired from the upstream `tracer` block via `meta_info.dependencies.from` (mirrored by tracer's own `dependencies.to`).
 
 ## Scaffold
 
