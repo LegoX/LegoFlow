@@ -37,8 +37,6 @@ V2_DISPLAY = "SWE-rebench-V2"
 # Prominent methodology block, shared with progress_monitor_multi (single source).
 METHODOLOGY = pm.METHODOLOGY_HTML
 
-SUBTITLE = "Unified LLM tagging &middot; difficulty &middot; tags &middot; bug class"
-
 
 def render_v2_panel(data: dict) -> str:
     """Render the swe_rebench_v2 panel in the unified new style (no tagged card,
@@ -98,7 +96,7 @@ def render_v2_panel(data: dict) -> str:
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3>{bug_rows}</section>
+    <section class="tag-card wide-card"><h3>Bug classes</h3>{bug_rows}</section>
 {METHODOLOGY}
   </div>
 </div>
@@ -130,6 +128,11 @@ def unify_existing(doc: str) -> str:
         r'\s*<div class="sidebar-stat"><span class="l">Total tagged</span>.*?</div>',
         "",
         doc,
+    )
+    # 6. make the Bug classes card span the full grid width (= Area/tier + Top topics)
+    doc = doc.replace(
+        '<section class="tag-card"><h3>Bug classes',
+        '<section class="tag-card wide-card"><h3>Bug classes',
     )
     return doc
 
@@ -163,13 +166,8 @@ def apply_style_and_i18n(doc: str) -> str:
     )
     # 2. page language -> English
     doc = doc.replace('<html lang="zh"', '<html lang="en"')
-    # 3. replace the subtitle line (was Chinese) with an English one, preserving
-    #    the "updated ..." timestamp suffix if present.
-    def _sub(m: re.Match) -> str:
-        tail = m.group(1) or ""
-        return f'<div class="sub">{SUBTITLE}{tail}</div>'
-    doc = re.sub(r'<div class="sub">.*?( &middot; updated[^<]*| · updated[^<]*)?</div>',
-                 _sub, doc, count=1, flags=re.DOTALL)
+    # 3. remove the subtitle line entirely
+    doc = re.sub(r'\s*<div class="sub">.*?</div>', "", doc, count=1, flags=re.DOTALL)
     return doc
 
 

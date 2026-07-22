@@ -340,6 +340,8 @@ td strong { font-weight: 600; }
 .method-body .dim { color: var(--c-violet); font-weight: 700; }
 .method-body code { color: var(--c-accent); background: var(--c-accent-soft);
   padding: 1px 6px; border-radius: 5px; font-size: 17px; }
+/* Full-width card: spans the whole grid row (e.g. Bug classes = Area/tier + Top topics width) */
+.wide-card { grid-column: 1 / -1; }
 """
 
 
@@ -363,9 +365,7 @@ METHODOLOGY_HTML = """    <section class="tag-card method-card"><h3>Methodology 
       &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
       &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
       &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
+      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)</div>
     </section>"""
 
 
@@ -428,7 +428,7 @@ def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bo
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3>{bug_rows}</section>
+    <section class="tag-card wide-card"><h3>Bug classes</h3>{bug_rows}</section>
   </div>
 
   <div class="grid2" style="margin-top:18px;">

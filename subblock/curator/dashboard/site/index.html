@@ -99,6 +99,8 @@ td strong { font-weight: 600; }
 .method-body .dim { color: var(--c-violet); font-weight: 700; }
 .method-body code { color: var(--c-accent); background: var(--c-accent-soft);
   padding: 1px 6px; border-radius: 5px; font-size: 17px; }
+/* Full-width card: spans the whole grid row (e.g. Bug classes = Area/tier + Top topics width) */
+.wide-card { grid-column: 1 / -1; }
 </style>
 </head>
 <body>
@@ -122,7 +124,6 @@ td strong { font-weight: 600; }
     <div class="topbar">
       <div>
         <h1>Dataset Analytics</h1>
-        <div class="sub">Unified LLM tagging &middot; difficulty &middot; tags &middot; bug class · updated 2026-07-22 04:22 UTC</div>
       </div>
       <button class="theme-btn" onclick="toggleTheme()">Theme</button>
     </div>
@@ -220,7 +221,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">3,075 (6.7%)</span></div>
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">3,075 (6.7%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:78.21%"></span></span><span class="tag-count">2,405 (5.2%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:69.27%"></span></span><span class="tag-count">2,130 (4.6%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:56.03%"></span></span><span class="tag-count">1,723 (3.8%)</span></div>
@@ -256,9 +257,7 @@ td strong { font-weight: 600; }
       &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
       &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
       &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
+      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)</div>
     </section>
   </div>
 </div>
@@ -354,7 +353,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,752 (8.2%)</span></div>
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,752 (8.2%)</span></div>
 <div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:83.62%"></span></span><span class="tag-count">1,465 (6.9%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:59.47%"></span></span><span class="tag-count">1,042 (4.9%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:59.13%"></span></span><span class="tag-count">1,036 (4.9%)</span></div>
@@ -390,9 +389,7 @@ td strong { font-weight: 600; }
       &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
       &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
       &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
+      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)</div>
     </section>
   </div>
 </div>
@@ -489,7 +486,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">2,494 (7.8%)</span></div>
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">2,494 (7.8%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:61.15%"></span></span><span class="tag-count">1,525 (4.8%)</span></div>
 <div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:55.17%"></span></span><span class="tag-count">1,376 (4.3%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:50.96%"></span></span><span class="tag-count">1,271 (4.0%)</span></div>
@@ -525,9 +522,7 @@ td strong { font-weight: 600; }
       &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
       &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
       &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
+      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)</div>
     </section>
   </div>
 </div>
@@ -623,7 +618,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,833 (8.0%)</span></div>
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,833 (8.0%)</span></div>
 <div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:69.18%"></span></span><span class="tag-count">1,268 (5.6%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:55.43%"></span></span><span class="tag-count">1,016 (4.5%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:54.17%"></span></span><span class="tag-count">993 (4.4%)</span></div>
@@ -659,9 +654,7 @@ td strong { font-weight: 600; }
       &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
       &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
       &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
+      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)</div>
     </section>
   </div>
 </div>
@@ -758,7 +751,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,472 (7.3%)</span></div>
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,472 (7.3%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:97.08%"></span></span><span class="tag-count">1,429 (7.1%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:76.63%"></span></span><span class="tag-count">1,128 (5.6%)</span></div>
 <div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:62.50%"></span></span><span class="tag-count">920 (4.6%)</span></div>
@@ -794,9 +787,7 @@ td strong { font-weight: 600; }
       &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
       &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
       &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
+      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)</div>
     </section>
   </div>
 </div>
