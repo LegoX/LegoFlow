@@ -5,8 +5,12 @@ meta_info:
   parent: root
   subblocks: {}
   dependencies:
-    # This block's own upstream hand-off: dataset_path receives curator's output.
-    dataset_path: curator.output.verified_tasks_dir
+    from:
+      # This block's own upstream hand-off: dataset_path receives curator's output.
+      dataset_path: curator.output.verified_tasks_dir
+    to:
+      # This block's own downstream hand-off: model_checkpoint feeds <consumer>'s input.
+      model_checkpoint: eval_demo.input.model.checkpoint_path
 
   repos:
     trl:

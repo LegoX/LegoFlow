@@ -8,7 +8,9 @@ meta_info:
   description: Runs registered benchmark evaluations through Harbor against a configurable upstream LLM.
   parent: swe_lego_live
   subblocks: {}
-  dependencies: {}
+  dependencies:
+    from: {}
+    to: {}
 
   resources:
     ip: local
@@ -88,5 +90,4 @@ runtime_info:
       job_layout: "artifacts/jobs/smoke/<job>/<task>/{agent,verifier}/"
       trajectory_format: "artifacts/jobs/smoke/<job>/<task>/agent/litellm-trajectory.jsonl"
       results_summary_format: "artifacts/jobs/smoke/<job>/result.json"
-      consumer_block: null
 

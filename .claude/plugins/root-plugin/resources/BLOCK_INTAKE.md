@@ -52,7 +52,7 @@ repos:
 
 ## 4. Runtime Inputs (required)
 
-What values does this block need before it can run? Include API keys, dataset paths, hyperparameters, and values produced by other blocks. Values produced by a sibling block become entries in the new block's `meta_info.dependencies` (`<input.dot.path>: <src>.output.<key>`); purely external values go straight into `runtime_info.input` (marked `human` until the user fills them).
+What values does this block need before it can run? Include API keys, dataset paths, hyperparameters, and values produced by other blocks. Values produced by a sibling block become entries in the new block's `meta_info.dependencies.from` (`<input.dot.path>: <src>.output.<key>`) — and, since the producer is expected to mirror the edge in its own `dependencies.to`, plan to also add `<output_key>: <this_block>.input.<input.dot.path>` to that sibling's config. Purely external values go straight into `runtime_info.input` (marked `human` until the user fills them).
 
 ```yaml
 inputs:

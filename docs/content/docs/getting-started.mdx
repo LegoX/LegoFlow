@@ -45,25 +45,47 @@ So filling a block config means exactly: **replace every `human`, and export the
 
 ### Dependencies between blocks
 
-Each block declares the values it consumes from sibling blocks in its own `meta_info.dependencies`. The key is the dot-path in that block's `runtime_info.input` that receives the value; the value names the producer's output:
+`meta_info.dependencies` always has two keys, `from` and `to` — a block shows both directions it participates in from its own file, so you never have to open every other block's config to see who feeds it and who it feeds.
+
+**`from`** — the values this block consumes from siblings. The key is the dot-path in this block's own `runtime_info.input` that receives the value; the value names the producer's output:
 
 ```yaml
-# subblock/tracer/config.yaml — tracer consumes curator's verified tasks
+# subblock/tracer/config.yaml — tracer declares its own upstream
 meta_info:
   dependencies:
-    task_source.dataset_name:
-      from: curator.output.swe_tasks_dir
-      when: {task_source.provider: local}   # only enforced in this mode
+    from:
+      task_source.dataset_name:
+        from: curator.output.swe_tasks_dir
+        when: {task_source.provider: local}   # only enforced in this mode
+    to: {}
 
 # optional upstream — warns instead of failing while the producer output is absent
 meta_info:
   dependencies:
-    model.model_path:
-      from: trainer.output.checkpoint_path
-      required: false
+    from:
+      model.model_path:
+        from: trainer.output.checkpoint_path
+        required: false
+    to: {}
 ```
 
-A block with no upstream declares an explicit `dependencies: {}`. You normally never edit these — they document and enforce the pipeline's hand-offs.
+**`to`** — the mirror image, declared by the *producer*: which of this block's own outputs feed which sibling's input.
+
+```yaml
+# subblock/curator/config.yaml — curator declares its own downstream
+meta_info:
+  dependencies:
+    from: {}
+    to:
+      swe_tasks_dir:
+        to: tracer.input.task_source.dataset_name
+        when: {tracer.input.task_source.provider: local}   # when-keys are fully-qualified —
+                                                            # the condition lives on the consumer
+```
+
+The same edge is declared twice — once in the consumer's `from`, once in the producer's `to` — each block only ever editing its own file. `python3 scripts/validate_config.py --root .` cross-checks the two declarations and warns (`dep:link-mismatch`) if they've drifted apart.
+
+A block with neither direction declares an explicit `dependencies: {from: {}, to: {}}`. You normally never edit these — they document and enforce the pipeline's hand-offs.
 
 ### A worked example
 

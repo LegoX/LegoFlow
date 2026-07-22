@@ -50,7 +50,7 @@ Any extra context in args (beyond identifying the block) is a hint for **how to 
 
 Read `resources/BLOCK_DEFINITION.md` bundled in this plugin (sibling of the `skills/` folder containing this file). It is the contract — pay particular attention to:
 
-- The `meta_info` / `runtime_info` schema and the **wiring rule** (each consumer block declares its own upstream in a flat `meta_info.dependencies`; keys are dot-paths into that block's `runtime_info.input`, values are `<source_block>.output.<key>` strings or `{from, when, required}` mappings; `runtime_info.input` is exclusively for values originating outside the block tree). `config.yaml` has exactly two top-level sections — `status:` and `evolving:` are retired; live state lives in `artifacts/index.yaml`.
+- The `meta_info` / `runtime_info` schema and the **wiring rule** (`meta_info.dependencies` has two keys, `from` and `to`, both always present. `from`: this block's own upstream — keys are dot-paths into that block's `runtime_info.input`, values are `<source_block>.output.<key>` strings or `{from, when, required}` mappings. `to`: this block's own downstream, the mirror declared by the producer — keys are this block's own `runtime_info.output` keys, values are `<consumer>.input.<path>` strings or `{to, when}` mappings with fully-qualified `<consumer>.input.<path>` when-keys. The same edge is declared on both ends; the validator cross-checks them (`dep:link-mismatch`). `runtime_info.input` is exclusively for values originating outside the block tree). `config.yaml` has exactly two top-level sections — `status:` and `evolving:` are retired; live state lives in `artifacts/index.yaml`.
 - The **fill markers** (`human` = must-fill, `""` = auto/env-supplied) and the output `path`/`value` shape.
 - The **remote-execution rule** (if `meta_info.resources.ip` is set, the block runs on that host — so its environment and repos must exist there, not locally).
 
@@ -76,7 +76,7 @@ python3 <repo_root>/scripts/validate_config.py --root <repo_root>
 python3 <repo_root>/scripts/validate_config.py --block <block_path>
 ```
 
-Every `[FAIL] <label> ...` / `[WARN] <label> ...` line becomes one finding row, keyed by its label (`schema:parse-error`, `schema:missing-section`, `schema:legacy-status`, `schema:legacy-evolving`, `schema:unknown-toplevel`, `schema:name-mismatch`, `schema:root-wiring`, `tree:missing-child`, `dep:missing-decl`, `dep:bad-key`, `dep:bad-ref`, `dep:unresolved`, `dep:path-mismatch`, `input:unfilled`, `input:placeholder`, `output:shape`). Include the validator's message verbatim.
+Every `[FAIL] <label> ...` / `[WARN] <label> ...` line becomes one finding row, keyed by its label (`schema:parse-error`, `schema:missing-section`, `schema:legacy-status`, `schema:legacy-evolving`, `schema:unknown-toplevel`, `schema:name-mismatch`, `schema:root-wiring`, `tree:missing-child`, `dep:bad-shape`, `dep:bad-key`, `dep:bad-ref`, `dep:unresolved`, `dep:path-mismatch`, `dep:link-mismatch`, `input:unfilled`, `input:placeholder`, `output:shape`). Include the validator's message verbatim.
 
 Then run the checks the validator cannot judge. **Never abort early** — collect failures across every block, every check; report them all in Step 4.
 

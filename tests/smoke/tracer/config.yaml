@@ -17,9 +17,11 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    task_source.dataset_name:
-      from: curator.output.swe_tasks_dir
-      when: {task_source.provider: local}
+    from:
+      task_source.dataset_name:
+        from: curator.output.swe_tasks_dir
+        when: {task_source.provider: local}
+    to: {}
 
   resources:
     ip: local
@@ -127,11 +129,9 @@ runtime_info:
       description: Harbor job directories with LiteLLM trajectory logs
       path: artifacts/jobs
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
-      consumer_block: sft
     sft_data_dir:
       description: LF-format JSON arrays converted from reward==1 Harbor trajectories, ready for LLaMA-Factory SFT.
       path: artifacts/sft_data
       format: llamafactory_lf_v0.1
       trajectory_format: "artifacts/sft_data/<job>/lf.json"
-      consumer_block: sft
 

@@ -5,9 +5,11 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    source.job_dir:
-      from: tracer.output.raw_trajectories_dir
-      when: {source.type: harbor_job}
+    from:
+      source.job_dir:
+        from: tracer.output.raw_trajectories_dir
+        when: {source.type: harbor_job}
+    to: {}   # nothing currently declares a dependency on trainer's outputs
 
   resources:
     ip: null

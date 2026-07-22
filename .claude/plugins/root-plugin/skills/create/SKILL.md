@@ -79,10 +79,16 @@ meta_info:
     # parent blocks: one entry per child with a role one-liner ONLY — no wiring here
     # <child1>: {role: "<one phrase>"}
 
-  dependencies: {}
-    # this block's OWN upstream hand-offs; keep {} when the block has no upstream
-    # <input.dot.path>: <src>.output.<key>
-    # <input.dot.path>: {from: <src>.output.<key>, when: {<input.dot.path>: <value>}, required: false}
+  dependencies:
+    # this block's own upstream AND downstream edges; both keys always present.
+    from: {}
+      # this block's OWN upstream hand-offs; keep {} when the block has no upstream
+      # <input.dot.path>: <src>.output.<key>
+      # <input.dot.path>: {from: <src>.output.<key>, when: {<input.dot.path>: <value>}, required: false}
+    to: {}
+      # this block's OWN downstream hand-offs (mirror of a consumer's `from`); keep {} when none
+      # <output_key>: <consumer>.input.<their.dot.path>
+      # <output_key>: {to: <consumer>.input.<their.dot.path>, when: {<consumer>.input.<path>: <value>}}
 
   repos:
     # omit section if no repos
@@ -125,7 +131,7 @@ Concise agent contract, under 60 lines. Include:
 - Repos: list any repos under `repos/` and their purpose; note each is a git submodule pinned to a specific commit
 - How to run: `scripts/start.sh` to execute, `scripts/dryrun.sh` to validate. Mention that `/root:run` (from the `block` plugin) preflights and executes this contract.
 - Artifact archiving rule: each run is archived automatically by `scripts/archive_run.sh`, which `start.sh` invokes via an EXIT trap. The helper writes `artifacts/archives/run_NNN/` (metadata.yaml + config snapshot + scripts copy + repo SHAs) and appends one entry to `artifacts/index.yaml`. Agent may optionally drop `session.log` or `monitor.md` into the archive after the run.
-- Inter-block wiring: values from sibling blocks are declared in this block's own `meta_info.dependencies` (key = the `runtime_info.input` dot-path that receives the value) — do not duplicate them in `runtime_info.input`. Only external values (API keys, human decisions) go in `runtime_info.input`.
+- Inter-block wiring: `meta_info.dependencies` has two keys, `from` (values this block consumes from siblings — key is the `runtime_info.input` dot-path that receives the value) and `to` (this block's own outputs' downstream consumers — key is the `runtime_info.output` key). Do not duplicate wired values in `runtime_info.input`. Only external values (API keys, human decisions) go in `runtime_info.input`.
 - One-shot config: `config.yaml` is configuration for one run; do not edit it during execution to track progress. Live state lives in `artifacts/index.yaml`.
 - Remote execution rule: if `meta_info.resources.ip` is set, open a local tmux window, SSH into the remote node, attach to a tmux session there, and run scripts inside it — never run a remote-resource block locally
 

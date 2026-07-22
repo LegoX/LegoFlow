@@ -4,7 +4,9 @@ meta_info:
   description: Runs registered benchmark evaluations through Harbor against a configurable upstream LLM. Mirrors tracer's runtime shell, but loads tasks from Harbor's registry.json instead of a local curator export.
   parent: swe_lego_live
   subblocks: {}
-  dependencies: {}   # standalone terminal block; benchmark comes from Harbor's registry
+  dependencies:
+    from: {}   # standalone terminal block; benchmark comes from Harbor's registry
+    to: {}
 
   resources:
     ip: local
@@ -92,4 +94,3 @@ runtime_info:
       job_layout: "artifacts/jobs/<job>/<task>/{agent,verifier}/"
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
       results_summary_format: "artifacts/jobs/<job>/result.json"
-      consumer_block: null                     # terminal block; no downstream consumer

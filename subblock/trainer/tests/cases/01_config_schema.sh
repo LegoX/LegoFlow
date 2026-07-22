@@ -64,10 +64,15 @@ if missing:
     sys.exit(1)
 
 
-# meta_info.dependencies must be an explicit mapping (leaf-declared wiring contract).
+# meta_info.dependencies must be {from: {...}, to: {...}} (both keys, both mappings).
 deps = get(cfg, "meta_info.dependencies")
-if not isinstance(deps, dict):
-    print("FAIL: meta_info.dependencies must be an explicit mapping (use {} when no upstream)", file=sys.stderr)
+if (
+    not isinstance(deps, dict)
+    or set(deps.keys()) != {"from", "to"}
+    or not isinstance(deps.get("from"), dict)
+    or not isinstance(deps.get("to"), dict)
+):
+    print("FAIL: meta_info.dependencies must have exactly `from` and `to` keys, each a mapping (use {} for no edges)", file=sys.stderr)
     sys.exit(1)
 name = get(cfg, "meta_info.name")
 if name != "trainer":

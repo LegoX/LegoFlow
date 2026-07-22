@@ -13,7 +13,9 @@ meta_info:
   description: Converts GitHub PRs into verified SWE-Bench tasks. Smoke mode runs against a committed PR list.
   parent: swe_lego_live
   subblocks: {}
-  dependencies: {}
+  dependencies:
+    from: {}
+    to: {}
 
   repos:
     swegen:

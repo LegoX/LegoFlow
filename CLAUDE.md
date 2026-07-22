@@ -19,12 +19,18 @@ meta_info:
   name, label, description, parent
   subblocks:         # parent blocks only: children with a role one-liner — NO wiring here
     <child>: {role: "<one phrase>"}
-  dependencies:      # this block's OWN upstream hand-offs (mandatory; {} when none)
-    <input.dot.path>: <source_block>.output.<key>          # required dep
-    <input.dot.path>:                                       # conditional / optional dep
-      from: <source_block>.output.<key>
-      when: {<input.dot.path>: <value>}                     # enforced only while matching
-      required: false                                       # null producer output -> warn
+  dependencies:      # this block's own upstream AND downstream edges (mandatory; both keys always present)
+    from:            # upstream hand-offs this block consumes
+      <input.dot.path>: <source_block>.output.<key>          # required dep
+      <input.dot.path>:                                       # conditional / optional dep
+        from: <source_block>.output.<key>
+        when: {<input.dot.path>: <value>}                     # enforced only while matching
+        required: false                                       # null producer output -> warn
+    to:              # downstream hand-offs this block's own outputs feed (mirror, owned by the producer)
+      <output_key>: <consumer_block>.input.<their.dot.path>
+      <output_key>:
+        to: <consumer_block>.input.<their.dot.path>
+        when: {<consumer_block>.input.<path>: <value>}        # fully-qualified — condition lives on the consumer
   repos: {}          # name → {commit_id, role}
   resources:
     ip:              # 'local' (default) or null = run on current host; remote IP = run via SSH+tmux
@@ -39,9 +45,9 @@ runtime_info:
 
 `config.yaml` is **one-shot per run**: every key is configuration. Live state (running / completed / failed) lives in `artifacts/index.yaml` (written automatically by `scripts/archive_run.sh`'s EXIT trap), not in `config.yaml`. Legacy `status:` / `evolving:` sections are retired.
 
-**Wiring rule**: inter-block values are declared in the **consumer block's own** `meta_info.dependencies` — the key is the dot-path in that block's `runtime_info.input` that receives the value, never a freeform label. Only values originating outside the block tree go in `runtime_info.input`.
+**Wiring rule**: `meta_info.dependencies` shows both directions from each block's own file. `from` is declared by the **consumer** — the key is the dot-path in that block's `runtime_info.input` that receives the value, never a freeform label. `to` is declared by the **producer** — the key is one of its own `runtime_info.output` keys, the value names the exact consumer input field. The same edge is declared on both ends; the validator cross-checks them. Only values originating outside the block tree go in `runtime_info.input`.
 
-**Enforcement**: `python3 scripts/validate_config.py --root .` validates the whole tree (schema, dependency resolution, fill markers, path consistency); `--block subblock/<name>` validates one block. Every block's `dryrun.sh` and the `:check` skills run it.
+**Enforcement**: `python3 scripts/validate_config.py --root .` validates the whole tree (schema, dependency resolution in both directions, fill markers, path consistency, `from`/`to` drift); `--block subblock/<name>` validates one block. Every block's `dryrun.sh` and the `:check` skills run it.
 
 ### Execution location rule
 
@@ -79,7 +85,7 @@ The root block does not consume external inputs directly (`runtime_info.input: {
 - `tracer.output.raw_trajectories_dir`: raw agent trajectories under `subblock/tracer/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
 - `tracer.output.sft_data_dir`: LLaMA-Factory LF-format SFT JSON converted from those trajectories at `subblock/tracer/artifacts/sft_data/<job>/lf.json` (produced by `subblock/tracer/scripts/convert_trajectories.sh`, which runs the `swe_data_process` converters under their own uv env at `subblock/tracer/artifacts/env/swe-data-process-uv`)
 
-**Producer→consumer contract**: tracer consumes **only** tasks listed in curator's `verifiable_tasks.txt`. `subblock/tracer/scripts/prepare_tasks.sh` enforces this by filtering through the manifest when copying from a local task source; task IDs already processed are tracked in `subblock/tracer/artifacts/consumption_ledger.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in tracer's `config.yaml`. Each consumer declares its upstream in its own `meta_info.dependencies` (e.g. trainer wires `source.job_dir: {from: tracer.output.raw_trajectories_dir, when: {source.type: harbor_job}}`).
+**Producer→consumer contract**: tracer consumes **only** tasks listed in curator's `verifiable_tasks.txt`. `subblock/tracer/scripts/prepare_tasks.sh` enforces this by filtering through the manifest when copying from a local task source; task IDs already processed are tracked in `subblock/tracer/artifacts/consumption_ledger.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in tracer's `config.yaml`. Each consumer declares its upstream in its own `meta_info.dependencies.from` (e.g. trainer wires `source.job_dir: {from: tracer.output.raw_trajectories_dir, when: {source.type: harbor_job}}`), mirrored by the producer's own `dependencies.to` (tracer wires `raw_trajectories_dir: {to: trainer.input.source.job_dir, when: {...}}`).
 
 ## How To Run
 

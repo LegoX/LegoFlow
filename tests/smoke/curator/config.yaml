@@ -17,7 +17,9 @@ meta_info:
   description: Converts GitHub PRs into verified SWE-Bench tasks. Root smoke collects ~200 PRs from scratch.
   parent: swe_lego_live
   subblocks: {}
-  dependencies: {}
+  dependencies:
+    from: {}
+    to: {}
 
   repos:
     swegen:

@@ -21,7 +21,7 @@ block needs before `:check` can pass. At the root level this covers:
    if missing.
 2. **Root config** — ensure `./config.yaml` exists and matches the contract
    (orchestration identity only: `meta_info.subblocks` roster with role
-   one-liners, explicit `dependencies: {}`, empty `runtime_info.input`/`output`).
+   one-liners, explicit `dependencies: {from: {}, to: {}}`, empty `runtime_info.input`/`output`).
    If missing, scaffold it from
    `resources/config.template.yaml`. **The root owns no shared inputs**: the
    blocks intentionally use different LLM endpoints/keys, so every external

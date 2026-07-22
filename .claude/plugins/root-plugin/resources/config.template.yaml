@@ -20,15 +20,29 @@ meta_info:
     # <child_name>:
     #   role: "<one phrase: what does this child do?>"
 
-  dependencies: {}
-    # This block's OWN upstream hand-offs (mandatory key; {} when no upstream).
-    # Key   = dot-path into this block's runtime_info.input that receives the value.
-    # Value = "<src>.output.<key>", or a mapping for conditional/optional deps:
-    # <input.dot.path>: <src>.output.<key>
-    # <input.dot.path>:
-    #   from: <src>.output.<key>
-    #   when: {<input.dot.path>: <expected value>}   # enforced only while matching
-    #   required: false                              # null producer output -> warn, not fail
+  dependencies:
+    # Mandatory mapping with exactly two keys, from/to — always both present, {}
+    # for a direction with no edges. Each block shows both directions from its
+    # own file; the same edge is declared on both ends by their own owners, and
+    # the validator cross-checks the two for drift (dep:link-mismatch).
+    from: {}
+      # This block's OWN upstream hand-offs.
+      # Key   = dot-path into this block's runtime_info.input that receives the value.
+      # Value = "<src>.output.<key>", or a mapping for conditional/optional deps:
+      # <input.dot.path>: <src>.output.<key>
+      # <input.dot.path>:
+      #   from: <src>.output.<key>
+      #   when: {<input.dot.path>: <expected value>}   # enforced only while matching
+      #   required: false                              # null producer output -> warn, not fail
+    to: {}
+      # This block's OWN downstream hand-offs — the mirror image, owned by the producer.
+      # Key   = one of this block's own runtime_info.output keys.
+      # Value = "<consumer>.input.<path>", or a mapping for a conditional hand-off:
+      # <output_key>: <consumer>.input.<path>
+      # <output_key>:
+      #   to: <consumer>.input.<path>
+      #   when: {<consumer>.input.<path>: <expected value>}   # keys are fully-qualified — the
+      #                                                        # condition lives on the consumer's state
 
   environment:
     venv_name: # the virtual env to be used

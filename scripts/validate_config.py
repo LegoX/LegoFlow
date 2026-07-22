@@ -16,9 +16,18 @@ Exit 0 iff no FAIL findings.
 Contract summary (full text: .claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md):
   - Top-level sections: meta_info and runtime_info only. Anything else — notably
     the legacy `status:`, `evolving:`, and top-level `environment:` — is an error.
-  - Every block declares `meta_info.dependencies` (may be {}). Keys are
-    dot-paths into the block's own runtime_info.input; values are either
-    "<src>.output.<key>" or {from: "<src>.output.<key>", when: {...}, required: bool}.
+  - Every block declares `meta_info.dependencies: {from: {...}, to: {...}}` (both
+    keys always present; use {} for a direction with no edges):
+      - `from` keys are dot-paths into this block's own runtime_info.input; values
+        are either "<src>.output.<key>" or
+        {from: "<src>.output.<key>", when: {...}, required: bool}.
+      - `to` keys are this block's own runtime_info.output keys; values are either
+        "<consumer>.input.<path>" or {to: "<consumer>.input.<path>", when: {...}}.
+        `to.when` keys are fully-qualified `<consumer>.input.<path>` (the condition
+        lives on the consumer's own state, not this block's).
+    Each edge is declared independently by both ends (consumer's `from`, producer's
+    `to`); the validator cross-checks the two declarations for drift
+    (`dep:link-mismatch`).
   - The root config's subblocks entries carry roles only, never dependencies.
   - runtime_info.input fill markers: `human` = must fill (FAIL until replaced);
     "" = auto-derived or supplied via env/file; anything else is a real value.
@@ -93,14 +102,24 @@ def iter_leaves(node, prefix=""):
         yield prefix, node
 
 
-def parse_output_ref(ref):
-    """'<src>.output.<key>' -> (src, key) or None."""
+def parse_ref(ref, expected_middle):
+    """'<block>.<expected_middle>.<rest>' -> (block, rest) or None."""
     if not isinstance(ref, str):
         return None
     parts = ref.split(".", 2)
-    if len(parts) != 3 or parts[1] != "output" or not parts[0] or not parts[2]:
+    if len(parts) != 3 or parts[1] != expected_middle or not parts[0] or not parts[2]:
         return None
     return parts[0], parts[2]
+
+
+def parse_output_ref(ref):
+    """'<src>.output.<key>' -> (src, key) or None."""
+    return parse_ref(ref, "output")
+
+
+def parse_input_ref(ref):
+    """'<consumer>.input.<path>' -> (consumer, path) or None."""
+    return parse_ref(ref, "input")
 
 
 def resolve_output(entry):
@@ -119,6 +138,25 @@ def resolve_output(entry):
 
 def sibling_config_path(block_dir, src_name):
     return os.path.join(os.path.dirname(os.path.abspath(block_dir)), src_name, "config.yaml")
+
+
+def load_sibling(block_dir, other_name, is_root, sibling_cache):
+    """Load another block's config by name, using/populating sibling_cache."""
+    if is_root:
+        cfg_path = os.path.join(block_dir, "subblock", other_name, "config.yaml")
+    else:
+        cfg_path = sibling_config_path(block_dir, other_name)
+    if sibling_cache is not None and cfg_path in sibling_cache:
+        return cfg_path, sibling_cache[cfg_path]
+    cfg = None
+    if os.path.isfile(cfg_path):
+        try:
+            cfg = load_yaml(cfg_path)
+        except yaml.YAMLError:
+            cfg = None
+    if sibling_cache is not None:
+        sibling_cache[cfg_path] = cfg
+    return cfg_path, cfg
 
 
 def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, schema_only=False):
@@ -179,15 +217,24 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
         if subblocks:
             ok("tree:subblocks", f"root: {len(subblocks)} subblocks declared")
 
-    # --- dependencies declaration ---
-    deps = meta.get("dependencies", None)
-    if deps is None or not isinstance(deps, dict):
-        fail("dep:missing-decl", f"{label_prefix} meta_info.dependencies must be an explicit mapping (use `dependencies: {{}}` when the block has no upstream)")
-        deps = {}
-    elif not deps:
-        ok("dep:none", f"{label_prefix} no upstream dependencies (explicit {{}})")
+    # --- dependencies declaration: {from: {...}, to: {...}}, both keys required ---
+    deps_raw = meta.get("dependencies", None)
+    deps_from, deps_to = {}, {}
+    if (
+        not isinstance(deps_raw, dict)
+        or set(deps_raw.keys()) != {"from", "to"}
+        or not isinstance(deps_raw.get("from"), dict)
+        or not isinstance(deps_raw.get("to"), dict)
+    ):
+        fail("dep:bad-shape", f"{label_prefix} meta_info.dependencies must be a mapping with exactly `from` and `to` keys, each a mapping (use {{}} for a direction with no edges)")
+    else:
+        deps_from = deps_raw["from"]
+        deps_to = deps_raw["to"]
+        if not deps_from and not deps_to:
+            ok("dep:none", f"{label_prefix} no dependencies in either direction (explicit from: {{}}, to: {{}})")
 
-    for dep_key, dep_val in deps.items():
+    # --- from: this block's own upstream hand-offs ---
+    for dep_key, dep_val in deps_from.items():
         # normalize string vs dict form
         if isinstance(dep_val, str):
             ref, when, required = dep_val, None, True
@@ -196,62 +243,62 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
             when = dep_val.get("when")
             required = dep_val.get("required", True)
         else:
-            fail("dep:bad-ref", f"{label_prefix} dependencies.{dep_key} must be a `<src>.output.<key>` string or a {{from, when, required}} mapping")
+            fail("dep:bad-ref", f"{label_prefix} dependencies.from.{dep_key} must be a `<src>.output.<key>` string or a {{from, when, required}} mapping")
             continue
 
         # key must be a dot-path into this block's own runtime_info.input
         found, consumer_val = dot_get(rt_input, dep_key)
         if not found:
-            fail("dep:bad-key", f"{label_prefix} dependencies key `{dep_key}` is not a path in this block's runtime_info.input")
+            fail("dep:bad-key", f"{label_prefix} dependencies.from key `{dep_key}` is not a path in this block's runtime_info.input")
 
         parsed = parse_output_ref(ref)
         if parsed is None:
-            fail("dep:bad-ref", f"{label_prefix} dependencies.{dep_key}: `{ref}` is not of the form <src>.output.<key>")
+            fail("dep:bad-ref", f"{label_prefix} dependencies.from.{dep_key}: `{ref}` is not of the form <src>.output.<key>")
             continue
         src, out_key = parsed
 
         # producer config must exist and declare the output key (even for
         # inactive/optional deps — a dangling ref is always an authoring error)
-        if is_root:
-            src_cfg_path = os.path.join(block_dir, "subblock", src, "config.yaml")
-        else:
-            src_cfg_path = sibling_config_path(block_dir, src)
-        src_cfg = None
-        if sibling_cache is not None and src_cfg_path in sibling_cache:
-            src_cfg = sibling_cache[src_cfg_path]
-        elif os.path.isfile(src_cfg_path):
-            try:
-                src_cfg = load_yaml(src_cfg_path)
-            except yaml.YAMLError:
-                src_cfg = None
-            if sibling_cache is not None:
-                sibling_cache[src_cfg_path] = src_cfg
+        src_cfg_path, src_cfg = load_sibling(block_dir, src, is_root, sibling_cache)
         if src_cfg is None:
-            fail("dep:bad-ref", f"{label_prefix} dependencies.{dep_key}: producer block `{src}` has no readable config at {src_cfg_path}")
+            fail("dep:bad-ref", f"{label_prefix} dependencies.from.{dep_key}: producer block `{src}` has no readable config at {src_cfg_path}")
             continue
         src_outputs = (src_cfg.get("runtime_info") or {}).get("output") or {}
         if out_key not in src_outputs:
-            fail("dep:bad-ref", f"{label_prefix} dependencies.{dep_key}: `{src}.output.{out_key}` does not exist in {src}'s runtime_info.output")
+            fail("dep:bad-ref", f"{label_prefix} dependencies.from.{dep_key}: `{src}.output.{out_key}` does not exist in {src}'s runtime_info.output")
             continue
+
+        # cross-check: the producer's own `to` should declare this exact edge back
+        src_deps = (src_cfg.get("meta_info") or {}).get("dependencies") or {}
+        src_to = src_deps.get("to") if isinstance(src_deps, dict) else None
+        back_ref = None
+        if isinstance(src_to, dict):
+            to_entry = src_to.get(out_key)
+            if isinstance(to_entry, str):
+                back_ref = to_entry
+            elif isinstance(to_entry, dict):
+                back_ref = to_entry.get("to")
+        if back_ref != f"{name}.input.{dep_key}":
+            warn("dep:link-mismatch", f"{label_prefix} dependencies.from.{dep_key} -> {src}.output.{out_key}, but {src}'s dependencies.to.{out_key} does not point back to {name}.input.{dep_key}")
 
         # `when` gate: dep only enforced while the named inputs hold the named values
         if when is not None:
             if not isinstance(when, dict):
-                fail("dep:bad-ref", f"{label_prefix} dependencies.{dep_key}: `when` must be a mapping of input dot-path -> expected value")
+                fail("dep:bad-ref", f"{label_prefix} dependencies.from.{dep_key}: `when` must be a mapping of input dot-path -> expected value")
                 continue
             active = all(dot_get(rt_input, k) == (True, v) for k, v in when.items())
             if not active:
-                ok("dep:inactive", f"{label_prefix} dependencies.{dep_key} inactive (when {when} does not match current input)")
+                ok("dep:inactive", f"{label_prefix} dependencies.from.{dep_key} inactive (when {when} does not match current input)")
                 continue
 
         resolved = resolve_output(src_outputs[out_key])
         if resolved is None:
             if required:
-                fail("dep:unresolved", f"{label_prefix} dependencies.{dep_key}: `{src}.output.{out_key}` has neither a non-null `value` nor a `path` yet")
+                fail("dep:unresolved", f"{label_prefix} dependencies.from.{dep_key}: `{src}.output.{out_key}` has neither a non-null `value` nor a `path` yet")
             else:
-                warn("dep:unresolved", f"{label_prefix} dependencies.{dep_key}: optional upstream `{src}.output.{out_key}` not produced yet")
+                warn("dep:unresolved", f"{label_prefix} dependencies.from.{dep_key}: optional upstream `{src}.output.{out_key}` not produced yet")
             continue
-        ok("dep:resolved", f"{label_prefix} dependencies.{dep_key} -> {src}.output.{out_key} = {resolved}")
+        ok("dep:resolved", f"{label_prefix} dependencies.from.{dep_key} -> {src}.output.{out_key} = {resolved}")
 
         # path consistency: consumer's configured value should live under the
         # producer's declared output path (catches renamed-block stale paths)
@@ -267,6 +314,75 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
             consumer_abs = os.path.abspath(os.path.join(block_dir, consumer_val))
             if not (consumer_abs == producer_abs or consumer_abs.startswith(producer_abs + os.sep)):
                 warn("dep:path-mismatch", f"{label_prefix} runtime_info.input.{dep_key} = `{consumer_val}` resolves outside {src}'s declared output path `{producer_path}`")
+
+    # --- to: this block's own downstream hand-offs ---
+    for out_key, to_val in deps_to.items():
+        # normalize string vs dict form
+        if isinstance(to_val, str):
+            to_ref, to_when = to_val, None
+        elif isinstance(to_val, dict):
+            to_ref = to_val.get("to")
+            to_when = to_val.get("when")
+        else:
+            fail("dep:bad-ref", f"{label_prefix} dependencies.to.{out_key} must be a `<consumer>.input.<path>` string or a {{to, when}} mapping")
+            continue
+
+        if out_key not in rt_output:
+            fail("dep:bad-key", f"{label_prefix} dependencies.to key `{out_key}` is not declared in this block's runtime_info.output")
+
+        parsed = parse_input_ref(to_ref)
+        if parsed is None:
+            fail("dep:bad-ref", f"{label_prefix} dependencies.to.{out_key}: `{to_ref}` is not of the form <consumer>.input.<path>")
+            continue
+        consumer, consumer_path = parsed
+
+        consumer_cfg_path, consumer_cfg = load_sibling(block_dir, consumer, is_root, sibling_cache)
+        if consumer_cfg is None:
+            fail("dep:bad-ref", f"{label_prefix} dependencies.to.{out_key}: consumer block `{consumer}` has no readable config at {consumer_cfg_path}")
+            continue
+        consumer_input = (consumer_cfg.get("runtime_info") or {}).get("input") or {}
+        found, _ = dot_get(consumer_input, consumer_path)
+        if not found:
+            fail("dep:bad-ref", f"{label_prefix} dependencies.to.{out_key}: `{consumer}.input.{consumer_path}` is not a path in {consumer}'s runtime_info.input")
+            continue
+
+        # cross-check: the consumer's own `from` should declare this exact edge back
+        consumer_deps = (consumer_cfg.get("meta_info") or {}).get("dependencies") or {}
+        consumer_from = consumer_deps.get("from") if isinstance(consumer_deps, dict) else None
+        back_ref = None
+        if isinstance(consumer_from, dict):
+            from_entry = consumer_from.get(consumer_path)
+            if isinstance(from_entry, str):
+                back_ref = from_entry
+            elif isinstance(from_entry, dict):
+                back_ref = from_entry.get("from")
+        if back_ref != f"{name}.output.{out_key}":
+            warn("dep:link-mismatch", f"{label_prefix} dependencies.to.{out_key} -> {consumer}.input.{consumer_path}, but {consumer}'s dependencies.from.{consumer_path} does not point back to {name}.output.{out_key}")
+
+        # `to.when` gate: keys are fully-qualified <consumer>.input.<path> (the
+        # condition lives on the consumer's own state, not this block's)
+        active = True
+        if to_when is not None:
+            if not isinstance(to_when, dict):
+                fail("dep:bad-ref", f"{label_prefix} dependencies.to.{out_key}: `when` must be a mapping of <consumer>.input.<path> -> expected value")
+                active = False
+            else:
+                for cond_key, cond_val in to_when.items():
+                    cond_parsed = parse_input_ref(cond_key)
+                    if cond_parsed is None or cond_parsed[0] != consumer:
+                        fail("dep:bad-ref", f"{label_prefix} dependencies.to.{out_key}: `when` key `{cond_key}` must be `{consumer}.input.<path>`")
+                        active = False
+                        continue
+                    _, cond_path = cond_parsed
+                    if dot_get(consumer_input, cond_path) != (True, cond_val):
+                        active = False
+        if to_when is not None:
+            if active:
+                ok("dep:to-declared", f"{label_prefix} dependencies.to.{out_key} -> {consumer}.input.{consumer_path} (active: when {to_when} matches)")
+            else:
+                ok("dep:to-inactive", f"{label_prefix} dependencies.to.{out_key} inactive (when {to_when} does not match {consumer}'s current input)")
+        else:
+            ok("dep:to-declared", f"{label_prefix} dependencies.to.{out_key} -> {consumer}.input.{consumer_path}")
 
     # --- input fill markers ---
     # `human` markers are expected on a fresh clone; --schema-only (CI schema

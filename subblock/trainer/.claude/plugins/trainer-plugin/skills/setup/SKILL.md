@@ -180,7 +180,7 @@ doesn't exist on this host (model dir, `job_dir`) — fix those, not the env.
 
 | mode | uses | ignores | conversion |
 |---|---|---|---|
-| `harbor_job` | `scaffold`, `job_dir` (wired from tracer via `meta_info.dependencies`) | `hf_*`, `lf_path` | full trajectory → LF conversion |
+| `harbor_job` | `scaffold`, `job_dir` (wired from tracer via `meta_info.dependencies.from`, mirrored by tracer's own `dependencies.to`) | `hf_*`, `lf_path` | full trajectory → LF conversion |
 | `hf_lf` | `hf_hub_url`, `hf_file_name` (exact repo file; empty = full dataset config), `hf_subset` (ignored when hf_file_name set), `hf_split` | `scaffold`, `job_dir`, `lf_path` | skipped |
 | `local_lf` | `lf_path` (absolute or block-relative LF json) | `scaffold`, `job_dir`, `hf_*` | skipped |
 

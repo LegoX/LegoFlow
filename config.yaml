@@ -12,7 +12,9 @@ meta_info:
       role: "SFT on trajectories via LLaMA-Factory + DeepSpeed"
     evaluator:
       role: "Run registered benchmarks via Harbor (standalone; no upstream dep)"
-  dependencies: {}
+  dependencies:
+    from: {}
+    to: {}
   resources:
     ip: local
     directory: null

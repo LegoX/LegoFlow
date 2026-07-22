@@ -22,7 +22,7 @@ Each unit of work — `curator`, `tracer`, `trainer`, `evaluator` — is a self-
 - `config.yaml` declares the block's inputs, outputs, children, dependencies between children, and (optionally) a remote node it must run on. It is **one-shot per run** — every key is configuration; no live state is stored here.
 - `scripts/start.sh`, `dryrun.sh`, `clean.sh`, `archive_run.sh` are how it actually executes. `start.sh` installs an EXIT trap that fires `archive_run.sh` on completion (success, failure, or signal), producing a `artifacts/archives/run_NNN/` snapshot and appending one entry to `artifacts/index.yaml`.
 - `artifacts/index.yaml` is the live state: the newest entry's `status` field (`completed | failed | interrupted`) tells you what the block last did.
-- Blocks can nest — a parent lists its children under `meta_info.subblocks` (roles only), and each child wires the outputs it consumes into its own inputs via its `meta_info.dependencies`. The full specification is in [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md).
+- Blocks can nest — a parent lists its children under `meta_info.subblocks` (roles only), and each child's own `meta_info.dependencies` shows both directions: `from` (the outputs it consumes, wired into its own inputs) and `to` (which of its own outputs feed which sibling, the mirror declared by the producer). The full specification is in [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md).
 
 
 

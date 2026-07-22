@@ -22,8 +22,13 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    # ROOT: consume the CONVERTED reward==1 LF (not raw trajectories).
-    source.upstream_lf_dir: tracer.output.sft_data_dir
+    from:
+      # ROOT: consume the CONVERTED reward==1 LF (not raw trajectories).
+      source.upstream_lf_dir: tracer.output.sft_data_dir
+    to:
+      # ROOT: eval (stage 4) serves this checkpoint via vLLM and points its
+      # llm_api.api_base_url at it — see tests/smoke/serve_checkpoint.sh.
+      checkpoint_path: evaluator.input.llm_api.api_base_url
 
   resources:
     ip: 47.79.124.13

@@ -5,7 +5,14 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    task_source.dataset_name: curator.output.swe_tasks_dir
+    from:
+      task_source.dataset_name:
+        from: curator.output.swe_tasks_dir
+        when: {task_source.provider: local}
+    to:
+      raw_trajectories_dir:
+        to: trainer.input.source.job_dir
+        when: {trainer.input.source.type: harbor_job}
 
   resources:
     ip: local        # CPU-only; runs on any node with Docker available
@@ -41,8 +48,8 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      api_key: dummy-cf                # functional dummy — proxied endpoint needs no real key
-      api_base_url: "https://llm.jierungogogo.com/v1"
+      api_key: human
+      api_base_url: human
       model: "openai/Qwen3.6-35B-A3B"
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
@@ -52,7 +59,7 @@ runtime_info:
 
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
-      port: 4003                       # 4001/4002 squatted — see /tracer:check reference
+      port: 4003
       master_key: dummy-key-cf         # functional dummy
 
     task_source:
@@ -91,10 +98,8 @@ runtime_info:
       description: Harbor job directories with LiteLLM trajectory logs
       path: artifacts/jobs
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
-      consumer_block: trainer
     sft_data_dir:
       description: LF-format JSON arrays converted from Harbor trajectories, ready for LLaMA-Factory SFT.
       path: artifacts/sft_data
       format: llamafactory_lf_v0.1
       trajectory_format: "artifacts/sft_data/<job>/lf.json"
-      consumer_block: trainer

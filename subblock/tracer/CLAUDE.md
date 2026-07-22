@@ -23,7 +23,7 @@ Read from `config.yaml` before running (details in `docs/content/docs/reference/
 - `meta_info.environment` — `harbor_uv`, `litellm_uv`, `swe_data_process_uv`, `swe_data_process_extras`
 - `runtime_info.input.llm_api` — upstream API used to build the per-job LiteLLM proxy
 - `runtime_info.input.litellm_proxy` — proxy config template, port, master key
-- `runtime_info.input.task_source` — SWE task source (wired from curator via `meta_info.dependencies."task_source.dataset_name"`)
+- `runtime_info.input.task_source` — SWE task source (wired from curator via `meta_info.dependencies.from."task_source.dataset_name"`, mirrored by curator's own `dependencies.to`)
 - `runtime_info.input.harbor_job` — jobs_dir, concurrency, retries, timeout multiplier
 - `runtime_info.input.agent` — agent name, version, runtime image, max turns, temperature
 - `runtime_info.input.sft_conversion` — optional post-Harbor conversion (`enabled`, `scaffold`, `out_dir`, …)

@@ -20,7 +20,7 @@ evaluator is configured entirely through [`config.yaml`](https://github.com/SWE-
 | `agent` | Harbor agent scaffold, version, runtime image/host path, sampling controls | external |
 | `HARBOR_EXCLUDE_TASKS` | Space-separated task IDs Harbor must skip | derived |
 
-evaluator is **standalone** — `meta_info.dependencies` is empty. The benchmark comes from Harbor's registry, not an upstream block, so the only values you normally fill are `llm_api` (or `local_model_serving` for a local checkpoint) and `task_source`.
+evaluator is **standalone** — `meta_info.dependencies` is `{from: {}, to: {}}`. The benchmark comes from Harbor's registry, not an upstream block, so the only values you normally fill are `llm_api` (or `local_model_serving` for a local checkpoint) and `task_source`.
 
 ## Active runtime values
 

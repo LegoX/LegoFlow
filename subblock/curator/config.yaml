@@ -4,7 +4,12 @@ meta_info:
   description: Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages (Python, JavaScript, TypeScript, Go, C, C++, Java, Rust).
   parent: swe_lego_live
   subblocks: {}
-  dependencies: {}   # task source block; no upstream
+  dependencies:
+    from: {}   # task source block; no upstream
+    to:
+      swe_tasks_dir:
+        to: tracer.input.task_source.dataset_name
+        when: {tracer.input.task_source.provider: local}
 
   repos:
     swegen:
