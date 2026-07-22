@@ -20,10 +20,12 @@ meta_info:
 
   resources:
     ip: local        # CPU-only; runs on any node with Docker available
-    user: root
+    # user / pwd / directory apply only when ip is a remote IP (SSH target).
+    # They are ignored for local execution — the block runs from its own dir.
+    user: null
     pwd: null
-    directory: /gpufs/haoli/code/
-    description: cpu node server for k8s cluster. By default you should work at ${directory}
+    directory: null
+    description: CPU node with Docker; runs locally by default.
     public_storage: null
 
 runtime_info:
@@ -154,14 +156,4 @@ runtime_info:
 
     logs:
       dir: artifacts/logs/swegen-create
-      description: "Per-language create logs: cc_<lang>_March.txt"
-
-status:
-  phase: idle
-  progress: "Ready for the next SWE task generation run."
-  next_steps: |
-    1. Set runtime_info.input.llm_api (especially cc_provider_mode) before a run.
-    2. Run scripts/dryrun.sh to preflight env, package, Docker, and the CC proxy.
-    3. Use memory/quick-verify.md for a small end-to-end check when changing the runtime.
-  blockers: null
-  last_updated: null
+      description: "Per-language create logs: cc_<lang>_<UTC-timestamp>.txt"

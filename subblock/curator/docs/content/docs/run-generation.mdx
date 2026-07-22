@@ -193,8 +193,7 @@ swegen create \
   --cc-timeout 1800 \
   --no-require-issue \
   --min-source-files 1 \
-  --max-source-files 10 \
-  --docker-prune-batch 0
+  --max-source-files 10
 
 # Production: single language
 bash scripts/create_py.sh
@@ -203,7 +202,11 @@ bash scripts/create_py.sh
 bash scripts/create_all_bg.sh
 ```
 
-Scripts read parameters from `config.yaml` automatically.
+The `--timeout`/`--cc-timeout` above are small illustrative values for a quick
+single-task check. For real runs the production scripts read per-language values
+from `config.yaml` (`languages.<lang>.params`, e.g. py `3200`/`2400`) — you do
+not set them by hand. `--timeout` is the overall per-case budget and must stay
+>= `--cc-timeout` (the inner Claude-Code session).
 
 </details>
 

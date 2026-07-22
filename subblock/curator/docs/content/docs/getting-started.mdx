@@ -86,9 +86,14 @@ export OPENAI_API_KEY="..."
 export ANTHROPIC_API_KEY="$OPENAI_API_KEY"
 export OPENAI_API_BASE_URL="https://your-openai-compatible-endpoint/v1"
 export ANTHROPIC_BASE_URL="https://your-anthropic-compatible-endpoint"
-export OPENAI_MODEL="openai/MiniMax-M2.7"
-export ANTHROPIC_MODEL="claude-sonnet-4-6"
+export OPENAI_MODEL="<your-pr-model>"        # e.g. the config default Qwen3.6-35B-A3B
+export ANTHROPIC_MODEL="<your-task-model>"   # e.g. claude-sonnet-4-6
 ```
+
+`config.yaml` is the source of truth for model names (`llm_api.pr_model` /
+`llm_api.task_model`); `scripts/load_runtime_env.sh` exports them as
+`OPENAI_MODEL` / `ANTHROPIC_MODEL`. The manual exports above are only for
+running the collector/CLI outside the block scripts.
 
 The pinned collector accepts both `GITHUB_TOKENS` and `GITHUB_TOKEN` and
 combines them with `repos/swegen/gh_token.txt` (or

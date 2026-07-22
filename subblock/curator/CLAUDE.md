@@ -183,6 +183,12 @@ swegen create \
   --max-source-files 10
 ```
 
+The `--timeout`/`--cc-timeout` here are illustrative. The per-language
+`scripts/create_<lang>.sh` read the real values from `config.yaml`
+(`languages.<lang>.params`, e.g. py `3200`/`2400`); `--timeout` is the overall
+per-case budget and must stay >= `--cc-timeout`. Prefer the scripts over a
+hand-written invocation.
+
 Output: task directories under `artifacts/swe_tasks/{lang}-cc/`. Verified task IDs appended to `verifiable_tasks.txt`.
 
 `--min-source-files` controls the yield/difficulty tradeoff: `1` keeps the most PRs (including small fixes, highest throughput), while higher values keep only larger changes. Use `1` for maximum data; every current per-language script uses `2`.

@@ -8,10 +8,9 @@ echo 'activate swegen-env'
 
 load_runtime_env
 
-pip install -e repos/swegen/
+python -c 'import swegen' 2>/dev/null || pip install -e repos/swegen/  # standalone fallback; create_all_bg.sh pre-installs once
 
-export OPENAI_MODEL="${OPENAI_MODEL:-glm-5-urg}"
-export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
+# OPENAI_MODEL / ANTHROPIC_MODEL come from config.yaml via load_runtime_env.
 
 set -euo pipefail
 
@@ -37,4 +36,4 @@ swegen create \
   --no-require-issue \
   --min-source-files 2 \
   --max-source-files 10 \
-  2>&1 | tee "${PROJECT_ROOT}/artifacts/logs/swegen-create/cc_py_March.txt"
+  2>&1 | tee "${PROJECT_ROOT}/artifacts/logs/swegen-create/cc_py_$(date -u +%Y%m%dT%H%M%SZ).txt"
