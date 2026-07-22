@@ -137,7 +137,7 @@ case "$SMOKE_TARGET" in
     run_root_smoke ;;
   subblocks|all)
     for b in "${SUBBLOCKS[@]}"; do run_subblock_smoke "$b"; done ;;
-  curator|tracer|trainer|evaluator|rl)
+  curator|tracer|trainer|evaluator)
     run_subblock_smoke "$SMOKE_TARGET" ;;
   *)
     echo "ERROR: unknown --smoke target '$SMOKE_TARGET' (want: root | ${SUBBLOCKS[*]} | subblocks)" >&2
