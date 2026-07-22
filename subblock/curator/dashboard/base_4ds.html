@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="zh" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,14 +12,12 @@
   --c-fg: #e2e8f0; --c-fg-dim: #94a3b8; --c-fg-mute: #64748b; --c-fg-faint: #475569;
   --c-accent: #6366f1; --c-accent-soft: #6366f133; --c-accent-border: #6366f180;
   --c-good: #34d399; --c-bad: #f87171; --c-warn: #fbbf24; --c-violet: #a78bfa;
-  --c-method-bg: #6366f11f; --c-method-head: #a5b4fc;
   font-size: 18px;
 }
 [data-theme="light"] {
   --c-bg: #f8fafc; --c-bg-2: #ffffff; --c-panel: #ffffff; --c-border: #e2e8f0;
   --c-fg: #0f172a; --c-fg-dim: #475569; --c-fg-mute: #64748b; --c-fg-faint: #94a3b8;
   --c-accent: #4f46e5; --c-accent-soft: #6366f122; --c-accent-border: #6366f1;
-  --c-violet: #7c3aed; --c-method-bg: #eef2ff; --c-method-head: #4338ca;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: var(--c-bg); color: var(--c-fg);
@@ -28,77 +26,65 @@ code, pre, .mono { font-family: var(--font-mono); }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb { background: var(--c-fg-faint); border-radius: 3px; }
 .layout { display: flex; height: 100vh; overflow: hidden; }
-.sidebar { width: 300px; flex-shrink: 0; border-right: 1px solid var(--c-border);
+.sidebar { width: 288px; flex-shrink: 0; border-right: 1px solid var(--c-border);
   background: linear-gradient(180deg, #0a1226 0%, var(--c-bg) 100%);
   display: flex; flex-direction: column; overflow: hidden; }
 [data-theme="light"] .sidebar { background: var(--c-bg-2); }
 .sidebar-logo { padding: 16px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: 10px; }
 .logo-mark { width: 38px; height: 32px; border-radius: 8px; background: var(--c-accent);
-  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 16px; }
-.logo-title { font-size: 20px; font-weight: 600; }
-.logo-sub { font-size: 16px; color: var(--c-fg-mute); }
+  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 14px; }
+.logo-title { font-size: 16px; font-weight: 600; }
+.logo-sub { font-size: 12px; color: var(--c-fg-mute); }
 .ds-nav { padding: 10px 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 3px; }
 .ds-item { background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
-  padding: 10px 12px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 19px;
+  padding: 9px 12px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 14px;
   display: flex; flex-direction: column; gap: 2px; width: 100%; }
 .ds-item:hover { background: #1e293b40; color: var(--c-fg); }
 .ds-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #c7d2fe; }
 [data-theme="light"] .ds-item.active { color: var(--c-accent); }
-.ds-item .ds-name { font-weight: 600; font-size: 19px; }
-.ds-item .ds-count { font-size: 17px; color: var(--c-fg-mute); }
+.ds-item .ds-name { font-weight: 600; font-size: 15px; }
+.ds-item .ds-count { font-size: 12px; color: var(--c-fg-mute); }
 .sidebar-section { padding: 12px 8px 8px; flex: 1; overflow: auto; }
-.section-label { text-transform: uppercase; font-size: 16px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 600; }
-.sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 19px; }
+.section-label { text-transform: uppercase; font-size: 12px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 600; }
+.sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 14px; }
 .sidebar-stat .l { color: var(--c-fg-mute); }
 .sidebar-stat .v { font-weight: 600; font-family: var(--font-mono); }
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { padding: 14px 24px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; justify-content: space-between; }
 .topbar h1 { font-size: 20px; margin: 0; font-weight: 650; }
-.topbar .sub { font-size: 17px; color: var(--c-fg-mute); margin-top: 3px; }
+.topbar .sub { font-size: 13px; color: var(--c-fg-mute); margin-top: 2px; }
 .theme-btn { background: var(--c-bg-2); border: 1px solid var(--c-border); color: var(--c-fg-dim);
-  border-radius: 8px; padding: 7px 14px; cursor: pointer; font-size: 17px; }
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
 .content { flex: 1; overflow: auto; padding: 24px; }
 .ds-panel { display: none; }
 .ds-panel.active { display: block; }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 22px; }
 .card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px 18px; }
-.card .k { font-size: 18px; color: var(--c-fg-mute); }
-.card .v { font-size: 30px; font-weight: 700; font-family: var(--font-mono); margin-top: 4px; }
-.card .v small { font-size: 18px; color: var(--c-fg-mute); font-weight: 500; }
+.card .k { font-size: 13px; color: var(--c-fg-mute); }
+.card .v { font-size: 26px; font-weight: 700; font-family: var(--font-mono); margin-top: 4px; }
+.card .v small { font-size: 14px; color: var(--c-fg-mute); font-weight: 500; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
 .panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 18px 20px; margin-bottom: 18px; }
-.panel h2 { font-size: 21px; margin: 0 0 14px; font-weight: 600; letter-spacing: .01em; }
-.panel h2 span { color: var(--c-fg-mute); font-weight: 400; font-size: 18px; margin-left: 6px; }
-table { width: 100%; border-collapse: collapse; font-size: 19px; }
-th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--c-border); }
+.panel h2 { font-size: 15px; margin: 0 0 14px; font-weight: 600; letter-spacing: .01em; }
+.panel h2 span { color: var(--c-fg-mute); font-weight: 400; font-size: 13px; margin-left: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--c-border); }
 th:first-child, td:first-child { text-align: left; }
-th { color: var(--c-fg-mute); font-weight: 600; font-size: 17px; text-transform: uppercase; letter-spacing: .04em; }
+th { color: var(--c-fg-mute); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 td strong { font-weight: 600; }
-.stacked { display: flex; height: 11px; border-radius: 5px; overflow: hidden; background: #1e293b; min-width: 120px; }
-.stacked.empty { color: var(--c-fg-mute); font-size: 16px; background: transparent; }
+.stacked { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #1e293b; min-width: 120px; }
+.stacked.empty { color: var(--c-fg-mute); font-size: 12px; background: transparent; }
 .seg.easy { background: var(--c-good); } .seg.medium { background: var(--c-warn); } .seg.hard { background: var(--c-bad); }
-.mini { font-size: 16px; color: var(--c-fg-mute); margin-top: 3px; font-family: var(--font-mono); }
-.tag-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 18px; }
-.tag-name { flex: 0 0 230px; font-family: var(--font-mono); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag-track { flex: 1; height: 9px; background: #1e293b; border-radius: 4px; overflow: hidden; }
+.mini { font-size: 11px; color: var(--c-fg-mute); margin-top: 3px; font-family: var(--font-mono); }
+.tag-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 13px; }
+.tag-name { flex: 0 0 190px; font-family: var(--font-mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-track { flex: 1; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
 .tag-fill { display: block; height: 100%; background: var(--c-accent); }
-.tag-count { flex: 0 0 150px; text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 17px; }
+.tag-count { flex: 0 0 120px; text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 12px; }
 .tag-card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px 18px; }
-.tag-card h3 { font-size: 20px; margin: 0 0 12px; font-weight: 600; }
-.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 17px; margin-left: 6px; }
-.muted { color: var(--c-fg-dim); font-size: 18px; }
-/* Prominent methodology card (difficulty & tagging) - stands out in both themes */
-.method-card { grid-column: 1 / -1; background: var(--c-method-bg);
-  border: 1px solid var(--c-accent-border); border-radius: 12px; padding: 20px 24px; }
-.method-card h3 { font-size: 22px; margin: 0 0 14px; font-weight: 700; color: var(--c-method-head); }
-.method-card h3 span { color: var(--c-accent); font-weight: 500; font-size: 18px; margin-left: 6px; }
-.method-body { font-size: 19px; line-height: 1.85; color: var(--c-fg); }
-.method-body strong { color: var(--c-fg); font-weight: 700; }
-.method-body .mh { display: inline-block; color: var(--c-method-head); font-weight: 800;
-  font-size: 20px; letter-spacing: .01em; margin: 4px 0 2px; }
-.method-body .dim { color: var(--c-violet); font-weight: 700; }
-.method-body code { color: var(--c-accent); background: var(--c-accent-soft);
-  padding: 1px 6px; border-radius: 5px; font-size: 17px; }
+.tag-card h3 { font-size: 14px; margin: 0 0 12px; font-weight: 600; }
+.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 12px; margin-left: 6px; }
+.muted { color: var(--c-fg-mute); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -110,19 +96,20 @@ td strong { font-weight: 600; }
     </div>
     <div class="ds-nav">
       <div class="section-label">Datasets</div>
-      <button class="ds-item active" data-ds="self_made" onclick="switchDs('self_made')"><span class="ds-name">SWE-Lego-Live-Instances</span><span class="ds-count">45,881 tasks</span></button><button class="ds-item" data-ds="swe_rebench" onclick="switchDs('swe_rebench')"><span class="ds-name">SWE-rebench</span><span class="ds-count">21,336 tasks</span></button><button class="ds-item" data-ds="swe_rebench_v2" onclick="switchDs('swe_rebench_v2')"><span class="ds-name">SWE-rebench-V2</span><span class="ds-count">32,079 tasks</span></button><button class="ds-item" data-ds="openswe_filtered" onclick="switchDs('openswe_filtered')"><span class="ds-name">OpenSWE-filtered</span><span class="ds-count">22,806 tasks</span></button><button class="ds-item" data-ds="scale_swe" onclick="switchDs('scale_swe')"><span class="ds-name">Scale-SWE</span><span class="ds-count">20,181 tasks</span></button>
+      <button class="ds-item active" data-ds="self_made" onclick="switchDs('self_made')"><span class="ds-name">SWE-Lego-Live-Instances</span><span class="ds-count">45,881 tasks · 45,881 tagged</span></button><button class="ds-item" data-ds="swe_rebench" onclick="switchDs('swe_rebench')"><span class="ds-name">SWE-rebench</span><span class="ds-count">21,336 tasks · 21,336 tagged</span></button><button class="ds-item" data-ds="openswe_filtered" onclick="switchDs('openswe_filtered')"><span class="ds-name">OpenSWE-filtered</span><span class="ds-count">22,806 tasks · 22,806 tagged</span></button><button class="ds-item" data-ds="scale_swe" onclick="switchDs('scale_swe')"><span class="ds-name">Scale-SWE</span><span class="ds-count">20,181 tasks · 20,181 tagged</span></button>
     </div>
     <div class="sidebar-section">
       <div class="section-label">Global</div>
-      <div class="sidebar-stat"><span class="l">Datasets</span><span class="v">5</span></div>
-      <div class="sidebar-stat"><span class="l">Total tasks</span><span class="v">142,283</span></div>
+      <div class="sidebar-stat"><span class="l">Datasets</span><span class="v">4</span></div>
+      <div class="sidebar-stat"><span class="l">Total tasks</span><span class="v">110,204</span></div>
+      <div class="sidebar-stat"><span class="l">Total tagged</span><span class="v">110,204</span></div>
     </div>
   </aside>
   <div class="main">
     <div class="topbar">
       <div>
         <h1>Dataset Analytics</h1>
-        <div class="sub">Unified LLM tagging &middot; difficulty &middot; tags &middot; bug class · updated 2026-07-22 04:22 UTC</div>
+        <div class="sub">统一 LLM 打标 (difficulty · tags · bug class) · updated 2026-07-22 04:22 UTC</div>
       </div>
       <button class="theme-btn" onclick="toggleTheme()">Theme</button>
     </div>
@@ -131,6 +118,7 @@ td strong { font-weight: 600; }
 <div class="ds-panel active" data-ds="self_made">
   <div class="cards">
     <div class="card"><div class="k">Total tasks</div><div class="v">45,881</div></div>
+    <div class="card"><div class="k">Tagged (LLM)</div><div class="v">45,881 <small>100.0%</small></div></div>
     <div class="card"><div class="k">Mean difficulty</div><div class="v">6.30</div></div>
     <div class="card"><div class="k">Median difficulty</div><div class="v">6.7</div></div>
     <div class="card"><div class="k">Avg patch lines</div><div class="v">313.3</div></div>
@@ -168,7 +156,7 @@ td strong { font-weight: 600; }
 <div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">19,202 (41.9%)</span></div>
 <div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:96.11%"></span></span><span class="tag-count">18,455 (40.2%)</span></div>
 <div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0 (0.0%)</span></div></section>
-    <section class="tag-card"><h3>Languages</h3><div class="tag-row"><span class="tag-name">go</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">7,487 (16.3%)</span></div>
+    <section class="tag-card"><h3>Languages <span>45881 tagged</span></h3><div class="tag-row"><span class="tag-name">go</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">7,487 (16.3%)</span></div>
 <div class="tag-row"><span class="tag-name">javascript</span><span class="tag-track"><span class="tag-fill" style="width:88.05%"></span></span><span class="tag-count">6,592 (14.4%)</span></div>
 <div class="tag-row"><span class="tag-name">c</span><span class="tag-track"><span class="tag-fill" style="width:86.36%"></span></span><span class="tag-count">6,466 (14.1%)</span></div>
 <div class="tag-row"><span class="tag-name">typescript</span><span class="tag-track"><span class="tag-fill" style="width:85.83%"></span></span><span class="tag-count">6,426 (14.0%)</span></div>
@@ -186,13 +174,13 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Area / tier</h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">24,598 (53.6%)</span></div>
+    <section class="tag-card"><h3>Area / tier <span>45881 tagged</span></h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">24,598 (53.6%)</span></div>
 <div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:44.13%"></span></span><span class="tag-count">10,855 (23.7%)</span></div>
 <div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:26.99%"></span></span><span class="tag-count">6,639 (14.5%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:15.29%"></span></span><span class="tag-count">3,760 (8.2%)</span></div>
 <div class="tag-row"><span class="tag-name">fullstack</span><span class="tag-track"><span class="tag-fill" style="width:0.11%"></span></span><span class="tag-count">27 (0.1%)</span></div>
 <div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:0.01%"></span></span><span class="tag-count">2 (0.0%)</span></div></section>
-    <section class="tag-card"><h3>Top topics</h3><div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">606 (1.3%)</span></div>
+    <section class="tag-card"><h3>Top topics <span>45881 tagged</span></h3><div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">606 (1.3%)</span></div>
 <div class="tag-row"><span class="tag-name">kubernetes</span><span class="tag-track"><span class="tag-fill" style="width:46.86%"></span></span><span class="tag-count">284 (0.6%)</span></div>
 <div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:32.51%"></span></span><span class="tag-count">197 (0.4%)</span></div>
 <div class="tag-row"><span class="tag-name">cobra</span><span class="tag-track"><span class="tag-fill" style="width:32.34%"></span></span><span class="tag-count">196 (0.4%)</span></div>
@@ -220,7 +208,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">3,075 (6.7%)</span></div>
+    <section class="tag-card"><h3>Bug classes <span>45881 tagged</span></h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">3,075 (6.7%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:78.21%"></span></span><span class="tag-count">2,405 (5.2%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:69.27%"></span></span><span class="tag-count">2,130 (4.6%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:56.03%"></span></span><span class="tag-count">1,723 (3.8%)</span></div>
@@ -240,25 +228,11 @@ td strong { font-weight: 600; }
 <div class="tag-row"><span class="tag-name">missing-default</span><span class="tag-track"><span class="tag-fill" style="width:4.81%"></span></span><span class="tag-count">148 (0.3%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-function</span><span class="tag-track"><span class="tag-fill" style="width:4.29%"></span></span><span class="tag-count">132 (0.3%)</span></div>
 <div class="tag-row"><span class="tag-name">feature-addition</span><span class="tag-track"><span class="tag-fill" style="width:4.10%"></span></span><span class="tag-count">126 (0.3%)</span></div></section>
-    <section class="tag-card method-card"><h3>Methodology <span>unified difficulty &amp; tagging</span></h3>
-      <div class="method-body">
-      <span class="mh">Difficulty Scoring (1&ndash;10 scale)</span><br>
-      Composite weighted score over 5 dimensions:<br>
-      &bull; <span class="dim">Patch scope (30%)</span>: lines changed, files affected, hunks count<br>
-      &bull; <span class="dim">Logic complexity (25%)</span>: control-flow depth, branching, algorithmic sophistication<br>
-      &bull; <span class="dim">Context breadth (20%)</span>: cross-module dependencies, API surface understanding<br>
-      &bull; <span class="dim">Test complexity (15%)</span>: fixture setup, mock requirements, edge-case coverage<br>
-      &bull; <span class="dim">Instruction complexity (10%)</span>: problem-statement clarity, implicit requirements<br>
-      Each dimension is log-scaled, then the weighted sum is mapped to 1&ndash;10 and binned into
-      <strong>easy</strong> (&le;4.0), <strong>medium</strong> (4.1&ndash;7.0), <strong>hard</strong> (&gt;7.0).<br><br>
-      <span class="mh">Semantic Tagging</span><br>
-      Each task is labelled with a 4-tuple <code>[language, area, topic, bug_class]</code>:<br>
-      &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
-      &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
-      &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
+    <section class="tag-card"><h3>Tag schema <span>harbor task_analysis</span></h3>
+      <div class="muted" style="line-height:1.7;">Every task is tagged with the 4-tuple<br>
+      <code>[language, area, topic, bug_class]</code><br>
+      area &isin; {backend, frontend, fullstack, cli, library, framework}.<br>
+      Difficulty is a 5-dimension weighted score (1&ndash;10).</div>
     </section>
   </div>
 </div>
@@ -266,6 +240,7 @@ td strong { font-weight: 600; }
 <div class="ds-panel" data-ds="swe_rebench">
   <div class="cards">
     <div class="card"><div class="k">Total tasks</div><div class="v">21,336</div></div>
+    <div class="card"><div class="k">Tagged (LLM)</div><div class="v">21,336 <small>100.0%</small></div></div>
     <div class="card"><div class="k">Mean difficulty</div><div class="v">5.64</div></div>
     <div class="card"><div class="k">Median difficulty</div><div class="v">6.0</div></div>
     <div class="card"><div class="k">Avg patch lines</div><div class="v">142.2</div></div>
@@ -303,7 +278,7 @@ td strong { font-weight: 600; }
 <div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">6,820 (32.0%)</span></div>
 <div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:61.45%"></span></span><span class="tag-count">4,191 (19.6%)</span></div>
 <div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:39.05%"></span></span><span class="tag-count">2,663 (12.5%)</span></div></section>
-    <section class="tag-card"><h3>Languages</h3><div class="tag-row"><span class="tag-name">python</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">21,216 (99.4%)</span></div>
+    <section class="tag-card"><h3>Languages <span>21336 tagged</span></h3><div class="tag-row"><span class="tag-name">python</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">21,216 (99.4%)</span></div>
 <div class="tag-row"><span class="tag-name">fortran</span><span class="tag-track"><span class="tag-fill" style="width:0.20%"></span></span><span class="tag-count">43 (0.2%)</span></div>
 <div class="tag-row"><span class="tag-name">cpp</span><span class="tag-track"><span class="tag-fill" style="width:0.19%"></span></span><span class="tag-count">41 (0.2%)</span></div>
 <div class="tag-row"><span class="tag-name">javascript</span><span class="tag-track"><span class="tag-fill" style="width:0.03%"></span></span><span class="tag-count">7 (0.0%)</span></div>
@@ -321,12 +296,12 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Area / tier</h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">9,601 (45.0%)</span></div>
+    <section class="tag-card"><h3>Area / tier <span>21336 tagged</span></h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">9,601 (45.0%)</span></div>
 <div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:93.66%"></span></span><span class="tag-count">8,992 (42.1%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:18.58%"></span></span><span class="tag-count">1,784 (8.4%)</span></div>
 <div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:9.98%"></span></span><span class="tag-count">958 (4.5%)</span></div>
 <div class="tag-row"><span class="tag-name">fullstack</span><span class="tag-track"><span class="tag-fill" style="width:0.01%"></span></span><span class="tag-count">1 (0.0%)</span></div></section>
-    <section class="tag-card"><h3>Top topics</h3><div class="tag-row"><span class="tag-name">sympy</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">732 (3.4%)</span></div>
+    <section class="tag-card"><h3>Top topics <span>21336 tagged</span></h3><div class="tag-row"><span class="tag-name">sympy</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">732 (3.4%)</span></div>
 <div class="tag-row"><span class="tag-name">sqlglot</span><span class="tag-track"><span class="tag-fill" style="width:62.02%"></span></span><span class="tag-count">454 (2.1%)</span></div>
 <div class="tag-row"><span class="tag-name">xarray</span><span class="tag-track"><span class="tag-fill" style="width:46.45%"></span></span><span class="tag-count">340 (1.6%)</span></div>
 <div class="tag-row"><span class="tag-name">matplotlib</span><span class="tag-track"><span class="tag-fill" style="width:37.16%"></span></span><span class="tag-count">272 (1.3%)</span></div>
@@ -354,7 +329,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,752 (8.2%)</span></div>
+    <section class="tag-card"><h3>Bug classes <span>21336 tagged</span></h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,752 (8.2%)</span></div>
 <div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:83.62%"></span></span><span class="tag-count">1,465 (6.9%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:59.47%"></span></span><span class="tag-count">1,042 (4.9%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:59.13%"></span></span><span class="tag-count">1,036 (4.9%)</span></div>
@@ -374,160 +349,11 @@ td strong { font-weight: 600; }
 <div class="tag-row"><span class="tag-name">incomplete-implementation</span><span class="tag-track"><span class="tag-fill" style="width:3.71%"></span></span><span class="tag-count">65 (0.3%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-exception-handling</span><span class="tag-track"><span class="tag-fill" style="width:3.25%"></span></span><span class="tag-count">57 (0.3%)</span></div>
 <div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:3.14%"></span></span><span class="tag-count">55 (0.3%)</span></div></section>
-    <section class="tag-card method-card"><h3>Methodology <span>unified difficulty &amp; tagging</span></h3>
-      <div class="method-body">
-      <span class="mh">Difficulty Scoring (1&ndash;10 scale)</span><br>
-      Composite weighted score over 5 dimensions:<br>
-      &bull; <span class="dim">Patch scope (30%)</span>: lines changed, files affected, hunks count<br>
-      &bull; <span class="dim">Logic complexity (25%)</span>: control-flow depth, branching, algorithmic sophistication<br>
-      &bull; <span class="dim">Context breadth (20%)</span>: cross-module dependencies, API surface understanding<br>
-      &bull; <span class="dim">Test complexity (15%)</span>: fixture setup, mock requirements, edge-case coverage<br>
-      &bull; <span class="dim">Instruction complexity (10%)</span>: problem-statement clarity, implicit requirements<br>
-      Each dimension is log-scaled, then the weighted sum is mapped to 1&ndash;10 and binned into
-      <strong>easy</strong> (&le;4.0), <strong>medium</strong> (4.1&ndash;7.0), <strong>hard</strong> (&gt;7.0).<br><br>
-      <span class="mh">Semantic Tagging</span><br>
-      Each task is labelled with a 4-tuple <code>[language, area, topic, bug_class]</code>:<br>
-      &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
-      &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
-      &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
-    </section>
-  </div>
-</div>
-
-<div class="ds-panel" data-ds="swe_rebench_v2">
-  <div class="cards">
-    <div class="card"><div class="k">Total tasks</div><div class="v">32,079</div></div>
-    <div class="card"><div class="k">Mean difficulty</div><div class="v">5.80</div></div>
-    <div class="card"><div class="k">Median difficulty</div><div class="v">6.2</div></div>
-    <div class="card"><div class="k">Avg patch lines</div><div class="v">86.9</div></div>
-    <div class="card"><div class="k">Avg patch files</div><div class="v">4.22</div></div>
-  </div>
-
-  <div class="panel">
-    <h2>Difficulty distribution <span>SWE-rebench-V2</span></h2>
-    <table>
-      <tr><th>Label breakdown</th><th>easy</th><th>medium</th><th>hard</th></tr>
-      <tr>
-        <td><div class="stacked"><div class="seg easy" style="width:22.817%" title="easy: 7319"></div><div class="seg medium" style="width:42.055%" title="medium: 13490"></div><div class="seg hard" style="width:35.128%" title="hard: 11268"></div></div><div class="mini">7319 / 13490 / 11268</div></td>
-        <td>7,319</td>
-        <td>13,490</td>
-        <td>11,268</td>
-      </tr>
-    </table>
-    <table style="margin-top:14px;">
-      <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
-      <tr>
-        <td>32,077</td>
-        <td>1.0</td>
-        <td>4.3</td>
-        <td>6.2</td>
-        <td>5.80</td>
-        <td>7.5</td>
-        <td>9.2</td>
-      </tr>
-    </table>
-  </div>
-
-  <div class="grid2">
-    <section class="tag-card"><h3>Score bins</h3><div class="tag-row"><span class="tag-name">&lt;=3</span><span class="tag-track"><span class="tag-fill" style="width:44.79%"></span></span><span class="tag-count">4,590 (14.3%)</span></div>
-<div class="tag-row"><span class="tag-name">3.1-5</span><span class="tag-track"><span class="tag-fill" style="width:58.28%"></span></span><span class="tag-count">5,972 (18.6%)</span></div>
-<div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">10,247 (31.9%)</span></div>
-<div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:68.14%"></span></span><span class="tag-count">6,982 (21.8%)</span></div>
-<div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:41.83%"></span></span><span class="tag-count">4,286 (13.4%)</span></div></section>
-    <section class="tag-card"><h3>Languages</h3><div class="tag-row"><span class="tag-name">python</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">7,222 (22.5%)</span></div>
-<div class="tag-row"><span class="tag-name">go</span><span class="tag-track"><span class="tag-fill" style="width:85.11%"></span></span><span class="tag-count">6,147 (19.2%)</span></div>
-<div class="tag-row"><span class="tag-name">javascript</span><span class="tag-track"><span class="tag-fill" style="width:60.52%"></span></span><span class="tag-count">4,371 (13.6%)</span></div>
-<div class="tag-row"><span class="tag-name">typescript</span><span class="tag-track"><span class="tag-fill" style="width:55.23%"></span></span><span class="tag-count">3,989 (12.4%)</span></div>
-<div class="tag-row"><span class="tag-name">rust</span><span class="tag-track"><span class="tag-fill" style="width:40.61%"></span></span><span class="tag-count">2,933 (9.1%)</span></div>
-<div class="tag-row"><span class="tag-name">java</span><span class="tag-track"><span class="tag-fill" style="width:24.23%"></span></span><span class="tag-count">1,750 (5.5%)</span></div>
-<div class="tag-row"><span class="tag-name">php</span><span class="tag-track"><span class="tag-fill" style="width:19.47%"></span></span><span class="tag-count">1,406 (4.4%)</span></div>
-<div class="tag-row"><span class="tag-name">kotlin</span><span class="tag-track"><span class="tag-fill" style="width:11.87%"></span></span><span class="tag-count">857 (2.7%)</span></div>
-<div class="tag-row"><span class="tag-name">julia</span><span class="tag-track"><span class="tag-fill" style="width:10.98%"></span></span><span class="tag-count">793 (2.5%)</span></div>
-<div class="tag-row"><span class="tag-name">elixir</span><span class="tag-track"><span class="tag-fill" style="width:5.68%"></span></span><span class="tag-count">410 (1.3%)</span></div>
-<div class="tag-row"><span class="tag-name">scala</span><span class="tag-track"><span class="tag-fill" style="width:5.52%"></span></span><span class="tag-count">399 (1.2%)</span></div>
-<div class="tag-row"><span class="tag-name">swift</span><span class="tag-track"><span class="tag-fill" style="width:4.97%"></span></span><span class="tag-count">359 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">dart</span><span class="tag-track"><span class="tag-fill" style="width:3.48%"></span></span><span class="tag-count">251 (0.8%)</span></div>
-<div class="tag-row"><span class="tag-name">r</span><span class="tag-track"><span class="tag-fill" style="width:2.20%"></span></span><span class="tag-count">159 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">cpp</span><span class="tag-track"><span class="tag-fill" style="width:2.19%"></span></span><span class="tag-count">158 (0.5%)</span></div></section>
-  </div>
-
-  <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Area / tier</h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">12,927 (40.3%)</span></div>
-<div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:89.71%"></span></span><span class="tag-count">11,597 (36.2%)</span></div>
-<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:31.91%"></span></span><span class="tag-count">4,125 (12.9%)</span></div>
-<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:26.45%"></span></span><span class="tag-count">3,419 (10.7%)</span></div>
-<div class="tag-row"><span class="tag-name">fullstack</span><span class="tag-track"><span class="tag-fill" style="width:0.06%"></span></span><span class="tag-count">8 (0.0%)</span></div>
-<div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:0.01%"></span></span><span class="tag-count">1 (0.0%)</span></div></section>
-    <section class="tag-card"><h3>Top topics</h3><div class="tag-row"><span class="tag-name">swc</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">407 (1.3%)</span></div>
-<div class="tag-row"><span class="tag-name">kubernetes</span><span class="tag-track"><span class="tag-fill" style="width:87.47%"></span></span><span class="tag-count">356 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">eslint</span><span class="tag-track"><span class="tag-fill" style="width:72.97%"></span></span><span class="tag-count">297 (0.9%)</span></div>
-<div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:65.85%"></span></span><span class="tag-count">268 (0.8%)</span></div>
-<div class="tag-row"><span class="tag-name">pandas</span><span class="tag-track"><span class="tag-fill" style="width:61.43%"></span></span><span class="tag-count">250 (0.8%)</span></div>
-<div class="tag-row"><span class="tag-name">moto</span><span class="tag-track"><span class="tag-fill" style="width:57.00%"></span></span><span class="tag-count">232 (0.7%)</span></div>
-<div class="tag-row"><span class="tag-name">serverless</span><span class="tag-track"><span class="tag-fill" style="width:48.65%"></span></span><span class="tag-count">198 (0.6%)</span></div>
-<div class="tag-row"><span class="tag-name">statamic</span><span class="tag-track"><span class="tag-fill" style="width:46.19%"></span></span><span class="tag-count">188 (0.6%)</span></div>
-<div class="tag-row"><span class="tag-name">cfn-lint</span><span class="tag-track"><span class="tag-fill" style="width:39.80%"></span></span><span class="tag-count">162 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">diktat</span><span class="tag-track"><span class="tag-fill" style="width:38.82%"></span></span><span class="tag-count">158 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">rust-analyzer</span><span class="tag-track"><span class="tag-fill" style="width:38.57%"></span></span><span class="tag-count">157 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">cobra</span><span class="tag-track"><span class="tag-fill" style="width:37.59%"></span></span><span class="tag-count">153 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">helm</span><span class="tag-track"><span class="tag-fill" style="width:36.86%"></span></span><span class="tag-count">150 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">pennylane</span><span class="tag-track"><span class="tag-fill" style="width:33.17%"></span></span><span class="tag-count">135 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">aiohttp</span><span class="tag-track"><span class="tag-fill" style="width:32.68%"></span></span><span class="tag-count">133 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">qiskit</span><span class="tag-track"><span class="tag-fill" style="width:32.43%"></span></span><span class="tag-count">132 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">swift-syntax</span><span class="tag-track"><span class="tag-fill" style="width:28.75%"></span></span><span class="tag-count">117 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">sveltekit</span><span class="tag-track"><span class="tag-fill" style="width:28.75%"></span></span><span class="tag-count">117 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">hypothesis</span><span class="tag-track"><span class="tag-fill" style="width:28.01%"></span></span><span class="tag-count">114 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">obsidian-linter</span><span class="tag-track"><span class="tag-fill" style="width:27.27%"></span></span><span class="tag-count">111 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">clap</span><span class="tag-track"><span class="tag-fill" style="width:26.78%"></span></span><span class="tag-count">109 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">laravel</span><span class="tag-track"><span class="tag-fill" style="width:26.29%"></span></span><span class="tag-count">107 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">knative</span><span class="tag-track"><span class="tag-fill" style="width:25.31%"></span></span><span class="tag-count">103 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">kiota</span><span class="tag-track"><span class="tag-fill" style="width:24.82%"></span></span><span class="tag-count">101 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">scalameta</span><span class="tag-track"><span class="tag-fill" style="width:23.83%"></span></span><span class="tag-count">97 (0.3%)</span></div></section>
-  </div>
-
-  <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">2,494 (7.8%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:61.15%"></span></span><span class="tag-count">1,525 (4.8%)</span></div>
-<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:55.17%"></span></span><span class="tag-count">1,376 (4.3%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:50.96%"></span></span><span class="tag-count">1,271 (4.0%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:45.07%"></span></span><span class="tag-count">1,124 (3.5%)</span></div>
-<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:42.50%"></span></span><span class="tag-count">1,060 (3.3%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:14.55%"></span></span><span class="tag-count">363 (1.1%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-state-propagation</span><span class="tag-track"><span class="tag-fill" style="width:11.19%"></span></span><span class="tag-count">279 (0.9%)</span></div>
-<div class="tag-row"><span class="tag-name">incomplete-parsing</span><span class="tag-track"><span class="tag-fill" style="width:8.94%"></span></span><span class="tag-count">223 (0.7%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:8.62%"></span></span><span class="tag-count">215 (0.7%)</span></div>
-<div class="tag-row"><span class="tag-name">false-positive</span><span class="tag-track"><span class="tag-fill" style="width:6.54%"></span></span><span class="tag-count">163 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:6.30%"></span></span><span class="tag-count">157 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-error-handling</span><span class="tag-track"><span class="tag-fill" style="width:6.01%"></span></span><span class="tag-count">150 (0.5%)</span></div>
-<div class="tag-row"><span class="tag-name">index-out-of-bounds</span><span class="tag-track"><span class="tag-fill" style="width:5.61%"></span></span><span class="tag-count">140 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-method</span><span class="tag-track"><span class="tag-fill" style="width:5.13%"></span></span><span class="tag-count">128 (0.4%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-default</span><span class="tag-track"><span class="tag-fill" style="width:4.41%"></span></span><span class="tag-count">110 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-method-implementation</span><span class="tag-track"><span class="tag-fill" style="width:4.17%"></span></span><span class="tag-count">104 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">nil-pointer-dereference</span><span class="tag-track"><span class="tag-fill" style="width:4.01%"></span></span><span class="tag-count">100 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">missing-function-implementation</span><span class="tag-track"><span class="tag-fill" style="width:3.53%"></span></span><span class="tag-count">88 (0.3%)</span></div>
-<div class="tag-row"><span class="tag-name">off-by-one</span><span class="tag-track"><span class="tag-fill" style="width:3.41%"></span></span><span class="tag-count">85 (0.3%)</span></div></section>
-    <section class="tag-card method-card"><h3>Methodology <span>unified difficulty &amp; tagging</span></h3>
-      <div class="method-body">
-      <span class="mh">Difficulty Scoring (1&ndash;10 scale)</span><br>
-      Composite weighted score over 5 dimensions:<br>
-      &bull; <span class="dim">Patch scope (30%)</span>: lines changed, files affected, hunks count<br>
-      &bull; <span class="dim">Logic complexity (25%)</span>: control-flow depth, branching, algorithmic sophistication<br>
-      &bull; <span class="dim">Context breadth (20%)</span>: cross-module dependencies, API surface understanding<br>
-      &bull; <span class="dim">Test complexity (15%)</span>: fixture setup, mock requirements, edge-case coverage<br>
-      &bull; <span class="dim">Instruction complexity (10%)</span>: problem-statement clarity, implicit requirements<br>
-      Each dimension is log-scaled, then the weighted sum is mapped to 1&ndash;10 and binned into
-      <strong>easy</strong> (&le;4.0), <strong>medium</strong> (4.1&ndash;7.0), <strong>hard</strong> (&gt;7.0).<br><br>
-      <span class="mh">Semantic Tagging</span><br>
-      Each task is labelled with a 4-tuple <code>[language, area, topic, bug_class]</code>:<br>
-      &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
-      &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
-      &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
+    <section class="tag-card"><h3>Tag schema <span>harbor task_analysis</span></h3>
+      <div class="muted" style="line-height:1.7;">Every task is tagged with the 4-tuple<br>
+      <code>[language, area, topic, bug_class]</code><br>
+      area &isin; {backend, frontend, fullstack, cli, library, framework}.<br>
+      Difficulty is a 5-dimension weighted score (1&ndash;10).</div>
     </section>
   </div>
 </div>
@@ -535,6 +361,7 @@ td strong { font-weight: 600; }
 <div class="ds-panel" data-ds="openswe_filtered">
   <div class="cards">
     <div class="card"><div class="k">Total tasks</div><div class="v">22,806</div></div>
+    <div class="card"><div class="k">Tagged (LLM)</div><div class="v">22,806 <small>100.0%</small></div></div>
     <div class="card"><div class="k">Mean difficulty</div><div class="v">5.36</div></div>
     <div class="card"><div class="k">Median difficulty</div><div class="v">5.8</div></div>
     <div class="card"><div class="k">Avg patch lines</div><div class="v">61.8</div></div>
@@ -572,7 +399,7 @@ td strong { font-weight: 600; }
 <div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">8,497 (37.3%)</span></div>
 <div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:53.51%"></span></span><span class="tag-count">4,547 (19.9%)</span></div>
 <div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:10.84%"></span></span><span class="tag-count">921 (4.0%)</span></div></section>
-    <section class="tag-card"><h3>Languages</h3><div class="tag-row"><span class="tag-name">python</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">22,686 (99.5%)</span></div>
+    <section class="tag-card"><h3>Languages <span>22806 tagged</span></h3><div class="tag-row"><span class="tag-name">python</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">22,686 (99.5%)</span></div>
 <div class="tag-row"><span class="tag-name">fortran</span><span class="tag-track"><span class="tag-fill" style="width:0.16%"></span></span><span class="tag-count">37 (0.2%)</span></div>
 <div class="tag-row"><span class="tag-name">cpp</span><span class="tag-track"><span class="tag-fill" style="width:0.11%"></span></span><span class="tag-count">25 (0.1%)</span></div>
 <div class="tag-row"><span class="tag-name">java</span><span class="tag-track"><span class="tag-fill" style="width:0.04%"></span></span><span class="tag-count">9 (0.0%)</span></div>
@@ -590,12 +417,12 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Area / tier</h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">11,616 (50.9%)</span></div>
+    <section class="tag-card"><h3>Area / tier <span>22806 tagged</span></h3><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">11,616 (50.9%)</span></div>
 <div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:69.70%"></span></span><span class="tag-count">8,096 (35.5%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:16.60%"></span></span><span class="tag-count">1,928 (8.5%)</span></div>
 <div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:10.03%"></span></span><span class="tag-count">1,165 (5.1%)</span></div>
 <div class="tag-row"><span class="tag-name">fullstack</span><span class="tag-track"><span class="tag-fill" style="width:0.01%"></span></span><span class="tag-count">1 (0.0%)</span></div></section>
-    <section class="tag-card"><h3>Top topics</h3><div class="tag-row"><span class="tag-name">django</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">507 (2.2%)</span></div>
+    <section class="tag-card"><h3>Top topics <span>22806 tagged</span></h3><div class="tag-row"><span class="tag-name">django</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">507 (2.2%)</span></div>
 <div class="tag-row"><span class="tag-name">pandas</span><span class="tag-track"><span class="tag-fill" style="width:59.17%"></span></span><span class="tag-count">300 (1.3%)</span></div>
 <div class="tag-row"><span class="tag-name">pydantic</span><span class="tag-track"><span class="tag-fill" style="width:54.24%"></span></span><span class="tag-count">275 (1.2%)</span></div>
 <div class="tag-row"><span class="tag-name">fastapi</span><span class="tag-track"><span class="tag-fill" style="width:39.45%"></span></span><span class="tag-count">200 (0.9%)</span></div>
@@ -623,7 +450,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,833 (8.0%)</span></div>
+    <section class="tag-card"><h3>Bug classes <span>22806 tagged</span></h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,833 (8.0%)</span></div>
 <div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:69.18%"></span></span><span class="tag-count">1,268 (5.6%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:55.43%"></span></span><span class="tag-count">1,016 (4.5%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:54.17%"></span></span><span class="tag-count">993 (4.4%)</span></div>
@@ -643,25 +470,11 @@ td strong { font-weight: 600; }
 <div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:4.26%"></span></span><span class="tag-count">78 (0.3%)</span></div>
 <div class="tag-row"><span class="tag-name">feature-addition</span><span class="tag-track"><span class="tag-fill" style="width:4.26%"></span></span><span class="tag-count">78 (0.3%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-parameter-propagation</span><span class="tag-track"><span class="tag-fill" style="width:3.82%"></span></span><span class="tag-count">70 (0.3%)</span></div></section>
-    <section class="tag-card method-card"><h3>Methodology <span>unified difficulty &amp; tagging</span></h3>
-      <div class="method-body">
-      <span class="mh">Difficulty Scoring (1&ndash;10 scale)</span><br>
-      Composite weighted score over 5 dimensions:<br>
-      &bull; <span class="dim">Patch scope (30%)</span>: lines changed, files affected, hunks count<br>
-      &bull; <span class="dim">Logic complexity (25%)</span>: control-flow depth, branching, algorithmic sophistication<br>
-      &bull; <span class="dim">Context breadth (20%)</span>: cross-module dependencies, API surface understanding<br>
-      &bull; <span class="dim">Test complexity (15%)</span>: fixture setup, mock requirements, edge-case coverage<br>
-      &bull; <span class="dim">Instruction complexity (10%)</span>: problem-statement clarity, implicit requirements<br>
-      Each dimension is log-scaled, then the weighted sum is mapped to 1&ndash;10 and binned into
-      <strong>easy</strong> (&le;4.0), <strong>medium</strong> (4.1&ndash;7.0), <strong>hard</strong> (&gt;7.0).<br><br>
-      <span class="mh">Semantic Tagging</span><br>
-      Each task is labelled with a 4-tuple <code>[language, area, topic, bug_class]</code>:<br>
-      &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
-      &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
-      &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
+    <section class="tag-card"><h3>Tag schema <span>harbor task_analysis</span></h3>
+      <div class="muted" style="line-height:1.7;">Every task is tagged with the 4-tuple<br>
+      <code>[language, area, topic, bug_class]</code><br>
+      area &isin; {backend, frontend, fullstack, cli, library, framework}.<br>
+      Difficulty is a 5-dimension weighted score (1&ndash;10).</div>
     </section>
   </div>
 </div>
@@ -669,6 +482,7 @@ td strong { font-weight: 600; }
 <div class="ds-panel" data-ds="scale_swe">
   <div class="cards">
     <div class="card"><div class="k">Total tasks</div><div class="v">20,181</div></div>
+    <div class="card"><div class="k">Tagged (LLM)</div><div class="v">20,181 <small>100.0%</small></div></div>
     <div class="card"><div class="k">Mean difficulty</div><div class="v">5.98</div></div>
     <div class="card"><div class="k">Median difficulty</div><div class="v">6.3</div></div>
     <div class="card"><div class="k">Avg patch lines</div><div class="v">321.4</div></div>
@@ -706,7 +520,7 @@ td strong { font-weight: 600; }
 <div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">10,072 (49.9%)</span></div>
 <div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:54.67%"></span></span><span class="tag-count">5,506 (27.3%)</span></div>
 <div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0 (0.0%)</span></div></section>
-    <section class="tag-card"><h3>Languages</h3><div class="tag-row"><span class="tag-name">python</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">19,284 (95.6%)</span></div>
+    <section class="tag-card"><h3>Languages <span>20181 tagged</span></h3><div class="tag-row"><span class="tag-name">python</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">19,284 (95.6%)</span></div>
 <div class="tag-row"><span class="tag-name">c</span><span class="tag-track"><span class="tag-fill" style="width:0.91%"></span></span><span class="tag-count">176 (0.9%)</span></div>
 <div class="tag-row"><span class="tag-name">cpp</span><span class="tag-track"><span class="tag-fill" style="width:0.79%"></span></span><span class="tag-count">152 (0.8%)</span></div>
 <div class="tag-row"><span class="tag-name">typescript</span><span class="tag-track"><span class="tag-fill" style="width:0.37%"></span></span><span class="tag-count">72 (0.4%)</span></div>
@@ -724,13 +538,13 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Area / tier</h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">10,187 (50.5%)</span></div>
+    <section class="tag-card"><h3>Area / tier <span>20181 tagged</span></h3><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">10,187 (50.5%)</span></div>
 <div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:78.41%"></span></span><span class="tag-count">7,988 (39.6%)</span></div>
 <div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:12.52%"></span></span><span class="tag-count">1,275 (6.3%)</span></div>
 <div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:7.13%"></span></span><span class="tag-count">726 (3.6%)</span></div>
 <div class="tag-row"><span class="tag-name">fullstack</span><span class="tag-track"><span class="tag-fill" style="width:0.04%"></span></span><span class="tag-count">4 (0.0%)</span></div>
 <div class="tag-row"><span class="tag-name">framework</span><span class="tag-track"><span class="tag-fill" style="width:0.01%"></span></span><span class="tag-count">1 (0.0%)</span></div></section>
-    <section class="tag-card"><h3>Top topics</h3><div class="tag-row"><span class="tag-name">fonttools</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">310 (1.5%)</span></div>
+    <section class="tag-card"><h3>Top topics <span>20181 tagged</span></h3><div class="tag-row"><span class="tag-name">fonttools</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">310 (1.5%)</span></div>
 <div class="tag-row"><span class="tag-name">click</span><span class="tag-track"><span class="tag-fill" style="width:91.29%"></span></span><span class="tag-count">283 (1.4%)</span></div>
 <div class="tag-row"><span class="tag-name">globus-sdk</span><span class="tag-track"><span class="tag-fill" style="width:68.71%"></span></span><span class="tag-count">213 (1.1%)</span></div>
 <div class="tag-row"><span class="tag-name">more-itertools</span><span class="tag-track"><span class="tag-fill" style="width:66.77%"></span></span><span class="tag-count">207 (1.0%)</span></div>
@@ -758,7 +572,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="grid2" style="margin-top:18px;">
-    <section class="tag-card"><h3>Bug classes</h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,472 (7.3%)</span></div>
+    <section class="tag-card"><h3>Bug classes <span>20181 tagged</span></h3><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">1,472 (7.3%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:97.08%"></span></span><span class="tag-count">1,429 (7.1%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:76.63%"></span></span><span class="tag-count">1,128 (5.6%)</span></div>
 <div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:62.50%"></span></span><span class="tag-count">920 (4.6%)</span></div>
@@ -778,25 +592,11 @@ td strong { font-weight: 600; }
 <div class="tag-row"><span class="tag-name">missing-default</span><span class="tag-track"><span class="tag-fill" style="width:5.37%"></span></span><span class="tag-count">79 (0.4%)</span></div>
 <div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:4.55%"></span></span><span class="tag-count">67 (0.3%)</span></div>
 <div class="tag-row"><span class="tag-name">missing-api-method</span><span class="tag-track"><span class="tag-fill" style="width:4.08%"></span></span><span class="tag-count">60 (0.3%)</span></div></section>
-    <section class="tag-card method-card"><h3>Methodology <span>unified difficulty &amp; tagging</span></h3>
-      <div class="method-body">
-      <span class="mh">Difficulty Scoring (1&ndash;10 scale)</span><br>
-      Composite weighted score over 5 dimensions:<br>
-      &bull; <span class="dim">Patch scope (30%)</span>: lines changed, files affected, hunks count<br>
-      &bull; <span class="dim">Logic complexity (25%)</span>: control-flow depth, branching, algorithmic sophistication<br>
-      &bull; <span class="dim">Context breadth (20%)</span>: cross-module dependencies, API surface understanding<br>
-      &bull; <span class="dim">Test complexity (15%)</span>: fixture setup, mock requirements, edge-case coverage<br>
-      &bull; <span class="dim">Instruction complexity (10%)</span>: problem-statement clarity, implicit requirements<br>
-      Each dimension is log-scaled, then the weighted sum is mapped to 1&ndash;10 and binned into
-      <strong>easy</strong> (&le;4.0), <strong>medium</strong> (4.1&ndash;7.0), <strong>hard</strong> (&gt;7.0).<br><br>
-      <span class="mh">Semantic Tagging</span><br>
-      Each task is labelled with a 4-tuple <code>[language, area, topic, bug_class]</code>:<br>
-      &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
-      &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
-      &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
-      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
-      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
-      difficulty and tags are directly comparable across datasets.</div>
+    <section class="tag-card"><h3>Tag schema <span>harbor task_analysis</span></h3>
+      <div class="muted" style="line-height:1.7;">Every task is tagged with the 4-tuple<br>
+      <code>[language, area, topic, bug_class]</code><br>
+      area &isin; {backend, frontend, fullstack, cli, library, framework}.<br>
+      Difficulty is a 5-dimension weighted score (1&ndash;10).</div>
     </section>
   </div>
 </div>

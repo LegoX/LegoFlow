@@ -8,3 +8,6 @@ datasets/*/tags.jsonl
 
 # Python bytecode cache
 __pycache__/
+
+# Pipeline run log (machine-local)
+pipeline.log

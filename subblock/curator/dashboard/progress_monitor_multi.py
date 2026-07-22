@@ -29,6 +29,7 @@ DEFAULT_OUTPUT = DASHBOARD_ROOT / "site" / "index.html"
 DATASETS = [
     ("self_made", "SWE-Lego-Live-Instances", "Curator self-made instances (swegen-selfmade non-top5k + top5k)"),
     ("swe_rebench", "SWE-rebench", "Open-source dataset nebius/SWE-rebench"),
+    ("swe_rebench_v2", "SWE-rebench-V2", "Open-source dataset nebius/SWE-rebench-V2"),
     ("openswe_filtered", "OpenSWE-filtered", "Open-source dataset SWE-Lego/openswe_filtered_for_rl"),
     ("scale_swe", "Scale-SWE", "Open-source dataset AweAI-Team/Scale-SWE"),
 ]
@@ -252,12 +253,14 @@ CSS = """
   --c-fg: #e2e8f0; --c-fg-dim: #94a3b8; --c-fg-mute: #64748b; --c-fg-faint: #475569;
   --c-accent: #6366f1; --c-accent-soft: #6366f133; --c-accent-border: #6366f180;
   --c-good: #34d399; --c-bad: #f87171; --c-warn: #fbbf24; --c-violet: #a78bfa;
+  --c-method-bg: #6366f11f; --c-method-head: #a5b4fc;
   font-size: 18px;
 }
 [data-theme="light"] {
   --c-bg: #f8fafc; --c-bg-2: #ffffff; --c-panel: #ffffff; --c-border: #e2e8f0;
   --c-fg: #0f172a; --c-fg-dim: #475569; --c-fg-mute: #64748b; --c-fg-faint: #94a3b8;
   --c-accent: #4f46e5; --c-accent-soft: #6366f122; --c-accent-border: #6366f1;
+  --c-violet: #7c3aed; --c-method-bg: #eef2ff; --c-method-head: #4338ca;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: var(--c-bg); color: var(--c-fg);
@@ -266,64 +269,104 @@ code, pre, .mono { font-family: var(--font-mono); }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb { background: var(--c-fg-faint); border-radius: 3px; }
 .layout { display: flex; height: 100vh; overflow: hidden; }
-.sidebar { width: 288px; flex-shrink: 0; border-right: 1px solid var(--c-border);
+.sidebar { width: 300px; flex-shrink: 0; border-right: 1px solid var(--c-border);
   background: linear-gradient(180deg, #0a1226 0%, var(--c-bg) 100%);
   display: flex; flex-direction: column; overflow: hidden; }
 [data-theme="light"] .sidebar { background: var(--c-bg-2); }
 .sidebar-logo { padding: 16px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: 10px; }
 .logo-mark { width: 38px; height: 32px; border-radius: 8px; background: var(--c-accent);
-  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 14px; }
-.logo-title { font-size: 18px; font-weight: 600; }
+  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 16px; }
+.logo-title { font-size: 20px; font-weight: 600; }
+.logo-sub { font-size: 16px; color: var(--c-fg-mute); }
 .ds-nav { padding: 10px 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 3px; }
 .ds-item { background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
-  padding: 9px 12px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 18px;
+  padding: 10px 12px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 19px;
   display: flex; flex-direction: column; gap: 2px; width: 100%; }
 .ds-item:hover { background: #1e293b40; color: var(--c-fg); }
 .ds-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #c7d2fe; }
 [data-theme="light"] .ds-item.active { color: var(--c-accent); }
-.ds-item .ds-name { font-weight: 600; font-size: 18px; }
-.ds-item .ds-count { font-size: 16px; color: var(--c-fg-mute); }
+.ds-item .ds-name { font-weight: 600; font-size: 19px; }
+.ds-item .ds-count { font-size: 17px; color: var(--c-fg-mute); }
 .sidebar-section { padding: 12px 8px 8px; flex: 1; overflow: auto; }
 .section-label { text-transform: uppercase; font-size: 16px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 600; }
-.sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 18px; }
+.sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 19px; }
 .sidebar-stat .l { color: var(--c-fg-mute); }
 .sidebar-stat .v { font-weight: 600; font-family: var(--font-mono); }
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { padding: 14px 24px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; justify-content: space-between; }
 .topbar h1 { font-size: 20px; margin: 0; font-weight: 650; }
+.topbar .sub { font-size: 17px; color: var(--c-fg-mute); margin-top: 3px; }
 .theme-btn { background: var(--c-bg-2); border: 1px solid var(--c-border); color: var(--c-fg-dim);
-  border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 17px; }
+  border-radius: 8px; padding: 7px 14px; cursor: pointer; font-size: 17px; }
 .content { flex: 1; overflow: auto; padding: 24px; }
 .ds-panel { display: none; }
 .ds-panel.active { display: block; }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 22px; }
 .card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px 18px; }
-.card .k { font-size: 17px; color: var(--c-fg-mute); }
-.card .v { font-size: 26px; font-weight: 700; font-family: var(--font-mono); margin-top: 4px; }
+.card .k { font-size: 18px; color: var(--c-fg-mute); }
+.card .v { font-size: 30px; font-weight: 700; font-family: var(--font-mono); margin-top: 4px; }
 .card .v small { font-size: 18px; color: var(--c-fg-mute); font-weight: 500; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
 .panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 18px 20px; margin-bottom: 18px; }
-.panel h2 { font-size: 19px; margin: 0 0 14px; font-weight: 600; letter-spacing: .01em; }
-.panel h2 span { color: var(--c-fg-mute); font-weight: 400; font-size: 17px; margin-left: 6px; }
-table { width: 100%; border-collapse: collapse; font-size: 18px; }
-th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--c-border); }
+.panel h2 { font-size: 21px; margin: 0 0 14px; font-weight: 600; letter-spacing: .01em; }
+.panel h2 span { color: var(--c-fg-mute); font-weight: 400; font-size: 18px; margin-left: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 19px; }
+th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--c-border); }
 th:first-child, td:first-child { text-align: left; }
-th { color: var(--c-fg-mute); font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .04em; }
+th { color: var(--c-fg-mute); font-weight: 600; font-size: 17px; text-transform: uppercase; letter-spacing: .04em; }
 td strong { font-weight: 600; }
-.stacked { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #1e293b; min-width: 120px; }
+.stacked { display: flex; height: 11px; border-radius: 5px; overflow: hidden; background: #1e293b; min-width: 120px; }
 .stacked.empty { color: var(--c-fg-mute); font-size: 16px; background: transparent; }
 .seg.easy { background: var(--c-good); } .seg.medium { background: var(--c-warn); } .seg.hard { background: var(--c-bad); }
-.mini { font-size: 15px; color: var(--c-fg-mute); margin-top: 3px; font-family: var(--font-mono); }
-.tag-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 17px; }
-.tag-name { flex: 0 0 220px; font-family: var(--font-mono); font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag-track { flex: 1; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
+.mini { font-size: 16px; color: var(--c-fg-mute); margin-top: 3px; font-family: var(--font-mono); }
+.tag-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 18px; }
+.tag-name { flex: 0 0 230px; font-family: var(--font-mono); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-track { flex: 1; height: 9px; background: #1e293b; border-radius: 4px; overflow: hidden; }
 .tag-fill { display: block; height: 100%; background: var(--c-accent); }
-.tag-count { flex: 0 0 140px; text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 16px; }
+.tag-count { flex: 0 0 150px; text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 17px; }
 .tag-card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px 18px; }
-.tag-card h3 { font-size: 18px; margin: 0 0 12px; font-weight: 600; }
-.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 16px; margin-left: 6px; }
-.muted { color: var(--c-fg-mute); font-size: 17px; }
+.tag-card h3 { font-size: 20px; margin: 0 0 12px; font-weight: 600; }
+.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 17px; margin-left: 6px; }
+.muted { color: var(--c-fg-dim); font-size: 18px; }
+/* Prominent methodology card (difficulty & tagging) - stands out in both themes */
+.method-card { grid-column: 1 / -1; background: var(--c-method-bg);
+  border: 1px solid var(--c-accent-border); border-radius: 12px; padding: 20px 24px; }
+.method-card h3 { font-size: 22px; margin: 0 0 14px; font-weight: 700; color: var(--c-method-head); }
+.method-card h3 span { color: var(--c-accent); font-weight: 500; font-size: 18px; margin-left: 6px; }
+.method-body { font-size: 19px; line-height: 1.85; color: var(--c-fg); }
+.method-body strong { color: var(--c-fg); font-weight: 700; }
+.method-body .mh { display: inline-block; color: var(--c-method-head); font-weight: 800;
+  font-size: 20px; letter-spacing: .01em; margin: 4px 0 2px; }
+.method-body .dim { color: var(--c-violet); font-weight: 700; }
+.method-body code { color: var(--c-accent); background: var(--c-accent-soft);
+  padding: 1px 6px; border-radius: 5px; font-size: 17px; }
 """
+
+
+# Single source of truth for the difficulty & tagging methodology card, shared by
+# render_panel() (full regenerate) and inject_v2.py (surgical injection) so every
+# panel shows identical, prominent, English-only copy. Weights/thresholds here
+# mirror the dashboard tagger repos/swegen/tools/tag_task_metadata.py.
+METHODOLOGY_HTML = """    <section class="tag-card method-card"><h3>Methodology <span>unified difficulty &amp; tagging</span></h3>
+      <div class="method-body">
+      <span class="mh">Difficulty Scoring (1&ndash;10 scale)</span><br>
+      Composite weighted score over 5 dimensions:<br>
+      &bull; <span class="dim">Patch scope (30%)</span>: lines changed, files affected, hunks count<br>
+      &bull; <span class="dim">Logic complexity (25%)</span>: control-flow depth, branching, algorithmic sophistication<br>
+      &bull; <span class="dim">Context breadth (20%)</span>: cross-module dependencies, API surface understanding<br>
+      &bull; <span class="dim">Test complexity (15%)</span>: fixture setup, mock requirements, edge-case coverage<br>
+      &bull; <span class="dim">Instruction complexity (10%)</span>: problem-statement clarity, implicit requirements<br>
+      Each dimension is log-scaled, then the weighted sum is mapped to 1&ndash;10 and binned into
+      <strong>easy</strong> (&le;4.0), <strong>medium</strong> (4.1&ndash;7.0), <strong>hard</strong> (&gt;7.0).<br><br>
+      <span class="mh">Semantic Tagging</span><br>
+      Each task is labelled with a 4-tuple <code>[language, area, topic, bug_class]</code>:<br>
+      &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
+      &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
+      &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
+      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)<br>
+      All datasets are scored and tagged by the same pipeline (LLM endpoint Qwen3.6-35B-A3B) so
+      difficulty and tags are directly comparable across datasets.</div>
+    </section>"""
 
 
 def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bool) -> str:
@@ -386,16 +429,10 @@ def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bo
 
   <div class="grid2" style="margin-top:18px;">
     <section class="tag-card"><h3>Bug classes</h3>{bug_rows}</section>
-    <section class="tag-card"><h3>Methodology <span>harbor task_analysis</span></h3>
-      <div class="muted" style="line-height:1.7;">
-      <strong>Difficulty:</strong> 5-dimension weighted, log-scaled score (1&ndash;10) based on patch scope (0.30),
-      logic complexity (0.25), context breadth (0.20), test complexity (0.15), and instruction complexity (0.10).
-      Labels: easy (&le;4.0), medium (4.1&ndash;7.0), hard (&gt;7.0).<br><br>
-      <strong>Tags:</strong> LLM assigns the 4-tuple <code>[language, area, topic, bug_class]</code> where
-      area &isin; {{backend, frontend, fullstack, cli, library, framework}}. The tagger is
-      <code>repos/swegen/tools/tag_task_metadata.py</code>.
-      </div>
-    </section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+{METHODOLOGY_HTML}
   </div>
 </div>
 """
