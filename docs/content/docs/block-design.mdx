@@ -22,62 +22,35 @@ scripts or documentation, but each directory keeps the same responsibility.
 
 ```text
 <block-name>/
-├── CLAUDE.md                         # Operating contract and block-specific rules
-├── config.yaml                       # Identity, resources, inputs, outputs, and wiring
-│
 ├── .claude/
-│   ├── settings.json                 # Enables the block's local plugin
-│   └── plugins/
-│       └── <block-name>-plugin/
-│           ├── .claude-plugin/
-│           │   └── plugin.json       # Plugin name, description, and version
-│           ├── README.md             # Human-readable plugin documentation
-│           ├── resources/            # Optional templates and reference material
-│           └── skills/
-│               ├── setup/SKILL.md    # Bootstrap the block
-│               ├── check/SKILL.md    # Validate readiness without launching a run
-│               ├── dashboard/SKILL.md # Inspect progress and results
-│               └── run/SKILL.md      # Confirm and execute the block
+│   └── plugins/<block-name>-plugin/
+│         ├── README.md               # Human-readable plugin documentation
+│         ├── resources/              # Optional templates and reference material
+│         └── skills/
+│             ├── setup/SKILL.md      # Bootstrap the block
+│             ├── check/SKILL.md      # Validate readiness without launching a run
+│             ├── dashboard/SKILL.md  # Inspect progress and results
+│             ├── run/SKILL.md        # Confirm and execute the block
+│             └── ...
 │
-├── repos/                            # Pinned, vendored repositories; do not edit casually
+├── CLAUDE.md                         # Operating contract
+├── config.yaml                       # Identity file to define the current block
+│
+├── repos/                            # Repositories associated with this block, added as git submodules
 ├── memory/                           # Durable notes, decisions, and operating context
-├── scripts/
-│   ├── dryrun.sh                     # Side-effect-free preflight checks
-│   ├── start.sh                      # Leaf block's executable entry point
-│   ├── archive_run.sh                # Snapshots a completed, failed, or interrupted run
-│   ├── clean.sh                      # Removes block-owned generated state when requested
-│   └── ...                           # Block-specific helpers such as training or conversion
-│
+├── scripts/                          # The associated running scripts used by the agent
 ├── dashboard/                        # Text or web views over logs, metrics, and artifacts
-├── artifacts/
-│   ├── index.yaml                    # Append-only history; newest entry is latest recorded state
+├── artifacts/                        # The output directories produced by this block
+│   ├── index.yaml                    # The running record
 │   └── archives/
 │       └── run_NNN/                  # Frozen config, scripts, metadata, and optional logs
-│
-└── subblock/                         # Child blocks, present only when this block is a parent
-    └── <child-name>/
 ```
-
-The root of this repository is itself a parent block. It lists Curator,
-Tracer, Trainer, and Evaluator as children, then delegates work to each child's
-own plugin skill. A leaf block has no children and runs its own
-`scripts/start.sh`.
-
-Three rules keep this layout dependable:
-
-- Files under `repos/` are pinned dependencies. Fixes normally belong upstream
-  or in the block's own scripts, not as unrecorded edits to vendored code.
-- `config.yaml` describes one run. Do not write live progress into it; the
-  newest entry in `artifacts/index.yaml` is the source of truth for run status.
-- Parent blocks coordinate children through plugin skills. They do not bypass
-  a child's checks by invoking the child's shell scripts directly.
 
 
 ## 2. Configuration File Template
 
 Every root block and subblock has a `config.yaml` with exactly two top-level
-sections: `meta_info` and `runtime_info`. The following generic template shows
-where each value belongs and what you are expected to fill.
+sections: `meta_info` and `runtime_info`. This file can fully characeterize the block, and we provide a  generic template as follows:
 
 ```yaml
 meta_info:
@@ -88,28 +61,19 @@ meta_info:
   parent: swe_lego_live               # null for the root block
 
   # Parent blocks list direct children and their roles here.
-  # This is a roster only; dependency wiring does not belong here.
   subblocks: {}
-  # child_block:
-  #   role: "One phrase describing the child's responsibility."
 
-  # This block declares every data handoff in both directions.
-  # Keep both mappings, even when one or both are empty.
+  # This block declares every data handoff in both directions. Keep both mappings, even when one or both are empty.
   dependencies:
     from: {}
-      # Consumer-owned upstream edge:
-      # <this input path>: <producer>.output.<producer output key>
-      # task_source.dataset_name: curator.output.swe_tasks_dir
     to: {}
-      # Producer-owned downstream edge, mirroring the consumer's from edge:
-      # <this output key>: <consumer>.input.<consumer input path>
-      # swe_tasks_dir: tracer.input.task_source.dataset_name
 
   # Repositories used by this block are checked out under repos/ and pinned.
   repos: {}
-  # harbor:
-  #   commit_id: <full commit SHA>
-  #   role: "Runs tasks in reproducible environments."
+    harbor:
+      name: harbor
+      commit_id: <full commit SHA>
+      role: "Runs tasks in reproducible environments."
 
   # Host-local environment used by scripts in this block.
   environment:
@@ -126,15 +90,12 @@ meta_info:
     public_storage: null              # optional shared output location
 
 runtime_info:
-  # Values that originate outside the block tree. Users fill only these values.
   input:
     api_base_url: human               # required: replace before checking or running
     api_key: ""                       # supplied through an environment or ignored file
     optional_filter: null             # intentionally unset; use the default behavior
-    batch_size: 8                     # working default; change only when needed
-    env_extra: {}                     # optional environment variables exported for the run
+    ...
 
-  # Values produced by this block. Consumers resolve value first, then path.
   output:
     result_dir:
       description: "Directory containing this block's results."
@@ -142,6 +103,7 @@ runtime_info:
     selected_checkpoint:
       description: "Checkpoint chosen after training."
       value: null                     # written by the run script when known
+    ...
 ```
 
 ### How to fill the template
@@ -163,52 +125,6 @@ files named by the owning block's setup guide.
 Leave `runtime_info.output` alone before a run. A static `path` is part of the
 block contract; a run-produced `value` starts as `null` and is written by the
 block's scripts after the output exists.
-
-### How dependencies work
-
-Dependencies connect an output from one block to an input in another without
-copying paths by hand. Each edge is declared twice so both block owners can see
-the same handoff:
-
-```yaml
-# Consumer: subblock/tracer/config.yaml
-meta_info:
-  dependencies:
-    from:
-      task_source.dataset_name:
-        from: curator.output.swe_tasks_dir
-        when: {task_source.provider: local}
-    to: {}
-
-# Producer: subblock/curator/config.yaml
-meta_info:
-  dependencies:
-    from: {}
-    to:
-      swe_tasks_dir:
-        to: tracer.input.task_source.dataset_name
-        when: {tracer.input.task_source.provider: local}
-```
-
-Read this edge as: “when Tracer uses a local task source, fill Tracer's
-`task_source.dataset_name` input with Curator's `swe_tasks_dir` output.” The
-consumer owns `from`; the producer owns the matching `to`.
-
-Use `required: false` on a `from` mapping when a missing producer value should
-warn instead of fail. Use `when` when the handoff applies only in a particular
-mode. Even optional or conditional edges must reference real blocks, inputs,
-and outputs.
-
-Validate one block or the complete tree after editing:
-
-```bash
-python3 scripts/validate_config.py --block subblock/tracer
-python3 scripts/validate_config.py --root .
-```
-
-The validator checks the schema, fill markers, referenced paths, and the two
-sides of every dependency. See [Configuration Schema](/docs/reference/config-schema)
-for the complete validation contract.
 
 
 ## 3. Plugin Skills
