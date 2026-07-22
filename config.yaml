@@ -1,9 +1,3 @@
-# Root block config — orchestration identity only. Inter-block wiring is declared
-# by each leaf block in its own meta_info.dependencies (see
-# .claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md §3.1).
-# Fill rules: `human` = must fill before a run; "" = auto-derived or env-supplied.
-# Validate the whole tree with: python3 scripts/validate_config.py --root .
-
 meta_info:
   name: swe_lego_live
   label: "SWE Lego Live"

@@ -1,8 +1,3 @@
-# evaluator block config — one-shot per run; live state lives in artifacts/index.yaml.
-# Fill rules: `human` = you must set this before a run; "" = auto-derived or env-supplied;
-# everything else is a working default. Validate: python3 ../../scripts/validate_config.py --block .
-# Field reference & worked examples: /evaluator:setup · Gotchas & preflight: /evaluator:check
-
 meta_info:
   name: evaluator
   label: "Evaluator"

@@ -1,9 +1,3 @@
-# trainer block config — one-shot per run; live state lives in artifacts/index.yaml.
-# Fill rules: `human` = you must set this before a run; "" = auto-derived or env-supplied;
-# everything else is a working default. Validate: python3 ../../scripts/validate_config.py --block .
-# Field reference & worked examples: /trainer:setup · Gotchas & preflight: /trainer:check
-# runtime_info.output is written back by scripts/train.sh STEP 3 after a successful run.
-
 meta_info:
   name: trainer
   label: "Trainer"

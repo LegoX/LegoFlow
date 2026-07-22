@@ -1,9 +1,3 @@
-# curator block config — one-shot per run; live state lives in artifacts/index.yaml.
-# Fill rules: `human` = you must set this before a run; "" = auto-derived or env-supplied;
-# everything else is a working default. Validate: python3 ../../scripts/validate_config.py --block .
-# Field reference & worked examples: /curator:setup · Gotchas & preflight: /curator:check
-# GitHub tokens are NOT stored here — export GITHUB_TOKENS / GITHUB_TOKEN or use gh_token.txt.
-
 meta_info:
   name: curator
   label: "Curator"
@@ -54,8 +48,29 @@ runtime_info:
         max_files_changed: 25
         max_lines_changed: 1500
 
-    # Two LLM API paths — BOTH must be right or verification fails silently.
-    # Modes, worked examples, and the env-var mapping: /curator:setup reference.
+    # Two LLM API Modes:
+    # ----- Mode A: NON-Anthropic model (e.g. local Qwen via openai_proxy) -----
+    # Tested end-to-end (NOP=0/Oracle=1) with these exact values:
+    # llm_api:
+    #   api_key: dummy-cf
+    #   api_base_url: https://llm.jierungogogo.com/v1
+    #   pr_model: Qwen3.6-35B-A3B
+    #   task_model: claude-sonnet-4-6        # any claude-* alias; proxy maps it to pr_model
+    #   cc_provider_mode: openai_proxy
+    #   anthropic_base_url: http://127.0.0.1:4010
+    #   cc_proxy_port: 4010
+    #
+    # ----- Mode B: Anthropic-format model (e.g. claude-opus-4-6 via gateway) -----
+    # Tested end-to-end (NOP=0/Oracle=1) with these exact values:
+    # llm_api:
+    #   api_key: <YOUR_KEY>
+    #   api_base_url: https://yunwu.ai/v1            # OpenAI-compatible side of the same gateway
+    #   pr_model: claude-opus-4-6
+    #   task_model: claude-opus-4-6
+    #   cc_provider_mode: native
+    #   anthropic_base_url: https://yunwu.ai         # provider Anthropic root, no /v1
+    #   # cc_proxy_port not used in native mode
+    # =========================================================================
     llm_api:
       api_key: human                          # never commit a real key; prefer env/.env
       api_base_url: human                     # OpenAI-compatible endpoint (PR eval + instruction gen)
