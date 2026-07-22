@@ -20,9 +20,9 @@ Training a strong coding agent is not a single training job. A realistic SWE pip
 ![SWE-Lego-Live pipeline introduction](/figures/my-version-coding-repos-expandable.png)
 
 
-The project is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. Users can operate the workflow through the same plugin-skill lifecycle across blocks: `:setup`, `:check`, and `:run`.
+The project is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. Users can operate the workflow through the same plugin-skill lifecycle across blocks: `:setup`, `:check`, `:dashboard`, and `:run`.
 
-The **root** block orchestrates four subblocks: **curator** builds verified SWE tasks, **tracer** rolls out agent trajectories, **trainer** turns trajectories into model checkpoints, and **evaluator** measures those checkpoints with shared rubrics.
+The **root** block orchestrates four subblocks: **curator** builds verified SWE tasks, **tracer** rolls out agent trajectories, **trainer** turns trajectories into model checkpoints, and **evaluator** measures configured models with shared rubrics.
 
 - **curator**: curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums such as Stack Overflow. Carefully designed filtering requirements preserve high-quality instances across **8+** programming languages and **20+** task tags.
 - **tracer**: collects high-quality trajectories with verified rewards, supporting rollouts across multiple coding scaffolds such as Claude Code, OpenCode, OpenHands, and Terminus.
@@ -38,7 +38,7 @@ Blocks make the pipeline easier to use and easier to change. Because every stage
 
 ## Where to go next
 
-- [Getting Started](/docs/getting-started) — the three skills (`:setup`, `:check`, `:run`) used to drive every block
+- [Getting Started](/docs/getting-started) — block-by-block and root-orchestrated workflows
 - [Block Design](/docs/block-design) — the abstraction the whole pipeline is built on
 - Block docs: [curator](/docs/sub-block/curator) · [tracer](/docs/sub-block/tracer) · [trainer](/docs/sub-block/trainer) · [evaluator](/docs/sub-block/evaluator)
 - [Reference](/docs/reference) — `config.yaml` schema and the archive format

@@ -35,7 +35,10 @@ After each job, append or update one entry per task (with `submitted_at`, `compl
 
 ## The exclude list
 
-Every task that is `done`, `failed`, or `skipped` must also appear in `HARBOR_EXCLUDE_TASKS` (under `environment.extra` in `config.yaml`). `start.sh` turns that space-separated list into Harbor `--exclude-task-name` flags so those tasks are never rolled out again.
+Every task that is `done`, `failed`, or `skipped` must also appear in
+`HARBOR_EXCLUDE_TASKS` under `runtime_info.input.env_extra` in `config.yaml`.
+`start.sh` turns that space-separated list into Harbor
+`--exclude-task-name` flags so those tasks are never rolled out again.
 
 ```text
 curator tasks + verifiable_tasks.txt

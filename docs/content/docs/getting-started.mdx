@@ -1,206 +1,219 @@
 ---
 title: Getting Started
-description: The core plugin skills for operating any block
+description: Choose the right way to set up, validate, and run SWE-Lego-Live
 ---
 
-## Prerequisites
+SWE-Lego-Live turns real software changes into training data, a fine-tuned
+model, and an evaluation report. The standard workflow has four stages:
 
-- **Claude Code** with this repo's plugin loaded — `/reload-plugins` should show `1 plugin · 3 skills`.
-- **Docker** on whichever host runs `curator` and `tracer` (containerized rollouts).
-- **An OpenAI-compatible LLM endpoint** with an API key — `curator` and `tracer` both call it.
-- An **8× GPU node** for `trainer`.
-- **GitHub token(s)** with `repo` read scope, for PR collection in `curator`.
+```text
+1. SWE task curation (Curator)
+   -> 2. Trajectory generation (Tracer)
+   -> 3. Supervised fine-tuning (Trainer)
+   -> 4. Model evaluation (Evaluator)
+```
+
+You can operate the blocks one at a time or coordinate the complete block tree
+from the repository root. If this is your first run, use the block-by-block
+workflow: it makes every handoff visible and is the clearest way to learn the
+system.
 
 
-## Step 1: Clone
+## Before you start
+
+You will need:
+
+- **Claude Code** with this repository's plugins enabled.
+- **Docker** on the hosts that run Curator, Tracer, and Evaluator.
+- An **OpenAI-compatible or Anthropic-compatible LLM endpoint** for task
+  curation, trajectory generation, and evaluation.
+- **GitHub token(s)** with repository read access for Curator.
+- A **GPU node**, typically with 8 A100/H100-class GPUs, for full-parameter
+  SFT. A local model evaluated through vLLM also needs GPU capacity.
+- Git, Python, and [uv](https://docs.astral.sh/uv/) on the relevant hosts.
+
+Clone the project and its pinned submodules:
 
 ```bash
-git clone --recurse-submodules <repo-url> SWE-Lego-Live
+git clone --recurse-submodules git@github.com:SWE-Lego/SWE-Lego-Live.git
 cd SWE-Lego-Live
 ```
-If you cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.
 
-
-## Step 2: Fill in `config.yaml`
-
-Every block is driven by a `config.yaml`. The file declares what the block is, where it runs, which repositories it pins, which sibling blocks it consumes, what values a user must provide, and what outputs the block publishes after a run.
-
-The schema has two top-level sections:
-
-- `meta_info` — block identity, pinned repositories, execution environment, resources, and this block's **own upstream dependencies**.
-- `runtime_info.input` / `runtime_info.output` — values that come from outside the block tree (API keys, model names, dataset paths, human choices) and values the block produces (verified task directories, trajectory directories, checkpoint paths).
-
-### Fill rules
-
-Every field in `runtime_info.input` follows one convention, so you can tell at a glance what needs your attention:
-
-| Marker | Meaning |
-| --- | --- |
-| `human` | **You must replace this before a run.** Validation fails until you do. |
-| `""` (empty string) | Auto-derived at runtime or supplied via an env/file channel (the inline comment names it, e.g. `# via $WANDB_API_KEY`). Never edit to run. |
-| `null` | Semantic "unset / use default / all" — leave as is unless you want the non-default. |
-| anything else | A real working default. Change it only if you know why. |
-
-So filling a block config means exactly: **replace every `human`, and export the env vars named in `""` comments.** Everything else can be left as is.
-
-### Dependencies between blocks
-
-`meta_info.dependencies` always has two keys, `from` and `to` — a block shows both directions it participates in from its own file, so you never have to open every other block's config to see who feeds it and who it feeds.
-
-**`from`** — the values this block consumes from siblings. The key is the dot-path in this block's own `runtime_info.input` that receives the value; the value names the producer's output:
-
-```yaml
-# subblock/tracer/config.yaml — tracer declares its own upstream
-meta_info:
-  dependencies:
-    from:
-      task_source.dataset_name:
-        from: curator.output.swe_tasks_dir
-        when: {task_source.provider: local}   # only enforced in this mode
-    to: {}
-
-# optional upstream — warns instead of failing while the producer output is absent
-meta_info:
-  dependencies:
-    from:
-      model.model_path:
-        from: trainer.output.checkpoint_path
-        required: false
-    to: {}
-```
-
-**`to`** — the mirror image, declared by the *producer*: which of this block's own outputs feed which sibling's input.
-
-```yaml
-# subblock/curator/config.yaml — curator declares its own downstream
-meta_info:
-  dependencies:
-    from: {}
-    to:
-      swe_tasks_dir:
-        to: tracer.input.task_source.dataset_name
-        when: {tracer.input.task_source.provider: local}   # when-keys are fully-qualified —
-                                                            # the condition lives on the consumer
-```
-
-The same edge is declared twice — once in the consumer's `from`, once in the producer's `to` — each block only ever editing its own file. `python3 scripts/validate_config.py --root .` cross-checks the two declarations and warns (`dep:link-mismatch`) if they've drifted apart.
-
-A block with neither direction declares an explicit `dependencies: {from: {}, to: {}}`. You normally never edit these — they document and enforce the pipeline's hand-offs.
-
-### A worked example
-
-Curator's LLM section ships as:
-
-```yaml
-llm_api:
-  api_key: human                          # never commit a real key; prefer env/.env
-  api_base_url: human                     # OpenAI-compatible endpoint
-  pr_model: Qwen3.6-35B-A3B
-  task_model: claude-sonnet-4-6
-  cc_provider_mode: openai_proxy          # native | openai_proxy
-  anthropic_base_url: http://127.0.0.1:4010
-  cc_proxy_port: 4010
-```
-
-Replace the two `human` fields with your endpoint and key, keep the rest, and you are done — `pr_model`, `cc_provider_mode`, and the proxy settings are working defaults you only touch when switching providers. (GitHub tokens are never stored in `config.yaml`: export `GITHUB_TOKENS` / `GITHUB_TOKEN` or use an ignored local token file.)
-
-### What to fill, per block
-
-Every path below is under that block's `config.yaml → runtime_info.input`. Everything not listed is a working default. Each block's `/<block>:setup` skill carries the full field reference with worked examples.
-
-| Block | Must fill (`human`) | Supplied via env / file | Commonly adjusted |
-| --- | --- | --- | --- |
-| **curator** | `llm_api.api_key`, `llm_api.api_base_url` | GitHub tokens: `GITHUB_TOKENS` / `GITHUB_TOKEN` / `gh_token.txt` | `llm_api.cc_provider_mode` (`native` vs `openai_proxy` — must match your provider or verification fails silently), `pr_model` / `task_model`, `pr_collection.*` scale knobs |
-| **tracer** | — (ships working defaults) | — | `llm_api.*` (point at your endpoint; `dummy-cf` works for proxied ones), `task_source.provider` (`local` = curator hand-off, `huggingface`), `harbor_job.n_tasks` / `n_concurrent` |
-| **trainer** | — (ships a working `hf_lf` source) | `$WANDB_API_KEY`, `$HF_TOKEN` (private datasets only) | `source.type` (`harbor_job` consumes tracer via the wired dep), `model.model_name_or_path`, `training.output_dir` + hyperparameters |
-| **evaluator** | — (ships a MODE B local-vLLM example) | — | `llm_api.*` (MODE A remote API vs MODE B local vLLM), `task_source.dataset_name` + `version` (benchmark), `agent.*` preset (switch all four fields together) |
-
-After editing any block, run `python3 scripts/validate_config.py --block subblock/<name>` — it fails on every remaining `human` marker and on any dependency you broke, so an incomplete config can't reach a launch.
-
-### Verify
-
-Leave `runtime_info.output` untouched — static `path` entries are pre-declared, and run-produced `value` entries are written back by the block's scripts after a successful run. Then validate:
+If you already cloned without submodules, run:
 
 ```bash
-python3 scripts/validate_config.py --root .          # whole tree: schema, deps, unfilled markers
-python3 scripts/validate_config.py --block subblock/tracer   # one block
+git submodule update --init --recursive
 ```
 
-or run `/<block>:check`, which wraps the validator plus live probes (tokens, endpoints, Docker, GPUs) before you commit to a long job.
+
+## Mode 1: Run one block at a time
+
+This is the recommended way to learn the complete pipeline. Each block owns
+its environment, configuration, checks, execution logic, and artifacts. The
+broad rhythm is always **setup -> check -> confirm -> run**, but the exact
+inputs and launch behavior are block-specific. Follow the linked Getting
+Started page instead of configuring a block from this overview.
+
+### 1. Curator: build verified SWE tasks
+
+Curator collects real GitHub pull requests, converts suitable changes into
+containerized SWE tasks, and validates each task with NOP and Oracle checks.
+Only task IDs written to `verifiable_tasks.txt` are safe for downstream use.
+
+[Set up and run Curator](/docs/sub-block/curator/getting-started)
+
+### 2. Tracer: generate agent trajectories
+
+Tracer consumes verified tasks, runs a selected coding-agent scaffold through
+Harbor, and records each rollout as a replayable LiteLLM trajectory. It can
+also convert successful trajectories into LLaMA-Factory-ready SFT data.
+
+[Set up and run Tracer](/docs/sub-block/tracer/getting-started)
+
+### 3. Trainer: perform supervised fine-tuning
+
+Trainer accepts a Harbor job, a prepared Hugging Face dataset, or a local
+LF/ShareGPT file. It registers the dataset, launches LLaMA-Factory with
+DeepSpeed, and records the resulting checkpoint and training metrics.
+
+[Set up and run Trainer](/docs/sub-block/trainer/getting-started)
+
+### 4. Evaluator: measure a configured model
+
+Evaluator runs a benchmark from Harbor's registry against either a remote API
+or a local checkpoint served with vLLM. It stores verifier results,
+trajectories, and post-run analysis for the dashboard.
+
+[Set up and run Evaluator](/docs/sub-block/evaluator/getting-started)
+
+<Callout title="Why the detailed steps live with each block" type="info">
+The skills are intentionally not identical under the hood. Curator separates
+PR collection from task creation, Trainer performs live GPU and
+checkpoint-safety checks, and Evaluator probes the model endpoint before
+launch. Keeping those instructions with their owning block prevents this page
+from becoming a second, stale copy of the runtime contract.
+</Callout>
 
 
-## Step 3: Running with Plugin Skills
+## Mode 2: Coordinate from the repository root
 
-Every block in SWE-Lego-Live is operated through the same plugin skills:
+Root mode gives you one entry point for the complete tree. The root is a
+coordinator: its own `config.yaml` describes the project and lists the
+participating blocks, while every external value remains in the block that
+uses it. The root does not collect shared API keys or duplicate child settings.
 
-| Skill | What it does |
-| --- | --- |
-| `/<block>:setup` | Install dependencies, build environments, and fill default config values |
-| `/<block>:check` | Validate config, inputs, environments, dependencies, repos, and live endpoints |
-| `/<block>:run` | Execute the selected block mode; archiving depends on the mode |
+### Step 1: Set up the root configuration
 
-Replace `<block>` with the block name — for example, `curator`, `tracer`, `trainer`, or `evaluator`. Same three verbs, every block.
-
-### Step 3.1: `/<block>:setup` — install dependencies
-
-Run setup once for the block you want to operate:
+From the repository root, run:
 
 ```text
-/curator:setup        # clone repos, build envs, prepare default config
+/root:setup
 ```
 
-Each `:setup` is idempotent and safe to re-run — it only fills in fields that aren't already set, and only builds environments that don't already exist. After setup, the block's `config.yaml` will still have external `runtime_info.input` markers and provider settings that only you can supply. For Curator, keep GitHub tokens in `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored local token file rather than `config.yaml`.
+This verifies shared tooling and ensures the root `config.yaml` contains the
+project identity, a role-only `meta_info.subblocks` roster, empty root
+dependencies, and empty root runtime inputs and outputs. It can then offer to
+invoke each child's setup skill. Accept the blocks you intend to prepare; each
+child setup owns its repositories, environment, credentials, and external
+inputs.
 
-### Step 3.2: `/<block>:check` — preflight
+A minimal root configuration looks like this:
 
-`<block>:check` is read-only. It validates the schema, filled inputs, inter-block dependencies, repo pins, environment paths, and live LLM endpoints. Block-specific probes differ: `/curator:check` sends a small real completion request, so it can consume a small number of tokens.
+```yaml
+meta_info:
+  name: swe_lego_live
+  parent: null
+  subblocks:
+    curator: {role: "Build verified SWE tasks"}
+    tracer: {role: "Generate trajectories from verified tasks"}
+    trainer: {role: "Train a model on selected trajectories"}
+    evaluator: {role: "Evaluate a configured model on a benchmark"}
+  dependencies: {from: {}, to: {}}
+  resources:
+    ip: local
+
+runtime_info:
+  input: {}
+  output: {}
+```
+
+Do not add dependency wiring to the root roster. Each consumer declares its
+upstream handoffs under its own `meta_info.dependencies.from`, and each producer
+declares the matching `meta_info.dependencies.to`. The root reads those edges
+to determine execution order.
+
+Keep secrets in environment variables or ignored credential files. The
+block-specific Getting Started pages explain exactly which values each setup
+expects:
+
+- [Curator setup](/docs/sub-block/curator/getting-started)
+- [Tracer setup](/docs/sub-block/tracer/getting-started)
+- [Trainer setup](/docs/sub-block/trainer/getting-started)
+- [Evaluator setup](/docs/sub-block/evaluator/getting-started)
+
+### Step 2: Validate the tree
+
+First validate the configuration schema and cross-block wiring:
+
+```bash
+python3 scripts/validate_config.py --root .
+```
+
+Then ask the root plugin to perform the full preflight:
 
 ```text
-/tracer:check         # validate tracer config, dependencies, Docker, and endpoints
+/root:check
 ```
 
-Run `:check` after every config edit. It tells you exactly which input is unfilled, which submodule is missing, and whether the remote node is reachable, so you can fix gaps before committing to a long run.
+The check is read-only. It walks the declared tree and reports unfilled inputs,
+dependency mismatches, repository-pin drift, missing environments, host
+reachability, credentials, live endpoints, and each block's dry-run findings.
+Fix every failure and review the configuration summary before continuing.
 
-### Step 3.3: `/<block>:run` — execute
-
-Only run after the matching `:check` passes:
+To inspect only one block while staying at the root, name it explicitly:
 
 ```text
-/trainer:run          # convert trajectories and train
+/root:check trainer
 ```
 
-Full block modes generally execute `scripts/start.sh`, whose EXIT trap creates
-an archive. Curator is mode-sensitive: full mode uses `start.sh`, while smoke
-and single-language modes run direct commands and do not archive. Long-running
-operations may launch in tmux or as detached workers; follow the block-specific
-skill for monitoring details.
+### Step 3: Confirm and run
 
-
-## Working with Root
-
-`/root:check` and `/root:run` recursively apply the same lifecycle across the whole tree, with a free-form argument that selects the target block:
+After the full check passes, review the proposed launch and confirm it
+explicitly. Then run:
 
 ```text
-/root:check                         # check root + every subblock
-/root:check curator                  # one block at a time
-/root:run tracer                   # directly executes tracer/scripts/start.sh
-/root:run start the data pipeline   # paraphrased; resolves to the root orchestrator
+/root:run
 ```
 
-An [Example Usage](/docs/example-usages) of root can be found here.
+For a parent block, the root plugin sorts children from their declared
+dependencies and calls each child's own run skill in order. It waits for a
+child to finish before starting its downstream consumers, and stops the
+pipeline if a child fails or you decline a confirmation. Each leaf skill owns
+its preflight, remote-execution decision, `scripts/start.sh`, and archive.
 
-## Result Collection
-
-The block's own artifacts are the source of truth:
-
-- `artifacts/index.yaml` — newest entry's `status` (`completed | failed | interrupted`)
-- `artifacts/archives/run_NNN/metadata.yaml` — id, timestamps, exit code, repo SHAs
-- `artifacts/archives/run_NNN/config.yaml` — the frozen config that produced this run
-
-Optionally, open the block dashboard for a visual summary:
+You can also select one child from the repository root:
 
 ```text
-/tracer:dashboard     # inspect trajectory rollouts and conversion status
+/root:run trainer
 ```
 
-Dashboards expose the same run state, logs, metrics, and artifacts in a more readable view. See each block's own docs under [Blocks](/docs/sub-block/curator).
+<Callout title="Evaluator model selection" type="info">
+Evaluator is currently an independent leaf in the dependency graph. Running
+it after Trainer does not automatically point it at Trainer's newest
+checkpoint. Configure Evaluator's remote endpoint or local model path in its
+own setup before launching it.
+</Callout>
+
+For block-specific modes, configuration changes, monitoring, or recovery, use
+the owning block's Getting Started page. Root orchestration deliberately keeps
+those details with the block that understands them.
+
+
+## Follow the outputs
+
+Every leaf block records its own history. The newest entry in
+`artifacts/index.yaml` is the latest recorded terminal state, while
+`artifacts/archives/run_NNN/` preserves the configuration, scripts, metadata,
+and optional run logs for that execution.
+
+Use the block's dashboard when you want a live view of progress and results.
