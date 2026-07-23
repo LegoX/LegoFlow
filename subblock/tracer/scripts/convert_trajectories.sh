@@ -15,12 +15,15 @@ Usage:
   bash scripts/convert_trajectories.sh --job latest --scaffold claude_code
   bash scripts/convert_trajectories.sh --job <name> --out-dir artifacts/sft_data --max-instances 100
   bash scripts/convert_trajectories.sh --job latest --skip-unchanged
+  bash scripts/convert_trajectories.sh --job latest --reasoning-check-mode adaptive --reasoning-content-ratio-threshold 0.2
 
 Converts a Harbor job's trajectory logs into:
   <out_dir>/<job>/im.jsonl   (intermediate OpenAI-style messages)
   <out_dir>/<job>/lf.json    (LLaMA-Factory ShareGPT array)
 
 Defaults are read from runtime_info.input.sft_conversion in config.yaml.
+Reasoning-content filtering defaults to adaptive mode with threshold 0.2
+for converters that support it.
 --job latest resolves to the most recently modified directory under artifacts/jobs.
 --skip-unchanged exits early (no reconversion) when the job's resolved
   (reward=1.0) instance set and conversion inputs are unchanged since the last
@@ -34,6 +37,8 @@ OUT_DIR_OVERRIDE=""
 MAX_INSTANCES_OVERRIDE=""
 EXCLUDE_REPOS_OVERRIDE=""
 EXCLUDE_REPOS_OVERRIDE_SET=0
+REASONING_CHECK_MODE_OVERRIDE=""
+REASONING_THRESHOLD_OVERRIDE=""
 SKIP_UNCHANGED=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -65,6 +70,16 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { echo "ERROR: --exclude-repos-file requires a value" >&2; exit 2; }
       EXCLUDE_REPOS_OVERRIDE="$2"
       EXCLUDE_REPOS_OVERRIDE_SET=1
+      shift 2
+      ;;
+    --reasoning-check-mode)
+      [[ $# -ge 2 ]] || { echo "ERROR: --reasoning-check-mode requires a value" >&2; exit 2; }
+      REASONING_CHECK_MODE_OVERRIDE="$2"
+      shift 2
+      ;;
+    --reasoning-content-ratio-threshold)
+      [[ $# -ge 2 ]] || { echo "ERROR: --reasoning-content-ratio-threshold requires a value" >&2; exit 2; }
+      REASONING_THRESHOLD_OVERRIDE="$2"
       shift 2
       ;;
     -h|--help)
@@ -150,6 +165,13 @@ scaffold_module() {
   esac
 }
 
+supports_reasoning_filter() {
+  case "$1" in
+    claude_code|open_code|openhands_sdk) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 [[ -f "$CONFIG" ]] || { echo "ERROR: config.yaml not found at $CONFIG" >&2; exit 1; }
 
 SWE_DP_PATH_RAW="$(cfg meta_info.repositories.swe_data_process.path)"
@@ -160,6 +182,8 @@ SCAFFOLD_CFG="$(cfg runtime_info.input.sft_conversion.scaffold)"
 OUT_DIR_CFG="$(cfg runtime_info.input.sft_conversion.out_dir)"
 MAX_INSTANCES_CFG="$(cfg runtime_info.input.sft_conversion.max_instances)"
 EXCLUDE_REPOS_CFG="$(cfg runtime_info.input.sft_conversion.exclude_repos_file)"
+REASONING_CHECK_MODE_CFG="$(cfg runtime_info.input.sft_conversion.reasoning_check_mode)"
+REASONING_THRESHOLD_CFG="$(cfg runtime_info.input.sft_conversion.reasoning_content_ratio_threshold)"
 
 [[ -n "$SWE_DP_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.swe_data_process.path is empty" >&2; exit 1; }
 [[ -n "$SWE_DP_UV_RAW" ]] || { echo "ERROR: meta_info.environment.swe_data_process_uv is empty" >&2; exit 1; }
@@ -167,6 +191,8 @@ EXCLUDE_REPOS_CFG="$(cfg runtime_info.input.sft_conversion.exclude_repos_file)"
 [[ -n "$AGENT_NAME" ]] || { echo "ERROR: runtime_info.input.agent.name is empty" >&2; exit 1; }
 [[ -n "$SCAFFOLD_CFG" ]] || SCAFFOLD_CFG="auto"
 [[ -n "$OUT_DIR_CFG" ]] || OUT_DIR_CFG="artifacts/sft_data"
+[[ -n "$REASONING_CHECK_MODE_CFG" ]] || REASONING_CHECK_MODE_CFG="adaptive"
+[[ -n "$REASONING_THRESHOLD_CFG" ]] || REASONING_THRESHOLD_CFG="0.2"
 
 SWE_DP_DIR="$(abspath "$SWE_DP_PATH_RAW")"
 SWE_DP_UV_ABS="$(abspath "$SWE_DP_UV_RAW")"
@@ -225,10 +251,43 @@ else
   EXCLUDE_REPOS_FILE="$EXCLUDE_REPOS_CFG"
 fi
 
+if [[ -n "$REASONING_CHECK_MODE_OVERRIDE" ]]; then
+  REASONING_CHECK_MODE="$REASONING_CHECK_MODE_OVERRIDE"
+else
+  REASONING_CHECK_MODE="$REASONING_CHECK_MODE_CFG"
+fi
+case "$REASONING_CHECK_MODE" in
+  strict|adaptive) ;;
+  *) echo "ERROR: reasoning_check_mode must be strict or adaptive (got: $REASONING_CHECK_MODE)" >&2; exit 1 ;;
+esac
+
+if [[ -n "$REASONING_THRESHOLD_OVERRIDE" ]]; then
+  REASONING_CONTENT_RATIO_THRESHOLD="$REASONING_THRESHOLD_OVERRIDE"
+else
+  REASONING_CONTENT_RATIO_THRESHOLD="$REASONING_THRESHOLD_CFG"
+fi
+python3 - "$REASONING_CONTENT_RATIO_THRESHOLD" <<'PY' || {
+import sys
+try:
+    value = float(sys.argv[1])
+except (TypeError, ValueError):
+    raise SystemExit(1)
+raise SystemExit(0 if 0 <= value <= 1 else 1)
+PY
+  echo "ERROR: reasoning_content_ratio_threshold must be a number between 0 and 1 (got: $REASONING_CONTENT_RATIO_THRESHOLD)" >&2
+  exit 1
+}
+
 CMD=("$SWE_DP_UV_ABS/bin/python" "-m" "$MODULE"
      "--job-dir" "$JOB_DIR"
      "--im-output" "$IM_OUTPUT"
      "--lf-output" "$LF_OUTPUT")
+REASONING_FILTER_SUPPORTED=0
+if supports_reasoning_filter "$SCAFFOLD"; then
+  REASONING_FILTER_SUPPORTED=1
+  CMD+=("--reasoning-check-mode" "$REASONING_CHECK_MODE")
+  CMD+=("--reasoning-content-ratio-threshold" "$REASONING_CONTENT_RATIO_THRESHOLD")
+fi
 if [[ -n "$MAX_INSTANCES" ]]; then
   CMD+=("--max-instances" "$MAX_INSTANCES")
 fi
@@ -244,13 +303,23 @@ SIG_FILE="$OUT_DIR/.convert_sig.json"
 # instance set (the only thing the converter consumes) plus scaffold/limits, so
 # it is stable while result.json metadata churns during a running job.
 compute_convert_sig() {
-  python3 - "$JOB_DIR/result.json" "$SCAFFOLD" "${MAX_INSTANCES:-}" "${EXCLUDE_REPOS_FILE:-}" <<'PY'
+  python3 - "$JOB_DIR/result.json" "$SCAFFOLD" "${MAX_INSTANCES:-}" "${EXCLUDE_REPOS_FILE:-}" "$REASONING_FILTER_SUPPORTED" "$REASONING_CHECK_MODE" "$REASONING_CONTENT_RATIO_THRESHOLD" <<'PY'
 import hashlib
 import json
 import sys
 
-result_path, scaffold, max_instances, exclude_file = sys.argv[1:5]
-parts = [scaffold, max_instances, exclude_file]
+(
+    result_path,
+    scaffold,
+    max_instances,
+    exclude_file,
+    reasoning_filter_supported,
+    reasoning_check_mode,
+    reasoning_content_ratio_threshold,
+) = sys.argv[1:8]
+parts = [scaffold, max_instances, exclude_file, reasoning_filter_supported]
+if reasoning_filter_supported == "1":
+    parts.extend([reasoning_check_mode, reasoning_content_ratio_threshold])
 try:
     with open(result_path, encoding="utf-8") as fh:
         data = json.load(fh)
@@ -302,6 +371,11 @@ echo "Job:       $JOB_NAME"
 echo "Job dir:   $JOB_DIR"
 echo "Scaffold:  $SCAFFOLD"
 echo "Module:    $MODULE"
+if [[ "$REASONING_FILTER_SUPPORTED" == "1" ]]; then
+  echo "Reasoning: $REASONING_CHECK_MODE (threshold=$REASONING_CONTENT_RATIO_THRESHOLD)"
+else
+  echo "Reasoning: n/a (unsupported by $SCAFFOLD converter)"
+fi
 echo "IM out:    $IM_OUTPUT"
 echo "LF out:    $LF_OUTPUT"
 echo "Env:       $SWE_DP_UV_ABS"

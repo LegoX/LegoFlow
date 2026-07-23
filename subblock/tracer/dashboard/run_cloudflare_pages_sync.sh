@@ -21,6 +21,28 @@ PORT="${PORT:-8770}"
 # wrangler v4+ requires Node.js >= 22; pin to v3 so it also runs on Node 18.
 # Override (e.g. WRANGLER_PKG=wrangler) if a newer Node.js is available.
 WRANGLER_PKG="${WRANGLER_PKG:-wrangler@3}"
+WRANGLER_WORKDIR="${WRANGLER_WORKDIR:-/tmp/trajgen-wrangler-workdir}"
+export CI="${CI:-1}"
+
+# Dashboard payload controls. Keep samples enabled by default for local parity,
+# but allow public sync deployments to shrink or omit embedded previews.
+DASHBOARD_INCLUDE_SAMPLES="${DASHBOARD_INCLUDE_SAMPLES:-1}"
+DASHBOARD_SAMPLE_LIMIT="${DASHBOARD_SAMPLE_LIMIT:-200}"
+DASHBOARD_SAMPLE_PREVIEW_CHARS="${DASHBOARD_SAMPLE_PREVIEW_CHARS:-1200}"
+DASHBOARD_SAMPLE_MESSAGE_LIMIT="${DASHBOARD_SAMPLE_MESSAGE_LIMIT:-12}"
+DASHBOARD_LOCAL_MODE="${DASHBOARD_LOCAL_MODE:-public}"
+DASHBOARD_HARBOR_JOBS_DIR="${DASHBOARD_HARBOR_JOBS_DIR:-/storage/jierun/code/harbor/jobs}"
+DASHBOARD_MAX_TRIALS_PER_JOB="${DASHBOARD_MAX_TRIALS_PER_JOB:-0}"
+DASHBOARD_MAX_QUALITY_RECORDS_PER_DATASET="${DASHBOARD_MAX_QUALITY_RECORDS_PER_DATASET:-0}"
+
+# Optional full-trajectory publishing. Static metrics always deploy through
+# Pages. Set TRACER_R2_UPLOAD=1 and TRACER_R2_BUCKET=<bucket> to upload local
+# Harbor trajectory JSON files referenced by data/traj_cards.jsonl. Bind the
+# same bucket to Pages as TRACER_TRAJ_BUCKET for /api/traj.
+TRACER_R2_UPLOAD="${TRACER_R2_UPLOAD:-0}"
+TRACER_R2_BUCKET="${TRACER_R2_BUCKET:-}"
+TRACER_R2_UPLOAD_LIMIT="${TRACER_R2_UPLOAD_LIMIT:-0}"
+R2_MANIFEST_SCRIPT="$SCRIPT_DIR/export_r2_manifest.py"
 
 # SFT conversion in the loop: re-run convert_trajectories.sh (skip when
 # unchanged) at most every CONVERT_EVERY_SECONDS, so the dashboard's SFT stats
@@ -32,6 +54,11 @@ CONVERT_EVERY_SECONDS="${CONVERT_EVERY_SECONDS:-7200}"
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*"
+}
+
+wrangler() {
+  mkdir -p "$WRANGLER_WORKDIR"
+  (cd "$WRANGLER_WORKDIR" && npx --yes "$WRANGLER_PKG" "$@")
 }
 
 # Map a Harbor job name to a swe_data_process scaffold key (same heuristic the
@@ -55,6 +82,49 @@ resolve_convert_job() {
   else
     echo "$CONVERT_JOB"
   fi
+}
+
+upload_r2_trajectories() {
+  if [[ "$TRACER_R2_UPLOAD" != "1" ]]; then
+    return 0
+  fi
+  if [[ -z "$TRACER_R2_BUCKET" ]]; then
+    log "TRACER_R2_UPLOAD=1 but TRACER_R2_BUCKET is empty; skipping R2 upload"
+    return 0
+  fi
+  if [[ ! -f "$PUBLIC_DIR/data/trial_fact.jsonl" ]]; then
+    log "trial_fact.jsonl not found; skipping R2 upload"
+    return 0
+  fi
+  if [[ ! -f "$R2_MANIFEST_SCRIPT" ]]; then
+    log "R2 manifest script not found at $R2_MANIFEST_SCRIPT; skipping R2 upload"
+    return 0
+  fi
+
+  manifest="/tmp/tracer_r2_manifest.$$.tsv"
+  python3 "$R2_MANIFEST_SCRIPT" "$PUBLIC_DIR/data/trial_fact.jsonl" --limit "$TRACER_R2_UPLOAD_LIMIT" >"$manifest"
+  count="$(wc -l <"$manifest" | tr -d ' ')"
+  if [[ "$count" == "0" ]]; then
+    log "no local trajectory JSON files found for R2 upload"
+    rm -f "$manifest"
+    return 0
+  fi
+
+  log "uploading $count trajectory JSON file(s) to R2 bucket $TRACER_R2_BUCKET"
+  while IFS=$'\t' read -r r2_key local_path; do
+    if [[ -z "$r2_key" || -z "$local_path" ]]; then
+      continue
+    fi
+    wrangler r2 object put "$TRACER_R2_BUCKET/$r2_key" \
+      --file "$local_path" \
+      --content-type application/json >/tmp/tracer_r2_upload.log 2>&1 || {
+        log "failed to upload $r2_key; see /tmp/tracer_r2_upload.log"
+        rm -f "$manifest"
+        return 1
+      }
+  done <"$manifest"
+  rm -f "$manifest"
+  log "R2 trajectory upload complete"
 }
 
 if [[ -f "$ENV_FILE" ]]; then
@@ -129,11 +199,24 @@ while true; do
   fi
 
   log "generating dashboard HTML"
+  sample_args=(
+    --sample-limit "$DASHBOARD_SAMPLE_LIMIT"
+    --sample-preview-chars "$DASHBOARD_SAMPLE_PREVIEW_CHARS"
+    --sample-message-limit "$DASHBOARD_SAMPLE_MESSAGE_LIMIT"
+    --local-mode "$DASHBOARD_LOCAL_MODE"
+    --harbor-jobs-dir "$DASHBOARD_HARBOR_JOBS_DIR"
+    --max-trials-per-job "$DASHBOARD_MAX_TRIALS_PER_JOB"
+    --max-quality-records-per-dataset "$DASHBOARD_MAX_QUALITY_RECORDS_PER_DATASET"
+  )
+  if [[ "$DASHBOARD_INCLUDE_SAMPLES" == "0" ]]; then
+    sample_args=(--no-include-samples "${sample_args[@]}")
+  fi
   if uv run --no-project --script "$DASHBOARD_SCRIPT" \
       --output-html "$PUBLIC_DIR/index.html" \
       --cache-file "$CACHE_FILE" \
       --refresh "$LOOP_SECONDS" \
-      --force-full-scan; then
+      --force-full-scan \
+      "${sample_args[@]}"; then
     log "generated $PUBLIC_DIR/index.html"
   else
     log "generation failed; will retry after $LOOP_SECONDS seconds"
@@ -141,19 +224,25 @@ while true; do
     continue
   fi
 
+  upload_r2_trajectories || log "R2 upload failed; deploying static dashboard anyway"
+
   if [[ "$PROJECT_READY" -eq 0 ]]; then
     log "ensuring Cloudflare Pages project $PROJECT_NAME exists"
-    npx --yes "$WRANGLER_PKG" pages project create "$PROJECT_NAME" \
+    wrangler pages project create "$PROJECT_NAME" \
       --production-branch "$BRANCH_NAME" >/tmp/tracer_pages_project_create.log 2>&1 || true
     PROJECT_READY=1
   fi
 
   log "deploying dashboard to Cloudflare Pages project $PROJECT_NAME"
-  npx --yes "$WRANGLER_PKG" pages deploy "$PUBLIC_DIR" \
+  if ! wrangler pages deploy "$PUBLIC_DIR" \
     --project-name "$PROJECT_NAME" \
     --branch "$BRANCH_NAME" \
     --commit-dirty=true \
-    --commit-message "Update tracer progress dashboard $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    --commit-message "Update tracer progress dashboard $(date -u '+%Y-%m-%dT%H:%M:%SZ')"; then
+    log "Cloudflare Pages deploy failed; will retry after $LOOP_SECONDS seconds"
+    sleep "$LOOP_SECONDS"
+    continue
+  fi
 
   log "sleeping $LOOP_SECONDS seconds before next refresh"
   sleep "$LOOP_SECONDS"

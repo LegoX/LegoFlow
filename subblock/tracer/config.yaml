@@ -32,7 +32,7 @@ meta_info:
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
       branch: main
-      commit: 76cb50cea432fb8687cf192c8ab3f09bb726cb07
+      commit: 2ca6541105988e7d77a0ca8b4d79d32cc4d620ef
       path: repos/swe_data_process
       readonly: true
 
@@ -88,6 +88,8 @@ runtime_info:
       out_dir: artifacts/sft_data
       max_instances: null
       exclude_repos_file: ""           # "" = repo default artifacts/excluded_repos.txt
+      reasoning_check_mode: adaptive
+      reasoning_content_ratio_threshold: 0.2
 
     env_extra:
       # Prior failures (timeout/OOM) + tasks consumed per artifacts/processed_tasks.yaml
