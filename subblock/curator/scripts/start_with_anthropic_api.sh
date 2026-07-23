@@ -26,4 +26,6 @@ if [ "$MODE" != "native" ]; then
 fi
 
 echo "[start_with_anthropic_api] cc_provider_mode=native; no local proxy needed."
+# Guard so start.sh runs generation directly instead of dispatching back here.
+export SWEGEN_LAUNCHER_ACTIVE=1
 exec bash "${BLOCK_DIR}/scripts/start.sh" "$@"
