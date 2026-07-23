@@ -184,9 +184,9 @@ except ImportError:
 with open(sys.argv[1], encoding="utf-8") as fh:
     data = yaml.safe_load(fh) or {}
 
-env = ((data.get("environment") or {}).get("extra") or {})
+env = (((data.get("runtime_info") or {}).get("input") or {}).get("env_extra") or {})
 if not isinstance(env, dict):
-    print("ERROR: environment.extra must be a mapping", file=sys.stderr)
+    print("ERROR: runtime_info.input.env_extra must be a mapping", file=sys.stderr)
     sys.exit(2)
 
 for key, value in env.items():

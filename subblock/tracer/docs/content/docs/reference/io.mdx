@@ -19,7 +19,7 @@ tracer is configured entirely through [`config.yaml`](https://github.com/SWE-Leg
 | `sft_conversion` | Optional post-job conversion step | external |
 | `HARBOR_EXCLUDE_TASKS` | Space-separated task IDs Harbor must skip | derived |
 
-The only external value you normally fill is `runtime_info.input.llm_api`; the task source is wired from curator via `meta_info.dependencies`.
+The only external value you normally fill is `runtime_info.input.llm_api`; the task source is wired from curator via `meta_info.dependencies.from` (mirrored by curator's own `dependencies.to`).
 
 ## Active runtime values
 

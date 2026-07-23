@@ -13,12 +13,12 @@ Trains a language model using supervised fine-tuning (SFT).
 ## Input / Output contract
 
 Read from `runtime_info.input` in `config.yaml` before running:
-- `dataset_path` — path to the labeled training dataset
+- `dataset_path` — path to the labeled training dataset (wired from curator via `meta_info.dependencies`)
 - `learning_rate` — float, e.g. 1e-4
 - `num_epochs` — int, number of training epochs
 
 Write to `runtime_info.output` in `config.yaml` after running:
-- `model_checkpoint` — path to saved model checkpoint
+- `model_checkpoint.value` — path to saved model checkpoint (run-produced write-back)
 
 ## Repos
 

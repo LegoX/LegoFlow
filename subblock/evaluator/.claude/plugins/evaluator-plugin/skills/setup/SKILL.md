@@ -90,7 +90,7 @@ satisfies this. `UV_PROJECT_ENVIRONMENT` must be an absolute path.
 
 ### 4. Config
 
-Walk `runtime_info.input` and prompt only for unset fields:
+Walk `runtime_info.input` and prompt only for unset fields (the literal `human` marker always counts as unset; `""` fields are env/auto-supplied — do not prompt for those):
 
 - `llm_api.{api_key, api_base_url, model}` — the upstream served via the
   per-job LiteLLM proxy. `config.yaml` keeps two interchangeable recipes,
@@ -218,3 +218,51 @@ the structured preflight report). Do not re-run `dryrun.sh` here. If
 - This skill never runs Harbor and never starts the LiteLLM proxy.
 - Setup must run on the host declared in `meta_info.resources.ip`. If
   your shell is elsewhere, connect there first.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+### llm_api — MODE A (remote API) vs MODE B (local vLLM)
+
+The block only talks to an OpenAI/Anthropic-compatible HTTP endpoint (the per-job LiteLLM proxy wraps `api_base_url`), so the two backends are interchangeable — point `llm_api` at one:
+
+**MODE A — remote API, no local serving:**
+```yaml
+llm_api:
+  api_key: "<your-api-key>"
+  api_base_url: "https://api.example.com/v1"
+  model: "openai/<served-model-name>"
+  protocols: [openai_compatible, anthropic_compatible]
+  served_via: per_job_litellm_proxy
+  input_cost_per_token: 0.0
+  output_cost_per_token: 0.0
+```
+
+**MODE B — local checkpoint served by vLLM** (the shipped default): `api_base_url: http://<GPU_NODE>:8000/v1`, `api_key` matching vLLM `--api-key`, `model: openai/<vLLM --served-model-name>`. `local_model_serving.{model_path,model_name}` is the source of truth read by `scripts/serve_local_model.sh`; ignored in MODE A. Full topology: CLAUDE.md "Evaluating a custom local model".
+
+### Agent presets (switch all four fields together)
+
+```yaml
+# custom-claude-code (Anthropic protocol, validated end-to-end)
+agent: {name: custom-claude-code, version: 2.1.118, runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1, runtime_host_path: artifacts/runtime/claude-code}
+# custom-openhands-sdk (OpenAI protocol; max_turns is reused as max_iterations)
+agent: {name: custom-openhands-sdk, version: 1.14.0, runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.5, runtime_host_path: artifacts/runtime/openhands-sdk}
+# custom-opencode (OpenAI-compatible via @ai-sdk/openai-compatible)
+agent: {name: custom-opencode, version: 1.14.22, runtime_image: docker.io/jierun/c-oc-1.14.22:v0.1, runtime_host_path: artifacts/runtime/opencode}
+```
+
+### Runtime pre-extract recipe (once per runtime_image; idempotent)
+
+`runtime_host_path` must already contain the extracted agent runtime tree from `runtime_image` (bind-mount source; preferred over image-mount, which trips an overlayfs filename-too-long bug on some task images). SUBPATH is `claude-code` or `oh-sdk` to match the agent:
+
+```bash
+RUNTIME_IMAGE=<runtime_image from config>
+SUBPATH=claude-code   # or: oh-sdk
+HOST_DIR=artifacts/runtime/<runtime_host_path basename>
+docker pull "$RUNTIME_IMAGE" && \
+CID=$(docker create "$RUNTIME_IMAGE") && \
+rm -rf "$HOST_DIR" && mkdir -p "$(dirname "$HOST_DIR")" && \
+docker cp "$CID:/opt/custom-agent-runtime/$SUBPATH" "$HOST_DIR" && \
+docker rm "$CID"
+```

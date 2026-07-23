@@ -3,21 +3,23 @@ title: config.yaml schema
 description: The fixed schema every block's config.yaml follows
 ---
 
-Every block in the tree — root or subblock — has a `config.yaml` with the same top-level shape. Live state is **not** stored here; that lives in `artifacts/index.yaml`.
+Every block in the tree — root or subblock — has a `config.yaml` with the same top-level shape. Live state is **not** stored here; that lives in `artifacts/index.yaml`. The schema is machine-enforced by `scripts/validate_config.py` (run by every block's `dryrun.sh`, the CI schema tests, and the `:check` skills).
 
 ## Top-level structure
 
 ```yaml
 meta_info:
-  name:                 # short identifier, kebab-case
+  name:                 # short identifier; must equal the block's directory name
   label:                # human-friendly title
   description:          # one-sentence purpose
   parent:               # parent block's `name`, or null for the root
-  subblocks:            # one entry per child block (optional)
-    <child_name>:
-      role:             # one-line purpose of the child
-      dependencies:     # input wiring — see "Wiring rule" below
-        <input_key>: <source_block>.output.<key>     # or: human
+  subblocks:            # parent blocks only: children with a role one-liner — NO wiring
+    <child_name>: {role: "<one phrase>"}
+  dependencies:         # this block's own upstream AND downstream edges — see "Wiring rule"
+    from:
+      <input.dot.path>: <source_block>.output.<key>
+    to:
+      <output_key>: <consumer_block>.input.<their.dot.path>
   repos: {}             # name → {commit_id, role}; pinned vendored deps under repos/
   resources:
     ip:                 # 'local' (default) or null = current host; remote IP = SSH+tmux
@@ -26,23 +28,63 @@ meta_info:
 runtime_info:
   input: {}             # ONLY values originating outside the block tree
   output: {}            # values produced for downstream blocks
-
-evolving:
-  tunable_params: {}    # auto-tuned parameters with bounds (optional)
 ```
+
+These are the **only** two top-level sections. Legacy `status:` and `evolving:` sections and a top-level `environment:` are validation failures (`schema:legacy-status`, `schema:legacy-evolving`, `schema:unknown-toplevel`); per-run env vars live in `runtime_info.input.env_extra`.
 
 ## Wiring rule
 
 This is the rule the whole pipeline depends on:
 
-> Inter-block values go in `meta_info.subblocks[].dependencies`, never in `runtime_info.input`. Only values originating **outside** the block tree go in `runtime_info.input`.
+> `meta_info.dependencies` is a mapping with exactly two keys, `from` and `to` — a block declares both directions it participates in, from its own file. A block with neither declares an explicit `dependencies: {from: {}, to: {}}`. The root's `subblocks` entries carry roles only — never wiring.
 
-That keeps every path/handle that connects two blocks resolvable at preflight time — and means you never copy paths by hand. `/root:check` validates that every `subblocks[].dependencies` entry resolves to a non-null `output` of the named sibling.
+**`from`** — this block's own upstream hand-offs. Key is a dot-path into this block's own `runtime_info.input`; value names the producer's output. Two value forms:
 
-## `runtime_info.input` vs `runtime_info.output`
+```yaml
+# string form — required dependency
+from:
+  task_source.dataset_name: curator.output.swe_tasks_dir
 
-- `input` is what you (or another tool) must fill before the block can run. Examples: API keys, GitHub tokens, human decisions about model names.
-- `output` is what the block promises to publish once it has run. Examples: a directory of verified tasks, a checkpoint path. Downstream blocks reference these via `dependencies`.
+# mapping form — conditional and/or optional
+from:
+  source.job_dir:
+    from: tracer.output.raw_trajectories_dir
+    when: {source.type: harbor_job}   # enforced only while these inputs hold these values
+    required: false                   # null producer output → warning, not failure
+```
+
+**`to`** — the mirror image, declared by the *producer*. Key is one of this block's own `runtime_info.output` keys; value names the exact consumer input field:
+
+```yaml
+# string form
+to:
+  swe_tasks_dir: tracer.input.task_source.dataset_name
+
+# mapping form — when-keys are fully-qualified <consumer>.input.<path>, since the
+# condition lives on the consumer's own state, not this (producer) block's
+to:
+  swe_tasks_dir:
+    to: tracer.input.task_source.dataset_name
+    when: {tracer.input.task_source.provider: local}
+```
+
+The same edge is declared twice — once in the consumer's `from`, once in the producer's `to` — each block only ever editing its own file. The validator cross-checks the two declarations and warns (`dep:link-mismatch`) if they've drifted apart.
+
+Resolution reads the producer's `runtime_info.output.<key>`: a non-null `value` first, else `path`. A dangling reference (missing producer/consumer block or field) always fails validation, even when the dependency is inactive or optional. The validator also warns (`dep:path-mismatch`) when a consumer's configured path does not lie under the producer's declared output path — catching stale paths after renames.
+
+## Fill markers in `runtime_info.input`
+
+| Marker | Meaning | Validator |
+| --- | --- | --- |
+| `human` | User must replace before a run | `input:unfilled` (fail) |
+| `""` | Auto-derived or env/file-supplied; never edit to run | — |
+| `null` | Semantic unset / default / all | — |
+| anything else | Real working default | — |
+| `<...>`, `REPLACE_ME`, `YOUR_API_KEY`, `changeme` | Retired legacy placeholders | `input:placeholder` (fail) |
+
+## `runtime_info.output` shape
+
+Each output key is a mapping with `path:` (a static location fixed at authoring time, block-relative) and/or `value:` (run-produced — `null` until the block's run script writes it back, as trainer's `train.sh` does after training). Consumers resolve `value` first, then `path`.
 
 ## `resources.ip`
 
@@ -51,11 +93,18 @@ That keeps every path/handle that connects two blocks resolvable at preflight ti
 
 Do **not** "restore" an old remote IP from git history. The local default is intentional.
 
-## `evolving.tunable_params`
+## Validation
 
-Optional. When set, the orchestrator may adjust these within bounds across runs as part of the self-evolving loop. Leave empty if the block is not tuned.
+```bash
+python3 scripts/validate_config.py --root .                  # whole tree + cross-block deps
+python3 scripts/validate_config.py --block subblock/tracer   # one block
+python3 scripts/validate_config.py --block subblock/tracer --config tests/smoke/config.yaml
+```
+
+Findings are printed as `[OK]`/`[WARN]`/`[FAIL]` lines with stable labels (`schema:*`, `dep:*` — including `dep:bad-shape` for a malformed `from`/`to` mapping and `dep:link-mismatch` (warning) when the two sides of an edge disagree — `input:*`, `output:shape`, `tree:*`); the exit code is non-zero iff any `[FAIL]` was reported.
 
 ## Where to read more
 
 - The canonical contract: `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`.
-- A worked example scaffold: `.claude/plugins/root-plugin/references/example_block/`.
+- The schema template: `.claude/plugins/root-plugin/resources/config.template.yaml`.
+- A worked example scaffold: `.claude/plugins/root-plugin/resources/example_block/`.

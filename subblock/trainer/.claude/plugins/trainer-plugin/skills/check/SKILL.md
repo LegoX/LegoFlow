@@ -221,3 +221,11 @@ Re-run `/trainer:check`.
 - `kill` a process — surface the conflict, let the user decide
 - SSH to other nodes — this block runs locally (`meta_info.resources.ip:
   null`); `/trainer:check` is head-node only
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **overwrite_output_dir: false** means an existing `training.output_dir` will NOT be replaced — an explicit env override is required to overwrite a previous run. Treat an existing output dir + false as "will refuse", not as an error.
+- **credentials.hf_token** is only required for private `source.type: hf_lf` datasets; empty is normal for public ones. `wandb_api_key` stays empty — the key flows via `$WANDB_API_KEY`.
+- **runtime_info.output** is written back by `scripts/train.sh` STEP 3 (comment-preserving, flock-guarded). Its pre-run shape (value: null entries) is the contract — do not "fix" the nulls.

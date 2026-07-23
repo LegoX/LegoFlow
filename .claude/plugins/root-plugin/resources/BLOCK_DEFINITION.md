@@ -19,7 +19,7 @@ This document is organized as four sections, in the order an agent typically nee
 
 Each block is operated by a dedicated agent. The agent reads `CLAUDE.md` for its contract and `config.yaml` for inputs, outputs, resources, and tree position. Agents coordinate through two mechanisms, both detailed in §3:
 
-- **Inter-block wiring** — `meta_info.subblocks[].dependencies` (the primary channel).
+- **Inter-block wiring** — each block's own `meta_info.dependencies`, showing both the upstream it consumes (`from`) and the downstream its own outputs feed (`to`) (the primary channel).
 - **External inputs** — `runtime_info.input` (values that originate outside the block tree).
 
 Each agent maintains its block's `memory/` and `artifacts/` independently. **Live run state lives in `artifacts/index.yaml`** (the newest entry's `status` field, written automatically by `archive_run.sh`) — never in `config.yaml`. This invariant is referenced throughout the rest of this document.
@@ -30,16 +30,17 @@ A canonical example block is shipped at [`example_block/`](./example_block/) (si
 
 ### 1.3 `config.yaml`
 
-The authoritative schema lives in [`config.template.yaml`](./config.template.yaml) (sibling of this file). Read the template for the exact field set, inline comments, and default conventions. Do not duplicate the schema here.
+The authoritative schema lives in [`config.template.yaml`](./config.template.yaml) (sibling of this file). Read the template for the exact field set, inline comments, and default conventions. Do not duplicate the schema here. The schema is **enforced** by `<repo_root>/scripts/validate_config.py` (`--root <repo_root>` for the whole tree, `--block <block_dir>` for one block) — every block's `dryrun.sh`, the CI schema tests, and the `:check` skills run it.
 
 Key invariants the template encodes:
 
-- Top-level sections: `meta_info`, `runtime_info`, `evolving`.
-- Inter-block wiring goes in `meta_info.subblocks[<child>].dependencies` (`<src>.output.<key>` or literal `human`); see §3.1. **Never** put inter-block values in `runtime_info.input`.
-- `runtime_info.input` holds only values originating outside the block tree (API keys, human decisions, external paths). `runtime_info.output` holds values this block produces for siblings/consumers.
+- Top-level sections: `meta_info` and `runtime_info` — nothing else. Legacy `status:` and `evolving:` sections and a top-level `environment:` are validation failures (live state lives in `artifacts/index.yaml`; per-run env vars live in `runtime_info.input.env_extra`).
+- Inter-block wiring goes in each block's own `meta_info.dependencies` — `from` declared by the consumer, `to` declared by the producer, the same edge on both ends (see §3.1). **Never** put inter-block values in `runtime_info.input` — the dependency entry names which `runtime_info.input` path receives the wired value.
+- `runtime_info.input` holds only values originating outside the block tree (API keys, human decisions, external paths). Fill markers are standardized: `human` = the user must replace this before a run (the validator fails on it); `""` = auto-derived at runtime or supplied via an env/file channel (never edit to run); `null` = semantic unset/default; anything else is a real working default.
+- `runtime_info.output` holds values this block produces for siblings/consumers. Each output key is a mapping with `path:` (a static location fixed at authoring time) and/or `value:` (run-produced — `null` until the block's run script writes it back, e.g. trainer's `train.sh` STEP 3). Consumers resolve `value` first, then `path`.
 - `meta_info.resources.ip`: `local` / null / absent → run on the current host. A real remote IP → SSH + tmux per §2.3.
 
-`config.yaml` is **one-shot per run**: every key is configuration the block reads at launch time. Live state lives in `artifacts/index.yaml` (§1.1, §2.2), not in `config.yaml`.
+`config.yaml` is **one-shot per run**: every key is configuration the block reads at launch time (run-produced `output.value` write-backs are the single exception). Live state lives in `artifacts/index.yaml` (§1.1, §2.2), not in `config.yaml`.
 
 ### 1.4 File roles
 
@@ -112,18 +113,56 @@ If `meta_info.resources.ip` is a real remote IP (not `local`, null, or absent), 
 
 ### 3.1 Inter-block wiring
 
-Subblock dependencies are declared in `meta_info.subblocks[].dependencies`. This is the authoritative wiring between blocks — never `runtime_info`. Example:
+Every block declares its dependencies in `meta_info.dependencies`, a mapping with exactly two keys, `from` and `to` — each block shows both directions it participates in, from its own file. The mapping is mandatory and always has both keys present (use `{}` for a direction with no edges): `dependencies: {from: {}, to: {}}` for a block with neither.
+
+**`from`** — this block's own **upstream** hand-offs (unchanged from the original grammar):
+
+- **Key** — a dot-path into this block's own `runtime_info.input` naming the input that receives the hand-off (e.g. `task_source.dataset_name`). The path must exist; freeform labels are a validation failure.
+- **Value** — either the string `<src>.output.<key>` (a required reference to a sibling block's `runtime_info.output` key), or a mapping for conditional/optional hand-offs:
 
 ```yaml
-subblocks:
-  tracer:
-    role: Generate trajectories from verified SWE instances
-    dependencies:
-      verified_tasks_dir: curator.output.verified_tasks_dir  # from sibling block
-      api_key: human                                         # filled manually
+# subblock/tracer/config.yaml — consumer declares its own upstream
+meta_info:
+  dependencies:
+    from:
+      task_source.dataset_name:
+        from: curator.output.swe_tasks_dir
+        when: {task_source.provider: local}   # enforced only while these inputs hold these values
+    to: {}
+
+# optional upstream (null producer output → warning, not failure)
+meta_info:
+  dependencies:
+    from:
+      model.model_path:
+        from: trainer.output.checkpoint_path
+        required: false
+    to: {}
 ```
 
-`runtime_info.input` is reserved for values that originate outside the block tree entirely.
+**`to`** — this block's own **downstream** hand-offs, the mirror image, declared by the *producer*:
+
+- **Key** — one of this block's own `runtime_info.output` keys.
+- **Value** — either the string `<consumer>.input.<path>` (naming the exact input field on the consumer that receives this output), or a mapping with an optional `when` gate whose keys are **fully-qualified** `<consumer>.input.<path>` (the condition lives on the consumer's own state, since the producer doesn't own an input to gate on):
+
+```yaml
+# subblock/curator/config.yaml — producer declares its own downstream
+meta_info:
+  dependencies:
+    from: {}
+    to:
+      swe_tasks_dir:
+        to: tracer.input.task_source.dataset_name
+        when: {tracer.input.task_source.provider: local}
+```
+
+The same logical edge is declared twice — once by the consumer's `from`, once by the producer's `to` — each block only ever editing its own file. `scripts/validate_config.py` cross-checks the two declarations and emits a `dep:link-mismatch` warning if they've drifted apart (e.g. one side renamed a field and the other wasn't updated).
+
+Resolution reads the producer's `runtime_info.output.<key>`: a non-null `value` first, else `path`. A dangling reference (producer/consumer block or field missing) is always a validation failure, even when the dependency is inactive or optional. `scripts/validate_config.py` enforces all of this.
+
+The **root block's** `config.yaml` lists its children under `meta_info.subblocks` with a `role:` one-liner each — no wiring there; a `dependencies` key under a `subblocks` entry is a validation failure. Root's own `dependencies` is `{from: {}, to: {}}` (it has no `runtime_info.input`/`output` of its own to hang edges off).
+
+`runtime_info.input` is reserved for values that originate outside the block tree entirely; human-supplied values live there directly (marked `human` until filled) — the literal `human` is **not** part of the dependency grammar.
 
 ### 3.2 Parent dispatches to children — never to `start.sh`
 
@@ -177,7 +216,7 @@ Termination is intentionally not a skill — see §2.1. Each block ships a `scri
 
 Naming rules:
 
-- Plugin manifest `name` MUST equal the block name (`root`, `rl`, `curator`, …). The slash-command namespace is `/<name>:`.
+- Plugin manifest `name` MUST equal the block name (`root`, `curator`, `tracer`, …). The slash-command namespace is `/<name>:`.
 - Marketplace `name` in `marketplace.json` MUST equal the key used in `settings.json` `extraKnownMarketplaces` (e.g. `curator-local`).
 - Directory name follows `<block_name>-plugin/` for grep-friendliness; the source path in `marketplace.json` (`./<block_name>-plugin`) must match.
 

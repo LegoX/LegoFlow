@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Launch curator and tracer on the remote node inside named tmux sessions.
-# trainer and rl are not yet connected and are skipped.
+# trainer and evaluator are launched from their own blocks and are skipped here.
 #
 # Usage:
 #   bash scripts/start.sh [options]

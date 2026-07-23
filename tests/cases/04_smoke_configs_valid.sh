@@ -17,7 +17,7 @@ except ImportError:
     print("FAIL: PyYAML not installed", file=sys.stderr); sys.exit(1)
 
 root = sys.argv[1]
-# The four blocks the root smoke chains. rl is not part of this pipeline.
+# The four blocks the root smoke chains.
 BLOCKS = ["curator", "tracer", "trainer", "evaluator"]
 errs = []
 for b in BLOCKS:

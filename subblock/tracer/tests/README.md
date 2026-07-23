@@ -58,7 +58,7 @@ events on `dev`/`main` and manual `workflow_dispatch` runs
 | 05: HF 404 | typo in `task_source.dataset_name` | fix in `config.yaml` |
 | 06: port held by another uid | someone else is on `litellm_proxy.port` | change the port, or kill the foreign process |
 | 07: image not pulled | runner's daemon lost the image | `docker pull docker.io/jierun/c-cc-2.1.118:v0.1` |
-| 08: ledger task not in `HARBOR_EXCLUDE_TASKS` | done/failed/skipped tasks would re-execute next run | add them to `environment.extra.HARBOR_EXCLUDE_TASKS` in `config.yaml` |
+| 08: ledger task not in `HARBOR_EXCLUDE_TASKS` | done/failed/skipped tasks would re-execute next run | add them to `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` in `config.yaml` |
 | 10: budget hit, no resolved trial | model regression, network slowness, or 10 unusually hard tasks | inspect `artifacts/jobs/smoke/<job>/*/result.json` for verifier output |
 
 ---
@@ -168,7 +168,7 @@ configured `DOCKER_HOST`. CI must not pay a multi-GB pull mid-job.
 Parses `artifacts/consumption_ledger.yaml` and enforces: (1) every entry's
 status is one of `{pending, running, done, failed, skipped}`; (2) every
 entry whose status is `done`/`failed`/`skipped` has its `task_id` listed in
-`environment.extra.HARBOR_EXCLUDE_TASKS`. Lists up to 10 offenders.
+`runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`. Lists up to 10 offenders.
 </details>
 
 <details>

@@ -13,7 +13,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 
 ## Read first
 
-1. `config.yaml` — block identity, Harbor config, runtime values, and live `status` (source of truth alongside `artifacts/index.yaml`)
+1. `config.yaml` — block identity, Harbor config, and runtime values (one-shot per run; live state is `artifacts/index.yaml`)
 2. `docs/content/docs/index.mdx` — human-facing overview and quickstart (`README.md` is the short project intro; `docs/` is the user-facing fumadocs site)
 
 ## Input / Output contract
@@ -23,11 +23,11 @@ Read from `config.yaml` before running (details in `docs/content/docs/reference/
 - `meta_info.environment` — `harbor_uv`, `litellm_uv`, `swe_data_process_uv`, `swe_data_process_extras`
 - `runtime_info.input.llm_api` — upstream API used to build the per-job LiteLLM proxy
 - `runtime_info.input.litellm_proxy` — proxy config template, port, master key
-- `runtime_info.input.task_source` — SWE task source (wired from curator via `meta_info.dependencies.task_source_dir`)
+- `runtime_info.input.task_source` — SWE task source (wired from curator via `meta_info.dependencies.from."task_source.dataset_name"`, mirrored by curator's own `dependencies.to`)
 - `runtime_info.input.harbor_job` — jobs_dir, concurrency, retries, timeout multiplier
 - `runtime_info.input.agent` — agent name, version, runtime image, max turns, temperature
 - `runtime_info.input.sft_conversion` — optional post-Harbor conversion (`enabled`, `scaffold`, `out_dir`, …)
-- `environment.extra.HARBOR_EXCLUDE_TASKS` — space-separated task IDs Harbor must skip
+- `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` — space-separated task IDs Harbor must skip
 
 Write to `config.yaml` → `runtime_info.output` after running:
 - `raw_trajectories_dir` — `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl` (consumed by `trainer`)

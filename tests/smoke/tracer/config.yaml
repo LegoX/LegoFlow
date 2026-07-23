@@ -17,7 +17,11 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    task_source_dir: curator.output.swe_tasks_dir
+    from:
+      task_source.dataset_name:
+        from: curator.output.swe_tasks_dir
+        when: {task_source.provider: local}
+    to: {}
 
   resources:
     ip: local
@@ -73,7 +77,7 @@ runtime_info:
     # output dir at launch.
     task_source:
       provider: local
-      dataset_name: ../swegen/artifacts/swe_tasks/py-cc-root-smoke
+      dataset_name: ../curator/artifacts/swe_tasks/py-cc-root-smoke
       split: train
 
     # ROOT: harbor has no native "run a task N times" knob, and max_retries only
@@ -116,28 +120,18 @@ runtime_info:
       max_instances: null
       exclude_repos_file: ""
 
+    env_extra:
+      HARBOR_EXCLUDE_TASKS: ""
+      LITELLM_NUM_WORKERS: "1"
+
   output:
     raw_trajectories_dir:
       description: Harbor job directories with LiteLLM trajectory logs
       path: artifacts/jobs
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
-      consumer_block: sft
     sft_data_dir:
       description: LF-format JSON arrays converted from reward==1 Harbor trajectories, ready for LLaMA-Factory SFT.
       path: artifacts/sft_data
       format: llamafactory_lf_v0.1
       trajectory_format: "artifacts/sft_data/<job>/lf.json"
-      consumer_block: sft
 
-environment:
-  extra:
-    HARBOR_EXCLUDE_TASKS: ""
-    LITELLM_NUM_WORKERS: "1"
-
-evolving:
-  description: Generates agent trajectories using Harbor.
-  tunable_params:
-    temperature: "Agent sampling temperature (0.0-1.0)"
-    max_turns: "Maximum agent turns per task"
-    n_concurrent: "Harbor concurrent tasks"
-    timeout_multiplier: "Task timeout multiplier"
