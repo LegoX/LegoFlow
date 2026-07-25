@@ -61,7 +61,7 @@ echo ""
 # ── 1. Local file checks ──────────────────────────────────────────────────────
 echo "1. Local files"
 
-for f in CLAUDE.md config.yaml artifacts/index.yaml \
+for f in CLAUDE.md config.yaml \
          .claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md \
          scripts/validate_config.py; do
   if [[ -f "$ROOT_DIR/$f" ]]; then
@@ -70,6 +70,15 @@ for f in CLAUDE.md config.yaml artifacts/index.yaml \
     fail "missing: $f"
   fi
 done
+
+# artifacts/index.yaml is runtime state written by scripts/archive_run.sh (the
+# start.sh EXIT trap), not a precondition — and it is gitignored, so a fresh
+# clone legitimately has none. Absence is INFO, never a failure.
+if [[ -f "$ROOT_DIR/artifacts/index.yaml" ]]; then
+  ok "artifacts/index.yaml"
+else
+  info "artifacts/index.yaml absent (auto-created by archive_run.sh after first run)"
+fi
 
 for d in artifacts scripts subblock; do
   if [[ -d "$ROOT_DIR/$d" ]]; then

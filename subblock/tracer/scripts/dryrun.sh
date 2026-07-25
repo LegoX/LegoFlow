@@ -148,17 +148,29 @@ echo ""
 echo "--- 1. Block files ---"
 # Note: meta_info and status are merged into config.yaml in this block, so
 # standalone metainfo.yaml / status.yaml are not expected.
-for file in CLAUDE.md config.yaml docs/content/docs/index.mdx artifacts/index.yaml; do
+for file in CLAUDE.md config.yaml docs/content/docs/index.mdx; do
   if [[ -f "$BLOCK_DIR/$file" ]]; then
     ok "$file exists"
   else
     fail "$file missing"
   fi
 done
+# artifacts/index.yaml is runtime state written by scripts/archive_run.sh (the
+# start.sh EXIT trap), not a precondition — and it is gitignored, so a fresh
+# clone legitimately has none. Absence is INFO, never a failure.
+if [[ -f "$BLOCK_DIR/artifacts/index.yaml" ]]; then
+  ok "artifacts/index.yaml exists"
+else
+  info "artifacts/index.yaml absent (auto-created by archive_run.sh after first run)"
+fi
 
 echo ""
 echo "--- 2. YAML syntax ---"
-for file in "$CONFIG" "$BLOCK_DIR/artifacts/index.yaml"; do
+# config.yaml must always parse; index.yaml is validated only if it exists yet
+# (a corrupt one would break archive_run.sh's next-run-id / append logic).
+yaml_files=("$CONFIG")
+[[ -f "$BLOCK_DIR/artifacts/index.yaml" ]] && yaml_files+=("$BLOCK_DIR/artifacts/index.yaml")
+for file in "${yaml_files[@]}"; do
   if python3 - "$file" <<'PY' >/dev/null 2>&1
 import sys
 import yaml

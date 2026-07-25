@@ -49,7 +49,7 @@ Key invariants the template encodes:
 | `CLAUDE.md` | Agent or human | Agent contract: role, I/O, run rules, archiving rules |
 | `config.yaml` | Agent or human | Identity, resources, runtime I/O, tunable params. One-shot per run — no live state. |
 | `dashboard/overview.mdx` | Agent | Human-readable current state: done, in progress, next |
-| `artifacts/index.yaml` | `archive_run.sh` (and agent for `notes`) | Append-only run index. Example: [`example_block/artifacts/index.yaml`](./example_block/artifacts/index.yaml). |
+| `artifacts/index.yaml` | `archive_run.sh` (and agent for `notes`) | Append-only run index. **Local runtime state — gitignored, never committed**; a fresh clone has none and `archive_run.sh` creates it on the first run, so every `dryrun.sh` must treat its absence as INFO, not a failure. The tracked format reference is [`example_block/artifacts/index.yaml`](./example_block/artifacts/index.yaml). |
 | `memory/notes.md` | Agent | Long-form observations, decisions, postmortems |
 
 ### 1.5 `repos/` is read-only by default
