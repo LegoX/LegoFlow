@@ -530,6 +530,107 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 12. VRAM headroom estimate (cutoff_len vs GPU memory)
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- 12. VRAM estimate ---"
+CUTOFF_LEN="$(cfg "training.cutoff_len")"
+PBS="$(cfg "training.per_device_train_batch_size")"
+UNSLOTH_GC="$(cfg "training.use_unsloth_gc")"
+FINETUNING_TYPE="$(cfg "training.finetuning_type")"
+VRAM_MODEL_PATH="$(cfg "model.model_name_or_path")"
+if ! command -v nvidia-smi &>/dev/null || ! [[ "$N_GPUS" =~ ^[0-9]+$ ]]; then
+    info "nvidia-smi or valid n_gpus_per_node unavailable — skipping VRAM estimate"
+elif [[ "$FINETUNING_TYPE" != "full" ]]; then
+    info "VRAM estimate covers finetuning_type=full (ZeRO-3 + Adam) only — skipping for '$FINETUNING_TYPE'"
+else
+    GPU_MEM_MIB="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | sort -n | head -1 | tr -d ' ')"
+    VRAM_OUT="$(VRAM_MODEL_PATH="$VRAM_MODEL_PATH" CUTOFF_LEN="$CUTOFF_LEN" PBS="$PBS" \
+        VRAM_N_GPUS="$N_GPUS" UNSLOTH_GC="$UNSLOTH_GC" GPU_MEM_MIB="$GPU_MEM_MIB" \
+        "$CONFIG_PYTHON" - <<'PYEOF' 2>/dev/null || true
+import glob, json, os, re, sys
+
+model = os.environ["VRAM_MODEL_PATH"]
+cutoff = int(float(os.environ.get("CUTOFF_LEN") or 0))
+pbs = int(float(os.environ.get("PBS") or 1))
+gpus = int(os.environ["VRAM_N_GPUS"])
+unsloth = os.environ.get("UNSLOTH_GC", "").lower() == "true"
+cap_gib = float(os.environ.get("GPU_MEM_MIB") or 0) / 1024
+
+def find_model_dir(m):
+    if os.path.isdir(m):
+        return m
+    hub = os.path.join(os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface")),
+                       "hub", "models--" + m.replace("/", "--"), "snapshots")
+    for s in sorted(glob.glob(hub + "/*"), key=os.path.getmtime, reverse=True):
+        if os.path.isfile(os.path.join(s, "config.json")):
+            return s
+    return None
+
+d = find_model_dir(model)
+if not d:
+    print("SKIP=model config not cached locally yet — estimate will appear once the model is downloaded")
+    sys.exit(0)
+cfg = json.load(open(os.path.join(d, "config.json")))
+tc = cfg.get("text_config") if isinstance(cfg.get("text_config"), dict) else {}
+def g(k):
+    return cfg.get(k, tc.get(k) if tc else None)
+hidden, layers = g("hidden_size"), g("num_hidden_layers")
+params = None
+idx = os.path.join(d, "model.safetensors.index.json")
+if os.path.isfile(idx):
+    try:
+        params = json.load(open(idx))["metadata"]["total_size"] / 2  # bf16 weights
+    except Exception:
+        pass
+if params is None:
+    sizes = re.findall(r"(\d+(?:\.\d+)?)\s*[Bb]", os.path.basename(model.rstrip("/")))
+    if sizes:
+        params = float(sizes[0]) * 1e9
+if not (hidden and layers and params and cutoff and cap_gib):
+    print("SKIP=could not determine model dims/params/cutoff/GPU capacity")
+    sys.exit(0)
+
+GIB = 2 ** 30
+# ZeRO-3 + Adam, bf16: 2B param + 2B grad + 4B master + 4B momentum + 4B variance, sharded
+states = 16 * params / gpus / GIB
+# Activation slope per token: one layer's recompute + backward temporaries under
+# gradient checkpointing with flash-attn/liger (calibrated for Qwen3.5-MoE-scale widths)
+per_tok = 80 * hidden
+if not unsloth:
+    per_tok += 2 * layers * hidden  # plain HF GC keeps layer-boundary checkpoints on GPU
+act = pbs * cutoff * per_tok / GIB
+overhead = 15.0  # CUDA context + NCCL + DS gather/prefetch buffers + allocator fragmentation
+total = states + act + overhead
+budget = 0.9 * cap_gib
+max_cutoff = int((budget - states - overhead) * GIB / (per_tok * pbs)) if budget > states + overhead else 0
+print(f"EST={total:.0f}")
+print(f"CAP={cap_gib:.0f}")
+print(f"MAX_CUTOFF={max_cutoff}")
+print(f"DETAIL=states≈{states:.0f} GiB (ZeRO-3/{gpus} GPU, Adam) + act≈{act:.0f} GiB "
+      f"(cutoff={cutoff}, pbs={pbs}, unsloth_gc={str(unsloth).lower()}) + overhead≈{overhead:.0f} GiB")
+PYEOF
+)"
+    if [[ -z "$VRAM_OUT" ]]; then
+        info "VRAM estimate unavailable (estimator error) — skipping"
+    elif grep -q '^SKIP=' <<<"$VRAM_OUT"; then
+        info "VRAM estimate skipped: $(sed -n 's/^SKIP=//p' <<<"$VRAM_OUT")"
+    else
+        VRAM_EST="$(sed -n 's/^EST=//p' <<<"$VRAM_OUT")"
+        VRAM_CAP="$(sed -n 's/^CAP=//p' <<<"$VRAM_OUT")"
+        VRAM_MAX_CUTOFF="$(sed -n 's/^MAX_CUTOFF=//p' <<<"$VRAM_OUT")"
+        info "$(sed -n 's/^DETAIL=//p' <<<"$VRAM_OUT")"
+        info "rough estimate (±30%): assumes bf16 + ZeRO-3 + Adam + gradient checkpointing + flash-attn"
+        VRAM_GRADE="$(awk -v e="$VRAM_EST" -v c="$VRAM_CAP" 'BEGIN{print (e<=0.85*c)?"ok":(e<=c)?"tight":"over"}')"
+        case "$VRAM_GRADE" in
+            ok)    ok "estimated peak ≈ ${VRAM_EST} GiB/GPU fits ${VRAM_CAP} GiB (≤85%); cutoff_len could go up to ≈${VRAM_MAX_CUTOFF} tokens" ;;
+            tight) warn "estimated peak ≈ ${VRAM_EST} GiB/GPU is >85% of ${VRAM_CAP} GiB — cutoff_len=${CUTOFF_LEN} is tight; consider ≤${VRAM_MAX_CUTOFF} or pbs=1" ;;
+            over)  warn "estimated peak ≈ ${VRAM_EST} GiB/GPU exceeds ${VRAM_CAP} GiB — likely OOM at cutoff_len=${CUTOFF_LEN}; reduce toward ≈${VRAM_MAX_CUTOFF} (or lower pbs / enable use_unsloth_gc)" ;;
+        esac
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
