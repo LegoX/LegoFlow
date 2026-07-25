@@ -615,6 +615,26 @@ else
 fi
 
 echo ""
+echo "--- 10. Cloudflare Pages (optional) ---"
+# Only needed for /evaluator:dashboard's public sync (dashboard/run_cloudflare_pages_sync.sh).
+# Never blocks scripts/start.sh -- always warn(), never fail() here.
+CF_ENV_FILE="${ENV_FILE:-${SWEGEN_HOME:-$HOME}/.config/harbor_webui_cloudflare.env}"
+CF_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+CF_ACCOUNT="${CLOUDFLARE_ACCOUNT_ID:-}"
+if [[ -z "$CF_TOKEN" && -f "$CF_ENV_FILE" ]]; then
+  CF_TOKEN="$(grep -E '^(export )?CLOUDFLARE_API_TOKEN=' "$CF_ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
+  CF_ACCOUNT="$(grep -E '^(export )?CLOUDFLARE_ACCOUNT_ID=' "$CF_ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
+fi
+if command -v npx >/dev/null 2>&1 && [[ -n "$CF_TOKEN" && -n "$CF_ACCOUNT" ]]; then
+  ok "cloudflare: npx available, credentials in env or $CF_ENV_FILE"
+else
+  missing=()
+  command -v npx >/dev/null 2>&1 || missing+=("npx/node")
+  [[ -n "$CF_TOKEN" && -n "$CF_ACCOUNT" ]] || missing+=("CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID ($CF_ENV_FILE)")
+  warn "cloudflare: missing ${missing[*]} -- dashboard/run_cloudflare_pages_sync.sh will fail; local HTML dashboard still works. See /root:setup optional extras."
+fi
+
+echo ""
 echo "================================================="
 echo "  PASS: $PASS   WARN: $WARN   FAIL: $FAIL"
 echo "================================================="

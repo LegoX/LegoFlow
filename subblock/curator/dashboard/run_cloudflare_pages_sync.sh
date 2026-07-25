@@ -10,6 +10,11 @@ STATE_FILE="${STATE_FILE:-$RUN_DIR/memory/.progress_monitor_all_state.jsonl}"
 CACHE_FILE="${CACHE_FILE:-$RUN_DIR/memory/.progress_monitor_all_cache.json}"
 ENV_FILE="${ENV_FILE:-$HOME_DIR/.config/swegen_progress_cloudflare.env}"
 
+# wrangler drops its .wrangler/ cache dir into whatever CWD it's invoked
+# from; pin that to artifacts/cloudflare so it never lands in the block root.
+WRANGLER_RUN_DIR="${WRANGLER_RUN_DIR:-$SCRIPT_DIR/../artifacts/cloudflare}"
+mkdir -p "$WRANGLER_RUN_DIR"
+
 PROJECT_NAME="${PROJECT_NAME:-swe-databoard}"
 BRANCH_NAME="${BRANCH_NAME:-swegen}"
 LOOP_SECONDS="${LOOP_SECONDS:-3600}"
@@ -71,17 +76,17 @@ while true; do
 
   if [[ "$PROJECT_READY" -eq 0 ]]; then
     log "ensuring Cloudflare Pages project $PROJECT_NAME exists"
-    npx --yes wrangler pages project create "$PROJECT_NAME" \
-      --production-branch "$BRANCH_NAME" >/tmp/swegen_pages_project_create.log 2>&1 || true
+    (cd "$WRANGLER_RUN_DIR" && npx --yes wrangler pages project create "$PROJECT_NAME" \
+      --production-branch "$BRANCH_NAME") >/tmp/swegen_pages_project_create.log 2>&1 || true
     PROJECT_READY=1
   fi
 
   log "deploying dashboard to Cloudflare Pages project $PROJECT_NAME"
-  npx --yes wrangler pages deploy "$PUBLIC_DIR" \
+  (cd "$WRANGLER_RUN_DIR" && npx --yes wrangler pages deploy "$PUBLIC_DIR" \
     --project-name "$PROJECT_NAME" \
     --branch "$BRANCH_NAME" \
     --commit-dirty=true \
-    --commit-message "Update Curator progress dashboard $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    --commit-message "Update Curator progress dashboard $(date -u '+%Y-%m-%dT%H:%M:%SZ')")
 
   log "sleeping $LOOP_SECONDS seconds before next refresh"
   sleep "$LOOP_SECONDS"

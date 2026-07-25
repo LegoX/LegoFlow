@@ -150,11 +150,25 @@ swegen validate \
 Expected result: NOP reward is `0` and Oracle reward is `1`. If the sample
 task is missing, report that `/curator:setup` must initialize the submodule.
 
+## Step 4b - Cloudflare Pages (optional, never blocking)
+
+`dryrun.sh` also checks whether `/curator:dashboard`'s public sync
+(`dashboard/run_cloudflare_pages_sync.sh`) is usable: an `npx`/node
+toolchain on `PATH`, plus `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
+either in the environment or in
+`~/.config/swegen_progress_cloudflare.env`. This is purely for publishing
+the progress dashboard online — nothing in `/curator:run` depends on it.
+Missing credentials/tooling is always a `WARN`, never a reason to block
+`SAFE TO RUN`. If it's missing, mention `/root:setup`'s optional Cloudflare
+extra as the fix, but do not offer to configure credentials yourself (see
+that skill's guardrail on secrets).
+
 ## Step 5 - Run the block dryrun
 
 Run `bash scripts/dryrun.sh` and include its OK/WARN/FAIL lines in the
 report. This script verifies the installed package, YAML parsing, key env
-vars, the Claude Code proxy endpoint, and Docker availability.
+vars, the Claude Code proxy endpoint, Docker availability, and (Step 4b)
+Cloudflare Pages tooling/credentials.
 
 ## Step 6 - The report (always the last thing you print)
 
@@ -176,6 +190,7 @@ inapplicable rows.
 | det  | llm (openai)    | <✓/✗>   | <base> / <model> |
 | det  | cc path         | <✓/⚠/✗> | <mode> / <anthropic_base_url> / <ok/down/native> |
 | det  | docker          | <✓/✗>   | <server version> at <DOCKER_HOST or unset> |
+| det  | cloudflare      | <✓/⚠>   | <ok \| missing npx/credentials (optional, see /root:setup)> |
 | det  | dryrun          | <✓/⚠/✗> | <pass/warn/fail> |
 | live | smoke           | <✓/·/✗> | <skipped \| NOP=0 Oracle=1 \| fail: <detail>> |
 

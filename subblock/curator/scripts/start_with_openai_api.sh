@@ -11,8 +11,17 @@
 # For real Claude or an Anthropic-format gateway, use the sibling launcher
 # start_with_anthropic_api.sh instead.
 #
-# Pipeline: read config -> start LiteLLM proxy -> wait for /health
-#           -> create_all_bg -> archive launcher exit -> stop proxy.
+# Pipeline: read config -> reuse or start LiteLLM proxy -> wait for /health
+#           -> create_all_bg -> archive launcher exit.
+#
+# NOTE on proxy lifecycle: create_all_bg.sh launches all 8 per-language
+# `swegen create` jobs detached (nohup) and returns almost immediately, but
+# those jobs keep needing the CC proxy for hours afterward. This script
+# therefore does NOT kill a proxy it started when it exits (that used to
+# happen via an EXIT trap and silently broke verification for every
+# in-flight job the moment this launcher returned). If this script started
+# the proxy, it's left running; see PROXY_PID_FILE below for how to stop it
+# once every language job has finished.
 set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$BLOCK_DIR"
@@ -32,10 +41,23 @@ if [ "$MODE" != "openai_proxy" ]; then
   exit 2
 fi
 
-PROXY_CONFIG="${BLOCK_DIR}/scripts/litellm_cc_proxy.example.yaml"
+# Prefer the real, filled config over the placeholder example. The example
+# is a template only -- pointing this launcher at it directly (the old
+# default) meant it always tripped the placeholder check below.
+PROXY_CONFIG="${BLOCK_DIR}/scripts/litellm_cc_proxy.yaml"
+if [ ! -f "$PROXY_CONFIG" ]; then
+  echo "ERROR: ${PROXY_CONFIG} does not exist yet." >&2
+  echo "  Create it from the template and fill in the three placeholders:" >&2
+  echo "    cp scripts/litellm_cc_proxy.example.yaml scripts/litellm_cc_proxy.yaml" >&2
+  echo "  then edit <UPSTREAM_OPENAI_BASE_URL>, <UPSTREAM_MODEL>, <API_KEY> using" >&2
+  echo "  llm_api.api_base_url / llm_api.pr_model / llm_api.api_key from config.yaml" >&2
+  echo "  (the CC path maps claude-* aliases to pr_model, not task_model)." >&2
+  exit 4
+fi
 PROXY_LOG_DIR="${BLOCK_DIR}/artifacts/logs"
 mkdir -p "$PROXY_LOG_DIR"
 PROXY_LOG="${PROXY_LOG_DIR}/litellm_cc_proxy.log"
+PROXY_PID_FILE="${PROXY_LOG_DIR}/litellm_cc_proxy.pid"
 
 # Resolve litellm binary. The block's swegen-env may not ship litellm; tracer
 # block's litellm-venv is the canonical location. Override via LITELLM_BIN.
@@ -60,28 +82,44 @@ if grep -qE "<UPSTREAM_OPENAI_BASE_URL>|<UPSTREAM_MODEL>|<API_KEY>" "$PROXY_CONF
   exit 4
 fi
 
-# Free the port if a stale proxy holds it.
-if lsof -ti:"${PORT}" >/dev/null 2>&1; then
-  echo "[start_with_openai_api] port ${PORT} busy; killing previous holder."
-  lsof -ti:"${PORT}" | xargs -r kill 2>/dev/null || true
-  sleep 1
-fi
-
-echo "[start_with_openai_api] starting LiteLLM proxy on :${PORT} (log: ${PROXY_LOG})"
-env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-C.UTF-8}" HOST=0.0.0.0 \
-  "$LITELLM_BIN" --config "$PROXY_CONFIG" --port "${PORT}" --host 127.0.0.1 \
-  >"$PROXY_LOG" 2>&1 &
-LITELLM_PID=$!
-echo "[start_with_openai_api] litellm PID=${LITELLM_PID}"
-
-cleanup_proxy() {
-  if [ -n "${LITELLM_PID:-}" ] && kill -0 "$LITELLM_PID" 2>/dev/null; then
-    echo "[start_with_openai_api] stopping LiteLLM proxy (PID=${LITELLM_PID})"
-    kill "$LITELLM_PID" 2>/dev/null || true
-    wait "$LITELLM_PID" 2>/dev/null || true
+# Reuse an already-healthy proxy on this port instead of always killing and
+# restarting -- a long-running curator session may already have one up (e.g.
+# started manually, or by a previous invocation of this launcher whose
+# create_all_bg workers are still in flight and still depend on it).
+STARTED_PROXY=0
+if curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+  echo "[start_with_openai_api] reusing already-healthy LiteLLM proxy on :${PORT}."
+else
+  # Free the port if a stale (unhealthy) holder is squatting on it.
+  if lsof -ti:"${PORT}" >/dev/null 2>&1; then
+    echo "[start_with_openai_api] port ${PORT} busy but not healthy; killing previous holder."
+    lsof -ti:"${PORT}" | xargs -r kill 2>/dev/null || true
+    sleep 1
   fi
-}
-trap cleanup_proxy EXIT INT TERM
+
+  echo "[start_with_openai_api] starting LiteLLM proxy on :${PORT} (log: ${PROXY_LOG})"
+  env -i HOME="$HOME" PATH="$PATH" LANG="${LANG:-C.UTF-8}" HOST=0.0.0.0 \
+    nohup "$LITELLM_BIN" --config "$PROXY_CONFIG" --port "${PORT}" --host 127.0.0.1 \
+    >"$PROXY_LOG" 2>&1 &
+  LITELLM_PID=$!
+  disown
+  STARTED_PROXY=1
+  echo "$LITELLM_PID" > "$PROXY_PID_FILE"
+  echo "[start_with_openai_api] litellm PID=${LITELLM_PID} (written to ${PROXY_PID_FILE})"
+
+  # Only clean up on a FAILED startup here, before any create_all_bg worker
+  # exists to depend on the proxy. Once /health succeeds below, the trap is
+  # cleared -- the proxy must outlive this launcher for the detached workers.
+  cleanup_proxy_on_startup_failure() {
+    if [ "$STARTED_PROXY" -eq 1 ] && kill -0 "$LITELLM_PID" 2>/dev/null; then
+      echo "[start_with_openai_api] startup failed; stopping LiteLLM proxy (PID=${LITELLM_PID})"
+      kill "$LITELLM_PID" 2>/dev/null || true
+      wait "$LITELLM_PID" 2>/dev/null || true
+      rm -f "$PROXY_PID_FILE"
+    fi
+  }
+  trap cleanup_proxy_on_startup_failure EXIT INT TERM
+fi
 
 # Wait up to 90s for /health.
 waited=0
@@ -94,6 +132,15 @@ until curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; do
   fi
 done
 echo "[start_with_openai_api] LiteLLM proxy ready on :${PORT}."
+
+# Startup succeeded (or we reused an existing proxy) -- disarm the
+# startup-failure trap so a healthy proxy is never killed just because this
+# launcher exits. The detached create_all_bg workers depend on it for hours.
+if [ "$STARTED_PROXY" -eq 1 ]; then
+  trap - EXIT INT TERM
+  echo "[start_with_openai_api] proxy left running independently of this launcher (PID=${LITELLM_PID})."
+  echo "  Stop it manually once every language job finishes: kill \$(cat ${PROXY_PID_FILE})"
+fi
 
 # Delegate to the shared start.sh (which runs archive + create_all_bg).
 bash "${BLOCK_DIR}/scripts/start.sh" "$@"

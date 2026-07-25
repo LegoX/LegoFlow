@@ -33,6 +33,41 @@ block needs before `:check` can pass. At the root level this covers:
    markers with real values (never writing secrets into config — env/file
    channels only, as each field's inline comment directs).
 
+## Optional extras
+
+These two are **off by default** — always ask before doing either, even if
+the user has run `/root:setup` before. Neither is required for `/root:check`
+or `/root:run` to pass; they only unlock specific quality-of-life gains.
+
+4. **Docker registry login** — ask "log in to Docker Hub now to raise the
+   anonymous pull rate limit?" This requires an interactive `docker login`
+   (the user supplies their own credentials or a token; never prompt for or
+   store a password on their behalf — just run `docker login` and let the
+   user's own terminal handle the prompt). Tell the user plainly **why**
+   before asking: `tracer` and `evaluator` both pull large numbers of Docker
+   images per run (one per Harbor task environment), and anonymous Docker
+   Hub pulls are aggressively rate-limited — a logged-in session raises that
+   ceiling substantially and avoids mid-run `429`/pull-throttling failures in
+   those two blocks. Skip silently if the user declines; do not treat a
+   skipped login as a setup failure.
+5. **Cloudflare Pages tooling + credentials** — ask "set up Cloudflare Pages
+   publishing for the dashboards now?" Tell the user this is for **dashboard
+   visualization only** (curator, tracer, and evaluator each have a
+   `dashboard/run_cloudflare_pages_sync.sh` that publishes their progress
+   dashboard to Cloudflare Pages) — declining it just means dashboards stay
+   local-only (`dashboard/site/index.html`, served on a local port), nothing
+   else in the pipeline depends on it. If the user says yes:
+   - Verify a Node.js/npm/npx toolchain exists (`command -v npx`); if not,
+     ask before installing one — this is a host-level change, not a
+     per-block one.
+   - Ask the user for `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` and
+     write them to `~/.config/swegen_progress_cloudflare.env` (the path each
+     block's `run_cloudflare_pages_sync.sh` reads via `$SWEGEN_HOME`).
+     **Never accept these values pasted directly in chat** — have the user
+     set the file themselves via a `!`-prefixed shell command in their own
+     terminal, then confirm back to you when done. Never echo the token
+     back or write it anywhere else (logs, config.yaml, other env files).
+
 ## Exit criterion
 
 Setup is done when `python3 scripts/validate_config.py --root .` reports no

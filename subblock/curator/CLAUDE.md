@@ -222,8 +222,13 @@ tasks — no need to wait for the full run.
 ### Step 3: Validate (optional, built into create)
 
 ```bash
-swegen validate ./artifacts/swe_tasks/py-cc --max-parallel 8
+swegen validate ./artifacts/swe_tasks/py-cc --max-parallel 8 \
+  --jobs-dir artifacts/experiments/validate-jobs
 ```
+
+`--jobs-dir` defaults to `.swegen/harbor-jobs` (relative to CWD) if omitted —
+always pass it explicitly so Harbor job artifacts land under `artifacts/`,
+not the block root.
 
 ### Step 4: Score Tasks
 

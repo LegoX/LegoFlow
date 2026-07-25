@@ -55,6 +55,7 @@ inapplicable rows.
 | det  | litellm port 4001     | <✓/✗>   | <free \| held by pid <P>> |
 | det  | agent runtime_image   | <✓/⚠>   | <present \| not pulled locally> |
 | det  | consumption ledger    | <✓/✗>   | <clean \| leak: <task_id> not in HARBOR_EXCLUDE_TASKS> |
+| det  | cloudflare (optional) | <✓/⚠>   | <ok \| missing npx/credentials, see /root:setup> |
 
 **Run configuration**
 ```
@@ -125,6 +126,7 @@ failures unless the user asks. The four current real-world warnings:
 | `agent runtime_image not pulled locally` | First task pays the pull cost. |
 | `HF dataset network error` | Likely transient; retry once. |
 | LLM endpoint 401/403 from this shell | Likely CF-gating artifact (see memory). |
+| `cloudflare: missing npx/credentials` | Only affects `/tracer:dashboard`'s public sync; local HTML dashboard is unaffected. Point the user at `/root:setup`'s optional Cloudflare extra — never blocks `/tracer:run`. |
 
 ## Mandatory before `/tracer:run`
 

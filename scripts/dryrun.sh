@@ -98,8 +98,12 @@ WARN=$((WARN+V_WARN))
 echo ""
 echo "3. Deployment & registry credentials"
 
-# Cloudflare Pages credentials — needed by the dashboard/docs deploy scripts
-# (docs/deploy_cloudflare_pages.sh, subblock/*/dashboard/run_cloudflare_pages_sync.sh).
+# Cloudflare Pages credentials for the ROOT-level docs deploy only
+# (docs/deploy_cloudflare_pages.sh). Each subblock's own dashboard sync
+# (subblock/*/dashboard/run_cloudflare_pages_sync.sh) uses its own env file
+# convention and is checked by that block's own dryrun.sh — this root check
+# does not attempt to cover those; Step 3 of /root:check folds each block's
+# dryrun.sh output (including its own cloudflare line) into the report.
 CF_ENV_FILE="${ENV_FILE:-$HOME/.config/trajgen_progress_cloudflare.env}"
 CF_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 CF_ACCOUNT="${CLOUDFLARE_ACCOUNT_ID:-}"
@@ -108,9 +112,9 @@ if [[ (-z "$CF_TOKEN" || -z "$CF_ACCOUNT") && -f "$CF_ENV_FILE" ]]; then
   CF_ACCOUNT="$(grep -E '^(export )?CLOUDFLARE_ACCOUNT_ID=' "$CF_ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
 fi
 if [[ -n "$CF_TOKEN" && -n "$CF_ACCOUNT" ]]; then
-  ok "cloudflare: credentials available (env or $CF_ENV_FILE)"
+  ok "cloudflare (root docs): credentials available (env or $CF_ENV_FILE)"
 else
-  warn "cloudflare: CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not found (env or $CF_ENV_FILE) — dashboard/docs deploys will fail"
+  warn "cloudflare (root docs): CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not found (env or $CF_ENV_FILE) — docs/deploy_cloudflare_pages.sh will fail. Per-block dashboard sync is checked separately by each block's own dryrun.sh."
 fi
 
 # Docker Hub login — anonymous pulls are limited to 100 per 6h per IP;

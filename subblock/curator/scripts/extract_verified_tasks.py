@@ -15,6 +15,7 @@ def main():
     OUTPUT_DIR.mkdir(exist_ok=True)
     total = 0
     stats = {}
+    extracted_ids = []
 
     for lang in LANGUAGES:
         lang_dir = ARTIFACTS_ROOT / f"{lang}-cc"
@@ -35,9 +36,13 @@ def main():
                 shutil.rmtree(dst)
             shutil.copytree(src, dst)
             copied += 1
+            extracted_ids.append(task_id)
 
         stats[lang] = copied
         total += copied
+
+    manifest_file = OUTPUT_DIR / "verifiable_tasks.txt"
+    manifest_file.write_text("\n".join(sorted(extracted_ids)) + "\n")
 
     print(f"\n{'Language':<10} {'Extracted':<10}")
     print("-" * 20)
@@ -46,6 +51,7 @@ def main():
     print("-" * 20)
     print(f"{'TOTAL':<10} {total:<10}")
     print(f"\nOutput directory: {OUTPUT_DIR}")
+    print(f"Manifest written: {manifest_file}")
 
 
 if __name__ == "__main__":

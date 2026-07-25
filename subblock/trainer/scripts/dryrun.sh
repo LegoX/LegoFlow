@@ -530,6 +530,25 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 12. Cloudflare quick tunnel (optional)
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- 12. Cloudflare tunnel (optional) ---"
+# Unlike curator/tracer/evaluator (wrangler + Pages, needs an API token),
+# trainer's dashboard uses a Cloudflare *quick tunnel* (dashboard/start_dashboard.sh,
+# TUNNEL=true) -- an anonymous ephemeral URL via the `cloudflared` binary only,
+# no account credentials. Never blocks scripts/start.sh -- always warn(), never fail().
+CLOUDFLARED_BIN="${CLOUDFLARED_BIN:-$(command -v cloudflared 2>/dev/null || true)}"
+if [[ -z "$CLOUDFLARED_BIN" && -x /public/storage/yuxin/cloudflared/bin/cloudflared ]]; then
+    CLOUDFLARED_BIN=/public/storage/yuxin/cloudflared/bin/cloudflared
+fi
+if [[ -n "$CLOUDFLARED_BIN" ]]; then
+    ok "cloudflare: cloudflared found at $CLOUDFLARED_BIN (dashboard TUNNEL=true will work)"
+else
+    warn "cloudflare: cloudflared not found -- dashboard/start_dashboard.sh TUNNEL=true will skip the public tunnel and fall back to local-only. Set CLOUDFLARED_BIN or install cloudflared. See /root:setup optional extras."
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
