@@ -21,15 +21,17 @@ meta_info:
     venv_name: swegen-env
     venv_path: artifacts/envs/swegen-env
     requirements: repos/swegen/pyproject.toml
-    python_version: "3.10+"
+    python_version: "3.12+"
     description: Virtual environment for swegen CLI and dependencies
 
   resources:
     ip: local        # CPU-only; runs on any node with Docker available
-    user: root
+    # user / pwd / directory apply only when ip is a remote IP (SSH target).
+    # They are ignored for local execution — the block runs from its own dir.
+    user: null
     pwd: null
-    directory: /gpufs/haoli/code/
-    description: cpu node server for k8s cluster. By default you should work at ${directory}
+    directory: null
+    description: CPU node with Docker; runs locally by default.
     public_storage: null
 
 runtime_info:
@@ -111,3 +113,4 @@ runtime_info:
     logs:
       path: artifacts/logs/swegen-create
       description: "Per-language create logs: cc_<lang>_March.txt"
+

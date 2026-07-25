@@ -10,6 +10,10 @@ load_runtime_env
 
 mkdir -p artifacts/logs/swegen-create
 
+# Install the swegen package once, up front, so the eight parallel language
+# scripts don't race on concurrent `pip install -e` into the shared venv.
+python -c 'import swegen' 2>/dev/null || pip install -e repos/swegen/
+
 echo "Starting create scripts (params from config.yaml)..."
 
 start_one() {
@@ -22,4 +26,4 @@ for lang in py go ts js c cpp java rust; do
     start_one "$lang"
 done
 
-echo "All create scripts started. Check artifacts/logs/swegen-create/cc_*_March.txt"
+echo "All create scripts started. Check artifacts/logs/swegen-create/cc_*_<timestamp>.txt"

@@ -3,7 +3,38 @@ title: Getting Started
 description: Set up the block and run your first training job
 ---
 
-This page walks through preparing the trainer block and running a training job end to end. trainer wraps a pinned [SWE-Lego LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory) checkout and the `swe_data_process` converter package, so most setup is about getting those into a single `uv` environment.
+trainer wraps a pinned [SWE-Lego LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory)
+checkout and the `swe_data_process` converter package in the SWE-Lego-Live block
+layout. The pinned repositories are recorded as gitlinks under
+`subblock/trainer/repos/`.
+
+## Recommended: operate via the Claude plugin
+
+The block ships a Claude Code plugin (`trainer-plugin`) that drives the whole
+lifecycle through slash commands. This is the recommended way to run trainer —
+each command performs the preflight, confirmation, and bookkeeping steps for
+you. Launch Claude from inside `subblock/trainer/` so the block-local plugin
+loads, then:
+
+```text
+/trainer:setup       # init submodules, build uv env, fill runtime_info.input
+/trainer:check       # preflight: config, repos, env, source data, GPUs
+/trainer:run         # dryrun + full pipeline (data → register → train) + archive
+/trainer:dashboard   # launch / summarize the training dashboard
+```
+
+`/trainer:setup` brings a fresh clone to a state where `/trainer:check` can
+pass. It does not convert data or start training — that is `/trainer:run`.
+`/trainer:run` runs `/trainer:check` first and rejects on any failure.
+
+The knobs these commands read live in `config.yaml` — dataset source under
+`runtime_info.input.source`, conversion under `runtime_info.input.conversion`,
+model/training under `runtime_info.input.model` / `runtime_info.input.training`,
+and GPU count under `runtime_info.input.infrastructure`. Edit `config.yaml`,
+not the scripts.
+
+The rest of this page documents the underlying commands the plugin runs, for
+manual operation or debugging.
 
 ## Prerequisites
 
@@ -17,7 +48,25 @@ This page walks through preparing the trainer block and running a training job e
 trainer trains on the node declared in `config.yaml` (`meta_info.resources.ip`). Run its scripts inside a `tmux` session on that host so a long training job survives shell disconnects.
 </Callout>
 
-## 1. Build the environment
+## 1. Enter the block
+
+Run commands from the block root:
+
+```bash
+cd subblock/trainer
+```
+
+Confirm the pinned repos are checked out:
+
+```bash
+git rev-parse HEAD:repos/LLaMA-Factory
+git rev-parse HEAD:repos/swe_data_process
+```
+
+These print the gitlink commits recorded for the submodules. `/trainer:setup`
+initializes them if the `repos/` working trees are empty.
+
+## 2. Build the environment
 
 Create the `uv` training environment at `meta_info.environment.sft_uv` (default `artifacts/env/lf`):
 
@@ -27,7 +76,7 @@ bash scripts/install_env.sh
 
 This installs CUDA 12.8 PyTorch 2.10.0, editable `repos/swe_data_process[llm]` and the patched LLaMA-Factory plus metrics/DeepSpeed/Liger requirements, source-built `flash-attn`, Qwen3.5's `flash-linear-attention` and `tilelang` dependencies, and `wandb`. See [Inputs & Outputs](/docs/reference/io) for the env layout.
 
-## 2. Point the config at your inputs
+## 3. Point the config at your inputs
 
 Edit `config.yaml` → `runtime_info.input`:
 
@@ -40,7 +89,7 @@ Edit `config.yaml` → `runtime_info.input`:
 
 See [Configuration](/docs/training/configuration) for what each field controls.
 
-## 3. Validate the config
+## 4. Validate the config
 
 Run the dry-run preflight. It checks the pinned repos, the `uv` environment, source-specific data settings, converter modules when applicable, the model, output directory, and GPU count — without side effects:
 
@@ -48,9 +97,10 @@ Run the dry-run preflight. It checks the pinned repos, the `uv` environment, sou
 bash scripts/dryrun.sh
 ```
 
-Fix anything it reports before launching a run.
+Fix anything it reports before launching a run. Prefer `/trainer:check` when
+operating through the plugin — it wraps this preflight plus additional gates.
 
-## 4. (Optional) Prepare data only
+## 5. (Optional) Prepare data only
 
 To convert and inspect the dataset before committing to a training run, run the data-only pipeline:
 
@@ -60,7 +110,7 @@ bash scripts/dataprep.sh
 
 For `harbor_job`, this runs conversion and writes the LF dataset under `artifacts/data/lf_data/` without registering it or training. Ready-made `hf_lf`/`local_lf` sources have nothing to convert, so the command exits early. See [Data Pipeline](/docs/data-pipeline).
 
-## 5. Launch a run
+## 6. Launch a run
 
 `scripts/start.sh` runs the dry run, then the full pipeline (obtain/convert LF data → dataset registration → training), and archives the run on exit:
 
@@ -68,9 +118,9 @@ For `harbor_job`, this runs conversion and writes the LF dataset under `artifact
 bash scripts/start.sh
 ```
 
-To run the pipeline directly without the archive wrapper, use `bash scripts/train.sh`. See [Training](/docs/training) for what each step does.
+To run the pipeline directly without the archive wrapper, use `bash scripts/train.sh`. Prefer `/trainer:run` when operating through the plugin — it runs check first, then this pipeline with post-run bookkeeping. See [Training](/docs/training) for what each step does.
 
-## 6. Inspect results
+## 7. Inspect results
 
 Training writes to:
 
@@ -79,16 +129,4 @@ artifacts/model/<run>/      # checkpoints, trainer_log.jsonl, trainer_state.json
 artifacts/logs/<run>_<ts>.log   # console log
 ```
 
-After a successful run, `config.yaml` → `runtime_info.output` is updated with the checkpoint path, metrics, and artifact paths. For a live view, open the [dashboard](/docs/dashboard).
-
-## Operating with the agent plugin
-
-If you operate the block through its Claude plugin, the same lifecycle maps to slash commands:
-
-```text
-/root:check trainer     # preflight: config, repos, env, source data, GPUs
-/trainer:setup           # build the uv environment and validate the config
-/root:run trainer       # execute scripts/start.sh and archive
-/trainer:run             # trainer-specific run procedure + post-run bookkeeping
-/trainer:dashboard       # launch / summarize the training dashboard
-```
+After a successful run, `config.yaml` → `runtime_info.output` is updated with the checkpoint path, metrics, and artifact paths. For a live view, open the [dashboard](/docs/dashboard) or run `/trainer:dashboard`.

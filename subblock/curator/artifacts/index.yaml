@@ -10,9 +10,9 @@ runs:
 
   - id: run_002
     started_at: "2026-05-10T12:09:00Z"
-    completed_at: null
-    status: running
-    notes: "Generating 40 NEW tasks from infra-retry PRs (62885 PRs that failed due to rate limiting in run_001). Skipping pre-existing 3. Using --skip-pr-files to exclude them from count. See artifacts/task_manifest.yaml for task origin tracking."
+    completed_at: "2026-05-10T12:09:00Z"
+    status: interrupted
+    notes: "Was left with status=running and never archived; outcome unknown. Marked interrupted on 2026-07-22 during a consistency pass (config.yaml is one-shot; live state belongs here, not in config). Intended: 40 NEW tasks from infra-retry PRs (the 62885 that hit rate limits in run_001), skipping the pre-existing 3. See artifacts/task_manifest.yaml for task origin tracking."
     input_file: artifacts/collected_prs/python_infra_retry.txt
     log: artifacts/logs/swegen-create/cc_py_retry_40.txt
     manifest: artifacts/task_manifest.yaml

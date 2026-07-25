@@ -43,8 +43,9 @@ Read, without modifying:
 - Generated task count from task directories that contain `tests/test.sh`.
 - Verified count from `<task-dir>/verifiable_tasks.txt`.
 - Batch state from hidden SWEgen state directories when present.
-- Difficulty score files such as `difficulty_scores.jsonl` or
-  `difficulty_scores_all.jsonl` when present.
+- Difficulty from each task's `task.toml` (scored inline during `swegen
+  create`); dataset-level difficulty + tags live in
+  `dashboard/datasets/<id>/tags.jsonl` when present.
 - Latest create logs under `artifacts/logs/swegen-create/`.
 - Latest run entry from `artifacts/index.yaml`.
 - Block status from `config.yaml -> status`.
@@ -62,20 +63,18 @@ such as `$HOME/SWE-gen`.
 
 ## Step 2 - Optional HTML dashboard refresh
 
-If `dashboard/progress_monitor_all.py` exists and the user asks for the web
-dashboard, run it once to regenerate the local HTML:
+`dashboard/` hosts the dataset **analytics** dashboard (difficulty + tag
+comparison across datasets), published to `swe-databoard.pages.dev`. It is a
+separate concern from this textual progress view. If the user asks for the web
+dashboard, regenerate the local HTML from the tagged datasets:
 
 ```bash
-python3 dashboard/progress_monitor_all.py \
-  --output-html dashboard/site/index.html \
-  --state-file dashboard/memory/.progress_monitor_all_state.jsonl \
-  --cache-file dashboard/memory/.progress_monitor_all_cache.json
+python3 dashboard/progress_monitor_multi.py --output-html dashboard/site/index.html
 ```
 
-This writes only dashboard runtime files. Do not start the Cloudflare sync
-loop unless the user explicitly asks. For local preview, use
-`python3 dashboard/progress_monitor_all.py --serve` only on request and
-report the port.
+This reads `dashboard/datasets/<id>/tags.jsonl` and writes only the HTML. Do
+not start any deploy unless the user explicitly asks. See
+`dashboard/README.md` for the tagging pipeline.
 
 ## Step 3 - Print the textual summary
 
