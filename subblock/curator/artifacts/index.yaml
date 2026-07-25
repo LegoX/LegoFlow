@@ -1,43 +1,45 @@
 version: 1
+
+# Index of all experiment runs. Agent appends an entry after each run completes.
 runs:
-- id: run_001
-  started_at: '2026-05-07T20:23:47Z'
-  completed_at: '2026-05-09T17:29:07Z'
-  status: completed
-  notes: 'Python batch (67517 PRs). 3 verified tasks: agentscope-ai__agentscope-885,
-    agentscope-ai__agentscope-1342, aider-ai__aider-4146. 62885 failed due to GitHub
-    API rate limiting (infra_error).'
-- id: run_002
-  started_at: '2026-05-10T12:09:00Z'
-  completed_at: null
-  status: running
-  notes: Generating 40 NEW tasks from infra-retry PRs (62885 PRs that failed due to
-    rate limiting in run_001). Skipping pre-existing 3. Using --skip-pr-files to exclude
-    them from count. See artifacts/task_manifest.yaml for task origin tracking.
-  input_file: artifacts/collected_prs/python_infra_retry.txt
-  log: artifacts/logs/swegen-create/cc_py_retry_40.txt
-  manifest: artifacts/task_manifest.yaml
-- id: run_003
-  started_at: '2026-07-20T14:52:15Z'
-  completed_at: '2026-07-20T14:52:17Z'
-  status: completed
-  archive: artifacts/archives/run_003/
-  notes: ''
-- id: run_004
-  started_at: '2026-07-20T14:55:21Z'
-  completed_at: '2026-07-20T14:55:22Z'
-  status: completed
-  archive: artifacts/archives/run_004/
-  notes: ''
-- id: run_005
-  started_at: '2026-07-22T16:28:01Z'
-  completed_at: '2026-07-22T16:28:02Z'
-  status: completed
-  archive: artifacts/archives/run_005/
-  notes: ''
-- id: run_006
-  started_at: '2026-07-22T16:36:05Z'
-  completed_at: '2026-07-22T16:36:06Z'
-  status: completed
-  archive: artifacts/archives/run_006/
-  notes: ''
+  - id: run_001
+    started_at: "2026-05-07T20:23:47Z"
+    completed_at: "2026-05-09T17:29:07Z"
+    status: completed
+    notes: "Python batch (67517 PRs). 3 verified tasks: agentscope-ai__agentscope-885, agentscope-ai__agentscope-1342, aider-ai__aider-4146. 62885 failed due to GitHub API rate limiting (infra_error)."
+
+  - id: run_002
+    started_at: "2026-05-10T12:09:00Z"
+    completed_at: "2026-05-10T12:09:00Z"
+    status: interrupted
+    notes: "Was left with status=running and never archived; outcome unknown. Marked interrupted on 2026-07-22 during a consistency pass (config.yaml is one-shot; live state belongs here, not in config). Intended: 40 NEW tasks from infra-retry PRs (the 62885 that hit rate limits in run_001), skipping the pre-existing 3. See artifacts/task_manifest.yaml for task origin tracking."
+    input_file: artifacts/collected_prs/python_infra_retry.txt
+    log: artifacts/logs/swegen-create/cc_py_retry_40.txt
+    manifest: artifacts/task_manifest.yaml
+  - id: run_003
+    started_at: "2026-07-20T14:52:15Z"
+    completed_at: "2026-07-20T14:52:17Z"
+    status: completed
+    archive: artifacts/archives/run_003/
+    notes: "Launcher-exit archive (create_all_bg detaches; this records launcher completion, not worker completion)."
+
+  - id: run_004
+    started_at: "2026-07-20T14:55:21Z"
+    completed_at: "2026-07-20T14:55:22Z"
+    status: completed
+    archive: artifacts/archives/run_004/
+    notes: "Launcher-exit archive."
+
+  - id: run_005
+    started_at: "2026-07-22T16:28:01Z"
+    completed_at: "2026-07-22T16:28:02Z"
+    status: completed
+    archive: artifacts/archives/run_005/
+    notes: "Launcher-exit archive."
+
+  - id: run_006
+    started_at: "2026-07-22T16:36:05Z"
+    completed_at: "2026-07-22T16:36:06Z"
+    status: completed
+    archive: artifacts/archives/run_006/
+    notes: "Launcher-exit archive; start of the 2026-07-23 large run."

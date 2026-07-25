@@ -100,7 +100,8 @@ echo "3. Deployment & registry credentials"
 
 # Cloudflare Pages credentials for the ROOT-level docs deploy only
 # (docs/deploy_cloudflare_pages.sh). Each subblock's own dashboard sync
-# (subblock/*/dashboard/run_cloudflare_pages_sync.sh) uses its own env file
+# publishing (tracer/evaluator: run_cloudflare_pages_sync.sh; curator: a manual
+# wrangler deploy from dashboard/site/) uses its own env file
 # convention and is checked by that block's own dryrun.sh — this root check
 # does not attempt to cover those; Step 3 of /root:check folds each block's
 # dryrun.sh output (including its own cloudflare line) into the report.

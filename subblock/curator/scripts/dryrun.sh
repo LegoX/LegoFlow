@@ -55,8 +55,9 @@ fi
 
 docker run --rm hello-world >/dev/null 2>&1 && echo "Docker: OK" || echo "WARN: Docker not available"
 
-# Cloudflare Pages (optional): only needed for `/curator:dashboard`'s public
-# sync (dashboard/run_cloudflare_pages_sync.sh). Never blocks /curator:run.
+# Cloudflare Pages (optional): only needed to publish the databoard, i.e. the
+# manual `npx wrangler pages deploy` from dashboard/site/ documented in
+# dashboard/README.md. Never blocks /curator:run.
 CF_ENV_FILE="${ENV_FILE:-${SWEGEN_HOME:-$HOME}/.config/swegen_progress_cloudflare.env}"
 CF_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 CF_ACCOUNT="${CLOUDFLARE_ACCOUNT_ID:-}"
@@ -70,7 +71,7 @@ else
     missing=()
     command -v npx >/dev/null 2>&1 || missing+=("npx/node")
     [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ] || missing+=("CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID ($CF_ENV_FILE)")
-    echo "WARN: cloudflare: missing ${missing[*]} — dashboard/run_cloudflare_pages_sync.sh will fail; local HTML dashboard still works. See /root:setup optional extras."
+    echo "WARN: cloudflare: missing ${missing[*]} — publishing dashboard/site/ to Cloudflare Pages will fail; the local HTML databoard still works. See /root:setup optional extras."
 fi
 
 echo "=== dryrun complete ==="

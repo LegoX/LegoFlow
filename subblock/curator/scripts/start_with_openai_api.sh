@@ -143,4 +143,6 @@ if [ "$STARTED_PROXY" -eq 1 ]; then
 fi
 
 # Delegate to the shared start.sh (which runs archive + create_all_bg).
+# Guard so start.sh runs generation directly instead of dispatching back here.
+export SWEGEN_LAUNCHER_ACTIVE=1
 bash "${BLOCK_DIR}/scripts/start.sh" "$@"

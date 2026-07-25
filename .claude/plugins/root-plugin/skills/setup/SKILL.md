@@ -52,17 +52,20 @@ or `/root:run` to pass; they only unlock specific quality-of-life gains.
    skipped login as a setup failure.
 5. **Cloudflare Pages tooling + credentials** — ask "set up Cloudflare Pages
    publishing for the dashboards now?" Tell the user this is for **dashboard
-   visualization only** (curator, tracer, and evaluator each have a
-   `dashboard/run_cloudflare_pages_sync.sh` that publishes their progress
-   dashboard to Cloudflare Pages) — declining it just means dashboards stay
+   visualization only** (tracer and evaluator each have a
+   `dashboard/run_cloudflare_pages_sync.sh` sync loop; curator publishes its
+   databoard with a manual `wrangler pages deploy` from `dashboard/site/`)
+   — declining it just means dashboards stay
    local-only (`dashboard/site/index.html`, served on a local port), nothing
    else in the pipeline depends on it. If the user says yes:
    - Verify a Node.js/npm/npx toolchain exists (`command -v npx`); if not,
      ask before installing one — this is a host-level change, not a
      per-block one.
    - Ask the user for `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` and
-     write them to `~/.config/swegen_progress_cloudflare.env` (the path each
-     block's `run_cloudflare_pages_sync.sh` reads via `$SWEGEN_HOME`).
+     write them to the env file that block's `dryrun.sh` looks for — each
+     block uses a different name (curator: `swegen_progress_cloudflare.env`,
+     tracer: `trajgen_progress_cloudflare.env`, evaluator:
+     `harbor_webui_cloudflare.env`), all under `$SWEGEN_HOME/.config/`.
      **Never accept these values pasted directly in chat** — have the user
      set the file themselves via a `!`-prefixed shell command in their own
      terminal, then confirm back to you when done. Never echo the token
