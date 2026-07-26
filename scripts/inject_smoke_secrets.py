@@ -39,20 +39,43 @@ except ImportError:  # pragma: no cover
     print("ERROR: PyYAML is required", file=sys.stderr)
     raise SystemExit(1)
 
-# dotted path inside the config  ->  env var that supplies it
+# dotted path inside the config  ->  env var suffix that supplies it
+#
+# Blocks do not share an endpoint: curator drives a PR-evaluation model, tracer
+# drives an agent that needs tool calling and a long context, evaluator points at
+# a locally served checkpoint. So each name is looked up per block first:
+#
+#     SMOKE_<BLOCK>_<SUFFIX>     e.g. SMOKE_TRACER_LLM_BASE_URL
+#     SMOKE_<SUFFIX>             shared fallback, e.g. SMOKE_LLM_BASE_URL
+#
+# The block name comes from the config's own meta_info.name, not the file path,
+# so a config works the same wherever it is copied to.
 FIELD_ENV = {
-    "runtime_info.input.llm_api.api_key": "SMOKE_LLM_API_KEY",
-    "runtime_info.input.llm_api.api_base_url": "SMOKE_LLM_BASE_URL",
-    "runtime_info.input.llm_api.anthropic_base_url": "SMOKE_LLM_ANTHROPIC_BASE_URL",
-    "runtime_info.input.llm_api.model": "SMOKE_LLM_MODEL",
-    "runtime_info.input.llm_api.pr_model": "SMOKE_LLM_PR_MODEL",
-    "runtime_info.input.llm_api.task_model": "SMOKE_LLM_TASK_MODEL",
-    "runtime_info.input.credentials.wandb_api_key": "SMOKE_WANDB_API_KEY",
-    "runtime_info.input.credentials.hf_token": "SMOKE_HF_TOKEN",
-    "meta_info.resources.ip": "SMOKE_REMOTE_IP",
-    "meta_info.resources.user": "SMOKE_REMOTE_USER",
-    "meta_info.resources.key": "SMOKE_REMOTE_KEY",
+    "runtime_info.input.llm_api.api_key": "LLM_API_KEY",
+    "runtime_info.input.llm_api.api_base_url": "LLM_BASE_URL",
+    "runtime_info.input.llm_api.anthropic_base_url": "LLM_ANTHROPIC_BASE_URL",
+    "runtime_info.input.llm_api.model": "LLM_MODEL",
+    "runtime_info.input.llm_api.pr_model": "LLM_PR_MODEL",
+    "runtime_info.input.llm_api.task_model": "LLM_TASK_MODEL",
+    "runtime_info.input.credentials.wandb_api_key": "WANDB_API_KEY",
+    "runtime_info.input.credentials.hf_token": "HF_TOKEN",
+    "meta_info.resources.ip": "REMOTE_IP",
+    "meta_info.resources.user": "REMOTE_USER",
+    "meta_info.resources.key": "REMOTE_KEY",
 }
+
+
+def resolve(suffix: str, block: str) -> tuple[str, str]:
+    """Return (value, env_var_consulted). Block-specific wins over shared."""
+    names = []
+    if block:
+        names.append(f"SMOKE_{block.upper()}_{suffix}")
+    names.append(f"SMOKE_{suffix}")
+    for name in names:
+        value = os.environ.get(name, "")
+        if value != "":
+            return value, name
+    return "", " or ".join(f"${n}" for n in names)
 
 
 def get_parent(data: dict, dotted: str):
@@ -93,8 +116,9 @@ def process(path: Path, check_only: bool) -> tuple[list[str], list[str]]:
     text = path.read_text(encoding="utf-8")
     data = yaml.safe_load(text) or {}
     filled, missing = [], []
+    block = str(((data.get("meta_info") or {}).get("name") or "")).strip()
 
-    for dotted, env_var in FIELD_ENV.items():
+    for dotted, suffix in FIELD_ENV.items():
         found = get_parent(data, dotted)
         if found is None:
             continue
@@ -104,12 +128,12 @@ def process(path: Path, check_only: bool) -> tuple[list[str], list[str]]:
         # Only ever fill a blank. Never overwrite a value the config states.
         if parent[leaf] != "":
             continue
-        value = os.environ.get(env_var, "")
+        value, source = resolve(suffix, block)
         if value == "":
-            missing.append(f"{dotted} (needs ${env_var})")
+            missing.append(f"{dotted} (needs {source})")
             continue
         parent[leaf] = value
-        filled.append(dotted)
+        filled.append(f"{dotted} <- ${source}" if source.startswith("SMOKE_") else dotted)
 
     if filled and not check_only:
         path.write_text(
