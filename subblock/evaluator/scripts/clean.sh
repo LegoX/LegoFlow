@@ -39,30 +39,43 @@ if [[ "$(basename "$ARTIFACTS_DIR")" != "artifacts" \
     exit 2
 fi
 
-if [[ ! -d "$ARTIFACTS_DIR" ]]; then
-    echo "  (no artifacts/ dir at $ARTIFACTS_DIR — nothing to clean)"
-    exit 0
-fi
-
-if command -v flock >/dev/null 2>&1; then
-    exec 8>"$ARTIFACTS_DIR/.smoke.lock"
-    if ! flock -n 8; then
-        echo "ERROR: refusing to clean while an eval smoke is running" >&2
-        exit 2
-    fi
-fi
-
 shopt -s nullglob dotglob
-for entry in "$ARTIFACTS_DIR"/*; do
-    name="$(basename "$entry")"
-    case "$name" in
-        env|envs|index.yaml|archives|jobs|datasets|runtime|.archive.lock|.smoke.lock) continue ;;
-    esac
+
+if [[ ! -d "$ARTIFACTS_DIR" ]]; then
+    echo "  (no artifacts/ dir at $ARTIFACTS_DIR — skipping artifacts cleanup)"
+else
+    if command -v flock >/dev/null 2>&1; then
+        exec 8>"$ARTIFACTS_DIR/.smoke.lock"
+        if ! flock -n 8; then
+            echo "ERROR: refusing to clean while an eval smoke is running" >&2
+            exit 2
+        fi
+    fi
+
+    for entry in "$ARTIFACTS_DIR"/*; do
+        name="$(basename "$entry")"
+        case "$name" in
+            env|envs|index.yaml|archives|jobs|datasets|runtime|.archive.lock|.smoke.lock) continue ;;
+        esac
+        if [[ "$DRY_RUN" == "1" ]]; then
+            echo "  [dry-run] would remove: $entry"
+        else
+            echo "  removing: $entry"
+            rm -rf "$entry"
+        fi
+    done
+fi
+
+# Stale nohack limit-registries: smoke runs create one file per --limit value
+# under the (gitignored) hack_control dir. The full registry and the nohack
+# task dataset are kept — only the disposable limitN variants are removed.
+NOHACK_CONTROL_DIR="$BLOCK_DIR/repos/harbor/scripts/git_ignore/hack_control"
+for entry in "$NOHACK_CONTROL_DIR"/registry.swebench_verified_nohack.limit*.json; do
     if [[ "$DRY_RUN" == "1" ]]; then
         echo "  [dry-run] would remove: $entry"
     else
         echo "  removing: $entry"
-        rm -rf "$entry"
+        rm -f "$entry"
     fi
 done
 

@@ -52,7 +52,7 @@ never launches.
 | 5. Harbor env | `harbor_uv` env exists and is outside `repos/harbor`; Python ≥ 3.12; `import harbor / litellm / datasets`; `harbor` resolves to `repos/harbor` (editable); `harbor --help` works. |
 | 6. LiteLLM env | `litellm_uv` venv exists; Python == 3.13; `litellm` CLI present; installed `litellm` version == `1.83.14`. |
 | 7. Model API | `llm_api.{api_base_url, model, api_key}` set (costs empty → WARN). **No live probe.** |
-| 8. Harbor run config | proxy/task_source/harbor_job/agent fields set; `provider == harbor_registry`; **`(dataset_name, version)` resolves in `registry.json` and reports task count**; LiteLLM template exists; agent `model_name` derivable; `jobs_dir`/`job_dir` under `artifacts/jobs`; `runtime_image` set; **`runtime_host_path` populated with the per-agent marker file**. |
+| 8. Harbor run config | proxy/task_source/harbor_job/agent fields set; `provider == harbor_registry`; **`(dataset_name, version)` resolves in `registry.json` and reports task count**; `no_hack` is bool (when `true`, source must be `swebench-verified` and nohack generator present); LiteLLM template exists; agent `model_name` derivable; `jobs_dir`/`job_dir` under `artifacts/jobs`; `runtime_image` set; **`runtime_host_path` populated with the per-agent marker file and its `.source-image` stamp matching `runtime_image`** (stamp missing → WARN with the record command; mismatch → FAIL). |
 | 9. Run command | `command_override` empty (default Harbor command will be built) or present. |
 
 ## Contextual checks the skill adds

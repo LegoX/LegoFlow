@@ -25,7 +25,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 - `meta_info.environment`: Harbor uv environment path and LiteLLM venv path
 - `runtime_info.input.llm_api`: raw upstream API config (model, api_base_url, api_key, optional token costs) — used to build the per-job LiteLLM proxy config
 - `runtime_info.input.litellm_proxy`: LiteLLM config template, port, and master key
-- `runtime_info.input.task_source`: benchmark selection — `provider: harbor_registry`, `dataset_name` (one of `swebench-verified`, `swebench-verified-100`, `swebench_multilingual`, `swebench_multilingual-100`, `swebenchpro`, `swebenchpro-100`, `terminal-bench`, `aider-polyglot`, `livecodebench`, `humanevalfix`, `bigcodebench-hard-complete`), `version`, and `registry_path` pointing at `repos/harbor/registry.json`
+- `runtime_info.input.task_source`: benchmark selection — `provider: harbor_registry`, `dataset_name` (one of `swebench-verified`, `swebench-verified-100`, `swebench_multilingual`, `swebench_multilingual-100`, `swebenchpro`, `swebenchpro-100`, `terminal-bench`, `aider-polyglot`, `livecodebench`, `humanevalfix`, `bigcodebench-hard-complete`), `version`, `registry_path` pointing at `repos/harbor/registry.json`, and `no_hack` (`false` by default; when `true`, remap `swebench-verified` to the local hardened `swebench-verified-nohack` registry with agent egress allowlisted to the LiteLLM host)
 - `runtime_info.input.harbor_job`: jobs directory, concurrency, retries, timeout multiplier, optional `n_tasks` smoke cap
 - `runtime_info.input.agent`: agent name, version, runtime image, max turns, temperature
 - `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`: space-separated list of task IDs Harbor must skip (prior timeouts/OOMs)
@@ -54,6 +54,15 @@ by editing two fields in `config.yaml → runtime_info.input.task_source`:
 
 Harbor resolves `(dataset_name, version)` against `repos/harbor/registry.json` and
 fetches the underlying task data automatically. No `artifacts/tasks/` staging is required.
+
+Set `task_source.no_hack: true` to run the hardened SWE-Bench Verified variant
+(`swebench-verified-nohack`): `start.sh` calls `scripts/prepare_nohack.sh` to
+generate the local dataset/registry if missing, then passes
+`--agent-extra-allowed-host` so agent egress is limited to the LiteLLM host
+(verifier stays public). Currently supports `swebench-verified` only — the
+`-100` subset is rejected (cap a smoke run with `harbor_job.n_tasks` instead).
+Refresh with `NOHACK_REFRESH=1`. Details: Harbor `docs_dev/network-policy-nohack.md`
+and docs page [Select Benchmark](docs/content/docs/run-jobs/select-benchmark.mdx).
 
 For smoke runs you can either pick a `-100` subset above, or set
 `runtime_info.input.harbor_job.n_tasks` to a small integer (Harbor will cap the run).
@@ -140,8 +149,9 @@ Steps:
 ## How To Run
 
 - `scripts/update_repos.sh`: clone or update repos/harbor at the pinned commit.
-- `scripts/dryrun.sh`: validate config, Harbor repo state, environments, model API, and confirm the configured `(dataset_name, version)` exists in `registry.json`.
-- `scripts/start.sh`: run dryrun + real-completion preflight → generate LiteLLM config → start proxy on `runtime_info.input.litellm_proxy.port` → run Harbor job with `--dataset <name>@<version> --registry-path repos/harbor/registry.json` and any `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS` → **post-eval job analysis** (unless disabled).
+- `scripts/dryrun.sh`: validate config, Harbor repo state, environments, model API, and confirm the configured `(dataset_name, version)` exists in `registry.json` (also validates `no_hack` when enabled).
+- `scripts/start.sh`: run dryrun + real-completion preflight → generate LiteLLM config → start proxy on `runtime_info.input.litellm_proxy.port` → run Harbor job with `--dataset <name>@<version> --registry-path …` and any `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS` → **post-eval job analysis** (unless disabled). When `task_source.no_hack: true`, also prepares the local nohack registry and passes `--agent-extra-allowed-host`.
+- `scripts/prepare_nohack.sh`: generate the local `swebench-verified-nohack` dataset + registry (called by `start.sh` when `no_hack` is true; `NOHACK_REFRESH=1` forces regenerate).
 - `scripts/analyze_job.sh [<job_dir>]`: run the Harbor `job_analysis` pipeline on a completed job and write results into `<job_dir>/analysis/` (the layout the dashboard reads). No arg → newest job under `jobs_dir`. Safe to re-run and to run on old jobs. `start.sh` calls this automatically after each eval (non-fatal). If the gold dataset is missing it auto-invokes `prepare_dataset.sh` first (disable with `JOB_ANALYSIS_PREPARE_DATASET=0`).
 - `scripts/prepare_dataset.sh [<dataset_name>]`: generate a Harbor gold dataset under `artifacts/datasets/<gold_base>/` for analysis — step 1 runs the matching `repos/harbor/adapters/<name>` adapter (from HuggingFace) to produce `tests/config.json` gold; step 2 runs `repos/harbor/scripts/task_analysis/tag_task_metadata.py` to complete each `task.toml`'s `[language, area, topic, bug_class]` + difficulty tags via an LLM. Idempotent (skips populated datasets unless `PREP_FORCE=1`). Tagging is best-effort: gold is still produced if it fails.
 - `scripts/clean.sh`: remove disposable logs and generated proxy state while preserving jobs, prepared datasets, runtime extractions, environments, archives, and `index.yaml`.

@@ -121,8 +121,11 @@ model = (rin.get("llm_api") or {}).get("model") \
     or (rin.get("agent") or {}).get("model_name") \
     or "unknown"
 
-# dataset_name -> gold dataset basename under artifacts/datasets/ (strip -100 subset suffix)
+# dataset_name -> gold dataset basename under artifacts/datasets/
+# Strip -100 subset and -nohack hardened suffixes; gold always comes from the base adapter.
 base = dataset_name[:-4] if dataset_name.endswith("-100") else dataset_name
+if base.endswith("-nohack"):
+    base = base[: -len("-nohack")]
 gold_map = {
     "swebench-verified": "swebench-verified",
     "swebench_multilingual": "swebench_multilingual",
