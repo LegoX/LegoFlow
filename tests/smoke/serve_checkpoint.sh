@@ -101,10 +101,24 @@ fi
 VLLM_CONDA_ENV="${VLLM_CONDA_ENV:-vllm_0.18.1}"
 CONDA_SH="${CONDA_SH:-/anaconda3/etc/profile.d/conda.sh}"
 
-remote() {
+_remote_raw() {
   ssh -i "$R_KEY" -p "$R_PORT" \
       -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20 \
       "$R_USER@$R_IP" "$@"
+}
+# The pod refuses individual handshakes under load while staying up, so a lone
+# refusal must not be read as a failure. Retry ONLY on 255 (ssh's own "could not
+# connect"); any other code is the remote command's result and passes through —
+# callers here test remote state with commands whose non-zero answers are
+# meaningful (e.g. "is vLLM up yet?").
+remote() {
+  local t rc
+  for t in 1 2 3 4 5; do
+    _remote_raw "$@"; rc=$?
+    [[ "$rc" -ne 255 ]] && return "$rc"
+    [[ "$t" -lt 5 ]] && sleep $((t * 6))
+  done
+  return "$rc"
 }
 
 open_tunnel() {  # localhost:VLLM_PORT -> pod 127.0.0.1:VLLM_PORT
