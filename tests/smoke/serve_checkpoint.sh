@@ -62,9 +62,15 @@ PY
 }
 
 # --- Resolve the remote pod from the trainer block's resources ------------------
-R_IP="$(cfg "$SFT_CFG" meta_info.resources.ip)"
-R_USER="$(cfg "$SFT_CFG" meta_info.resources.user)"
-R_KEY="$(cfg "$SFT_CFG" meta_info.resources.key)"
+# The trainer stage restores its config when it finishes, so by the time the
+# evaluator stage runs, the block config is the value-free template again and
+# ip/key read back empty — the pod address only ever exists in the overlaid
+# copy. Fall back to the same env the injector uses, so serving the checkpoint
+# does not depend on a config that has already been rolled back.
+[[ -f /gpufs/haoli/cicd/shared/.env ]] && { set -a; . /gpufs/haoli/cicd/shared/.env; set +a; }
+R_IP="$(cfg "$SFT_CFG" meta_info.resources.ip)";   R_IP="${R_IP:-${SMOKE_REMOTE_IP:-}}"
+R_USER="$(cfg "$SFT_CFG" meta_info.resources.user)"; R_USER="${R_USER:-${SMOKE_REMOTE_USER:-}}"
+R_KEY="$(cfg "$SFT_CFG" meta_info.resources.key)";  R_KEY="${R_KEY:-${SMOKE_REMOTE_KEY:-}}"
 R_PORT="$(cfg "$SFT_CFG" meta_info.resources.port)"
 R_DIR="$(cfg "$SFT_CFG" meta_info.resources.directory)"
 OUTPUT_DIR="$(cfg "$SFT_CFG" runtime_info.input.training.output_dir)"
