@@ -41,7 +41,7 @@ runtime_info:
     # Reliable OpenAI-only endpoint (llm12 / Qwen3.6-35B-A3B) reached through a
     # local LiteLLM CC proxy — the SAME setup the per-block swegen smoke verifies
     # cleanly with (10_pr_demo.sh). History: llm10/GLM-5 native-anthropic failed
-    # categorically (0/46), and az.gptplus5/deepseek-v4-flash "drove the SDK" but
+    # categorically (0/46), and <an-alternate-provider>/<model> "drove the SDK" but
     # was flaky — 0–3 verified between runs, and 0 verified FAILED the whole root
     # chain at stage 1. openai_proxy + Qwen is the stable path; run_pipeline.sh's
     # swegen stage starts the proxy on cc_proxy_port (no real key — llm12 takes

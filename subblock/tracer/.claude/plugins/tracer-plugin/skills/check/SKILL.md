@@ -87,7 +87,7 @@ Re-run `/tracer:check`.
 ## Interpreting results
 
 - **LLM endpoint 401 from this shell**: when the configured base URL is
-  `llm10.jierungogogo.com` (or similar CF-gated production endpoint),
+  `<your-production-endpoint>` (or similar CF-gated production endpoint),
   `dummy-key` is the real production key and the 401 is a network
   artifact specific to Claude Code's sandboxed shell — see memory
   `project-swegen-llm-endpoint`. Dryrun downgrades 401/403 to WARN for

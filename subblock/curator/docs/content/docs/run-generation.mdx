@@ -41,11 +41,11 @@ Two provider modes are supported:
 ```yaml
 llm_api:
   api_key: <YOUR_API_KEY>
-  api_base_url: https://yunwu.ai/v1              # OpenAI-compatible endpoint
+  api_base_url: https://<your-anthropic-gateway>/v1              # OpenAI-compatible endpoint
   pr_model: claude-opus-4-6
   task_model: claude-opus-4-6
   cc_provider_mode: native
-  anthropic_base_url: https://yunwu.ai           # Anthropic-compatible endpoint (no /v1)
+  anthropic_base_url: https://<your-anthropic-gateway>           # Anthropic-compatible endpoint (no /v1)
 ```
 
 **Mode 2: OpenAI-compatible model with local proxy**

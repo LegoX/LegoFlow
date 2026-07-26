@@ -38,7 +38,7 @@ runtime_info:
     # local LiteLLM CC proxy — verified cleanly by 10_pr_demo.sh. The smoke
     # runner (.github/scripts/smoke_run.sh) starts the proxy on cc_proxy_port.
     # History (all in NATIVE-anthropic mode, which is why native was abandoned):
-    # az.gptplus5/deepseek-v4-flash had real PASSes but was flaky AND needed a
+    # <an-alternate-provider>/<model> had real PASSes but was flaky AND needed a
     # committed real key; GLM-5-FP8 gave 0 verified, opus/sonnet returned empty
     # for swegen's verdict-shaped prompt. openai_proxy + Qwen sidesteps all of
     # it — no real key (the llm endpoint takes the dummy-cf CF token).
