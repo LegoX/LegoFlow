@@ -48,7 +48,7 @@ SWE-Lego-Live/
 │   ├── dryrun.sh              # validate root block
 │   ├── start.sh               # launch data blocks (curator + tracer); installs EXIT-trap → archive_run.sh
 │   ├── archive_run.sh         # snapshot config + scripts + repo SHAs → artifacts/archives/run_NNN/
-│   └── clean.sh               # purge intermediate artifacts (keeps env/, index.yaml, archives/)
+│   └── clean.sh               # remove a run's temporary output; --purge wipes artifacts/
 ├── dashboard/
 │   └── overview.mdx           # human-readable current state
 ├── artifacts/

@@ -100,8 +100,10 @@ Regenerate with `scripts/generate_excluded_repos.py`.
   instead of re-dumping the whole file.
 - Relative `training.output_dir` values write to `artifacts/model/<basename>`. Absolute
   `training.output_dir` values are honored consistently by training and the dashboard.
-- `scripts/clean.sh` cleans script-local `__pycache__` by default. Use
-  `--repo-cache --yes` only when you intentionally want to clean cache files under `repos/`.
+- `scripts/clean.sh` with no flags removes only a run's temporary output under
+  `artifacts/` (logs, the generated training YAML, offline WandB state) and keeps
+  the uv env, `data/` and `model/`. `--purge` wipes `artifacts/` except git-tracked
+  files and confirms twice. It never touches `repos/`.
 
 ## Experiment Log
 

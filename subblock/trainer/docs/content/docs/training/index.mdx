@@ -50,4 +50,4 @@ The executed LLaMA-Factory YAML is **generated at runtime** from `config.yaml`, 
 ## Data-only and cleanup
 
 - `scripts/dataprep.sh` — run Harbor conversion only, to prepare and inspect converted data without training.
-- `scripts/clean.sh` — remove script-local `__pycache__`. Artifact deletion requires `--artifacts --yes`; repo-cache cleanup requires `--repo-cache --yes`.
+- `scripts/clean.sh` — remove a run's temporary output under `artifacts/` (logs, the generated training YAML, offline WandB state), keeping the uv env, `data/` and `model/`. `--purge` wipes `artifacts/` entirely except git-tracked files and confirms twice; `--dry-run` previews either mode.

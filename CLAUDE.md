@@ -98,7 +98,10 @@ The root block does not consume external inputs directly (`runtime_info.input: {
 ```bash
 scripts/dryrun.sh   # validate config, inputs, and required paths (no side effects)
 scripts/start.sh    # launch the wired curator/tracer jobs; PR collection is separate (ONLY after user confirms)
-scripts/clean.sh    # remove temporary working files
+scripts/clean.sh    # remove a run's temporary output in every block (keeps envs,
+                    # run records, and anything expensive to regenerate)
+scripts/clean.sh --purge   # wipe every block's artifacts/ except git-tracked files
+                           # (destroys envs, datasets, checkpoints; confirms twice)
 ```
 
 ## Subblocks

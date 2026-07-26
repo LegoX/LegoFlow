@@ -56,7 +56,7 @@ bash scripts/install_env.sh
 - `scripts/train.sh`: End-to-end pipeline (obtain/convert LF data → dataset registration → training)
 - `scripts/dataprep.sh`: Data-only pipeline (conversion only, no training)
 - `scripts/dryrun.sh`: Validate config, paths, and uv environment
-- `scripts/clean.sh`: Remove temporary outputs; artifact deletion requires `--artifacts --yes`
+- `scripts/clean.sh`: Remove a run's temporary output (logs, generated training YAML, offline WandB state). Keeps the uv env, `artifacts/data/` and `artifacts/model/`. `--purge` wipes `artifacts/` entirely except git-tracked files, confirming twice
 
 ## Artifact Archiving
 
