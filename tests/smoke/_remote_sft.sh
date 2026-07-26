@@ -78,7 +78,37 @@ SCP_TO "$CFG" "$REMOTE_SFT/config.yaml" \
 SSH "rm -rf '$REMOTE_SFT/artifacts/model/$OUT'; \
      chown '$REMOTE_OWNER' '$REMOTE_SFT/config.yaml' '$REMOTE_SFT/$MERGED_REL' 2>/dev/null || true; \
      chown -R '$REMOTE_OWNER' '$REMOTE_SFT/artifacts/logs' '$REMOTE_SFT/artifacts/model' \
-        '$REMOTE_SFT/artifacts/data' '$REMOTE_SFT/artifacts/training_config' 2>/dev/null || true"
+        '$REMOTE_SFT/artifacts/data' '$REMOTE_SFT/artifacts/training_config' \
+        '$REMOTE_SFT/artifacts/archives' '$REMOTE_SFT/artifacts/index.yaml' 2>/dev/null || true"
+
+# Link the pod's prepared runtime into the block, exactly as the per-block CI
+# smoke does (.github/scripts/sft_smoke_run.sh). Without this the pod has no uv
+# env and no checked-out repos, so dryrun fails with "SFT uv python not found",
+# "uv command not found" and empty repo HEADs, and training dies in ~30s. The
+# runtime itself already exists on the pod — only the symlinks were missing,
+# which is why this worked in CI and not here.
+# SFT_REMOTE_RUNTIME_DIR lives in the private env file the CI runner already
+# uses, outside the repo — same source .github/scripts/sft_smoke_run.sh reads.
+for _envf in "${SFT_REMOTE_ENV:-}" /gpufs/haoli/cicd/shared/sft-remote.env; do
+  [[ -n "$_envf" && -f "$_envf" ]] && { set -a; . "$_envf"; set +a; break; }
+done
+RUNTIME_DIR="${SFT_REMOTE_RUNTIME_DIR:-}"
+if [[ -n "$RUNTIME_DIR" ]]; then
+  SSH "set -e
+    cd '$REMOTE_SFT'
+    mkdir -p repos artifacts
+    for l in artifacts/env repos/LLaMA-Factory repos/swe_data_process artifacts/data/examples; do
+      src='$RUNTIME_DIR'/\$l
+      # actions/checkout-style empty placeholders would swallow the link
+      [ -L \"\$l\" ] && rm -f \"\$l\"
+      [ -d \"\$l\" ] && [ ! -L \"\$l\" ] && rmdir \"\$l\" 2>/dev/null || true
+      [ -e \"\$src\" ] && [ ! -e \"\$l\" ] && ln -s \"\$src\" \"\$l\" || true
+    done
+    ls -ld artifacts/env repos/LLaMA-Factory 2>/dev/null | sed 's/^/  linked: /'
+  " || echo "WARN: could not link pod runtime from $RUNTIME_DIR"
+else
+  echo "WARN: SFT_REMOTE_RUNTIME_DIR unset — pod must already have artifacts/env and repos/"
+fi
 
 # Launcher runs on the pod AS the repo-owner uid: shared-FS HOME/HF_HOME + a uv
 # the uid can execute (root's /root/.local/bin/uv is unreadable to a dropped uid;
