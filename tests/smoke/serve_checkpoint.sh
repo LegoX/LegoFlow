@@ -177,6 +177,27 @@ case "$ACTION" in
       exit 77
     fi
 
+    # Normalise the checkpoint's tokenizer_config for the serving env. The
+    # training env (transformers 5.6.0) writes extra_special_tokens as a LIST;
+    # the pod's vLLM env (transformers 4.57.6) expects a mapping and dies with
+    # "AttributeError: 'list' object has no attribute 'keys'" deep inside
+    # tokenizer init — surfacing only as "Engine core initialization failed".
+    # The tokens are fully described by added_tokens_decoder, so dropping the
+    # redundant key costs nothing and lets an older server load a newer
+    # checkpoint. Idempotent, and skipped when the value is already a mapping.
+    remote "python3 - <<'PYEOF'
+import json, os
+p = os.path.join('$CKPT_REMOTE', 'tokenizer_config.json')
+try:
+    d = json.load(open(p))
+except Exception:
+    raise SystemExit(0)
+if isinstance(d.get('extra_special_tokens'), list):
+    d.pop('extra_special_tokens')
+    json.dump(d, open(p, 'w'), ensure_ascii=False, indent=2)
+    print('normalised extra_special_tokens (list -> removed) for older transformers')
+PYEOF" || echo "WARN: could not normalise tokenizer_config (continuing)"
+
     # data_parallel_size: explicit config, else count FREE GPUs (shared pod —
     # never claim a GPU someone else is using).
     if [[ -z "$DP" || "$DP" == "auto" || "$DP" == "null" ]]; then
