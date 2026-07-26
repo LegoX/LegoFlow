@@ -55,23 +55,36 @@ fi
 
 docker run --rm hello-world >/dev/null 2>&1 && echo "Docker: OK" || echo "WARN: Docker not available"
 
-# Cloudflare Pages (optional): only needed to publish the databoard, i.e. the
-# manual `npx wrangler pages deploy` from dashboard/site/ documented in
-# dashboard/README.md. Never blocks /curator:run.
+# Optional shared credentials (Cloudflare Pages publishing + authenticated image
+# pulls). Resolved by scripts/shared_credentials.sh in this order: env > root
+# config.yaml (runtime_info.input.cloudflare/docker) > this block's legacy env
+# file. Never blocks /curator:run.
 CF_ENV_FILE="${ENV_FILE:-${SWEGEN_HOME:-$HOME}/.config/swegen_progress_cloudflare.env}"
-CF_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
-CF_ACCOUNT="${CLOUDFLARE_ACCOUNT_ID:-}"
-if [ -z "$CF_TOKEN" ] && [ -f "$CF_ENV_FILE" ]; then
-    CF_TOKEN="$(grep -E '^(export )?CLOUDFLARE_API_TOKEN=' "$CF_ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
-    CF_ACCOUNT="$(grep -E '^(export )?CLOUDFLARE_ACCOUNT_ID=' "$CF_ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
+if [ -f "$REPO_ROOT/scripts/shared_credentials.sh" ]; then
+    CF_LEGACY_ENV_FILE="$CF_ENV_FILE"
+    # shellcheck source=/dev/null
+    source "$REPO_ROOT/scripts/shared_credentials.sh"
+    load_shared_credentials "$(pwd)"
+else
+    echo "WARN: scripts/shared_credentials.sh not found at repo root — using env vars only"
 fi
-if command -v npx >/dev/null 2>&1 && [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ]; then
-    echo "cloudflare: OK (npx available, credentials in env or $CF_ENV_FILE)"
+
+if command -v npx >/dev/null 2>&1 && [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+    echo "cloudflare: OK (npx available, credentials from ${SHARED_CLOUDFLARE_SOURCE:-env})"
 else
     missing=()
     command -v npx >/dev/null 2>&1 || missing+=("npx/node")
-    [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ] || missing+=("CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID ($CF_ENV_FILE)")
+    [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] || \
+        missing+=("CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID (root config.yaml runtime_info.input.cloudflare, env, or $CF_ENV_FILE)")
     echo "WARN: cloudflare: missing ${missing[*]} — publishing dashboard/site/ to Cloudflare Pages will fail; the local HTML databoard still works. See /root:setup optional extras."
+fi
+
+# Registry auth raises the anonymous 100-pulls-per-6h-per-IP cap that otherwise
+# breaks task image pulls partway through a long create run.
+if [ -n "${DOCKER_USERNAME:-}" ] && [ -n "${DOCKER_PASSWORD:-}" ]; then
+    echo "docker registry: OK (credentials from ${SHARED_DOCKER_SOURCE:-env}; run scripts/docker_login.sh to authenticate pulls)"
+else
+    echo "WARN: docker registry: no credentials (root config.yaml runtime_info.input.docker or DOCKER_USERNAME/DOCKER_PASSWORD) — pulls stay anonymous and capped at 100/6h per IP"
 fi
 
 echo "=== dryrun complete ==="

@@ -40,7 +40,7 @@ Every check lives in **exactly one** layer:
 
 | Layer | Run by | Covers |
 |---|---|---|
-| **Deterministic** | `scripts/dryrun.sh` | config schema · uv env + python · repos · source-specific Harbor/HF/local fields · converter when applicable · data paths · dataset registration (including exact `hf_file_name`) · base model · `output_dir` + train-YAML target · WandB mode/key · GPU count · Cloudflare quick tunnel binary (optional, dashboard-only) |
+| **Deterministic** | `scripts/dryrun.sh` | config schema · uv env + python · repos · source-specific Harbor/HF/local fields · converter when applicable · data paths · dataset registration (including exact `hf_file_name`) · base model · `output_dir` + train-YAML target · WandB mode/key · GPU count · Cloudflare quick tunnel binary (optional, dashboard-only) · shared Cloudflare/registry credentials from root `config.yaml` (informational — trainer needs neither: its tunnel is anonymous and it pulls no images) |
 | **Live (judgment)** | this skill | is a training process already alive? · are the GPUs idle / ours / foreign? · will training overwrite an existing checkpoint? |
 
 ---
@@ -176,7 +176,8 @@ rows.
 | det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim dryrun line> |
 | det  | wandb         | <✓/✗>   | <mode=offline/online/disabled · key set?> |
 | det  | gpu-count     | <✓/⚠>   | <nvidia-smi N vs config N_GPUS> |
-| det  | cloudflare (optional) | <✓/⚠> | <cloudflared found \| missing, dashboard TUNNEL=true will be local-only> |
+| det  | cloudflare tunnel (optional) | <✓/⚠> | <cloudflared found \| missing, dashboard TUNNEL=true will be local-only> |
+| det  | cloudflare account (optional) | <✓/·> | <shared credentials present (source: …) \| not configured — the quick tunnel needs none> |
 | live | job           | <✓/✗>   | <job:none / job:running pid=<P>> |
 | live | gpu           | <✓/⚠/✗> | <gpu:idle / gpu:mine / gpu:foreign pid=<P> mem=<M>> |
 | live | checkpoint    | <✓/⚠>   | <ckpt:clean / ckpt:clobber: <dir>> |

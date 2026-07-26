@@ -55,7 +55,8 @@ inapplicable rows.
 | det  | litellm port 4001     | <✓/✗>   | <free \| held by pid <P>> |
 | det  | agent runtime_image   | <✓/⚠>   | <present \| not pulled locally> |
 | det  | processed-tasks ledger    | <✓/✗>   | <clean \| leak: <task_id> not in HARBOR_EXCLUDE_TASKS> |
-| det  | cloudflare (optional) | <✓/⚠>   | <ok \| missing npx/credentials, see /root:setup> |
+| det  | cloudflare (optional) | <✓/⚠>   | <ok (source: env\|root-config\|legacy-file) \| missing npx/credentials, see /root:setup> |
+| det  | docker registry (optional) | <✓/⚠> | <ok (source: …) \| no credentials, pulls capped at 100/6h per IP> |
 
 **Run configuration**
 ```
@@ -126,7 +127,8 @@ failures unless the user asks. The four current real-world warnings:
 | `agent runtime_image not pulled locally` | First task pays the pull cost. |
 | `HF dataset network error` | Likely transient; retry once. |
 | LLM endpoint 401/403 from this shell | Likely CF-gating artifact (see memory). |
-| `cloudflare: missing npx/credentials` | Only affects `/tracer:dashboard`'s public sync; local HTML dashboard is unaffected. Point the user at `/root:setup`'s optional Cloudflare extra — never blocks `/tracer:run`. |
+| `cloudflare: missing npx/credentials` | Only affects `/tracer:dashboard`'s public sync; local HTML dashboard is unaffected. Credentials resolve env > root `config.yaml` → `runtime_info.input.cloudflare` > `~/.config/trajgen_progress_cloudflare.env`; the reported source says which won. Point the user at `/root:setup`'s optional Cloudflare extra — never blocks `/tracer:run`. A common cause on this host: node installed under `~/.nvm` is not on the PATH of a non-interactive shell, so `npx` looks missing to the script but present to the user. |
+| `docker registry: no credentials` | Anonymous Docker Hub pulls are capped at 100 per 6h per IP; a long Harbor run pulls one image per task environment and can hit the cap mid-job, where it surfaces as agent/verifier failures rather than an auth error. Fix with `bash <repo_root>/scripts/docker_login.sh` (uses root `config.yaml` → `runtime_info.input.docker`) or a plain `docker login`. Never blocks `/tracer:run`. |
 
 ## Mandatory before `/tracer:run`
 

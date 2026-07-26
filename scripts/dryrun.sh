@@ -107,25 +107,42 @@ WARN=$((WARN+V_WARN))
 echo ""
 echo "3. Deployment & registry credentials"
 
-# Cloudflare Pages credentials for the ROOT-level docs deploy only
-# (docs/deploy_cloudflare_pages.sh). Each subblock's own dashboard sync
-# publishing (tracer/evaluator: run_cloudflare_pages_sync.sh; curator: a manual
-# wrangler deploy from dashboard/site/) uses its own env file
-# convention and is checked by that block's own dryrun.sh — this root check
-# does not attempt to cover those; Step 3 of /root:check folds each block's
-# dryrun.sh output (including its own cloudflare line) into the report.
+# These are the tree-wide, OPTIONAL credentials declared in root config.yaml ->
+# runtime_info.input.{cloudflare,docker}. scripts/shared_credentials.sh resolves
+# them as env > root config.yaml > legacy per-block env file, and every subblock
+# reads them through the same helper, so what is reported here is exactly what
+# the blocks will see. Absence is always a WARN, never a FAIL.
 CF_ENV_FILE="${ENV_FILE:-$HOME/.config/trajgen_progress_cloudflare.env}"
-CF_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
-CF_ACCOUNT="${CLOUDFLARE_ACCOUNT_ID:-}"
-if [[ (-z "$CF_TOKEN" || -z "$CF_ACCOUNT") && -f "$CF_ENV_FILE" ]]; then
-  CF_TOKEN="$(grep -E '^(export )?CLOUDFLARE_API_TOKEN=' "$CF_ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
-  CF_ACCOUNT="$(grep -E '^(export )?CLOUDFLARE_ACCOUNT_ID=' "$CF_ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
-fi
-if [[ -n "$CF_TOKEN" && -n "$CF_ACCOUNT" ]]; then
-  ok "cloudflare (root docs): credentials available (env or $CF_ENV_FILE)"
+if [[ -f "$ROOT_DIR/scripts/shared_credentials.sh" ]]; then
+  CF_LEGACY_ENV_FILE="$CF_ENV_FILE"
+  # shellcheck source=/dev/null
+  source "$ROOT_DIR/scripts/shared_credentials.sh"
+  load_shared_credentials "$ROOT_DIR"
 else
-  warn "cloudflare (root docs): CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not found (env or $CF_ENV_FILE) — docs/deploy_cloudflare_pages.sh will fail. Per-block dashboard sync is checked separately by each block's own dryrun.sh."
+  fail "scripts/shared_credentials.sh missing — blocks cannot resolve shared cloudflare/docker credentials"
 fi
+
+if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+  ok "cloudflare: account_id + api_token resolved from ${SHARED_CLOUDFLARE_SOURCE}"
+  # Availability, not just presence: verify the token against the Cloudflare API.
+  CF_PROBE="$(shared_cloudflare_probe)" && ok "cloudflare: $CF_PROBE" \
+    || warn "cloudflare: $CF_PROBE — deploys will fail until the token is fixed"
+  [[ -n "${CLOUDFLARE_PAGES_PROJECT_PREFIX:-}" ]] && \
+    info "cloudflare: Pages project prefix '${CLOUDFLARE_PAGES_PROJECT_PREFIX}'"
+elif [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" || -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+  warn "cloudflare: only one of account_id/api_token is set (from ${SHARED_CLOUDFLARE_SOURCE}) — both are required; deploys will fail"
+else
+  warn "cloudflare: not configured (optional) — set runtime_info.input.cloudflare in root config.yaml, or export CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID. Without it docs/deploy_cloudflare_pages.sh and every block's dashboard publish are unavailable; local dashboards still work."
+fi
+
+if [[ -n "${DOCKER_USERNAME:-}" && -n "${DOCKER_PASSWORD:-}" ]]; then
+  ok "docker registry: credentials resolved from ${SHARED_DOCKER_SOURCE} for ${DOCKER_REGISTRY:-docker.io}"
+elif [[ -n "${DOCKER_USERNAME:-}" || -n "${DOCKER_PASSWORD:-}" ]]; then
+  warn "docker registry: only one of username/password is set (from ${SHARED_DOCKER_SOURCE}) — both are required"
+else
+  info "docker registry: no credentials in root config.yaml runtime_info.input.docker (optional) — falling back to any existing docker login below"
+fi
+[[ -n "${DOCKER_MIRROR:-}" ]] && info "docker registry: pull-through mirror configured (${DOCKER_MIRROR})"
 
 # Docker Hub login — anonymous pulls are limited to 100 per 6h per IP;
 # tracer/evaluator pull task + agent-runtime images and can hit the limit
@@ -146,7 +163,7 @@ PY
 then
   ok "docker: Docker Hub login found in $DOCKER_CFG"
 else
-  warn "docker: no Docker Hub login in $DOCKER_CFG — anonymous pulls are capped at 100/6h per IP; run \`docker login\` to avoid mid-job pull failures in tracer/evaluator"
+  warn "docker: no Docker Hub login in $DOCKER_CFG — anonymous pulls are capped at 100/6h per IP; run \`bash scripts/docker_login.sh\` (uses the credentials above) or \`docker login\` to avoid mid-job pull failures in tracer/evaluator"
 fi
 
 # ── 4. SSH reachability ───────────────────────────────────────────────────────

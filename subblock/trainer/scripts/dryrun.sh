@@ -649,6 +649,29 @@ else
     warn "cloudflare: cloudflared not found -- dashboard/start_dashboard.sh TUNNEL=true will skip the public tunnel and fall back to local-only. Set CLOUDFLARED_BIN or install cloudflared. See /root:setup optional extras."
 fi
 
+# Shared account-level credentials from root config.yaml (runtime_info.input.
+# cloudflare/docker), resolved by scripts/shared_credentials.sh: env > root
+# config > legacy env file. Reported for parity with the other blocks; trainer
+# itself needs neither -- its tunnel is anonymous and it pulls no images.
+SHARED_CREDS="$BLOCK_DIR/../../scripts/shared_credentials.sh"
+if [[ -f "$SHARED_CREDS" ]]; then
+    # shellcheck source=/dev/null
+    source "$SHARED_CREDS"
+    load_shared_credentials "$BLOCK_DIR"
+    if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+        ok "cloudflare account: credentials from ${SHARED_CLOUDFLARE_SOURCE} (available for a named Pages deploy instead of a quick tunnel)"
+    else
+        info "cloudflare account: not configured (optional) -- the quick tunnel above needs no credentials"
+    fi
+    if [[ -n "${DOCKER_USERNAME:-}" && -n "${DOCKER_PASSWORD:-}" ]]; then
+        ok "docker registry: credentials from ${SHARED_DOCKER_SOURCE} (unused by trainer; consumed by curator/tracer/evaluator)"
+    else
+        info "docker registry: not configured (optional) -- trainer pulls no images"
+    fi
+else
+    warn "shared credentials: scripts/shared_credentials.sh not found at repo root"
+fi
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

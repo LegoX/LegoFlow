@@ -42,14 +42,34 @@ paths = [p for p in out.split("\0") if p]
 
 # Values that are fine to commit.
 PLACEHOLDERS = {"", "human", "none", "null", "local"}
+# Self-declaring non-secrets. Some endpoints (notably a locally served vLLM)
+# reject an empty api_key, so the configs carry an obviously fake one — e.g.
+# `dummy-key`. The prefix is the declaration of intent; a real credential never
+# starts this way.
+FAKE_VALUE = re.compile(r"^(dummy|fake|test|placeholder|unused|not-?used|changeme)[-_a-z0-9]*$",
+                        re.IGNORECASE)
 SECRET_KEYS = {
     "api_key", "api_base_url", "anthropic_base_url", "auth_token", "token",
     "password", "pwd", "wandb_api_key", "hf_token", "key", "ip", "user",
     "model", "pr_model", "task_model",
+    # root config.yaml -> runtime_info.input.{cloudflare,docker}: tree-wide
+    # optional credentials. They are read from the environment at run time, so
+    # the committed value must always be empty.
+    "account_id", "api_token", "username",
 }
 # Only these keys are host/URL-shaped; the model names are checked for keys only.
 URL_KEYS = {"api_base_url", "anthropic_base_url"}
 HOST_KEYS = {"ip"}
+# Opaque credentials: no format to pattern-match against, so ANY non-placeholder
+# value fails. Without this, a key that is in SECRET_KEYS but is neither URL- nor
+# host-shaped falls through every branch below and is silently accepted unless it
+# happens to start with a known vendor prefix — which a Cloudflare token
+# (40+ chars of base62), a Cloudflare account id (32 hex chars), or a registry
+# username never does.
+OPAQUE_SECRET_KEYS = {
+    "account_id", "api_token", "username", "password", "pwd",
+    "api_key", "auth_token", "token", "wandb_api_key", "hf_token",
+}
 KEYISH = re.compile(r"^(sk-|ghp_|gho_|github_pat_|xox|AKIA|AIza)")
 
 
@@ -131,10 +151,15 @@ for rel in paths:
         if leaf not in SECRET_KEYS or not isinstance(value, str):
             continue
         v = value.strip()
-        if v.lower() in PLACEHOLDERS or v.startswith("PENDING_SET_BY_"):
+        if v.lower() in PLACEHOLDERS or v.startswith("PENDING_SET_BY_") or FAKE_VALUE.match(v):
             continue
         if KEYISH.match(v):
             bad.append(f"{rel}: {dotted} looks like a live API key")
+            continue
+        if leaf in OPAQUE_SECRET_KEYS:
+            # Never echo the value — this output goes to CI logs.
+            bad.append(f"{rel}: {dotted} holds a non-empty value ({len(v)} chars); "
+                       f"credentials must be supplied via the environment, not committed")
             continue
         if leaf in URL_KEYS:
             if not is_local_url(v):

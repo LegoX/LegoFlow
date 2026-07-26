@@ -20,13 +20,19 @@ block needs before `:check` can pass. At the root level this covers:
    docker prerequisites the pipeline assumes; abort with actionable next steps
    if missing.
 2. **Root config** — ensure `./config.yaml` exists and matches the contract
-   (orchestration identity only: `meta_info.subblocks` roster with role
-   one-liners, explicit `dependencies: {from: {}, to: {}}`, empty `runtime_info.input`/`output`).
-   If missing, scaffold it from
-   `resources/config.template.yaml`. **The root owns no shared inputs**: the
-   blocks intentionally use different LLM endpoints/keys, so every external
-   value is filled per-block by that block's own `:setup` — do not invent a
-   shared `runtime_info.input` at the root.
+   (orchestration identity: `meta_info.subblocks` roster with role one-liners,
+   explicit `dependencies: {from: {}, to: {}}`, empty `runtime_info.output`).
+   If missing, scaffold it from `resources/config.template.yaml`.
+   **The root owns no shared *pipeline* inputs**: the blocks intentionally use
+   different LLM endpoints/keys, so every external pipeline value is filled
+   per-block by that block's own `:setup` — do not invent a shared `llm_api` or
+   task-source at the root.
+
+   The one exception is `runtime_info.input.cloudflare` and
+   `runtime_info.input.docker`: tree-wide, **optional**, account-level
+   infrastructure credentials that every block reads through
+   `scripts/shared_credentials.sh`. Both default to all-empty (feature off) and
+   are filled in step 4/5 below, never automatically.
 3. **Recurse (optional)** — for each `name` in `meta_info.subblocks`, ask the
    user "set up `<name>` now?" and on yes hand off to `/<name>:setup`. Each
    subblock's setup fills its own `runtime_info.input`, replacing `human`
@@ -39,37 +45,61 @@ These two are **off by default** — always ask before doing either, even if
 the user has run `/root:setup` before. Neither is required for `/root:check`
 or `/root:run` to pass; they only unlock specific quality-of-life gains.
 
-4. **Docker registry login** — ask "log in to Docker Hub now to raise the
-   anonymous pull rate limit?" This requires an interactive `docker login`
-   (the user supplies their own credentials or a token; never prompt for or
-   store a password on their behalf — just run `docker login` and let the
-   user's own terminal handle the prompt). Tell the user plainly **why**
-   before asking: `tracer` and `evaluator` both pull large numbers of Docker
-   images per run (one per Harbor task environment), and anonymous Docker
-   Hub pulls are aggressively rate-limited — a logged-in session raises that
-   ceiling substantially and avoids mid-run `429`/pull-throttling failures in
-   those two blocks. Skip silently if the user declines; do not treat a
-   skipped login as a setup failure.
+Both write to the same place: root `config.yaml` →
+`runtime_info.input.{docker,cloudflare}`, read by every block through
+`scripts/shared_credentials.sh` (resolution order: env > root config.yaml >
+the block's own legacy env file). **Non-secret fields go in `config.yaml`;
+secrets do not** — `config.yaml` is git-tracked, so `api_token` and `password`
+stay `""` there and come from the environment instead.
+
+4. **Docker registry credentials** — ask "configure a container-registry login
+   to raise the anonymous pull rate limit?" Tell the user plainly **why**
+   before asking: `curator`, `tracer` and `evaluator` all pull large numbers of
+   Docker images per run (one per task environment), and anonymous Docker Hub
+   pulls are capped at 100 per 6h per IP — hitting it mid-run surfaces as
+   manifest errors that look like agent or verifier failures. If the user says
+   yes:
+   - Write the non-secret fields into root `config.yaml` →
+     `runtime_info.input.docker`: `username`, and `registry`/`mirror` if they
+     use something other than Docker Hub.
+   - Have the user supply the password/token as `$DOCKER_PASSWORD` in their own
+     environment. **Never accept a password pasted in chat**, and never write
+     one into `config.yaml`.
+   - Alternatively, a plain interactive `docker login` in their own terminal
+     works too and needs no config at all — `scripts/docker_login.sh --status`
+     and the root dryrun both detect an existing login.
+   Skip silently if the user declines; a skipped login is not a setup failure.
 5. **Cloudflare Pages tooling + credentials** — ask "set up Cloudflare Pages
    publishing for the dashboards now?" Tell the user this is for **dashboard
    visualization only** (tracer and evaluator each have a
    `dashboard/run_cloudflare_pages_sync.sh` sync loop; curator publishes its
-   databoard with a manual `wrangler pages deploy` from `dashboard/site/`)
-   — declining it just means dashboards stay
-   local-only (`dashboard/site/index.html`, served on a local port), nothing
-   else in the pipeline depends on it. If the user says yes:
+   databoard with a manual `wrangler pages deploy` from `dashboard/site/`;
+   trainer instead uses an anonymous `cloudflared` quick tunnel and needs no
+   account at all) — declining it just means dashboards stay local-only
+   (`dashboard/site/index.html`, served on a local port), nothing else in the
+   pipeline depends on it. If the user says yes:
    - Verify a Node.js/npm/npx toolchain exists (`command -v npx`); if not,
      ask before installing one — this is a host-level change, not a
-     per-block one.
-   - Ask the user for `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` and
-     write them to the env file that block's `dryrun.sh` looks for — each
-     block uses a different name (curator: `swegen_progress_cloudflare.env`,
-     tracer: `trajgen_progress_cloudflare.env`, evaluator:
-     `harbor_webui_cloudflare.env`), all under `$SWEGEN_HOME/.config/`.
-     **Never accept these values pasted directly in chat** — have the user
-     set the file themselves via a `!`-prefixed shell command in their own
-     terminal, then confirm back to you when done. Never echo the token
-     back or write it anywhere else (logs, config.yaml, other env files).
+     per-block one. A common gotcha: node installed via `nvm` is absent from
+     non-interactive shells, so `npx` resolves for the user but not for the
+     sync script. Check for `~/.nvm/versions/node/*/bin/npx` before concluding
+     node is missing, and if that is the situation, put that bin dir on `PATH`
+     in the env file rather than installing a second node.
+   - Write `account_id` (not a secret) into root `config.yaml` →
+     `runtime_info.input.cloudflare.account_id`, plus
+     `pages_project_prefix` if they want one.
+   - Have the user supply `CLOUDFLARE_API_TOKEN` in their own environment, or
+     in whichever per-block env file they already use (curator:
+     `swegen_progress_cloudflare.env`, tracer:
+     `trajgen_progress_cloudflare.env`, evaluator:
+     `harbor_webui_cloudflare.env`, all under `$SWEGEN_HOME/.config/`) — those
+     remain supported as a fallback. **Never accept the token pasted directly
+     in chat** — have the user write it themselves via a `!`-prefixed shell
+     command or their own editor, then confirm back to you when done. Never
+     echo the token back or write it into `config.yaml`.
+   - The token needs **Cloudflare Pages: Edit** permission. Confirm it works
+     with `bash scripts/dryrun.sh` (its step 3 live-probes the token against
+     `/user/tokens/verify`), not by guessing.
 
 ## Exit criterion
 
