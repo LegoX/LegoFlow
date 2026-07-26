@@ -466,7 +466,19 @@ PY
     # leaves the dir behind and the "stale job" it was meant to prevent survives
     # (seen 2026-07-26: a previous job dir outlived three rm attempts). Fall back
     # to moving it aside, which only needs write permission on the parent.
-    for _stale in "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" "$TB/$TRAJ_OUT" "$STAGE_DIR"; do
+    # NOTE: scope each entry to the smoke's OWN artifacts. `jobs_dir` is already
+    # smoke-specific (artifacts/jobs/root-smoke), but `sft_conversion.out_dir` is
+    # the shared artifacts/sft_data root — the converter writes per job into
+    # <out_dir>/<job>/, so only that subdir belongs to the smoke. Clearing the
+    # whole out_dir wipes every real converted dataset in the block (seen
+    # 2026-07-27: a full artifacts/sft_data/ was destroyed by a smoke run).
+    # NOT $STAGE_DIR: it was filled from curator moments ago by the copy above,
+    # which already rmtree's it first. Clearing it here deleted this run's own
+    # task source, so prepare_tasks.sh had nothing to stage and tracer's dryrun
+    # failed with "Harbor tasks are not prepared" — harbor never launched and the
+    # stage sat out its whole budget waiting for a job that did not exist.
+    for _stale in "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" \
+                  "$TB/$TRAJ_OUT/$(basename "$JOBS")"; do
       [[ -e "$_stale" ]] || continue
       if ! rm -rf "$_stale" 2>/dev/null; then
         mv "$_stale" "${_stale}.stale-$(date +%s)" 2>/dev/null \
