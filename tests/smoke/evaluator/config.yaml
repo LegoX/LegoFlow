@@ -87,7 +87,7 @@ runtime_info:
         # errored every trial in run 28371626594 at 32768. Serve the model's full
         # native window (config max_position_embeddings=163840, rope_theta=1e6, no
         # rope_scaling needed) so a 131072 completion + a ~32K trajectory prompt fit.
-        max_model_len: 163840
+        max_model_len: 32768
         gpu_memory_utilization: 0.92
         dtype: bfloat16
       litellm:
