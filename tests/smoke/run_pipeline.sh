@@ -616,8 +616,19 @@ import sys, os, yaml
 p = sys.argv[1]; d = yaml.safe_load(open(p)) or {}
 api = d["runtime_info"]["input"]["llm_api"]
 api["api_base_url"] = os.environ["BASE_URL"]
+# The edge this declares — llm_api.api_base_url <- trainer.output.checkpoint_path
+# — has just been satisfied for real: the checkpoint is served and its URL is
+# written above. Leaving the declaration makes validate_config resolve it
+# against the trainer block, which restored its template config when its stage
+# ended, so checkpoint_path reads null and the whole dryrun fails. Worse, that
+# one failure trips dryrun's `FAIL -eq 0` gate and blanks every later config
+# read, surfacing as ~12 phantom failures ("harbor.url is empty", ...).
+dep = (d.get("meta_info") or {}).get("dependencies") or {}
+if isinstance(dep.get("from"), dict):
+    dep["from"].pop("llm_api.api_base_url", None)
 yaml.safe_dump(d, open(p, "w"), sort_keys=False, allow_unicode=True)
 print(f"wired evaluator llm_api.api_base_url -> {os.environ['BASE_URL']}")
+print("cleared the now-satisfied dependency on trainer.output.checkpoint_path")
 PY
     fi
   fi
