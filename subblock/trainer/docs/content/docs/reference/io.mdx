@@ -36,7 +36,7 @@ source:
   hf_split: "train"
 conversion:
   max_instances: 0
-  exclude_repos_file: artifacts/data/excluded_repos.txt
+  exclude_repos_file: scripts/excluded_repos.txt
   data_name: "glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5"
 model:
   model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base
@@ -44,7 +44,7 @@ model:
 training:
   stage: sft
   finetuning_type: full
-  deepspeed: artifacts/training_config/deepspeed/ds_z3_config.json
+  deepspeed: scripts/deepspeed/ds_z3_config.json
   template: qwen3_5
   cutoff_len: 131072
   rope_scaling: null

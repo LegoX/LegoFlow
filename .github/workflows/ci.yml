@@ -586,7 +586,7 @@ jobs:
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh trainer"; exit 1; }
           # actions/checkout creates empty placeholder dirs for declared
           # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
-          # The tracked artifacts/training_config/deepspeed/*.json come from the
+          # The tracked scripts/deepspeed/*.json come from the
           # checkout (case 07), so only repos/ + the uv env are symlinked.
           mkdir -p repos artifacts
           rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env

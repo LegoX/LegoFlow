@@ -52,6 +52,9 @@ artifacts/files/
 # Runtime run index — written by archive_run.sh, not committed
 artifacts/index.yaml
 subblock/*/artifacts/index.yaml
+# ...but keep the artifacts/ dir itself in the tree: scripts/dryrun.sh
+# checks that it exists, and git does not track empty directories.
+!artifacts/.gitkeep
 
 # SWE-gen subblock — generated data and virtual env
 subblock/curator/artifacts/*

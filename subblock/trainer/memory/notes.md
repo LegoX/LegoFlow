@@ -52,7 +52,7 @@ local_lf ─▶ register an existing local LF JSON ─────────�
 
 ### Repo Exclusion Filter
 
-`artifacts/data/excluded_repos.txt` contains 64 `owner/repo` entries from SWE-bench_Verified,
+`scripts/excluded_repos.txt` contains 64 `owner/repo` entries from SWE-bench_Verified,
 SWE-bench_Pro, and SWE-bench_Multilingual. All converters default to filtering these out.
 Regenerate with `scripts/generate_excluded_repos.py`.
 

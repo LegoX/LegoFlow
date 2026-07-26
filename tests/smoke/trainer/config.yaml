@@ -77,7 +77,7 @@ runtime_info:
 
     conversion:
       max_instances: 0
-      exclude_repos_file: artifacts/data/excluded_repos.txt
+      exclude_repos_file: scripts/excluded_repos.txt
       data_name: "root_smoke_combined"
 
     dataset:
@@ -90,7 +90,7 @@ runtime_info:
     training:
       stage: sft
       finetuning_type: full
-      deepspeed: artifacts/training_config/deepspeed/ds_z3_config.json
+      deepspeed: scripts/deepspeed/ds_z3_config.json
       template: qwen3_nothink
       cutoff_len: 131072
       rope_scaling: yarn
