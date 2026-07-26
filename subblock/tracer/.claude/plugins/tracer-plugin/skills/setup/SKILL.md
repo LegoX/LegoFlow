@@ -5,7 +5,7 @@ description: >
   `~/.local/bin` is root-owned), clone+pin Harbor and swe_data_process,
   build the three uv/venv environments (harbor uv, LiteLLM venv on Python
   3.13, swe_data_process uv), fill in `runtime_info.input` only for unset
-  fields, initialise `artifacts/consumption_ledger.yaml`, and (when
+  fields, initialise `artifacts/processed_tasks.yaml`, and (when
   `task_source.provider: huggingface`) prompt for a HF token if the
   dataset is gated. Idempotent. Ends by running `scripts/dryrun.sh` so the
   user sees whether the block is now check-passing. Triggers on phrases
@@ -111,10 +111,10 @@ Walk `runtime_info.input` and prompt only for unset fields (the literal `human` 
 
 ### 6. Ledger
 
-If `artifacts/consumption_ledger.yaml` is missing, create it:
+If `artifacts/processed_tasks.yaml` is missing, create it:
 
 ```yaml
-description: "Tracer task consumption ledger — statuses: pending | running | done | failed | skipped."
+description: "Tracer task processed-tasks ledger — statuses: pending | running | done | failed | skipped."
 runs: []
 ```
 

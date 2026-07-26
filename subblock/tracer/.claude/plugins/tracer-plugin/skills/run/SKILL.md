@@ -4,7 +4,7 @@ description: >
   Launch the tracer pipeline via `scripts/start.sh` after preflight passes,
   and do the tracer-specific post-run accounting: prepare/filter tasks, start
   the per-job LiteLLM proxy, run Harbor trajectories, clean up the proxy,
-  inspect artifacts/jobs/<job>/, update consumption_ledger.yaml and
+  inspect artifacts/jobs/<job>/, update processed_tasks.yaml and
   HARBOR_EXCLUDE_TASKS, and optionally produce LF-format SFT data under
   artifacts/sft_data/<job>/lf.json. Long-running. Triggers on phrases like
   "run tracer", "run a tracer job", "launch tracer", "generate
@@ -92,7 +92,7 @@ outcome and reward.
 Tracer **only** runs tasks listed in curator's `verifiable_tasks.txt`, and must
 never re-run a task it already processed. After every job:
 
-1. Update `artifacts/consumption_ledger.yaml` — one entry per task with
+1. Update `artifacts/processed_tasks.yaml` — one entry per task with
    `status` (`pending | running | done | failed | skipped`), `submitted_at`,
    `completed_at`, `trajectory_path`, `reward`, `note`.
 2. Add every task now `done`, `failed` (excluded), or `skipped` to

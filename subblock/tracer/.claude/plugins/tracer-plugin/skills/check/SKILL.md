@@ -9,7 +9,7 @@ description: >
   `task_source.provider: huggingface`) probes HF dataset reachability;
   confirms LiteLLM proxy port is free or held by current user; verifies
   the agent runtime_image is present on the local Docker daemon; sanity-
-  checks `artifacts/consumption_ledger.yaml` and cross-checks every
+  checks `artifacts/processed_tasks.yaml` and cross-checks every
   done/failed/skipped entry against `HARBOR_EXCLUDE_TASKS`. Read-only.
   Reports all failures in one pass. Triggers on phrases like "check
   tracer", "preflight tracer", "is tracer ready", "diagnose tracer",
@@ -54,7 +54,7 @@ inapplicable rows.
 | det  | hf dataset auth       | <✓/⚠/✗/·> | <reachable \| 401/403 \| skipped (not a huggingface source)> |
 | det  | litellm port 4001     | <✓/✗>   | <free \| held by pid <P>> |
 | det  | agent runtime_image   | <✓/⚠>   | <present \| not pulled locally> |
-| det  | consumption ledger    | <✓/✗>   | <clean \| leak: <task_id> not in HARBOR_EXCLUDE_TASKS> |
+| det  | processed-tasks ledger    | <✓/✗>   | <clean \| leak: <task_id> not in HARBOR_EXCLUDE_TASKS> |
 | det  | cloudflare (optional) | <✓/⚠>   | <ok \| missing npx/credentials, see /root:setup> |
 
 **Run configuration**

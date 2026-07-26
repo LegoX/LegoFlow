@@ -805,11 +805,11 @@ SFT_DATA_DIR_OUT="$(cfg runtime_info.output.sft_data_dir.path)"
 [[ -n "$SFT_DATA_DIR_OUT" ]] && ok "runtime_info.output.sft_data_dir.path = $SFT_DATA_DIR_OUT" || fail "runtime_info.output.sft_data_dir.path is required"
 
 echo ""
-echo "--- 8c. Consumption ledger ---"
-LEDGER_PATH="$BLOCK_DIR/artifacts/consumption_ledger.yaml"
+echo "--- 8c. Processed-tasks ledger ---"
+LEDGER_PATH="$BLOCK_DIR/artifacts/processed_tasks.yaml"
 EXCLUDE_TASKS_RAW="$(cfg runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS)"
 if [[ ! -f "$LEDGER_PATH" ]]; then
-  fail "artifacts/consumption_ledger.yaml is missing — initialise with: printf 'description: %s\nruns: []\n' \"Tracer task consumption ledger\" > '$LEDGER_PATH'"
+  fail "artifacts/processed_tasks.yaml is missing — initialise with: printf 'description: %s\nruns: []\n' \"Tracer task processed-tasks ledger\" > '$LEDGER_PATH'"
 else
   LEDGER_REPORT="$(LEDGER_PATH="$LEDGER_PATH" EXCLUDE_TASKS="$EXCLUDE_TASKS_RAW" python3 - <<'PY' 2>&1
 import os, sys

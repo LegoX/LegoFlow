@@ -6,7 +6,7 @@
 #   (default)   Remove the temporary output of a run. Keeps each block's
 #               keep-list: environments, dependencies, run records, and
 #               anything expensive to collect or regenerate (curator's
-#               collected PRs, tracer's consumption ledger, trainer's
+#               collected PRs, tracer's processed-tasks ledger, trainer's
 #               checkpoints, ...). Safe to run between runs.
 #
 #   --all       Wipe each block's artifacts/ completely, EXCEPT files tracked
@@ -121,7 +121,7 @@ if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     echo "  This deletes, among other things:"
     echo "    - uv/venv environments (artifacts/env, artifacts/envs)"
     echo "    - curator's collected PRs and generated SWE tasks"
-    echo "    - tracer's trajectories, task pool and consumption ledger"
+    echo "    - tracer's trajectories, task pool and processed-tasks ledger"
     echo "    - trainer's converted datasets and model checkpoints"
     echo "    - evaluator's job results and prepared gold datasets"
     echo "    - every run archive and artifacts/index.yaml"

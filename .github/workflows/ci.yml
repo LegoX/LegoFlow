@@ -30,7 +30,7 @@ permissions:
 
 # SHARED_RUNTIME is read by the per-block "Link runtime state" steps. It points
 # at a self-contained mirror of the runtime state CI needs — venvs / uv envs /
-# pinned submodule checkouts / agent-runtime / consumption ledger / gh_token —
+# pinned submodule checkouts / agent-runtime / processed-tasks ledger / gh_token —
 # living entirely under /gpufs (NOT under /, NOT under the canonical block
 # tree). Rebuild it from the canonical tree with /gpufs/haoli/cicd/sync_runtime.sh.
 env:
@@ -279,7 +279,7 @@ jobs:
           CANON="${SHARED_RUNTIME}/tracer"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh tracer"; exit 1; }
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
           ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
           ln -s "$CANON/artifacts/env"                      artifacts/env
@@ -289,8 +289,8 @@ jobs:
           # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
           [ -d "$CANON/artifacts/agent-runtime" ] && \
             ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
-          [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
-            ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+          [ -f "$CANON/artifacts/processed_tasks.yaml" ] && \
+            ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml || true
           ls -la repos artifacts
       - name: Run tracer test cases
         working-directory: subblock/tracer
@@ -355,7 +355,7 @@ jobs:
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/tracer"
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
           ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
           ln -s "$CANON/artifacts/env"                      artifacts/env
@@ -365,8 +365,8 @@ jobs:
           # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
           [ -d "$CANON/artifacts/agent-runtime" ] && \
             ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
-          [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
-            ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+          [ -f "$CANON/artifacts/processed_tasks.yaml" ] && \
+            ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml || true
       - name: Overlay smoke config.yaml from subblock/tracer/tests/smoke
         run: cp subblock/tracer/tests/smoke/config.yaml subblock/tracer/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh tracer
@@ -739,12 +739,12 @@ jobs:
           # tracer — uv envs + repos + agent runtime + ledger
           C="${SHARED_RUNTIME}/tracer"; cd "$GITHUB_WORKSPACE/subblock/tracer"
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$C/repos/harbor" repos/harbor
           ln -s "$C/repos/swe_data_process" repos/swe_data_process
           ln -s "$C/artifacts/env" artifacts/env
           [ -d "$C/artifacts/agent-runtime" ] && ln -s "$C/artifacts/agent-runtime" artifacts/agent-runtime || true
-          [ -f "$C/artifacts/consumption_ledger.yaml" ] && ln -s "$C/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+          [ -f "$C/artifacts/processed_tasks.yaml" ] && ln -s "$C/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml || true
           # trainer — uv env + repos + 512 fixture (remote pod hosts the GPUs)
           C="${SHARED_RUNTIME}/trainer"; cd "$GITHUB_WORKSPACE/subblock/trainer"
           mkdir -p repos artifacts artifacts/data

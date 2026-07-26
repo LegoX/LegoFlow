@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# CI test 08: consumption_ledger.yaml parses and every done/failed/skipped
+# CI test 08: processed_tasks.yaml parses and every done/failed/skipped
 # entry's task_id appears in runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS.
 
 set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LEDGER="$BLOCK_DIR/artifacts/consumption_ledger.yaml"
+LEDGER="$BLOCK_DIR/artifacts/processed_tasks.yaml"
 CONFIG="$BLOCK_DIR/config.yaml"
 
 [[ -f "$LEDGER" ]] || { echo "FAIL: $LEDGER missing — initialise with: printf 'description: %s\\nruns: []\\n' \"tracer ledger\" > '$LEDGER'"; exit 1; }

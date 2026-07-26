@@ -37,9 +37,9 @@ tracer starts a **per-job LiteLLM proxy** in front of your upstream model API. T
 
 A **scaffold** is the agent harness that drives the model through a task — for example Claude Code, OpenCode, OpenHands SDK, or Terminus-2. The scaffold determines the raw trajectory shape, which in turn selects the converter used for SFT data. See [SFT scaffolds](/docs/sft-data/scaffolds).
 
-## Consumption ledger
+## Processed-tasks ledger
 
-The **consumption ledger** (`artifacts/consumption_ledger.yaml`) is the source of truth for which task IDs tracer has already processed (`pending | running | done | failed | skipped`). Every task that is `done`, excluded, or `skipped` is also added to `HARBOR_EXCLUDE_TASKS` so Harbor never rolls it out again. Together the manifest and the ledger guarantee each verified task is consumed exactly once.
+The **processed-tasks ledger** (`artifacts/processed_tasks.yaml`) is the source of truth for which task IDs tracer has already processed (`pending | running | done | failed | skipped`). Every task that is `done`, excluded, or `skipped` is also added to `HARBOR_EXCLUDE_TASKS` so Harbor never rolls it out again. Together the manifest and the ledger guarantee each verified task is consumed exactly once.
 
 ## SFT data (IM and LF)
 

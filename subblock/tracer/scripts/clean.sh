@@ -4,7 +4,7 @@
 #   (default)   Remove the temporary output of a run: proxy state, logs, launch
 #               logs. Keeps the environment and everything expensive to
 #               regenerate — Harbor jobs, the prepared task pool, converted SFT
-#               data, the extracted agent runtime, and the consumption ledger
+#               data, the extracted agent runtime, and the processed-tasks ledger
 #               (the source of truth for which tasks were already processed).
 #
 #   --all       Wipe artifacts/ completely except git-tracked files. Asks for
@@ -18,12 +18,12 @@ BLOCK_NAME="$(basename "$BLOCK_DIR")"
 ARTIFACTS_DIR="$BLOCK_DIR/artifacts"
 
 # Kept in default mode. Rationale for the non-obvious ones:
-#   consumption_ledger.yaml — source of truth for processed task IDs; losing it
+#   processed_tasks.yaml — source of truth for processed task IDs; losing it
 #                             makes tracer re-run every task it already paid for
 #   agent-runtime           — extracted agent runtime (~360 MB), costly to rebuild
 #   jobs / tasks / sft_data — the block's declared outputs, consumed downstream
 KEEP_DEFAULT=(env envs index.yaml archives jobs tasks sft_data
-              consumption_ledger.yaml agent-runtime)
+              processed_tasks.yaml agent-runtime)
 
 # Generator output living outside artifacts/; disposable in both modes.
 EXTRA_PATHS=("$BLOCK_DIR/dashboard/site" "$BLOCK_DIR/dashboard/.cache")
@@ -81,7 +81,7 @@ if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     echo "  keeping only git-tracked files. This deletes the uv env,"
     echo "  all Harbor jobs and trajectories, the prepared task pool,"
     echo "  converted SFT data, the extracted agent runtime, every run"
-    echo "  archive, and the consumption ledger."
+    echo "  archive, and the processed-tasks ledger."
     echo ""
     echo "  Make sure no tracer job is running before you continue."
     echo "############################################################"
