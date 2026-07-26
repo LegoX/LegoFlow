@@ -332,6 +332,30 @@ PY
     # swegen-create, so it must start the proxy itself — otherwise dryrun.sh's
     # /health check fails and verification SILENTLY banks 0 tasks (the failure
     # that sank the first root run). No-op when cc_provider_mode != openai_proxy;
+    # Start from nothing. A smoke must prove THIS run produced tasks, so its own
+    # output and state dirs are wiped first. Leaving them made the gate below
+    # count leftovers from a previous smoke: on 2026-07-26 curator "banked 8
+    # verified tasks" 2 minutes in, with its endpoint hard down and not one task
+    # generated — the 8 were residue. Same reason the ledger is never consulted
+    # here (see HARBOR_LEDGER_EXCLUDE=0 at the tracer stage): a smoke depends on
+    # no history but its own.
+    #
+    # Agent containers write some files as root, so rm can fail on them; move the
+    # dir aside instead of failing the run, and never touch anything outside the
+    # smoke's own subdirs.
+    if [[ "$DRY_RUN" == 1 ]]; then
+      log "[DRY-RUN] would clear curator smoke output ($BASE/$SUB) and state ($BASE/$STATE)"
+    else
+      for _stale in "$SB/$BASE/$SUB" "$SB/$BASE/$STATE"; do
+        [[ -e "$_stale" ]] || continue
+        if ! rm -rf "$_stale" 2>/dev/null; then
+          mv "$_stale" "${_stale}.stale-$(date +%s)" 2>/dev/null \
+            || log "WARN: could not clear $_stale — the gate may count stale tasks"
+        fi
+      done
+      log "cleared curator smoke output ($BASE/$SUB) and state ($BASE/$STATE)"
+    fi
+
     # torn down after the curator gate. shellcheck source=/dev/null
     source "$SB/scripts/cc_proxy_lib.sh"
     [[ "$DRY_RUN" == 1 ]] || cc_proxy_start "$SB" "$CFG" \
@@ -435,7 +459,18 @@ PY
   # zero — masking a broken curator→tracer handoff.
   TRAJ_OUT="$(cfg "$CFG" runtime_info.input.sft_conversion.out_dir)"; TRAJ_OUT="${TRAJ_OUT:-artifacts/sft_data}"
   if [[ "$DRY_RUN" != 1 ]]; then
-    rm -rf "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" "$TB/$TRAJ_OUT"
+    # Agent containers write session files as root, so a plain rm -rf silently
+    # leaves the dir behind and the "stale job" it was meant to prevent survives
+    # (seen 2026-07-26: a previous job dir outlived three rm attempts). Fall back
+    # to moving it aside, which only needs write permission on the parent.
+    for _stale in "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" "$TB/$TRAJ_OUT" "$STAGE_DIR"; do
+      [[ -e "$_stale" ]] || continue
+      if ! rm -rf "$_stale" 2>/dev/null; then
+        mv "$_stale" "${_stale}.stale-$(date +%s)" 2>/dev/null \
+          || log "WARN: could not clear $_stale — a stale result may be picked up"
+      fi
+    done
+    log "cleared tracer smoke jobs/tasks/sft_data"
   fi
   # A smoke deliberately re-runs its fixture tasks, and curator regenerates the
   # same task ids from the same PR pool every time. Excluding what the ledger
