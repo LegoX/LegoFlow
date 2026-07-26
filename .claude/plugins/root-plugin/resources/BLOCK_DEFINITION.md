@@ -84,7 +84,7 @@ Each run produces `artifacts/archives/run_NNN/` containing:
 |---|---|---|
 | `metadata.yaml` | Full per-run record. Example: [`example_block/artifacts/archives/run_001/metadata.yaml`](./example_block/artifacts/archives/run_001/metadata.yaml). | `archive_run.sh` |
 | `config.yaml` | Snapshot of `config.yaml` as it was at run time | `archive_run.sh` |
-| `scripts/` | Copy of all scripts (top-level files + non-hidden subdirs; hidden state dirs like `.swegen-py` are skipped) | `archive_run.sh` |
+| `scripts/` | Copy of all scripts (top-level files + non-hidden subdirs; hidden state dirs are skipped) | `archive_run.sh` |
 | `session.log` *(optional)* | Claude Code session record (tool calls, agent reasoning, decisions) | Agent, manually after the run |
 | `monitor.md` *(optional)* | Human-readable monitor output produced by the agent during the run | Agent, manually after the run |
 

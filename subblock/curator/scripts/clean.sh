@@ -23,8 +23,10 @@ ARTIFACTS_DIR="$BLOCK_DIR/artifacts"
 #                      verifiable_tasks.txt is the downstream contract
 #   merged_swe_tasks — extract_verified_tasks.py output, consumed by tracer
 #   claude-config    — CLAUDE_CONFIG_DIR prepared by setup
+#   state            — swegen's per-language --state-dir; it is what lets a run
+#                      resume instead of re-processing every PR from scratch
 KEEP_DEFAULT=(env envs index.yaml archives
-              collected_prs swe_tasks merged_swe_tasks claude-config)
+              collected_prs swe_tasks merged_swe_tasks claude-config state)
 
 MODE=default
 DRY_RUN=0

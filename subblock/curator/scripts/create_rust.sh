@@ -13,7 +13,11 @@ python -c 'import swegen' 2>/dev/null || pip install -e repos/swegen/  # standal
 
 set -euo pipefail
 
-cd "$(dirname "$0")"
+# swegen writes its state dir AND any stray tool output into the CWD;
+# keep both under artifacts/ instead of polluting scripts/.
+STATE_DIR="${PROJECT_ROOT}/artifacts/state/swegen-rust"
+mkdir -p "$STATE_DIR"
+cd "$STATE_DIR"
 mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
 # Read per-language params from config.yaml
 eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang rust --config-yaml "${PROJECT_ROOT}/config.yaml")
@@ -25,7 +29,7 @@ swegen create \
   --max-pr "${SWEGEN_MAX_PR:-5000}" \
   --n-concurrent "${N_CONCURRENT}" \
   --output "${PROJECT_ROOT}/artifacts/swe_tasks/rust-cc" \
-  --state-dir .swegen-rust \
+  --state-dir "$STATE_DIR" \
   --timeout "${TIMEOUT}" \
   --cc-timeout "${CC_TIMEOUT}" \
   --no-require-issue \

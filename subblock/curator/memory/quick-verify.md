@@ -178,7 +178,7 @@ swegen create \
   --max-pr 1 \
   --n-concurrent 1 \
   --output artifacts/swe_tasks/py-cc \
-  --state-dir scripts/.swegen-py \
+  --state-dir artifacts/state/swegen-py \
   --timeout 2400 \
   --cc-timeout 1800 \
   --no-require-issue \

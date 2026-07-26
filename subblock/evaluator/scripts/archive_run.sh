@@ -68,7 +68,7 @@ RUN_DIR="$ARCHIVES_DIR/$RUN_ID"
 mkdir -p "$RUN_DIR"
 
 # Snapshot config.yaml and scripts/ (top-level files + non-hidden subdirs only —
-# skip hidden state dirs like .swegen-py that some blocks stash inside scripts/).
+# skip any hidden state dir a tool may leave inside scripts/).
 [[ -f "$CONFIG" ]] && cp -p "$CONFIG" "$RUN_DIR/config.yaml"
 if [[ -d "$BLOCK_DIR/scripts" ]]; then
     mkdir -p "$RUN_DIR/scripts"

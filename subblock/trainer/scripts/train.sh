@@ -612,7 +612,12 @@ import yaml
 # alt run writes runtime_info.output into ITS config, never the canonical one.
 block_dir, output_dir, train_log, config_path_arg = sys.argv[1:5]
 config_path = Path(config_path_arg)
-lock_path = config_path.with_suffix(config_path.suffix + ".lock")
+# The fcntl sidecar is scratch state, so it belongs under artifacts/, not next
+# to the config in the block root. Name it after the config so an alternate
+# config (smoke / SFT_CONFIG override) still gets its own distinct lock.
+lock_dir = Path(block_dir) / "artifacts"
+lock_dir.mkdir(parents=True, exist_ok=True)
+lock_path = lock_dir / (config_path.name + ".lock")
 
 
 def find_wandb_run_id(block_dir: Path) -> str:
