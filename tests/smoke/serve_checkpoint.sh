@@ -102,7 +102,7 @@ VLLM_CONDA_ENV="${VLLM_CONDA_ENV:-vllm_0.18.1}"
 CONDA_SH="${CONDA_SH:-/anaconda3/etc/profile.d/conda.sh}"
 
 _remote_raw() {
-  ssh -i "$R_KEY" -p "$R_PORT" \
+  ssh -i "$R_KEY" -p "$R_PORT" -o ControlMaster=auto -o ControlPath=/tmp/.ssh-smoke-%r@%h:%p -o ControlPersist=900 \
       -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20 \
       "$R_USER@$R_IP" "$@"
 }

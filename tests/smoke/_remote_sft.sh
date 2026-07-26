@@ -62,11 +62,11 @@ _retry() {  # _retry <what> <transport_rcs,comma-sep> <cmd...>
   done
   return "$rc"
 }
-_ssh_raw() { ssh -i "$R_KEY" -p "$R_PORT" -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20 "$R_USER@$R_IP" "$@"; }
+_ssh_raw() { ssh -i "$R_KEY" -p "$R_PORT" -o ControlMaster=auto -o ControlPath=/tmp/.ssh-smoke-%r@%h:%p -o ControlPersist=900 -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20 "$R_USER@$R_IP" "$@"; }
 SSH() { _retry "ssh" 255 _ssh_raw "$@"; }
-_scp_to_raw() { scp -i "$R_KEY" -P "$R_PORT" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$1" "$R_USER@$R_IP:$2"; }
+_scp_to_raw() { scp -i "$R_KEY" -P "$R_PORT" -o ControlMaster=auto -o ControlPath=/tmp/.ssh-smoke-%r@%h:%p -o ControlPersist=900 -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$1" "$R_USER@$R_IP:$2"; }
 SCP_TO() { _retry "scp->pod" 1,255 _scp_to_raw "$1" "$2"; }
-_scp_from_raw() { scp -i "$R_KEY" -P "$R_PORT" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$R_USER@$R_IP:$1" "$2"; }
+_scp_from_raw() { scp -i "$R_KEY" -P "$R_PORT" -o ControlMaster=auto -o ControlPath=/tmp/.ssh-smoke-%r@%h:%p -o ControlPersist=900 -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$R_USER@$R_IP:$1" "$2"; }
 SCP_FROM() { _retry "scp<-pod" 1,255 _scp_from_raw "$1" "$2"; }
 
 if [[ "$DRY" == 1 ]]; then
