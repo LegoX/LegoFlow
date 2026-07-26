@@ -49,12 +49,13 @@ Thumbs.db
 *.safetensors
 artifacts/files/
 
-# Runtime run index — written by archive_run.sh, not committed
-artifacts/index.yaml
-subblock/*/artifacts/index.yaml
-# ...but keep the artifacts/ dir itself in the tree: scripts/dryrun.sh
-# checks that it exists, and git does not track empty directories.
+# Root artifacts/ is generated state end to end — run indexes, smoke logs,
+# monitor output. Ignore all of it; keep only the .gitkeep that holds the
+# directory in the tree, because scripts/dryrun.sh checks the dir exists and
+# git does not track empty directories.
+artifacts/*
 !artifacts/.gitkeep
+subblock/*/artifacts/index.yaml
 
 # SWE-gen subblock — generated data and virtual env
 subblock/curator/artifacts/*
