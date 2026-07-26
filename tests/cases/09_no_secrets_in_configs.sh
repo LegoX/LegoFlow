@@ -64,6 +64,32 @@ def is_private_host(v: str) -> bool:
         return False
 
 
+def live_overlay(config_path: Path):
+    """Is this config currently swapped out by a running smoke?
+
+    A smoke overlays the production config with its own and injects live
+    endpoints into the copy, so during a run the working tree legitimately holds
+    values this check would otherwise reject. Both smoke flavours leave a backup
+    next to (or beside) the config, named with the owning process's pid:
+
+        subblock/<b>/config.yaml.root-smoke-bak.<pid>      root chain
+        subblock/<b>/tests/smoke/.config.yaml.backup.<pid> block smoke
+
+    The pid is what makes this safe: a backup whose process is gone is debris
+    from a crashed run, and must NOT suppress the check — otherwise one crashed
+    smoke would silently blind this case forever.
+    """
+    candidates = list(config_path.parent.glob(config_path.name + ".root-smoke-bak.*"))
+    candidates += list((config_path.parent / "tests" / "smoke").glob(".config.yaml.backup.*"))
+    for bak in candidates:
+        suffix = bak.name.rsplit(".", 1)[-1]
+        if not suffix.isdigit():
+            continue
+        if Path(f"/proc/{suffix}").exists():
+            return bak.name
+    return None
+
+
 def walk(node, trail, out):
     if isinstance(node, dict):
         for k, v in node.items():
@@ -76,10 +102,20 @@ def walk(node, trail, out):
 
 
 bad = []
+skipped = []
+stale = []
 for rel in paths:
     p = root / rel
     if not p.is_file():
         continue
+    held_by = live_overlay(p)
+    if held_by:
+        skipped.append((rel, held_by))
+        continue
+    # A backup with a dead pid means a smoke died mid-run: the file may still
+    # hold injected values, so it is checked normally, but say why it looks odd.
+    for bak in list(p.parent.glob(p.name + ".root-smoke-bak.*")):
+        stale.append((rel, bak.name))
     try:
         data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     except Exception:
@@ -109,6 +145,12 @@ for rel in paths:
                 bad.append(f"{rel}: {dotted} = {v!r} is a routable host")
             continue
 
+for rel, bak in skipped:
+    print(f"INFO: skipping {rel} — overlaid by a running smoke ({bak})")
+for rel, bak in stale:
+    print(f"WARN: {rel} has a leftover backup from a dead run ({bak}); "
+          f"it may still hold injected values — checking it anyway")
+
 if bad:
     print("FAIL: credential/host values found in tracked configs:", file=sys.stderr)
     for b in bad:
@@ -118,5 +160,6 @@ if bad:
     print("       field as \"\" — scripts/inject_smoke_secrets.py fills it at run time.", file=sys.stderr)
     sys.exit(1)
 
-print(f"PASS: no credential/host values in {len(paths)} tracked configs")
+print(f"PASS: no credential/host values in {len(paths) - len(skipped)} tracked configs"
+      + (f" ({len(skipped)} skipped: smoke in progress)" if skipped else ""))
 PY
