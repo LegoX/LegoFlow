@@ -45,7 +45,10 @@ CLAUDE_SDK="${CLAUDE_SDK:-1}"
 # policy=first early-exit so these are just upper bounds on the wait.
 # trainer: 50 steps at 128K cutoff on an 8B model (DeepSpeed ZeRO-3) is ~4 min/step
 # (~3.3h), plus model load + tokenization — 4h cap.
-declare -A BUDGET=( [curator]=14400 [tracer]=10800 [trainer]=14400 [evaluator]=5400 )
+# Per-stage wall-clock ceilings. curator and tracer were 4h and 3h, which is far
+# longer than a smoke should ever hold the pipeline: the point is to prove the
+# chain works, not to accumulate data. Both are 2h.
+declare -A BUDGET=( [curator]=7200 [tracer]=7200 [trainer]=14400 [evaluator]=5400 )
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
