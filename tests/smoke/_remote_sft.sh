@@ -47,9 +47,18 @@ if [[ "$DRY" == 1 ]]; then
   exit 0
 fi
 
-# Probe SSH first — SKIP cleanly if the pod is unreachable.
-if ! SSH 'echo ok' >/dev/null 2>&1; then
-  echo "SKIP: trainer pod $R_IP unreachable over SSH — cannot run remote training"
+# Probe SSH first — SKIP cleanly if the pod is unreachable. Retry: this pod
+# refuses individual handshakes under load ("Connection closed by ... port
+# 30977") while remaining perfectly reachable seconds later, so a single failed
+# attempt is not evidence the host is down. Observed 2026-07-27: probe failed,
+# a manual ssh with identical arguments succeeded immediately after.
+_ssh_ok=0
+for _try in 1 2 3 4 5; do
+  if SSH 'echo ok' >/dev/null 2>&1; then _ssh_ok=1; break; fi
+  [[ "$_try" -lt 5 ]] && { echo "INFO: SSH probe $_try/5 failed — retrying in $((_try * 10))s"; sleep $((_try * 10)); }
+done
+if [[ "$_ssh_ok" != 1 ]]; then
+  echo "SKIP: trainer pod $R_IP unreachable over SSH after 5 attempts — cannot run remote training"
   exit 77
 fi
 
