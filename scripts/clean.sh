@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Root clean: purge run artifacts at the root and in every subblock.
+# Root clean: remove run artifacts at the root and in every subblock.
 #
 # Two modes, and only two:
 #
@@ -9,7 +9,7 @@
 #               collected PRs, tracer's consumption ledger, trainer's
 #               checkpoints, ...). Safe to run between runs.
 #
-#   --purge     Wipe each block's artifacts/ completely, EXCEPT files tracked
+#   --all       Wipe each block's artifacts/ completely, EXCEPT files tracked
 #               by git. This destroys environments and every collected or
 #               generated dataset. Requires repeated explicit confirmation.
 #
@@ -28,23 +28,23 @@ ASSUME_YES=0
 for arg in "$@"; do
     case "$arg" in
         -n|--dry-run) DRY_RUN=1 ;;
-        --purge)      MODE=purge ;;
+        --all)        MODE=all ;;
         --yes)        ASSUME_YES=1 ;;
         --outputs)
             echo "ERROR: --outputs was removed; its behaviour was ambiguous." >&2
-            echo "  Primary outputs are now kept by default and only removed by --purge," >&2
+            echo "  Primary outputs are now kept by default and only removed by --all," >&2
             echo "  which wipes artifacts/ entirely and asks for confirmation first." >&2
             exit 2
             ;;
         -h|--help)
             cat <<EOF
-Usage: $(basename "$0") [--dry-run] [--purge [--yes]]
+Usage: $(basename "$0") [--dry-run] [--all [--yes]]
 
   (no flags)  Remove temporary run output under <block>/artifacts/.
               Keeps environments, dependencies, run records, and everything
               expensive to collect or regenerate.
 
-  --purge     Wipe every block's artifacts/ except git-tracked files. This
+  --all       Wipe every block's artifacts/ except git-tracked files. This
               deletes environments, collected PRs, trajectories, datasets and
               checkpoints. Asks for confirmation twice; --yes skips the prompts
               (for automation only).
@@ -77,7 +77,7 @@ assert_safe_artifacts_dir() {
     fi
 }
 
-# Purge a directory. In default mode the caller's keep-list applies; in purge
+# Clean a directory. In default mode the caller's keep-list applies; in all
 # mode only git-tracked paths survive.
 clean_artifacts_dir() {
     local dir="$1"; shift
@@ -112,10 +112,10 @@ clean_artifacts_dir() {
     shopt -u nullglob dotglob
 }
 
-# --- purge confirmation ------------------------------------------------------
-if [[ "$MODE" == "purge" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
+# --- clean-all confirmation ------------------------------------------------------
+if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     echo "############################################################"
-    echo "  PURGE: this wipes artifacts/ in the root block AND in"
+    echo "  CLEAN ALL: this wipes artifacts/ in the root block AND in"
     echo "  every subblock, keeping only git-tracked files."
     echo ""
     echo "  This deletes, among other things:"
@@ -130,15 +130,15 @@ if [[ "$MODE" == "purge" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     echo "  and re-spends GitHub API quota and LLM tokens."
     echo "############################################################"
     if [[ ! -t 0 ]]; then
-        echo "ERROR: --purge needs an interactive terminal (or pass --yes)." >&2
+        echo "ERROR: --all needs an interactive terminal (or pass --yes)." >&2
         exit 2
     fi
     read -r -p "Type 'yes' to continue: " reply
     [[ "$reply" == "yes" ]] || { echo "Aborted."; exit 1; }
     echo ""
     echo "Second confirmation — this cannot be undone."
-    read -r -p "Type 'purge swe_lego_live' to proceed: " reply2
-    [[ "$reply2" == "purge swe_lego_live" ]] || { echo "Aborted."; exit 1; }
+    read -r -p "Type 'clean all swe_lego_live' to proceed: " reply2
+    [[ "$reply2" == "clean all swe_lego_live" ]] || { echo "Aborted."; exit 1; }
     echo ""
 fi
 
@@ -146,7 +146,7 @@ subblock_args() {
     local args=()
     [[ "$DRY_RUN" == "1" ]] && args+=(--dry-run)
     # The root already confirmed; subblocks must not prompt again.
-    [[ "$MODE" == "purge" ]] && args+=(--purge --yes)
+    [[ "$MODE" == "all" ]] && args+=(--all --yes)
     printf '%s\n' "${args[@]}"
 }
 
@@ -162,14 +162,14 @@ for block_dir in "$ROOT_DIR/subblock"/*/; do
     if [[ -f "$clean_script" ]]; then
         mapfile -t args < <(subblock_args)
         # A block's own clean.sh knows its keep-list; if it fails, report it.
-        # Never fall back to the generic purge here — that used to silently
+        # Never fall back to the generic clean here — that used to silently
         # delete what the block's script deliberately preserves.
         if ! bash "$clean_script" ${args[@]+"${args[@]}"}; then
             echo "  ERROR: $block_name clean.sh failed — leaving it untouched." >&2
             FAILED+=("$block_name")
         fi
     else
-        echo "  (no scripts/clean.sh — falling back to generic purge)"
+        echo "  (no scripts/clean.sh — falling back to generic clean)"
         clean_artifacts_dir "${block_dir}artifacts" "${KEEP_DEFAULT[@]}"
     fi
 done

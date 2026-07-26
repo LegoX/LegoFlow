@@ -49,4 +49,4 @@ and one entry is appended to `artifacts/index.yaml`. Use `artifacts/index.yaml` 
 
 ## Cleaning up
 
-`scripts/clean.sh` with no flags removes only a run's temporary output — LiteLLM state, logs, launch logs, `dashboard/site/`, and the dashboard cache. It keeps the uv env, `jobs/`, `tasks/`, `sft_data/`, `agent-runtime/`, `consumption_ledger.yaml`, and archived runs. `--purge` wipes `artifacts/` entirely except git-tracked files, after confirming twice.
+`scripts/clean.sh` with no flags removes only a run's temporary output — LiteLLM state, logs, launch logs, `dashboard/site/`, and the dashboard cache. It keeps the uv env, `jobs/`, `tasks/`, `sft_data/`, `agent-runtime/`, `consumption_ledger.yaml`, and archived runs. `--all` wipes `artifacts/` entirely except git-tracked files, after confirming twice.

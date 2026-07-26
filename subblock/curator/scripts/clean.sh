@@ -6,7 +6,7 @@
 #               most importantly the collected PR ids (days of collection under
 #               GitHub API rate limits) and the verified SWE tasks.
 #
-#   --purge     Wipe artifacts/ completely except git-tracked files. Asks for
+#   --all       Wipe artifacts/ completely except git-tracked files. Asks for
 #               confirmation twice.
 #
 # Git-tracked files are never removed in either mode.
@@ -33,21 +33,21 @@ ASSUME_YES=0
 for arg in "$@"; do
     case "$arg" in
         -n|--dry-run) DRY_RUN=1 ;;
-        --purge)      MODE=purge ;;
+        --all)        MODE=all ;;
         --yes)        ASSUME_YES=1 ;;
         --outputs)
             echo "ERROR: --outputs was removed; its behaviour was ambiguous." >&2
-            echo "  swe_tasks/ is now kept by default and only removed by --purge," >&2
+            echo "  swe_tasks/ is now kept by default and only removed by --all," >&2
             echo "  which wipes artifacts/ entirely after confirmation." >&2
             exit 2
             ;;
         -h|--help)
             cat <<EOF
-Usage: $(basename "$0") [--dry-run] [--purge [--yes]]
+Usage: $(basename "$0") [--dry-run] [--all [--yes]]
 
   (no flags)  Remove temporary run output under $ARTIFACTS_DIR.
               Keeps: ${KEEP_DEFAULT[*]}
-  --purge     Wipe artifacts/ except git-tracked files (confirms twice).
+  --all       Wipe artifacts/ except git-tracked files (confirms twice).
   --dry-run   Print what would be removed and exit.
 EOF
             exit 0
@@ -72,9 +72,9 @@ is_tracked() {
     [[ -n "$(git -C "$BLOCK_DIR" ls-files -- "$1" 2>/dev/null | head -1)" ]]
 }
 
-if [[ "$MODE" == "purge" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
+if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     echo "############################################################"
-    echo "  PURGE $BLOCK_NAME: wipes $ARTIFACTS_DIR entirely,"
+    echo "  CLEAN ALL — $BLOCK_NAME: wipes $ARTIFACTS_DIR entirely,"
     echo "  keeping only git-tracked files. This deletes the venv, the"
     echo "  collected PR ids (~1.4 GB, days of GitHub API collection),"
     echo "  every generated and verified SWE task, and all run archives."
@@ -82,13 +82,13 @@ if [[ "$MODE" == "purge" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     echo "  Make sure no swegen create/collect job is running."
     echo "############################################################"
     if [[ ! -t 0 ]]; then
-        echo "ERROR: --purge needs an interactive terminal (or pass --yes)." >&2
+        echo "ERROR: --all needs an interactive terminal (or pass --yes)." >&2
         exit 2
     fi
     read -r -p "Type 'yes' to continue: " reply
     [[ "$reply" == "yes" ]] || { echo "Aborted."; exit 1; }
-    read -r -p "Type 'purge $BLOCK_NAME' to proceed: " reply2
-    [[ "$reply2" == "purge $BLOCK_NAME" ]] || { echo "Aborted."; exit 1; }
+    read -r -p "Type 'clean all $BLOCK_NAME' to proceed: " reply2
+    [[ "$reply2" == "clean all $BLOCK_NAME" ]] || { echo "Aborted."; exit 1; }
 fi
 
 shopt -s nullglob dotglob
