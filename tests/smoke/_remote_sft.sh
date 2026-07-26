@@ -48,12 +48,16 @@ REMOTE_SFT="$R_DIR/subblock/trainer"
 # through — the poll loop below runs `grep -q status=failed`, whose normal
 # answer is a non-zero "not found", and retrying that would add ~80s to every
 # poll and eventually stall the stage.
-_retry() {  # _retry <what> <transport_rc> <cmd...>
-  local what="$1" trc="$2"; shift 2
+_retry() {  # _retry <what> <transport_rcs,comma-sep> <cmd...>
+  local what="$1" trcs="$2"; shift 2
   local t rc
   for t in 1 2 3 4 5; do
     "$@"; rc=$?
-    [[ "$rc" -ne "$trc" ]] && return "$rc"
+    # Retry only if rc is one of the transport codes. ssh uses 255; scp reports
+    # a dropped connection as 255 on some builds and 1 on others, so it lists
+    # both — a missing local file also gives 1, which merely costs a few retries
+    # before failing, whereas not retrying costs the whole stage.
+    case ",$trcs," in *",$rc,"*) : ;; *) return "$rc" ;; esac
     [[ "$t" -lt 5 ]] && { echo "INFO: $what transport failure $t/5 — retrying in $((t * 8))s" >&2; sleep $((t * 8)); }
   done
   return "$rc"
@@ -61,9 +65,9 @@ _retry() {  # _retry <what> <transport_rc> <cmd...>
 _ssh_raw() { ssh -i "$R_KEY" -p "$R_PORT" -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20 "$R_USER@$R_IP" "$@"; }
 SSH() { _retry "ssh" 255 _ssh_raw "$@"; }
 _scp_to_raw() { scp -i "$R_KEY" -P "$R_PORT" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$1" "$R_USER@$R_IP:$2"; }
-SCP_TO() { _retry "scp->pod" 1 _scp_to_raw "$1" "$2"; }
+SCP_TO() { _retry "scp->pod" 1,255 _scp_to_raw "$1" "$2"; }
 _scp_from_raw() { scp -i "$R_KEY" -P "$R_PORT" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$R_USER@$R_IP:$1" "$2"; }
-SCP_FROM() { _retry "scp<-pod" 1 _scp_from_raw "$1" "$2"; }
+SCP_FROM() { _retry "scp<-pod" 1,255 _scp_from_raw "$1" "$2"; }
 
 if [[ "$DRY" == 1 ]]; then
   echo "[DRY-RUN] scp $MERGED_REL + config.yaml -> $R_USER@$R_IP:$REMOTE_SFT ; ssh start.sh ; poll ; fetch train_results.json"
