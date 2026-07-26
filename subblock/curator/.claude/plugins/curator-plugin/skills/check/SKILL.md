@@ -157,7 +157,8 @@ Pages — the manual `npx wrangler pages deploy` from `dashboard/site/`
 documented in `dashboard/README.md`. It needs an `npx`/node toolchain on
 `PATH`, plus `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` either in the
 environment or in `~/.config/swegen_progress_cloudflare.env`. This is purely
-for publishing the dashboard online — nothing in `/curator:run` depends on it.
+for publishing the dashboard online — nothing in `/curator:create-tasks`
+depends on it.
 Missing credentials/tooling is always a `WARN`, never a reason to block
 `SAFE TO RUN`. If it's missing, mention `/root:setup`'s optional Cloudflare
 extra as the fix, but do not offer to configure credentials yourself (see
