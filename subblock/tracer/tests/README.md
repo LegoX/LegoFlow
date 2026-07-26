@@ -74,7 +74,6 @@ cases/                         cheap deterministic checks
   05_hf_dataset.sh
   06_litellm_port.sh
   07_runtime_image.sh
-  08_processed_tasks.sh
 smoke/                         expensive end-to-end runs (--with-smoke gates them)
   10_hf_task_demo.sh
 run.sh                         aggregator
@@ -160,15 +159,6 @@ isn't on PATH.
 
 `docker image inspect ${agent.runtime_image}` exits 0 against the
 configured `DOCKER_HOST`. CI must not pay a multi-GB pull mid-job.
-</details>
-
-<details>
-<summary><code>cases/08_processed_tasks.sh</code> — ledger ↔ HARBOR_EXCLUDE_TASKS</summary>
-
-Parses `artifacts/processed_tasks.yaml` and enforces: (1) every entry's
-status is one of `{pending, running, done, failed, skipped}`; (2) every
-entry whose status is `done`/`failed`/`skipped` has its `task_id` listed in
-`runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`. Lists up to 10 offenders.
 </details>
 
 <details>

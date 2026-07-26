@@ -31,10 +31,10 @@ meta_info:
       checkpoint_path: evaluator.input.llm_api.api_base_url
 
   resources:
-    ip: 47.79.124.13
+    ip: ""
     user: root
     pwd: null
-    key: /home/haoli/.ssh/dym_id_rsa
+    key: ""
     port: 30977
     directory: /mnt/public/storage/haoli/code/SWE-Lego-Live
 

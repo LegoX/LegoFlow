@@ -207,7 +207,13 @@ jobs:
           ln -s "$CANON/artifacts/envs"      artifacts/envs
           [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
       - name: Overlay smoke config.yaml from subblock/curator/tests/smoke
-        run: cp subblock/curator/tests/smoke/config.yaml subblock/curator/config.yaml
+        # The template carries no endpoint/key; inject them from the
+        # shared env into the COPY (never back into the template).
+        run: |
+          set -euo pipefail
+          source /gpufs/haoli/cicd/shared/.env
+          cp subblock/curator/tests/smoke/config.yaml subblock/curator/config.yaml
+          python3 scripts/inject_smoke_secrets.py subblock/curator/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh curator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -368,7 +374,13 @@ jobs:
           [ -f "$CANON/artifacts/processed_tasks.yaml" ] && \
             ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml || true
       - name: Overlay smoke config.yaml from subblock/tracer/tests/smoke
-        run: cp subblock/tracer/tests/smoke/config.yaml subblock/tracer/config.yaml
+        # The template carries no endpoint/key; inject them from the
+        # shared env into the COPY (never back into the template).
+        run: |
+          set -euo pipefail
+          source /gpufs/haoli/cicd/shared/.env
+          cp subblock/tracer/tests/smoke/config.yaml subblock/tracer/config.yaml
+          python3 scripts/inject_smoke_secrets.py subblock/tracer/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh tracer
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -520,7 +532,13 @@ jobs:
           [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
             || printf 'runs: []\n' > artifacts/index.yaml
       - name: Overlay smoke config.yaml from subblock/evaluator/tests/smoke
-        run: cp subblock/evaluator/tests/smoke/config.yaml subblock/evaluator/config.yaml
+        # The template carries no endpoint/key; inject them from the
+        # shared env into the COPY (never back into the template).
+        run: |
+          set -euo pipefail
+          source /gpufs/haoli/cicd/shared/.env
+          cp subblock/evaluator/tests/smoke/config.yaml subblock/evaluator/config.yaml
+          python3 scripts/inject_smoke_secrets.py subblock/evaluator/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh evaluator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock

@@ -86,6 +86,12 @@ overlay() {  # overlay <block>
   cp "$prod" "$prod.root-smoke-bak.$$"
   _BACKUPS+=("$prod")
   cp "$smoke" "$prod"
+  # The smoke template carries structure only — endpoints, keys and remote hosts
+  # come from the shared env file at run time. Inject into the COPY; the
+  # template itself is tracked and must stay value-free.
+  [[ -f /gpufs/haoli/cicd/shared/.env ]] && source /gpufs/haoli/cicd/shared/.env
+  python3 "$ROOT_DIR/scripts/inject_smoke_secrets.py" "$prod" || {
+    echo "FAIL: could not inject smoke secrets into $prod"; exit 1; }
   sync
   # The shared filesystem (aliyun-alinas-efc) can lag: the cp returns before the
   # new bytes are consistent for a fresh open(), so the cfg reads right after

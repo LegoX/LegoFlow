@@ -47,10 +47,10 @@ runtime_info:
     # swegen stage starts the proxy on cc_proxy_port (no real key — llm12 takes
     # the dummy-cf CF token).
     llm_api:
-      api_key: dummy-cf
-      api_base_url: https://llm.jierungogogo.com/v1
-      pr_model: Qwen3.6-35B-A3B
-      task_model: claude-sonnet-4-6
+      api_key: ""
+      api_base_url: ""
+      pr_model: ""
+      task_model: ""
       cc_provider_mode: openai_proxy
       anthropic_base_url: http://127.0.0.1:4010
       cc_proxy_port: 4010
