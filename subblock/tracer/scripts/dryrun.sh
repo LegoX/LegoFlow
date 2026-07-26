@@ -861,11 +861,13 @@ PY
         fail "ledger has $bad entries with invalid status"
         grep '^BAD_STATUS:' <<<"$LEDGER_REPORT" | sed 's/^/         /'
       fi
-      if [[ "$leak" == "0" ]]; then
-        ok "every done/failed/skipped ledger entry is in HARBOR_EXCLUDE_TASKS"
-      else
-        fail "$leak ledger task(s) marked done/failed/skipped are NOT in HARBOR_EXCLUDE_TASKS — Harbor will re-run them"
-        grep '^LEAK:' <<<"$LEDGER_REPORT" | sed 's/^/         /'
+      # No cross-check against HARBOR_EXCLUDE_TASKS any more. start.sh derives
+      # the already-processed set straight from this ledger at launch, so the
+      # two cannot drift and config.yaml no longer carries a hand-copied mirror
+      # of runtime state. HARBOR_EXCLUDE_TASKS is now only the human decision
+      # list (chronic timeouts/OOMs), which is unrelated to what the ledger saw.
+      if [[ "$leak" != "0" ]]; then
+        info "$leak terminal ledger entr(ies) not in HARBOR_EXCLUDE_TASKS — expected; start.sh excludes them from the ledger itself"
       fi
       ;;
     PARSE:*)

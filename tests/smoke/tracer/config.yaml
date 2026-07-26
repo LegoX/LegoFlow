@@ -121,7 +121,7 @@ runtime_info:
       exclude_repos_file: ""
 
     env_extra:
-      HARBOR_EXCLUDE_TASKS: 4meepo__tagalign-20 99x__dynamodb-localhost-45 abhinav__requiredfield-39 abhinav__requiredfield-52 acassen__gtp-guard-48 adbautoplayer__adbautoplayer-8 aidasoft__podio-863 aidasoft__podio-979 ajmandourah__ladispad-8 alexfalkowski__go-service-3036 alireza29675__teamctl-465 alireza29675__teamctl-475 alireza29675__teamctl-506 andy5995__canfigger-38 andy5995__canfigger-52 andy5995__canfigger-55 aremmell__libsir-322 aremmell__libsir-390 bsc-es__autosubmit-2975 bsc-es__autosubmit-2979 canonical__autoinstall-generator-19 canonical__autoinstall-generator-23 canonical__autoinstall-generator-5 canonical__autoinstall-generator-7 chrisrbe__pp-p2p-parser-269 chrisrbe__pp-p2p-parser-457 chrisrbe__pp-p2p-parser-478 chrisrbe__pp-p2p-parser-611 cilium__workerpool-12 electricitymaps__electricitymaps-contrib-8113 exynos990-mainline__lk3rd-67
+      HARBOR_EXCLUDE_TASKS: ""
       LITELLM_NUM_WORKERS: "1"
 
   output:

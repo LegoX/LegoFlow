@@ -122,7 +122,10 @@ set +e
 # 1800 s budget for trials + --kill-after 60 s so SIGKILL fires if start.sh
 # ignores SIGTERM (Harbor pipes the signal up the bash chain unreliably).
 # Job-level timeout-minutes is 55 → ~25 min of slack for cleanup + result scan.
-timeout --foreground --kill-after=60s 1800 bash "$BLOCK_DIR/scripts/start.sh" >>"$LOG" 2>&1
+# HARBOR_LEDGER_EXCLUDE=0: a smoke re-runs its fixture tasks on purpose, so it
+# must not inherit the block's record of what production already consumed.
+HARBOR_LEDGER_EXCLUDE=0 \
+  timeout --foreground --kill-after=60s 1800 bash "$BLOCK_DIR/scripts/start.sh" >>"$LOG" 2>&1
 rc=$?
 set -e
 

@@ -437,7 +437,12 @@ PY
   if [[ "$DRY_RUN" != 1 ]]; then
     rm -rf "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" "$TB/$TRAJ_OUT"
   fi
-  RUN="nohup bash scripts/start.sh >> artifacts/logs/root-smoke-tracer.log 2>&1 &"
+  # A smoke deliberately re-runs its fixture tasks, and curator regenerates the
+  # same task ids from the same PR pool every time. Excluding what the ledger
+  # already consumed would leave harbor with nothing to do (0 trials -> SKIP),
+  # so the ledger-derived half of the exclude list is off for smoke runs. The
+  # hand-maintained HARBOR_EXCLUDE_TASKS still applies.
+  RUN="nohup env HARBOR_LEDGER_EXCLUDE=0 bash scripts/start.sh >> artifacts/logs/root-smoke-tracer.log 2>&1 &"
   ( cd "$TB" && mkdir -p artifacts/logs && \
     { [[ "$DRY_RUN" == 1 ]] && echo "[DRY-RUN] prepare_tasks.sh" || bash scripts/prepare_tasks.sh || log "WARN: prepare_tasks.sh non-zero"; } && \
     claude_launch tracer \
