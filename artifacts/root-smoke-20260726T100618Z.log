@@ -1,0 +1,266 @@
+============================================================
+ ROOT SMOKE PREFLIGHT  (resource gate, window: curator..evaluator)
+============================================================
+[1] CI runner — disk / memory / Docker
+  [OK]   runner disk: 56753GB free on workspace fs
+  [OK]   runner memory: 1304GB available
+  [OK]   docker daemon reachable
+  [OK]   docker can run containers (sympy__sympy-19637__6f4q53a-main:latest)
+  [OK]   /tmp (root fs): 1774GB free
+[2] Upstream LLM endpoint (curator/tracer)
+  [WARN] no llm_api.api_base_url in /gpufs/haoli/code/SWE-Lego-Live/tests/smoke/curator/config.yaml
+[3] GPU pod — reachability / GPUs / disk / memory
+  [OK]   trainer/evaluator configured local (ip=) — no remote GPU pod to probe
+============================================================
+ PREFLIGHT  OK: 6   WARN: 1   FAIL: 0
+============================================================
+CLEAR TO LAUNCH (with 1 advisory warning(s)).
+=================================================================
+[10:06:23] ROOT SMOKE CHAIN  from=curator to=evaluator  claude_sdk=1  dry_run=0
+=================================================================
+=================================================================
+[10:06:23] STAGE 1/4 — curator (collect ~200 PRs -> verified tasks)
+=================================================================
+  /gpufs/haoli/code/SWE-Lego-Live/subblock/curator/config.yaml: filled 4 field(s): runtime_info.input.llm_api.api_key, runtime_info.input.llm_api.api_base_url, runtime_info.input.llm_api.pr_model, runtime_info.input.llm_api.task_model
+[10:06:23] overlaid tests/smoke/curator/config.yaml -> subblock/curator/config.yaml
+[10:06:24] from-scratch PR collection (python), best-effort budget 7200s
+Loaded 12 tokens from /gpufs/haoli/code/SWE-Lego-Live/subblock/curator/gh_token.txt (0 with inline proxy)
+Loaded 12 tokens from GITHUB_TOKENS/GITHUB_TOKEN env
+Total unique tokens: 12
+
+WARNING: multiple GitHub tokens were found, but fixed proxy mappings are missing.
+To keep IP isolation safe, this run will use only 1/12 token(s): ghp_UWQw...tgEd
+To use all tokens, add proxies using one of these formats:
+  gh_token.txt line:              <token> <proxy_url>
+  github_token_proxies.txt line:  <token> <proxy_url>
+  GITHUB_TOKEN_PROXIES env:       token1=http://proxy1,token2=socks5://proxy2
+To intentionally use all tokens from one IP, set GITHUB_REQUIRE_PROXY_ISOLATION=0.
+[2026-07-26 18:06:26] Proxy isolation: 0/1 token(s) have fixed proxy mappings
+[2026-07-26 18:06:26]   - ghp_UWQw...tgEd -> DIRECT
+Found 1 GitHub token(s), validating...
+  ✓ Token valid: ghp_UWQw...tgEd (user: ftufpe, remaining: 4660)
+
+Checking rate limit status for all tokens...
+[2026-07-26 18:06:27] 
+✓ 1 valid token(s) found.
+[2026-07-26 18:06:27] Total available quota: 4660
+[2026-07-26 18:06:27] Auto-setting workers_per_lang to 1 (calculated from quota: 4660 / 1000 = 4, max 1).
+
+[2026-07-26 18:06:27] Loaded 50 repos already rechecked under v2.7
+[2026-07-26 18:06:27] Processing languages: ['python'] (parallel processing)
+[2026-07-26 18:06:27] Target: 15 repos with qualifying PRs per language
+[2026-07-26 18:06:27] Max PRs per repo: 50
+[2026-07-26 18:06:27] Launching 1 language threads for 1 languages
+[2026-07-26 18:06:27] [python] Already have 15/15 qualifying repos. Skipping.
+[2026-07-26 18:06:27][python] 
+============================================================
+[2026-07-26 18:06:27][python] SUMMARY for python
+[2026-07-26 18:06:27][python] ============================================================
+[2026-07-26 18:06:27][python] Qualifying repos: 15/15
+[2026-07-26 18:06:27] Output directory: artifacts/collected_prs/root-smoke
+[2026-07-26 18:06:27]   - Progress: artifacts/collected_prs/root-smoke/progress/
+[2026-07-26 18:06:27]   - Statistics: artifacts/collected_prs/root-smoke/filtering_statistics.json
+[2026-07-26 18:06:27] Filtering report saved to: artifacts/collected_prs/root-smoke/filtering_report.md
+[2026-07-26 18:06:27] 
+============================================================
+[2026-07-26 18:06:27] FILTERING STATISTICS
+[2026-07-26 18:06:27] ============================================================
+[2026-07-26 18:06:27] Repos: 907 searched -> 200 candidates (22.05%) -> 15 with qualifying PRs (7.50%)
+[2026-07-26 18:06:27] PRs: 1474 scanned -> 1296 merged (87.92%) -> 123 qualifying (9.49%)
+[2026-07-26 18:06:27] 
+Qualifying repos per language:
+[2026-07-26 18:06:27]   python: 15 repos (searched: 907, candidates: 200)
+[2026-07-26 18:06:27] 
+Qualifying PRs per language:
+[2026-07-26 18:06:27]   python: 0 PRs (scanned: 1474, merged: 1296)
+[2026-07-26 18:06:27] 
+Filtering report saved to: artifacts/collected_prs/root-smoke/filtering_report.md
+[10:06:27] from-scratch collection wrote 123 PR id(s)
+[10:06:27] PR id list ready: 123 id(s) -> artifacts/collected_prs/root-smoke/python_pr_ids.txt
+INFO: port 4010 busy — killing stale holder.
+INFO: starting LiteLLM CC proxy on :4010 (bin=/gpufs/haoli/code/SWE-Lego-Live/subblock/curator/../tracer/artifacts/env/litellm-venv/bin/litellm, upstream=Qwen3.6-35B-A3B @ https://llm.jierungogogo.com/v1, log=/gpufs/haoli/code/SWE-Lego-Live/subblock/curator/artifacts/logs/.cc-litellm-proxy.log)
+INFO: LiteLLM CC proxy ready on :4010 (PID=41919).
+[10:09:05] (CLAUDE_SDK=0) launching curator directly
+setup-ok
+=== curator dryrun ===
+[OK] schema:parse curator: config parses
+[OK] schema:name curator: meta_info.name matches directory
+[OK] dep:none curator: no dependencies in either direction (explicit from: {}, to: {})
+validate_config: 0 FAIL, 0 WARN, 3 OK
+swegen: OK
+config.yaml: OK
+GITHUB_TOKENS: set
+OPENAI_API_KEY: set
+OPENAI_API_BASE_URL: set
+OPENAI_MODEL: set
+ANTHROPIC_MODEL: set
+cc_provider_mode: openai_proxy
+CC endpoint (http://127.0.0.1:4010): OK
+Docker: OK
+WARN: cloudflare: missing npx/node CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID (/home/haoli/.config/swegen_progress_cloudflare.env) — publishing dashboard/site/ to Cloudflare Pages will fail; the local HTML databoard still works. See /root:setup optional extras.
+=== dryrun complete ===
+[10:10:27] waiting for curator to bank up to max_pr=5 verified task(s) (budget 14400s)
+[10:10:27]   curator banked 8 verified task(s) (>= max_pr=5)
+PASS: curator produced 8 verified task(s):
+         canonical__autoinstall-generator-7
+         canonical__autoinstall-generator-19
+         canonical__autoinstall-generator-23
+         canonical__autoinstall-generator-5
+         chrisrbe__pp-p2p-parser-611
+         chrisrbe__pp-p2p-parser-478
+         chrisrbe__pp-p2p-parser-457
+         chrisrbe__pp-p2p-parser-269
+[10:10:28] stage curator PASS
+INFO: stopping LiteLLM CC proxy (PID=41919).
+=================================================================
+[10:10:28] STAGE 2/4 — tracer (verified tasks -> reward==1 -> LF SFT data)
+=================================================================
+  /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/config.yaml: filled 3 field(s): runtime_info.input.llm_api.api_key, runtime_info.input.llm_api.api_base_url, runtime_info.input.llm_api.model
+[10:10:28] overlaid tests/smoke/tracer/config.yaml -> subblock/tracer/config.yaml
+staged 8 task replica(s) (8 verified x 1) -> /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/artifacts/root-smoke-src-tasks
+wired tracer task_source.dataset_name -> /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/artifacts/root-smoke-src-tasks
+=== tracer prepare tasks ===
+Config:   /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/config.yaml
+Provider: local
+Dataset:  /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/artifacts/root-smoke-src-tasks
+Split:    train
+Target:   artifacts/tasks/root-smoke-src-tasks
+Manifest found: /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/artifacts/root-smoke-src-tasks/verifiable_tasks.txt — copying only listed tasks.
+filtered:8/8 copied (manifest=verifiable_tasks.txt)
+Prepared Harbor tasks at artifacts/tasks/root-smoke-src-tasks (valid:8).
+[10:10:44] (CLAUDE_SDK=0) launching tracer directly
+setup-ok
+  [OK]   validate_config: block contract OK
+=== tracer dryrun: /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer ===
+
+--- 1. Block files ---
+  [OK]   CLAUDE.md exists
+  [OK]   config.yaml exists
+  [OK]   docs/content/docs/index.mdx exists
+  [OK]   artifacts/index.yaml exists
+
+--- 2. YAML syntax ---
+  [OK]   config.yaml parses
+  [OK]   index.yaml parses
+
+=== 3+4. Managed repos ===
+
+--- harbor repo config ---
+  [OK]   meta_info.repositories.harbor.url = https://github.com/SWE-Lego/harbor.git
+  [OK]   meta_info.repositories.harbor.commit = ff0434968e5b6975af10d72ca1d7ed20e7fa2465
+  [OK]   meta_info.repositories.harbor.path = repos/harbor
+  [OK]   meta_info.repositories.harbor.readonly = true
+  [OK]   repos/harbor is a tracked git submodule (managed checkout)
+
+--- harbor local checkout ---
+  [OK]   repos/harbor exists
+  [OK]   origin URL matches config.yaml
+  [OK]   current commit: ff0434968e5b6975af10d72ca1d7ed20e7fa2465
+  [OK]   current commit matches config.yaml pin
+  [OK]   repos/harbor worktree is clean
+  [OK]   harbor working tree is read-only
+
+--- swe_data_process repo config ---
+  [OK]   meta_info.repositories.swe_data_process.url = https://github.com/SWE-Lego/swe_data_process.git
+  [OK]   meta_info.repositories.swe_data_process.commit = 76cb50cea432fb8687cf192c8ab3f09bb726cb07
+  [OK]   meta_info.repositories.swe_data_process.path = repos/swe_data_process
+  [OK]   meta_info.repositories.swe_data_process.readonly = true
+  [OK]   repos/swe_data_process is gitignored
+
+--- swe_data_process local checkout ---
+  [OK]   repos/swe_data_process exists
+  [OK]   origin URL matches config.yaml
+  [OK]   current commit: 76cb50cea432fb8687cf192c8ab3f09bb726cb07
+  [OK]   current commit matches config.yaml pin
+  [OK]   repos/swe_data_process worktree is clean
+  [OK]   swe_data_process working tree is read-only
+
+--- 5. Environment ---
+  [OK]   uv project environment path = artifacts/env/harbor-uv
+  [OK]   uv project environment is outside repos/harbor
+  [OK]   uv project environment exists
+  [OK]   command exists: git
+  [OK]   command exists: uv
+  [OK]   python check command works: /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/artifacts/env/harbor-uv/bin/python (3.13.14)
+  [OK]   python version >= 3.12
+  [OK]   python package importable via configured environment: harbor
+  [OK]   python package importable via configured environment: litellm
+  [OK]   python package importable via configured environment: datasets
+  [OK]   harbor imports from repos/harbor
+  [OK]   harbor check command works: /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/artifacts/env/harbor-uv/bin/harbor
+
+--- 5b. swe_data_process Environment ---
+  [OK]   swe_data_process uv environment path = artifacts/env/swe-data-process-uv
+  [OK]   swe_data_process uv environment is outside repos/swe_data_process
+  [OK]   swe_data_process uv environment exists
+  [OK]   swe_data_process python exists: /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/artifacts/env/swe-data-process-uv/bin/python
+  [OK]   swe_data_process package is importable
+
+--- 6. LiteLLM Environment ---
+  [OK]   litellm uv environment path = artifacts/env/litellm-venv
+  [OK]   litellm uv environment exists
+  [OK]   litellm python exists: /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/artifacts/env/litellm-venv/bin/python
+  [OK]   litellm python version = 3.13
+  [OK]   litellm CLI exists: /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/artifacts/env/litellm-venv/bin/litellm
+  [OK]   litellm package version = 1.83.14
+
+--- 7. Model API ---
+  [OK]   runtime_info.input.llm_api.api_base_url = https://llm.jierungogogo.com/v1
+  [OK]   runtime_info.input.llm_api.model = openai/Qwen3.6-35B-A3B
+  [OK]   runtime_info.input.llm_api.api_key is set
+  [OK]   runtime_info.input.llm_api.input_cost_per_token = 2.1e-06
+  [OK]   runtime_info.input.llm_api.output_cost_per_token = 8.4e-06
+  [OK]   LLM endpoint reachable: https://llm.jierungogogo.com/v1/models (1 models)
+  [OK]   configured model present in upstream catalog: openai/Qwen3.6-35B-A3B
+
+--- 8. Harbor run config ---
+  [OK]   runtime_info.input.litellm_proxy.config_template = scripts/serve_llm/litellm_config.example.yaml
+  [OK]   runtime_info.input.litellm_proxy.port = 4003
+  [OK]   runtime_info.input.litellm_proxy.master_key = dummy-key-cf
+  [OK]   runtime_info.input.task_source.provider = local
+  [OK]   runtime_info.input.task_source.dataset_name = /gpufs/haoli/code/SWE-Lego-Live/subblock/tracer/artifacts/root-smoke-src-tasks
+  [OK]   runtime_info.input.harbor_job.jobs_dir = artifacts/jobs/root-smoke
+  [OK]   runtime_info.input.harbor_job.n_concurrent = 1
+  [OK]   runtime_info.input.harbor_job.max_retries = 1
+  [OK]   runtime_info.input.harbor_job.timeout_multiplier = 5
+  [OK]   runtime_info.input.agent.name = custom-claude-code
+  [OK]   runtime_info.input.agent.version = 2.1.118
+  [OK]   LiteLLM config template exists
+  [OK]   derived agent model_name = Qwen3.6-35B-A3B
+  [OK]   derived harbor dataset = root-smoke-src-tasks
+  [OK]   derived harbor dataset_path = artifacts/tasks/root-smoke-src-tasks
+  [OK]   Harbor jobs_dir is under block artifacts
+  [OK]   Harbor dataset_path is under block artifacts/tasks
+  [OK]   Harbor task directory is ready (8 task dirs)
+  [OK]   job_dir is under block artifacts
+  [OK]   runtime_info.input.agent.runtime_image = docker.io/jierun/c-cc-2.1.118:v0.1
+  [OK]   agent runtime_image is present locally: docker.io/jierun/c-cc-2.1.118:v0.1
+  [OK]   LiteLLM proxy port 4003 is free
+
+--- 8b. SFT conversion config ---
+  [OK]   runtime_info.input.sft_conversion.enabled = true
+  [OK]   runtime_info.input.sft_conversion.scaffold = auto
+  [OK]   runtime_info.input.sft_conversion.out_dir = artifacts/sft_data
+  [OK]   runtime_info.output.sft_data_dir.path = artifacts/sft_data
+
+--- 8c. Processed-tasks ledger ---
+  [OK]   ledger parses (runs=31)
+  [OK]   all ledger entries have valid status (pending|running|done|failed|skipped)
+  [FAIL] 31 ledger task(s) marked done/failed/skipped are NOT in HARBOR_EXCLUDE_TASKS — Harbor will re-run them
+         LEAK:4meepo__tagalign-20:done
+         LEAK:99x__dynamodb-localhost-45:done
+         LEAK:abhinav__requiredfield-39:done
+         LEAK:abhinav__requiredfield-52:done
+         LEAK:acassen__gtp-guard-48:done
+
+--- 9. Run command ---
+  [OK]   command_override is empty; scripts/start.sh will build the default Harbor command
+
+--- 10. Cloudflare Pages (optional) ---
+  [WARN] cloudflare: missing npx/node CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID (/home/haoli/.config/trajgen_progress_cloudflare.env) -- dashboard/run_cloudflare_pages_sync.sh will fail; local HTML dashboard still works. See /root:setup optional extras.
+
+=================================================
+  PASS: 88   WARN: 1   FAIL: 1
+=================================================
+Fix failures before running scripts/start.sh
+FAILED 2 (check)
