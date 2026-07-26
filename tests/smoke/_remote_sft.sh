@@ -110,7 +110,16 @@ if [[ -n "$RUNTIME_DIR" ]]; then
       src='$RUNTIME_DIR'/\$l
       # actions/checkout-style empty placeholders would swallow the link
       [ -L \"\$l\" ] && rm -f \"\$l\"
-      [ -d \"\$l\" ] && [ ! -L \"\$l\" ] && rmdir \"\$l\" 2>/dev/null || true
+      # A real directory here is a husk from an earlier run: repos/* ends up
+      # present but with no .git, so rev-parse returns empty and the pin check
+      # fails with 'HEAD= does not match'. rmdir only clears an empty one, so
+      # drop a git-less repo outright and let the link replace it.
+      if [ -d \"\$l\" ] && [ ! -L \"\$l\" ]; then
+        case \"\$l\" in
+          repos/*) [ -d \"\$l/.git\" ] || rm -rf \"\$l\" ;;
+          *) rmdir \"\$l\" 2>/dev/null || true ;;
+        esac
+      fi
       [ -e \"\$src\" ] && [ ! -e \"\$l\" ] && ln -s \"\$src\" \"\$l\" || true
     done
     ls -ld artifacts/env repos/LLaMA-Factory 2>/dev/null | sed 's/^/  linked: /'

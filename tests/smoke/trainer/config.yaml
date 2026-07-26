@@ -42,13 +42,13 @@ meta_info:
     llama_factory:
       url: https://github.com/hiyouga/LLaMA-Factory.git
       branch: null
-      commit: e695fdfa7092fc39e474fb47be4de82b87160a8e
+      commit: 3e32f8ca86a71b94d79d1cd51ad457900ec1dc20
       path: repos/LLaMA-Factory
       readonly: true
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
       branch: swe-lego-live
-      commit: 8f60ee31bc6c0caf36d1fca88b16bb1e024b9c7e
+      commit: 67aadd1e029c6e9a4b3c4b18bfc68557edb6d3c5
       path: repos/swe_data_process
       readonly: true
 
