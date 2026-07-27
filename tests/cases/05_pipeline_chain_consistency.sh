@@ -28,6 +28,9 @@ except ImportError:
 root = sys.argv[1]
 def load(b):
     return yaml.safe_load(open(os.path.join(root, "tests", "smoke", b, "config.yaml"), encoding="utf-8")) or {}
+def load_prod(b):
+    """The block's real config — used where the smoke must not drift from it."""
+    return yaml.safe_load(open(os.path.join(root, "subblock", b, "config.yaml"), encoding="utf-8")) or {}
 def get(d, dotted, default=None):
     cur = d
     for p in dotted.split("."):
@@ -77,9 +80,21 @@ if tr_dep_from != "tracer.output.sft_data_dir":
     errs.append("trainer: meta_info.dependencies.from['source.upstream_lf_dir'] must reference tracer.output.sft_data_dir")
 if get(trainer, "runtime_info.input.source.type") != "combined_lf":
     errs.append("trainer: source.type must be 'combined_lf' (512 fixture + tracer reward==1 LF)")
+# The smoke must train on the SAME dataset as the production block, so that what
+# it exercises is the real training setup rather than a stand-in. The two configs
+# carry that dataset differently — production is source.type=hf_lf and names it in
+# hf_file_name (fetched from the Hub); the smoke is combined_lf and points
+# fixture_lf at the already-downloaded local copy — so compare the file name, not
+# the path. Asserting a hard-coded name here instead is what went stale when the
+# fixture was switched to the production dataset in e7f7d94.
 fixture = str(get(trainer, "runtime_info.input.source.fixture_lf", ""))
-if "lf_512" not in fixture:
-    errs.append(f"trainer: source.fixture_lf={fixture!r} should point at the 512-sample fixture (lf_512.json)")
+prod_file = str(get(load_prod("trainer"), "runtime_info.input.source.hf_file_name", ""))
+if not prod_file:
+    errs.append("trainer: production config has no source.hf_file_name to pin the smoke fixture against "
+                "(did source.type change away from hf_lf? update this check together with it)")
+elif os.path.basename(fixture) != prod_file:
+    errs.append(f"trainer: smoke source.fixture_lf={fixture!r} does not match the production "
+                f"dataset {prod_file!r} — the smoke would train on a different dataset than the block")
 up = str(get(trainer, "runtime_info.input.source.upstream_lf_dir", ""))
 if "sft_data" not in up:
     errs.append(f"trainer: source.upstream_lf_dir={up!r} should reference tracer's sft_data dir")
