@@ -111,9 +111,10 @@ runtime_info:
       learning_rate: 1.0e-4
       weight_decay: 0.01
       max_grad_norm: 1.0
-      # ROOT: more than the block smoke's 4 so the served model is lightly trained.
-      # Validates the CHAIN, not model quality.
-      max_steps: 50
+      # Enough to produce a servable checkpoint, not to train a good model:
+      # this validates the CHAIN. At 35B/131072 a step costs ~12 min, so 8 is
+      # already ~1.5h of the stage's budget.
+      max_steps: 8
       num_train_epochs: 1.0
       lr_scheduler_type: cosine
       warmup_ratio: 0.03

@@ -103,7 +103,7 @@ runtime_info:
       learning_rate: 5.0e-5
       weight_decay: 0.01
       max_grad_norm: 1.0
-      max_steps: 4                      # SMOKE: cap at 4 optimizer steps
+      max_steps: 8                      # SMOKE: cap at 4 optimizer steps
       num_train_epochs: 3.0
       lr_scheduler_type: cosine
       warmup_ratio: 0.0                 # SMOKE: was 0.1 (meaningless over 4 steps)
