@@ -534,7 +534,12 @@ if want trainer && [[ "$CHAIN_RC" == 0 ]]; then
     # Stage the 512 fixture if it isn't present yet.
     if [[ ! -s "$FB/$FIXTURE" ]]; then
       log "fixture $FIXTURE absent — staging via subblock/trainer/tests/smoke/prepare_smoke_data.sh"
-      bash "$FB/tests/smoke/prepare_smoke_data.sh" "$FB/$FIXTURE" || log "WARN: could not stage 512 fixture"
+      # The dataset repo is private, so staging needs HF_TOKEN from the shared
+      # env — without it the download fails with "Invalid username or password"
+      # and the merge silently proceeds with tracer output alone.
+      ( [[ -f /gpufs/haoli/cicd/shared/.env ]] && { set -a; . /gpufs/haoli/cicd/shared/.env; set +a; }
+        bash "$FB/tests/smoke/prepare_smoke_data.sh" "$FB/$FIXTURE" ) \
+        || log "WARN: could not stage the fixture dataset"
     fi
     FIXTURE_ABS="$FB/$FIXTURE"; TRAJ_SFT_ABS="$TRAJ_SFT" MERGED="$MERGED_ABS" FIX="$FIXTURE_ABS" python3 - <<'PY'
 import json, os, glob
