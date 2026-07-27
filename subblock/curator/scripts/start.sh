@@ -40,3 +40,13 @@ _archive_run_on_exit() {
 trap _archive_run_on_exit EXIT
 
 bash scripts/create_all_bg.sh
+
+# create_all_bg.sh detaches its eight workers and returns, so this script is
+# about to exit while tasks keep landing for hours. Detach an aggregator that
+# publishes verified tasks into output.merged_tasks_dir as they appear — that
+# directory is what tracer consumes, and nothing else ever populates it. It
+# stops on its own once the workers are gone.
+AGG_LOG="$BLOCK_DIR/artifacts/logs/aggregate_verified_$(date -u +%Y%m%d_%H%M%S).log"
+mkdir -p "$BLOCK_DIR/artifacts/logs"
+setsid nohup bash "$BLOCK_DIR/scripts/aggregate_verified_bg.sh" > "$AGG_LOG" 2>&1 < /dev/null &
+echo "Verified-task aggregator PID: $! (log: ${AGG_LOG#$BLOCK_DIR/})"

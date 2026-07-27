@@ -469,16 +469,30 @@ PY
     # NOTE: scope each entry to the smoke's OWN artifacts. `jobs_dir` is already
     # smoke-specific (artifacts/jobs/root-smoke), but `sft_conversion.out_dir` is
     # the shared artifacts/sft_data root — the converter writes per job into
-    # <out_dir>/<job>/, so only that subdir belongs to the smoke. Clearing the
+    # <out_dir>/<job>/, so only those subdirs belong to the smoke. Clearing the
     # whole out_dir wipes every real converted dataset in the block (seen
     # 2026-07-27: a full artifacts/sft_data/ was destroyed by a smoke run).
+    #
+    # The per-job conversion dirs are named after the JOB, not after jobs_dir:
+    # start.sh names each job <dataset>-<agent>-<model>-<timestamp>, so
+    # <out_dir>/$(basename $JOBS) — i.e. .../sft_data/root-smoke — never exists
+    # and nothing was ever cleared. Enumerate the actual job names under the
+    # jobs root instead, or a repeat smoke leaves every previous conversion in
+    # place and the trainer stage merges those stale trajectories into the run.
+    _sft_stale=()
+    if [[ -d "$TB/$JOBS" ]]; then
+      for _job in "$TB/$JOBS"/*/; do
+        [[ -d "$_job" ]] || continue
+        _sft_stale+=("$TB/$TRAJ_OUT/$(basename "$_job")")
+      done
+    fi
     # NOT $STAGE_DIR: it was filled from curator moments ago by the copy above,
     # which already rmtree's it first. Clearing it here deleted this run's own
     # task source, so prepare_tasks.sh had nothing to stage and tracer's dryrun
     # failed with "Harbor tasks are not prepared" — harbor never launched and the
     # stage sat out its whole budget waiting for a job that did not exist.
     for _stale in "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" \
-                  "$TB/$TRAJ_OUT/$(basename "$JOBS")"; do
+                  "${_sft_stale[@]}"; do
       [[ -e "$_stale" ]] || continue
       if ! rm -rf "$_stale" 2>/dev/null; then
         mv "$_stale" "${_stale}.stale-$(date +%s)" 2>/dev/null \
