@@ -2,12 +2,14 @@
 # Overlaid onto subblock/trainer/config.yaml by tests/smoke/run_pipeline.sh.
 # Schema-compatible with production sft; deltas tagged "# ROOT:".
 #
-# Trains on the 512-sample smoke fixture COMBINED with the reward==1 LF data
+# Trains on the production SFT dataset COMBINED with the reward==1 LF data
 # tracer (stage 2) just produced, then PERSISTS the resulting checkpoint so
-# eval (stage 4) can serve it.
+# eval (stage 4) can serve it. Model and dataset match the trainer block's own
+# config, so the chain exercises the real training setup; only the step count
+# and the added tracer output differ.
 #
 # source.type "combined_lf" is a chain-level logical type: run_pipeline.sh
-# merges `source.fixture_lf` (the 512 fixture) with every `lf.json` under
+# merges `source.fixture_lf` (the production dataset) with every `lf.json` under
 # `source.upstream_lf_dir` (tracer's sft_data) into one LF json, then lowers
 # the overlay to the trainer block's native source.type=local_lf (lf_path=<merged>)
 # before launch — so no sft code change is needed.
@@ -18,7 +20,7 @@
 meta_info:
   name: trainer
   label: "SFT Training"
-  description: SFT on the 512 fixture + tracer reward==1 trajectories; persists a checkpoint for eval.
+  description: SFT on the production dataset + tracer reward==1 trajectories; persists a checkpoint for eval.
   parent: swe_lego_live
   subblocks: {}
   dependencies:
@@ -67,8 +69,16 @@ runtime_info:
       type: combined_lf
       scaffold: openhands-sdk
       job_dir: ""
-      # The 512-sample fixture (seed via subblock/trainer/tests/smoke/prepare_smoke_data.sh).
-      fixture_lf: artifacts/data/examples/lf_512.json
+      # The fixture half of the merge: the same production SFT file the trainer
+      # block trains on, so the smoke exercises the real dataset rather than a
+      # stand-in. prepare_smoke_data.sh downloads it using the two hf_* fields
+      # below — they must be present here, not only in the block's own smoke
+      # config, because run_pipeline overlays THIS file onto the block before
+      # calling it (a missing hf_hub_url is why the fixture silently staged as
+      # 0 samples and the merge trained on tracer output alone).
+      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft
+      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
+      fixture_lf: artifacts/data/examples/jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
       # tracer's reward==1 SFT data dir (relative to the trainer block dir; the
       # orchestrator rewrites to the absolute upstream path at launch).
       upstream_lf_dir: ../tracer/artifacts/sft_data
@@ -84,15 +94,15 @@ runtime_info:
       name: ""                          # auto-derived from conversion.data_name
 
     model:
-      model_name_or_path: /mnt/public/models/Qwen3-8B
+      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base
       trust_remote_code: true
 
     training:
       stage: sft
       finetuning_type: full
       deepspeed: scripts/deepspeed/ds_z3_config.json
-      template: qwen3_nothink
-      cutoff_len: 32768
+      template: qwen3_5
+      cutoff_len: 131072
       rope_scaling: null
       max_samples: 1000000
       preprocessing_num_workers: 16

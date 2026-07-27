@@ -57,7 +57,7 @@ runtime_info:
       # SMOKE: production uses hf_lf + hf_file_name. Smoke reads a staged
       # snapshot of that exact file from artifacts/data/examples/lf_512.json
       # (seeded by subblock/trainer/tests/smoke/prepare_smoke_data.sh).
-      type: local_lf
+      type: hf_lf
       scaffold: openhands-sdk
       job_dir: ""
       hf_hub_url: "SWE-Lego/samples_for_llama_factory_sft"
