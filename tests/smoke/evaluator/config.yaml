@@ -2,13 +2,10 @@
 # Overlaid onto subblock/evaluator/config.yaml by tests/smoke/run_pipeline.sh.
 # Schema-compatible with production eval; deltas tagged "# ROOT:".
 #
-# Evaluates the model sft (stage 3) just trained on the SWE-bench Verified
-# 100-task subset. eval itself does NOT serve a model — it drives a per-job
-# LiteLLM proxy in front of an OpenAI-compatible endpoint. So before this stage
-# run_pipeline.sh deploys the sft checkpoint with vLLM on the SAME remote GPU
-# pod that trained it, wraps it with LiteLLM, and rewrites
-# runtime_info.input.llm_api.api_base_url here to that wrapper's URL.
-# See tests/smoke/serve_checkpoint.sh.
+# Evaluates the checkpoint trainer just produced on the SWE-bench Verified
+# 100-task subset. evaluator serves no model itself, so run_pipeline first
+# stands the checkpoint up with vLLM on the same GPU pod that trained it and
+# rewrites llm_api.api_base_url here — see tests/smoke/serve_checkpoint.sh.
 
 meta_info:
   name: evaluator

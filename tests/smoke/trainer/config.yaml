@@ -1,21 +1,14 @@
-# ROOT SMOKE — stage 3/4: sft.
+# ROOT SMOKE — stage 3/4: trainer.
 # Overlaid onto subblock/trainer/config.yaml by tests/smoke/run_pipeline.sh.
-# Schema-compatible with production sft; deltas tagged "# ROOT:".
+# Deltas from production are tagged "# ROOT:".
 #
-# Trains on the production SFT dataset COMBINED with the reward==1 LF data
-# tracer (stage 2) just produced, then PERSISTS the resulting checkpoint so
-# eval (stage 4) can serve it. Model and dataset match the trainer block's own
-# config, so the chain exercises the real training setup; only the step count
-# and the added tracer output differ.
+# Model and dataset match production; only the step count differs and tracer's
+# reward==1 output is merged in. source.type "combined_lf" is chain-level:
+# run_pipeline merges fixture_lf + every lf.json under upstream_lf_dir, then
+# lowers this to the block's native local_lf before launch.
 #
-# source.type "combined_lf" is a chain-level logical type: run_pipeline.sh
-# merges `source.fixture_lf` (the production dataset) with every `lf.json` under
-# `source.upstream_lf_dir` (tracer's sft_data) into one LF json, then lowers
-# the overlay to the trainer block's native source.type=local_lf (lf_path=<merged>)
-# before launch — so no sft code change is needed.
-#
-# Runs on the remote GPU pod (meta_info.resources.ip). That same pod hosts the
-# vLLM server eval points at — see tests/smoke/serve_checkpoint.sh.
+# Runs on the GPU pod in meta_info.resources; eval serves the checkpoint from
+# there (tests/smoke/serve_checkpoint.sh).
 
 meta_info:
   name: trainer
@@ -69,18 +62,12 @@ runtime_info:
       type: combined_lf
       scaffold: openhands-sdk
       job_dir: ""
-      # The fixture half of the merge: the same production SFT file the trainer
-      # block trains on, so the smoke exercises the real dataset rather than a
-      # stand-in. prepare_smoke_data.sh downloads it using the two hf_* fields
-      # below — they must be present here, not only in the block's own smoke
-      # config, because run_pipeline overlays THIS file onto the block before
-      # calling it (a missing hf_hub_url is why the fixture silently staged as
-      # 0 samples and the merge trained on tracer output alone).
+      # hf_* must be HERE, not only in the block's smoke config: run_pipeline
+      # overlays this file before prepare_smoke_data.sh reads them.
       hf_hub_url: SWE-Lego/samples_for_llama_factory_sft
       hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
       fixture_lf: artifacts/data/examples/jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
-      # tracer's reward==1 SFT data dir (relative to the trainer block dir; the
-      # orchestrator rewrites to the absolute upstream path at launch).
+      # Relative to the trainer block; run_pipeline rewrites to an absolute path.
       upstream_lf_dir: ../tracer/artifacts/sft_data
       # Filled in by run_pipeline.sh after the merge:
       lf_path: ""
@@ -107,13 +94,10 @@ runtime_info:
       max_samples: 1000000
       preprocessing_num_workers: 16
       dataloader_num_workers: 4
-      # ROOT: PERSISTED run dir (NOT a throwaway _smoke_* dir). eval serves this
-      # checkpoint; run_pipeline.sh/verify.sh must NOT delete it until eval done.
+      # ROOT: persisted (not a throwaway _smoke_* dir) — eval serves this.
       output_dir: "root_smoke_model"
       logging_steps: 1
-      # ROOT: 'no' still writes ONE final consolidated model into output_dir at
-      # the end (what eval serves); it only suppresses the multiplicative
-      # intermediate checkpoint-*/global_step* dirs.
+      # ROOT: 'no' still writes the final model; it only drops intermediate checkpoints.
       save_strategy: "no"
       save_steps: 200
       overwrite_output_dir: true
@@ -124,9 +108,8 @@ runtime_info:
       learning_rate: 1.0e-4
       weight_decay: 0.01
       max_grad_norm: 1.0
-      # ROOT: more steps than the subblock smoke (4) so the served model is at
-      # least lightly trained. This smoke validates the CHAIN, not model quality;
-      # bump for a quality-representative run.
+      # ROOT: more than the block smoke's 4 so the served model is lightly trained.
+      # Validates the CHAIN, not model quality.
       max_steps: 50
       num_train_epochs: 1.0
       lr_scheduler_type: cosine

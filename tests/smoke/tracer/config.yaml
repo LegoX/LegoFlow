@@ -3,12 +3,10 @@
 # Schema-compatible with production tracer; deltas from production tagged
 # "# ROOT:".
 #
-# Unlike the per-subblock tracer smoke (which pulls a 10-task HuggingFace
-# slice), this stage consumes the REAL verified tasks swegen (stage 1) just
-# produced — task_source.provider=local pointing at curator's smoke output dir,
-# manifest-filtered by its verifiable_tasks.txt — runs Harbor to generate agent
-# trajectories, and converts the reward==1 (resolved) trajectories into LF SFT
-# data that sft (stage 3) trains on.
+# Unlike the per-block tracer smoke (a 10-task HuggingFace slice), this consumes
+# the real verified tasks curator just produced (provider=local, filtered by its
+# verifiable_tasks.txt), runs Harbor, and converts the reward==1 trajectories
+# into the LF SFT data trainer trains on.
 
 meta_info:
   name: tracer

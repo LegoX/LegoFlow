@@ -1,10 +1,6 @@
-# SMOKE CI CONFIG — copied over subblock/curator/config.yaml by
-# .github/workflows/ci.yml before .github/cicd/smoke/run.sh launches the
-# smoke. Production config lives at subblock/curator/config.yaml on dev.
-#
-# Design: schema-compatible with the production config — every key that
-# exists in production keeps its name and meaning. Production fields the
-# smoke doesn't consume are pruned. The smoke-specific fields all live in
+# SMOKE CI CONFIG — copied over subblock/curator/config.yaml by ci.yml.
+# Schema-compatible with production: shared keys keep their name and meaning,
+# unused production fields are pruned, smoke-only fields live under
 # `runtime_info.input.smoke.*`.
 
 meta_info:
@@ -34,14 +30,10 @@ meta_info:
 
 runtime_info:
   input:
-    # Reliable OpenAI-only endpoint (llm12 / Qwen3.6-35B-A3B) reached through a
-    # local LiteLLM CC proxy — verified cleanly by 10_pr_demo.sh. The smoke
-    # runner (.github/scripts/smoke_run.sh) starts the proxy on cc_proxy_port.
-    # History (all in NATIVE-anthropic mode, which is why native was abandoned):
-    # <an-alternate-provider>/<model> had real PASSes but was flaky AND needed a
-    # committed real key; GLM-5-FP8 gave 0 verified, opus/sonnet returned empty
-    # for swegen's verdict-shaped prompt. openai_proxy + Qwen sidesteps all of
-    # it — no real key (the llm endpoint takes the dummy-cf CF token).
+    # OpenAI-only endpoint via a local LiteLLM CC proxy (started by
+    # .github/scripts/smoke_run.sh on cc_proxy_port). native-anthropic mode was
+    # abandoned: it was flaky, needed a committed real key, and several models
+    # returned empty for swegen's verdict-shaped prompt.
     llm_api:
       api_key: ""
       api_base_url: ""
@@ -51,9 +43,8 @@ runtime_info:
       anthropic_base_url: http://127.0.0.1:4010
       cc_proxy_port: 4010
 
-    # Smoke uses only py. Other languages and the adaptive `global` /
-    # `status` blocks from production are dropped; they're not read by
-    # `swegen create`.
+    # py only; other languages and production's adaptive `global`/`status`
+    # blocks are dropped — `swegen create` does not read them.
     languages:
       py:
         enabled: true
@@ -62,15 +53,9 @@ runtime_info:
           # field names — read by .github/scripts/smoke_run.sh.
           timeout: 2400
           cc_timeout: 1800
-          # Smoke runs 5 PRs in parallel and stops at the first verified one
-          # (max_pr=1). The 10-PR fixture decays over time (upstream
-          # Dockerfile/test drift); 5-wide concurrency hedges against any one
-          # PR being upstream-broken on a given day. 5 chosen over 10 to keep
-          # the load on the LLM endpoint + Harbor docker pool reasonable
-          # (each PR runs an LLM-driven Claude Code agent + 2 verifier
-          # containers; 5 concurrent ≈ 10 docker containers + 5 in-flight
-          # agent SDK sessions, which is the empirical sweet spot before
-          # CF 524s and host docker pressure start showing up).
+          # 5 PRs in parallel, stop at the first verified (max_pr=1). Width
+          # hedges against a decayed fixture PR; 5 rather than 10 keeps the LLM
+          # endpoint and docker pool under the point where CF 524s appear.
           n_concurrent: 5
 
     # Smoke-only knobs that production config doesn't express (these live
