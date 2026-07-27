@@ -19,7 +19,9 @@ meta_info:
       task_source.dataset_name:
         from: curator.output.swe_tasks_dir
         when: {task_source.provider: local}
-    to: {}
+    # stage 2 -> 3; the chain wires the LF dir, not the raw job dir production uses
+    to:
+      sft_data_dir: trainer.input.source.upstream_lf_dir
 
   resources:
     ip: local

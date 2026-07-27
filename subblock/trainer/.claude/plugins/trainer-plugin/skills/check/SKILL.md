@@ -93,6 +93,28 @@ run-config table in Step 3 from the `[INFO]`/`[OK]` lines it printed
 (scaffold, data_name, dataset, model path, template/epochs/lr, output_dir,
 WandB mode, GPU count).
 
+## Dependency wiring (cross-checked inside dryrun)
+
+`scripts/dryrun.sh` runs `scripts/validate_config.py --block .`, which
+cross-checks `meta_info.dependencies` against the real `runtime_info` on **both**
+ends of every edge. These findings are easy to lose in the dryrun output, and
+they are exactly what breaks a hand-off silently — surface them in the report.
+
+| Finding | Meaning | Verdict |
+|---|---|---|
+| `dep:bad-key` | a `from` key is not a real dot-path in this block's own `runtime_info.input`, or a `to` key is not a declared `runtime_info.output` key | FAIL |
+| `dep:bad-ref` | malformed ref, or the named block / output key / input path does not exist | FAIL |
+| `dep:link-mismatch` | the edge is declared by only one end — the other end does not point back | FAIL |
+| `dep:unresolved` | a required upstream output has neither `value` nor `path` yet | FAIL (WARN when the edge is `required: false`) |
+| `dep:path-mismatch` | this block's configured value resolves outside the producer's declared output path — usually a stale path after a rename | WARN |
+| `output:orphan` | an output with no `dependencies.to` entry; normal for a terminal output, suspicious for one that is supposed to feed the next stage | WARN |
+| `dep:smoke-overlay` | a root smoke currently holds some block's config, so the tree mixes two config sets; every cross-block finding above is downgraded to a warning for the duration | INFO |
+
+Any `dep:*` FAIL blocks `SAFE TO RUN` — it means this block is wired to something
+the other end does not actually provide. The one exception is when
+`dep:smoke-overlay` is present: those findings are artifacts of the running
+smoke, not real drift, and must not be reported as such.
+
 ## Step 2 — Live checks
 
 Things `dryrun.sh` can't decide from a static snapshot. Judge them here.
@@ -174,6 +196,7 @@ rows.
 |-------|-------|:------:|--------|
 | det  | config · uv-env · repos · imports · converter · paths · dataset · model · output_dir | ✓ | ok=<N> |
 | det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim dryrun line> |
+| det  | dependency wiring | <✓/✗> | <ok: N edges, both ends \| dep:link-mismatch … \| suppressed: smoke overlay> |
 | det  | wandb         | <✓/✗>   | <mode=offline/online/disabled · key set?> |
 | det  | gpu-count     | <✓/⚠>   | <nvidia-smi N vs config N_GPUS> |
 | det  | cloudflare tunnel (optional) | <✓/⚠> | <cloudflared found \| missing, dashboard TUNNEL=true will be local-only> |

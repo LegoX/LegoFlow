@@ -16,7 +16,11 @@ meta_info:
   subblocks: {}
   dependencies:
     from: {}
-    to: {}
+    # stage 1 -> 2; mirrors tracer's own `from`
+    to:
+      swe_tasks_dir:
+        to: tracer.input.task_source.dataset_name
+        when: {tracer.input.task_source.provider: local}
 
   repos:
     swegen:

@@ -18,7 +18,10 @@ meta_info:
       # ROOT: the model under test is the trainer's persisted checkpoint —
       # run_pipeline.sh serves it (serve_checkpoint.sh) and rewrites
       # llm_api.api_base_url to the resulting vLLM endpoint at launch.
-      llm_api.api_base_url: trainer.output.checkpoint_path
+      # required: false — checkpoint_path stays null until stage 3 runs
+      llm_api.api_base_url:
+        from: trainer.output.checkpoint_path
+        required: false
     to: {}
 
   resources:

@@ -5,7 +5,7 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    from: {}   # standalone terminal block; benchmark comes from Harbor's registry
+    from: {}
     to: {}
 
   resources:
@@ -20,23 +20,23 @@ meta_info:
     harbor:
       url: https://github.com/SWE-Lego/harbor.git
       branch: main
-      commit: 0bdee0a6943afa8839e79038acb19a9016e27fb2   # tracks current registry (independent of tracer's pin)
+      commit: 0bdee0a6943afa8839e79038acb19a9016e27fb2
       path: repos/harbor
       readonly: true
 
   environment:
     harbor_uv: artifacts/env/harbor-uv
-    litellm_uv: artifacts/env/litellm-venv   # separate venv; harbor env is managed by uv run
+    litellm_uv: artifacts/env/litellm-venv
     litellm:
       python_version: "3.13"
       litellm_version: "1.83.14"
 
 runtime_info:
   input:
-    # MODE B (local vLLM checkpoint) active; MODE A (remote API) example: /evaluator:setup reference
+    # MODE A (remote API) example: /evaluator:setup reference; MODE B (local vLLM checkpoint) active;
     llm_api:
-      api_key: dummy-key                       # must match vLLM --api-key
-      api_base_url: "http://127.0.0.1:8000/v1"
+      api_key: human                       # must match vLLM --api-key
+      api_base_url: human
       model: "openai/Qwen3.5-35B-A3B"          # openai/<vLLM --served-model-name>
       description: Example local checkpoint served via vLLM; see scripts/serve_local_model.sh.
       protocols: [openai_compatible, anthropic_compatible]
@@ -73,8 +73,7 @@ runtime_info:
         model: ""
         api_key: ""
 
-    # Switch agents by editing all four of name/version/runtime_image/runtime_host_path
-    # together — presets and the runtime pre-extract recipe: /evaluator:setup reference
+    # reference to /evaluator:setup 
     agent:
       name: custom-openhands-sdk
       version: 1.14.0

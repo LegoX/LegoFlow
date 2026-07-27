@@ -55,6 +55,7 @@ inapplicable rows.
 | det  | litellm port 4001     | <✓/✗>   | <free \| held by pid <P>> |
 | det  | agent runtime_image   | <✓/⚠>   | <present \| not pulled locally> |
 | det  | processed-tasks ledger    | <✓/✗>   | <clean \| leak: <task_id> not in HARBOR_EXCLUDE_TASKS> |
+| det  | dependency wiring | <✓/✗> | <ok: N edges, both ends \| dep:link-mismatch … \| suppressed: smoke overlay> |
 | det  | cloudflare (optional) | <✓/⚠>   | <ok (source: env\|root-config\|legacy-file) \| missing npx/credentials, see /root:setup> |
 | det  | docker registry (optional) | <✓/⚠> | <ok (source: …) \| no credentials, pulls capped at 100/6h per IP> |
 
@@ -115,6 +116,28 @@ Re-run `/tracer:check`.
   also appear in `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`. If dryrun
   reports leaks, Harbor will re-run them — fix the exclude list
   before running.
+
+## Dependency wiring (cross-checked inside dryrun)
+
+`scripts/dryrun.sh` runs `scripts/validate_config.py --block .`, which
+cross-checks `meta_info.dependencies` against the real `runtime_info` on **both**
+ends of every edge. These findings are easy to lose in the dryrun output, and
+they are exactly what breaks a hand-off silently — surface them in the report.
+
+| Finding | Meaning | Verdict |
+|---|---|---|
+| `dep:bad-key` | a `from` key is not a real dot-path in this block's own `runtime_info.input`, or a `to` key is not a declared `runtime_info.output` key | FAIL |
+| `dep:bad-ref` | malformed ref, or the named block / output key / input path does not exist | FAIL |
+| `dep:link-mismatch` | the edge is declared by only one end — the other end does not point back | FAIL |
+| `dep:unresolved` | a required upstream output has neither `value` nor `path` yet | FAIL (WARN when the edge is `required: false`) |
+| `dep:path-mismatch` | this block's configured value resolves outside the producer's declared output path — usually a stale path after a rename | WARN |
+| `output:orphan` | an output with no `dependencies.to` entry; normal for a terminal output, suspicious for one that is supposed to feed the next stage | WARN |
+| `dep:smoke-overlay` | a root smoke currently holds some block's config, so the tree mixes two config sets; every cross-block finding above is downgraded to a warning for the duration | INFO |
+
+Any `dep:*` FAIL blocks `SAFE TO RUN` — it means this block is wired to something
+the other end does not actually provide. The one exception is when
+`dep:smoke-overlay` is present: those findings are artifacts of the running
+smoke, not real drift, and must not be reported as such.
 
 ## When to escalate to FAIL vs WARN
 

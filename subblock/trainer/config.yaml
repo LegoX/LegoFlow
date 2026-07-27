@@ -39,8 +39,7 @@ meta_info:
       - repos/swe_data_process
 
 runtime_info:
-  input:
-    # source.type mode matrix (which fields apply per mode): /trainer:setup reference
+  input: 
     source:
       type: hf_lf                 # harbor_job | hf_lf | local_lf
       scaffold: openhands-sdk     # harbor_job only: openhands-sdk | claude-code | open-code | terminus2

@@ -7,7 +7,7 @@ meta_info:
   dependencies:
     from:
       task_source.dataset_name:
-        from: curator.output.swe_tasks_dir
+        from: curator.output.merged_tasks_dir
         when: {task_source.provider: local}
     to:
       raw_trajectories_dir:
@@ -64,7 +64,7 @@ runtime_info:
 
     task_source:
       provider: local                  # local (curator) | huggingface — see /tracer:setup reference
-      dataset_name: ../curator/artifacts/swe_tasks/py-cc
+      dataset_name: ../curator/artifacts/merged_swe_tasks
       split: train
 
     harbor_job:

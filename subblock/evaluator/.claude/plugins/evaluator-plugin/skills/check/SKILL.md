@@ -56,6 +56,28 @@ never launches.
 | 9. Run command | `command_override` empty (default Harbor command will be built) or present. |
 | 10. Cloudflare Pages / registry (optional) | `npx`/node toolchain present, plus `account_id`/`api_token` resolved by `<repo_root>/scripts/shared_credentials.sh` in the order env > root `config.yaml` → `runtime_info.input.cloudflare` > `~/.config/harbor_webui_cloudflare.env` (report which source won). Only needed for `/evaluator:dashboard`'s public sync (`dashboard/run_cloudflare_pages_sync.sh`). Same step also reports registry credentials (`runtime_info.input.docker`) used by `scripts/docker_login.sh` to lift the 100-pulls-per-6h anonymous cap on benchmark images. Both always WARN, never FAIL. |
 
+## Dependency wiring (cross-checked inside dryrun)
+
+`scripts/dryrun.sh` runs `scripts/validate_config.py --block .`, which
+cross-checks `meta_info.dependencies` against the real `runtime_info` on **both**
+ends of every edge. These findings are easy to lose in the dryrun output, and
+they are exactly what breaks a hand-off silently — surface them in the report.
+
+| Finding | Meaning | Verdict |
+|---|---|---|
+| `dep:bad-key` | a `from` key is not a real dot-path in this block's own `runtime_info.input`, or a `to` key is not a declared `runtime_info.output` key | FAIL |
+| `dep:bad-ref` | malformed ref, or the named block / output key / input path does not exist | FAIL |
+| `dep:link-mismatch` | the edge is declared by only one end — the other end does not point back | FAIL |
+| `dep:unresolved` | a required upstream output has neither `value` nor `path` yet | FAIL (WARN when the edge is `required: false`) |
+| `dep:path-mismatch` | this block's configured value resolves outside the producer's declared output path — usually a stale path after a rename | WARN |
+| `output:orphan` | an output with no `dependencies.to` entry; normal for a terminal output, suspicious for one that is supposed to feed the next stage | WARN |
+| `dep:smoke-overlay` | a root smoke currently holds some block's config, so the tree mixes two config sets; every cross-block finding above is downgraded to a warning for the duration | INFO |
+
+Any `dep:*` FAIL blocks `SAFE TO RUN` — it means this block is wired to something
+the other end does not actually provide. The one exception is when
+`dep:smoke-overlay` is present: those findings are artifacts of the running
+smoke, not real drift, and must not be reported as such.
+
 ## Contextual checks the skill adds
 
 `dryrun.sh` is static. Add these live checks and fold them into the
@@ -169,6 +191,7 @@ inapplicable rows.
 | live | job already running  | <✓/✗>   | <none \| harbor/litellm process pid=<P>> |
 | live | litellm port owner   | <✓/✗>   | <free \| held by pid <P>> |
 | live | job dir overwrite    | <✓/⚠>   | <clean \| job_dir already has results> |
+| det  | dependency wiring | <✓/✗> | <ok: N edges, both ends \| dep:link-mismatch … \| suppressed: smoke overlay> |
 | det  | cloudflare (optional) | <✓/⚠>  | <ok (source: env\|root-config\|legacy-file) \| missing npx/credentials, see /root:setup> |
 | det  | docker registry (optional) | <✓/⚠> | <ok (source: …) \| no credentials, pulls capped at 100/6h per IP> |
 

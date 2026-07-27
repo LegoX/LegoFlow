@@ -16,17 +16,13 @@ meta_info:
   description: SFT on the production dataset + tracer reward==1 trajectories; persists a checkpoint for eval.
   parent: swe_lego_live
   subblocks: {}
-  # ROOT: left empty on purpose. The chain's real wiring is done by
-  # run_pipeline.sh — it merges tracer's converted reward==1 LF into
-  # source.fixture_lf, and serves this checkpoint for eval, rewriting eval's
-  # llm_api.api_base_url. Declaring those edges here instead makes
-  # validate_config check them against the OTHER blocks' production configs,
-  # which carry no matching mirror (tracer declares only raw_trajectories_dir;
-  # eval declares none) — so `--from trainer` failed on dep:link-mismatch for
-  # wiring that the orchestrator had already satisfied.
   dependencies:
-    from: {}
-    to: {}
+    from:
+      # stage 2 -> 3: the CONVERTED reward==1 LF, not raw trajectories
+      source.upstream_lf_dir: tracer.output.sft_data_dir
+    to:
+      # stage 3 -> 4: eval serves this checkpoint and points llm_api at it
+      checkpoint_path: evaluator.input.llm_api.api_base_url
 
   resources:
     ip: ""
