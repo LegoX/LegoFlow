@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CI test 07: the DeepSpeed config referenced by training.deepspeed exists and
 # is valid. Guards the regression where the ds_z*_config.json files under
-# artifacts/training_config/deepspeed/ get deleted but config.yaml still points
+# scripts/deepspeed/ get deleted but config.yaml still points
 # at one — train.sh would then fail at launch. Asserts the file parses as JSON
 # and declares a zero_optimization stage.
 
@@ -28,7 +28,7 @@ case "$DS_RAW" in
   *)  DS_PATH="$BLOCK_DIR/$DS_RAW" ;;
 esac
 
-[[ -f "$DS_PATH" ]] || { echo "FAIL: deepspeed config missing: $DS_RAW (restore artifacts/training_config/deepspeed/)"; exit 1; }
+[[ -f "$DS_PATH" ]] || { echo "FAIL: deepspeed config missing: $DS_RAW (restore scripts/deepspeed/)"; exit 1; }
 
 DS_PATH="$DS_PATH" python3 - <<'PY' || exit 1
 import json, os, sys

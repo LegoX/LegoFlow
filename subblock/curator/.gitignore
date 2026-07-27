@@ -9,6 +9,9 @@ artifacts/merged_swe_tasks/
 artifacts/envs/
 artifacts/claude-config/
 artifacts/logs/
+artifacts/.pytest_cache/
+artifacts/cloudflare/
+artifacts/experiments/
 config.json
 docs/site/
 docs/out/
@@ -16,3 +19,10 @@ docs/.next/
 docs/.source/
 docs/node_modules/
 docs/next-env.d.ts
+
+# Local backups of credential/config files (gh_token.txt.bak, etc.)
+*.bak
+
+# Filled-in LiteLLM CC proxy config (generated from litellm_cc_proxy.example.yaml,
+# holds host-specific endpoint values — the example template is the tracked one)
+scripts/litellm_cc_proxy.yaml

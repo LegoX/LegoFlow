@@ -18,7 +18,7 @@ The upstream model is declared in `config.yaml` under `runtime_info.input.llm_ap
 ```yaml
 llm_api:
   api_key: dummy-key
-  api_base_url: "http://llm10.jierungogogo.com/v1"
+  api_base_url: "http://<your-production-endpoint>/v1"
   model: "openai/MiniMax-M2.7"
   protocols: [openai_compatible, anthropic_compatible]
   served_via: per_job_litellm_proxy

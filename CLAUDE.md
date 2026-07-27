@@ -70,7 +70,15 @@ The root `config.yaml` holds orchestration identity only (subblock roster, roles
 
 ## Input/Output Contract
 
-The root block does not consume external inputs directly (`runtime_info.input: {}` in the root config). Required external values are filled into each active subblock's `runtime_info.input`:
+The root block consumes no external **pipeline** inputs — those are filled into each active subblock's `runtime_info.input`. The only exception is two optional, tree-wide infrastructure sections in the root config:
+
+**root** (`config.yaml` → `runtime_info.input`) — both default to all-empty, meaning "feature off":
+- `cloudflare.{account_id, api_token, pages_project_prefix}`: used by every block's dashboard publishing (`dashboard/run_cloudflare_pages_sync.sh`, `docs/deploy_cloudflare_pages.sh`)
+- `docker.{registry, username, password, mirror}`: registry login used by `scripts/docker_login.sh` to lift the anonymous 100-pulls-per-6h-per-IP cap that otherwise breaks image pulls mid-job in curator/tracer/evaluator
+
+Every block reads these through `scripts/shared_credentials.sh`, which resolves each field as **env > root `config.yaml` > that block's legacy env file** (`~/.config/{swegen,trajgen,harbor_webui}_*_cloudflare.env`, still supported). `config.yaml` is git-tracked, so keep `api_token` / `password` empty there and supply them via `$CLOUDFLARE_API_TOKEN` / `$DOCKER_PASSWORD`. Missing credentials are always a WARN, never a FAIL — nothing in the core pipeline depends on them.
+
+Required external values per subblock:
 
 **curator** (`subblock/curator/config.yaml` → `runtime_info.input`):
 - PR collection tokens are provided through `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored local token file (`gh_token.txt`) — never through `config.yaml`
@@ -81,11 +89,12 @@ The root block does not consume external inputs directly (`runtime_info.input: {
 - `llm_api.api_key`, `llm_api.api_base_url`, `llm_api.model`: OpenAI-compatible LLM endpoint and model used by the per-job LiteLLM proxy
 
 **Outputs** (downstream-consumable artifacts):
-- `curator.output.swe_tasks_dir`: verified SWE tasks under `subblock/curator/artifacts/swe_tasks/{lang}-cc/`. The authoritative manifest is `{lang}-cc/verifiable_tasks.txt` — only task IDs in that file have passed NOP/Oracle validation.
+- `curator.output.merged_tasks_dir`: verified SWE tasks flattened into `subblock/curator/artifacts/merged_swe_tasks/` by `scripts/extract_verified_tasks.py`, which copies only task IDs listed in each language's `verifiable_tasks.txt` and writes a combined `merged_swe_tasks/verifiable_tasks.txt`. This is what tracer consumes.
+- `curator.output.swe_tasks_dir`: the per-language source pool at `subblock/curator/artifacts/swe_tasks/{lang}-cc/`, whose `{lang}-cc/verifiable_tasks.txt` lists the task IDs that passed NOP/Oracle validation. Input to the merge step above; no longer handed to a downstream block directly.
 - `tracer.output.raw_trajectories_dir`: raw agent trajectories under `subblock/tracer/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
 - `tracer.output.sft_data_dir`: LLaMA-Factory LF-format SFT JSON converted from those trajectories at `subblock/tracer/artifacts/sft_data/<job>/lf.json` (produced by `subblock/tracer/scripts/convert_trajectories.sh`, which runs the `swe_data_process` converters under their own uv env at `subblock/tracer/artifacts/env/swe-data-process-uv`)
 
-**Producer→consumer contract**: tracer consumes **only** tasks listed in curator's `verifiable_tasks.txt`. `subblock/tracer/scripts/prepare_tasks.sh` enforces this by filtering through the manifest when copying from a local task source; task IDs already processed are tracked in `subblock/tracer/artifacts/consumption_ledger.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in tracer's `config.yaml`. Each consumer declares its upstream in its own `meta_info.dependencies.from` (e.g. trainer wires `source.job_dir: {from: tracer.output.raw_trajectories_dir, when: {source.type: harbor_job}}`), mirrored by the producer's own `dependencies.to` (tracer wires `raw_trajectories_dir: {to: trainer.input.source.job_dir, when: {...}}`).
+**Producer→consumer contract**: tracer consumes **only** tasks listed in curator's `verifiable_tasks.txt`. `subblock/tracer/scripts/prepare_tasks.sh` enforces this by filtering through the manifest it finds at the root of the local task source — currently `merged_swe_tasks/verifiable_tasks.txt`, written by the merge step; a source without a manifest falls back to copying every task dir; task IDs already processed are tracked in `subblock/tracer/artifacts/processed_tasks.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in tracer's `config.yaml`. Each consumer declares its upstream in its own `meta_info.dependencies.from` (e.g. trainer wires `source.job_dir: {from: tracer.output.raw_trajectories_dir, when: {source.type: harbor_job}}`), mirrored by the producer's own `dependencies.to` (tracer wires `raw_trajectories_dir: {to: trainer.input.source.job_dir, when: {...}}`).
 
 ## How To Run
 
@@ -98,7 +107,10 @@ The root block does not consume external inputs directly (`runtime_info.input: {
 ```bash
 scripts/dryrun.sh   # validate config, inputs, and required paths (no side effects)
 scripts/start.sh    # launch the wired curator/tracer jobs; PR collection is separate (ONLY after user confirms)
-scripts/clean.sh    # remove temporary working files
+scripts/clean.sh    # remove a run's temporary output in every block (keeps envs,
+                    # run records, and anything expensive to regenerate)
+scripts/clean.sh --all   # wipe every block's artifacts/ except git-tracked files
+                         # (destroys envs, datasets, checkpoints; confirms twice)
 ```
 
 ## Subblocks

@@ -62,10 +62,23 @@ if [[ -f "$ENV_FILE" ]]; then
   source "$ENV_FILE"
 fi
 
+# Fall back to the tree-wide shared credentials (root config.yaml ->
+# runtime_info.input.cloudflare) for anything $ENV_FILE did not provide. Values
+# already exported above win, so a per-block env file still overrides the shared
+# config for this block.
+SHARED_CREDS="$BLOCK_DIR/../../scripts/shared_credentials.sh"
+if [[ -f "$SHARED_CREDS" ]]; then
+  CF_LEGACY_ENV_FILE="$ENV_FILE"
+  # shellcheck disable=SC1090
+  source "$SHARED_CREDS"
+  load_shared_credentials "$BLOCK_DIR"
+fi
+
 if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
-  log "missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID in $ENV_FILE"
+  log "missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID — set them in $ENV_FILE, in the environment, or in the root config.yaml runtime_info.input.cloudflare"
   exit 1
 fi
+log "cloudflare credentials source: ${SHARED_CLOUDFLARE_SOURCE:-env-file}"
 export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
 
 mkdir -p "$PUBLIC_DIR"

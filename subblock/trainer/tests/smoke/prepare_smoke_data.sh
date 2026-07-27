@@ -60,10 +60,33 @@ if [[ -n "$HF_TOKEN_VAL" ]]; then
 fi
 
 SFT_UV="$BLOCK_DIR/$(cfg meta_info.environment.sft_uv 2>/dev/null || echo artifacts/env/lf)"
-PY_BIN="$SFT_UV/bin/python"
-[[ -x "$PY_BIN" ]] || PY_BIN="python3"
+# The block env can be a symlink into a shared runtime that only one side of a
+# two-mount setup can resolve (the pod sees /mnt/public/..., this host sees
+# /gpufs/...), so it is often dangling here. Falling straight back to a bare
+# python3 then fails on `import datasets`. Try the shared runtime directly
+# before giving up on a real env.
+_py_has_datasets() { [[ -x "$1" ]] && "$1" -c 'import datasets' >/dev/null 2>&1; }
+PY_BIN=""
+for _cand in "$SFT_UV/bin/python" \
+             "${SHARED_RUNTIME:-/gpufs/haoli/cicd/shared/runtime}/sft/artifacts/env/lf/bin/python" \
+             "python3"; do
+  if _py_has_datasets "$_cand" || command -v "$_cand" >/dev/null 2>&1 && _py_has_datasets "$(command -v "$_cand")"; then
+    PY_BIN="$_cand"; break
+  fi
+done
+[[ -n "$PY_BIN" ]] || { echo "ERROR: no python with 'datasets' available (tried $SFT_UV/bin/python, shared runtime, python3)" >&2; exit 1; }
+echo "INFO: staging with $PY_BIN"
 
-mkdir -p "$(dirname "$OUT")"
+# A dangling symlink here fails `mkdir -p` with "File exists" and takes the
+# whole staging step down. artifacts/data/examples is a symlink into the shared
+# runtime on hosts that have that mount, and a broken link on hosts that do not
+# — so drop it and materialise a real directory instead of failing.
+OUT_DIR="$(dirname "$OUT")"
+if [[ -L "$OUT_DIR" && ! -e "$OUT_DIR" ]]; then
+  echo "INFO: $OUT_DIR is a dangling symlink (target absent on this host) — replacing with a real dir"
+  rm -f "$OUT_DIR"
+fi
+mkdir -p "$OUT_DIR"
 echo "INFO: snapshotting $HF_URL${HF_FILE_NAME:+/$HF_FILE_NAME}${HF_SUBSET:+ (subset=$HF_SUBSET)} [$HF_SPLIT] -> $OUT"
 
 HF_URL="$HF_URL" HF_FILE_NAME="$HF_FILE_NAME" HF_SPLIT="$HF_SPLIT" HF_SUBSET="$HF_SUBSET" OUT="$OUT" "$PY_BIN" - <<'PY'

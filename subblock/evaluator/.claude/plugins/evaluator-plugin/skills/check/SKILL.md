@@ -54,6 +54,29 @@ never launches.
 | 7. Model API | `llm_api.{api_base_url, model, api_key}` set (costs empty → WARN). **No live probe.** |
 | 8. Harbor run config | proxy/task_source/harbor_job/agent fields set; `provider == harbor_registry`; **`(dataset_name, version)` resolves in `registry.json` and reports task count**; LiteLLM template exists; agent `model_name` derivable; `jobs_dir`/`job_dir` under `artifacts/jobs`; `runtime_image` set; **`runtime_host_path` populated with the per-agent marker file**. |
 | 9. Run command | `command_override` empty (default Harbor command will be built) or present. |
+| 10. Cloudflare Pages / registry (optional) | `npx`/node toolchain present, plus `account_id`/`api_token` resolved by `<repo_root>/scripts/shared_credentials.sh` in the order env > root `config.yaml` → `runtime_info.input.cloudflare` > `~/.config/harbor_webui_cloudflare.env` (report which source won). Only needed for `/evaluator:dashboard`'s public sync (`dashboard/run_cloudflare_pages_sync.sh`). Same step also reports registry credentials (`runtime_info.input.docker`) used by `scripts/docker_login.sh` to lift the 100-pulls-per-6h anonymous cap on benchmark images. Both always WARN, never FAIL. |
+
+## Dependency wiring (cross-checked inside dryrun)
+
+`scripts/dryrun.sh` runs `scripts/validate_config.py --block .`, which
+cross-checks `meta_info.dependencies` against the real `runtime_info` on **both**
+ends of every edge. These findings are easy to lose in the dryrun output, and
+they are exactly what breaks a hand-off silently — surface them in the report.
+
+| Finding | Meaning | Verdict |
+|---|---|---|
+| `dep:bad-key` | a `from` key is not a real dot-path in this block's own `runtime_info.input`, or a `to` key is not a declared `runtime_info.output` key | FAIL |
+| `dep:bad-ref` | malformed ref, or the named block / output key / input path does not exist | FAIL |
+| `dep:link-mismatch` | the edge is declared by only one end — the other end does not point back | FAIL |
+| `dep:unresolved` | a required upstream output has neither `value` nor `path` yet | FAIL (WARN when the edge is `required: false`) |
+| `dep:path-mismatch` | this block's configured value resolves outside the producer's declared output path — usually a stale path after a rename | WARN |
+| `output:orphan` | an output with no `dependencies.to` entry; normal for a terminal output, suspicious for one that is supposed to feed the next stage | WARN |
+| `dep:smoke-overlay` | a root smoke currently holds some block's config, so the tree mixes two config sets; every cross-block finding above is downgraded to a warning for the duration | INFO |
+
+Any `dep:*` FAIL blocks `SAFE TO RUN` — it means this block is wired to something
+the other end does not actually provide. The one exception is when
+`dep:smoke-overlay` is present: those findings are artifacts of the running
+smoke, not real drift, and must not be reported as such.
 
 ## Contextual checks the skill adds
 
@@ -143,6 +166,8 @@ failures unless the user asks. The expected real-world WARNs:
 | benchmark outside the curated `CLAUDE.md` table | Agent compatibility is the user's call. |
 | CF-gated remote endpoint 401/403 from this shell | Likely sandbox/network artifact; re-probe on the eval node. |
 | `scripts/stop.sh` missing | Teardown is handled by `start.sh`'s EXIT trap. |
+| `cloudflare: missing npx/credentials` | Only affects `/evaluator:dashboard`'s public sync; local HTML dashboard is unaffected. Credentials resolve env > root `config.yaml` → `runtime_info.input.cloudflare` > `~/.config/harbor_webui_cloudflare.env`. Point the user at `/root:setup`'s optional Cloudflare extra — never blocks `/evaluator:run`. |
+| `docker registry: no credentials` | Anonymous Docker Hub pulls are capped at 100 per 6h per IP; a full benchmark run pulls one image per task and can hit the cap mid-job, surfacing as agent/verifier failures rather than an auth error. Fix with `bash <repo_root>/scripts/docker_login.sh` or a plain `docker login`. Never blocks `/evaluator:run`. |
 
 ## Step 5 — The report (always the last thing you print)
 
@@ -166,6 +191,9 @@ inapplicable rows.
 | live | job already running  | <✓/✗>   | <none \| harbor/litellm process pid=<P>> |
 | live | litellm port owner   | <✓/✗>   | <free \| held by pid <P>> |
 | live | job dir overwrite    | <✓/⚠>   | <clean \| job_dir already has results> |
+| det  | dependency wiring | <✓/✗> | <ok: N edges, both ends \| dep:link-mismatch … \| suppressed: smoke overlay> |
+| det  | cloudflare (optional) | <✓/⚠>  | <ok (source: env\|root-config\|legacy-file) \| missing npx/credentials, see /root:setup> |
+| det  | docker registry (optional) | <✓/⚠> | <ok (source: …) \| no credentials, pulls capped at 100/6h per IP> |
 
 **Run configuration**
 ```

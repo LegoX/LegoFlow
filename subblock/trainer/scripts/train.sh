@@ -588,7 +588,25 @@ nvidia-smi
 
 # Live progress is served by the dashboard webui (dashboard/start_dashboard.sh),
 # which reads trainer_log.jsonl from artifacts/model/<run>/ directly.
+# TORCHELASTIC_ERROR_FILE: without it torchrun reports every rank as
+# "error_file: <N/A>" and the worker's actual exception is never written
+# anywhere — a failed run leaves only "CalledProcessError: Command ['torchrun'
+# ...] returned non-zero exit status 1", which says nothing about why. The
+# per-rank JSON below is what makes a training failure diagnosable at all.
+TORCHELASTIC_ERROR_DIR="$BLOCK_DIR/artifacts/logs/torchelastic"
+mkdir -p "$TORCHELASTIC_ERROR_DIR"
+export TORCHELASTIC_ERROR_FILE="$TORCHELASTIC_ERROR_DIR/rank.json"
 FORCE_TORCHRUN=1 NPROC_PER_NODE="$N_GPUS" PYTHONPATH="$BLOCK_DIR/repos/LLaMA-Factory/src:${PYTHONPATH:-}" PATH="$SFT_UV/bin:$PATH" "$LF_PYTHON" -m llamafactory.cli train "$TRAIN_YAML_PATH" 2>&1 | tee "$TRAIN_LOG"
+_TRAIN_RC="${PIPESTATUS[0]}"
+if [[ "$_TRAIN_RC" -ne 0 ]]; then
+    echo "=== torchrun failed (rc=$_TRAIN_RC) — per-rank error files ==="
+    for _ef in "$TORCHELASTIC_ERROR_DIR"/*.json; do
+        [[ -f "$_ef" ]] || continue
+        echo "--- $_ef"
+        python3 -c "import json,sys;d=json.load(open(sys.argv[1]));m=(d.get('message') or {});print(m.get('message') or d)[:2000]" "$_ef" 2>/dev/null \
+            || head -c 2000 "$_ef"
+    done
+fi
 
 # ---------------------------------------------------------------------------
 # STEP 3: Update config.yaml runtime_info.output
@@ -612,7 +630,12 @@ import yaml
 # alt run writes runtime_info.output into ITS config, never the canonical one.
 block_dir, output_dir, train_log, config_path_arg = sys.argv[1:5]
 config_path = Path(config_path_arg)
-lock_path = config_path.with_suffix(config_path.suffix + ".lock")
+# The fcntl sidecar is scratch state, so it belongs under artifacts/, not next
+# to the config in the block root. Name it after the config so an alternate
+# config (smoke / SFT_CONFIG override) still gets its own distinct lock.
+lock_dir = Path(block_dir) / "artifacts"
+lock_dir.mkdir(parents=True, exist_ok=True)
+lock_path = lock_dir / (config_path.name + ".lock")
 
 
 def find_wandb_run_id(block_dir: Path) -> str:

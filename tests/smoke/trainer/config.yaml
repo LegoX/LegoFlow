@@ -1,40 +1,34 @@
-# ROOT SMOKE — stage 3/4: sft.
+# ROOT SMOKE — stage 3/4: trainer.
 # Overlaid onto subblock/trainer/config.yaml by tests/smoke/run_pipeline.sh.
-# Schema-compatible with production sft; deltas tagged "# ROOT:".
+# Deltas from production are tagged "# ROOT:".
 #
-# Trains on the 512-sample smoke fixture COMBINED with the reward==1 LF data
-# tracer (stage 2) just produced, then PERSISTS the resulting checkpoint so
-# eval (stage 4) can serve it.
+# Model and dataset match production; only the step count differs and tracer's
+# reward==1 output is merged in. source.type "combined_lf" is chain-level:
+# run_pipeline merges fixture_lf + every lf.json under upstream_lf_dir, then
+# lowers this to the block's native local_lf before launch.
 #
-# source.type "combined_lf" is a chain-level logical type: run_pipeline.sh
-# merges `source.fixture_lf` (the 512 fixture) with every `lf.json` under
-# `source.upstream_lf_dir` (tracer's sft_data) into one LF json, then lowers
-# the overlay to the trainer block's native source.type=local_lf (lf_path=<merged>)
-# before launch — so no sft code change is needed.
-#
-# Runs on the remote GPU pod (meta_info.resources.ip). That same pod hosts the
-# vLLM server eval points at — see tests/smoke/serve_checkpoint.sh.
+# Runs on the GPU pod in meta_info.resources; eval serves the checkpoint from
+# there (tests/smoke/serve_checkpoint.sh).
 
 meta_info:
   name: trainer
   label: "SFT Training"
-  description: SFT on the 512 fixture + tracer reward==1 trajectories; persists a checkpoint for eval.
+  description: SFT on the production dataset + tracer reward==1 trajectories; persists a checkpoint for eval.
   parent: swe_lego_live
   subblocks: {}
   dependencies:
     from:
-      # ROOT: consume the CONVERTED reward==1 LF (not raw trajectories).
+      # stage 2 -> 3: the CONVERTED reward==1 LF, not raw trajectories
       source.upstream_lf_dir: tracer.output.sft_data_dir
     to:
-      # ROOT: eval (stage 4) serves this checkpoint via vLLM and points its
-      # llm_api.api_base_url at it — see tests/smoke/serve_checkpoint.sh.
+      # stage 3 -> 4: eval serves this checkpoint and points llm_api at it
       checkpoint_path: evaluator.input.llm_api.api_base_url
 
   resources:
-    ip: 47.79.124.13
+    ip: ""
     user: root
     pwd: null
-    key: /home/haoli/.ssh/dym_id_rsa
+    key: ""
     port: 30977
     directory: /mnt/public/storage/haoli/code/SWE-Lego-Live
 
@@ -42,13 +36,13 @@ meta_info:
     llama_factory:
       url: https://github.com/hiyouga/LLaMA-Factory.git
       branch: null
-      commit: e695fdfa7092fc39e474fb47be4de82b87160a8e
+      commit: 3e32f8ca86a71b94d79d1cd51ad457900ec1dc20
       path: repos/LLaMA-Factory
       readonly: true
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
       branch: swe-lego-live
-      commit: 8f60ee31bc6c0caf36d1fca88b16bb1e024b9c7e
+      commit: 67aadd1e029c6e9a4b3c4b18bfc68557edb6d3c5
       path: repos/swe_data_process
       readonly: true
 
@@ -67,43 +61,42 @@ runtime_info:
       type: combined_lf
       scaffold: openhands-sdk
       job_dir: ""
-      # The 512-sample fixture (seed via subblock/trainer/tests/smoke/prepare_smoke_data.sh).
-      fixture_lf: artifacts/data/examples/lf_512.json
-      # tracer's reward==1 SFT data dir (relative to the trainer block dir; the
-      # orchestrator rewrites to the absolute upstream path at launch).
+      # hf_* must be HERE, not only in the block's smoke config: run_pipeline
+      # overlays this file before prepare_smoke_data.sh reads them.
+      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft
+      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
+      fixture_lf: artifacts/data/examples/jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
+      # Relative to the trainer block; run_pipeline rewrites to an absolute path.
       upstream_lf_dir: ../tracer/artifacts/sft_data
       # Filled in by run_pipeline.sh after the merge:
       lf_path: ""
 
     conversion:
       max_instances: 0
-      exclude_repos_file: artifacts/data/excluded_repos.txt
+      exclude_repos_file: scripts/excluded_repos.txt
       data_name: "root_smoke_combined"
 
     dataset:
       name: ""                          # auto-derived from conversion.data_name
 
     model:
-      model_name_or_path: /mnt/public/models/Qwen3-8B
+      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base
       trust_remote_code: true
 
     training:
       stage: sft
       finetuning_type: full
-      deepspeed: artifacts/training_config/deepspeed/ds_z3_config.json
-      template: qwen3_nothink
+      deepspeed: scripts/deepspeed/ds_z3_config.json
+      template: qwen3_5
       cutoff_len: 131072
-      rope_scaling: yarn
+      rope_scaling: null
       max_samples: 1000000
       preprocessing_num_workers: 16
       dataloader_num_workers: 4
-      # ROOT: PERSISTED run dir (NOT a throwaway _smoke_* dir). eval serves this
-      # checkpoint; run_pipeline.sh/verify.sh must NOT delete it until eval done.
+      # ROOT: persisted (not a throwaway _smoke_* dir) — eval serves this.
       output_dir: "root_smoke_model"
       logging_steps: 1
-      # ROOT: 'no' still writes ONE final consolidated model into output_dir at
-      # the end (what eval serves); it only suppresses the multiplicative
-      # intermediate checkpoint-*/global_step* dirs.
+      # ROOT: 'no' still writes the final model; it only drops intermediate checkpoints.
       save_strategy: "no"
       save_steps: 200
       overwrite_output_dir: true
@@ -114,10 +107,10 @@ runtime_info:
       learning_rate: 1.0e-4
       weight_decay: 0.01
       max_grad_norm: 1.0
-      # ROOT: more steps than the subblock smoke (4) so the served model is at
-      # least lightly trained. This smoke validates the CHAIN, not model quality;
-      # bump for a quality-representative run.
-      max_steps: 50
+      # Enough to produce a servable checkpoint, not to train a good model:
+      # this validates the CHAIN. At 35B/131072 a step costs ~12 min, so 8 is
+      # already ~1.5h of the stage's budget.
+      max_steps: 8
       num_train_epochs: 1.0
       lr_scheduler_type: cosine
       warmup_ratio: 0.03

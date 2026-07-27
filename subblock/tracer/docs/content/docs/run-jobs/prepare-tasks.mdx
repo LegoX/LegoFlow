@@ -3,7 +3,7 @@ title: Prepare Tasks
 description: Manifest-filtered task selection and exactly-once consumption
 ---
 
-tracer only ever rolls out tasks that curator has marked verified, and never rolls the same task out twice. Two mechanisms enforce this: the **manifest filter** during task preparation, and the **consumption ledger** plus exclude list during a run.
+tracer only ever rolls out tasks that curator has marked verified, and never rolls the same task out twice. Two mechanisms enforce this: the **manifest filter** during task preparation, and the **processed-tasks ledger** plus exclude list during a run.
 
 ## Manifest-filtered copy
 
@@ -19,9 +19,9 @@ bash scripts/prepare_tasks.sh
 
 The task source is configured in `config.yaml` under `runtime_info.input.task_source` and is normally wired from curator's output via `meta_info.dependencies`.
 
-## The consumption ledger
+## The processed-tasks ledger
 
-`artifacts/consumption_ledger.yaml` is the source of truth for which task IDs have already been processed. Each entry has a status:
+`artifacts/processed_tasks.yaml` is the source of truth for which task IDs have already been processed. Each entry has a status:
 
 | Status | Meaning |
 | --- | --- |
@@ -42,7 +42,7 @@ curator tasks + verifiable_tasks.txt
    └─ manifest filter ─▶ artifacts/tasks/<dataset>
                            └─▶ Harbor job ◀── --exclude-task-name ── HARBOR_EXCLUDE_TASKS
                                   │                                          ▲
-                                  └─ update entries ─▶ consumption_ledger.yaml
+                                  └─ update entries ─▶ processed_tasks.yaml
                                                           (done / failed / skipped)
 ```
 

@@ -57,7 +57,7 @@ runtime_info:
       # SMOKE: production uses hf_lf + hf_file_name. Smoke reads a staged
       # snapshot of that exact file from artifacts/data/examples/lf_512.json
       # (seeded by subblock/trainer/tests/smoke/prepare_smoke_data.sh).
-      type: local_lf
+      type: hf_lf
       scaffold: openhands-sdk
       job_dir: ""
       hf_hub_url: "SWE-Lego/samples_for_llama_factory_sft"
@@ -68,7 +68,7 @@ runtime_info:
 
     conversion:
       max_instances: 0
-      exclude_repos_file: artifacts/data/excluded_repos.txt
+      exclude_repos_file: scripts/excluded_repos.txt
       # SMOKE: stable throwaway key — the verifier removes this entry from
       # dataset_info.json after the smoke so it doesn't accumulate.
       data_name: "_smoke_train_ci"
@@ -83,7 +83,7 @@ runtime_info:
     training:
       stage: sft
       finetuning_type: full
-      deepspeed: artifacts/training_config/deepspeed/ds_z3_config.json
+      deepspeed: scripts/deepspeed/ds_z3_config.json
       template: qwen3_5
       cutoff_len: 131072
       rope_scaling: null
@@ -103,7 +103,7 @@ runtime_info:
       learning_rate: 5.0e-5
       weight_decay: 0.01
       max_grad_norm: 1.0
-      max_steps: 4                      # SMOKE: cap at 4 optimizer steps
+      max_steps: 8                      # SMOKE: cap at 4 optimizer steps
       num_train_epochs: 3.0
       lr_scheduler_type: cosine
       warmup_ratio: 0.0                 # SMOKE: was 0.1 (meaningless over 4 steps)

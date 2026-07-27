@@ -50,9 +50,9 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      api_key: dummy-cf
-      api_base_url: "https://llm.jierungogogo.com/v1"
-      model: "openai/Qwen3.6-35B-A3B"
+      api_key: ""
+      api_base_url: ""
+      model: ""
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy

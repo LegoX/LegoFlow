@@ -135,7 +135,7 @@ comments).
 | `dataset.name` | leave empty to auto-derive from `data_name` (recommended) |
 | `model.model_name_or_path` | Hub model ID or local base-model directory |
 | `training.output_dir` | run name → `artifacts/model/<basename>`; encode key hparams in the name as the existing value does |
-| `training.deepspeed` | ZeRO-3 config path (`artifacts/training_config/deepspeed/ds_z3_config.json`); confirm it exists |
+| `training.deepspeed` | ZeRO-3 config path (`scripts/deepspeed/ds_z3_config.json`); confirm it exists |
 | `experiment.wandb_mode` | `offline` (default) \| `online` \| `disabled` |
 | `credentials.wandb_api_key` | Leave empty in tracked config. For `wandb_mode: online`, export `WANDB_API_KEY` in the private runtime environment. |
 

@@ -615,6 +615,44 @@ else
 fi
 
 echo ""
+echo "--- 10. Cloudflare Pages / registry credentials (optional) ---"
+# Only needed for /evaluator:dashboard's public sync (dashboard/run_cloudflare_pages_sync.sh)
+# and for authenticated image pulls. Never blocks scripts/start.sh -- always
+# warn(), never fail() here.
+#
+# Credentials resolve through scripts/shared_credentials.sh: env > root
+# config.yaml (runtime_info.input.cloudflare/docker) > this block's legacy env
+# file, which stays supported so existing setups keep working untouched.
+CF_ENV_FILE="${ENV_FILE:-${SWEGEN_HOME:-$HOME}/.config/harbor_webui_cloudflare.env}"
+SHARED_CREDS="$BLOCK_DIR/../../scripts/shared_credentials.sh"
+if [[ -f "$SHARED_CREDS" ]]; then
+  CF_LEGACY_ENV_FILE="$CF_ENV_FILE"
+  # shellcheck source=/dev/null
+  source "$SHARED_CREDS"
+  load_shared_credentials "$BLOCK_DIR"
+else
+  warn "cloudflare/docker: scripts/shared_credentials.sh not found at repo root -- falling back to env vars only"
+fi
+
+if command -v npx >/dev/null 2>&1 && [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+  ok "cloudflare: npx available, credentials from ${SHARED_CLOUDFLARE_SOURCE:-env}"
+else
+  missing=()
+  command -v npx >/dev/null 2>&1 || missing+=("npx/node")
+  [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || \
+    missing+=("CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID (root config.yaml runtime_info.input.cloudflare, env, or $CF_ENV_FILE)")
+  warn "cloudflare: missing ${missing[*]} -- dashboard/run_cloudflare_pages_sync.sh will fail; local HTML dashboard still works. See /root:setup optional extras."
+fi
+
+# Registry auth lifts the anonymous 100-pulls-per-6h cap that otherwise fails
+# benchmark/agent image pulls mid-job.
+if [[ -n "${DOCKER_USERNAME:-}" && -n "${DOCKER_PASSWORD:-}" ]]; then
+  ok "docker registry: credentials from ${SHARED_DOCKER_SOURCE:-env} (run scripts/docker_login.sh to authenticate pulls)"
+else
+  warn "docker registry: no credentials (root config.yaml runtime_info.input.docker or DOCKER_USERNAME/DOCKER_PASSWORD) -- pulls stay anonymous and capped at 100/6h per IP"
+fi
+
+echo ""
 echo "================================================="
 echo "  PASS: $PASS   WARN: $WARN   FAIL: $FAIL"
 echo "================================================="

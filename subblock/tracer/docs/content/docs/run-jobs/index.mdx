@@ -14,7 +14,7 @@ bash scripts/start.sh    # generate proxy config, start proxy, run Harbor job
 
 `start.sh` runs the dry-run preflight, generates a per-job LiteLLM config, starts the proxy on the configured port, builds the Harbor command (including `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS`), and writes results under `artifacts/jobs/`. If `sft_conversion.enabled` is `true`, it runs the conversion step after Harbor exits.
 
-- [Prepare Tasks](/docs/run-jobs/prepare-tasks) — manifest-filtered task copy, the consumption ledger, and the exclude list
+- [Prepare Tasks](/docs/run-jobs/prepare-tasks) — manifest-filtered task copy, the processed-tasks ledger, and the exclude list
 - [LiteLLM Proxy](/docs/run-jobs/litellm-proxy) — the per-job proxy in front of your model API
 - [Results & Artifacts](/docs/run-jobs/results-and-artifacts) — where trajectories, results, and archives land
 

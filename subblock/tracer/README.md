@@ -40,7 +40,7 @@ subblock/tracer/
 ├── memory/notes.md      # long-form notes, repo policy, decisions
 ├── scripts/             # update_repos, setup env, prepare_tasks, dryrun, start, convert, clean
 ├── repos/               # managed local-only deps (gitignored): harbor, swe_data_process
-├── artifacts/           # tasks/, jobs/, sft_data/, env/, index.yaml, consumption_ledger.yaml
+├── artifacts/           # tasks/, jobs/, sft_data/, env/, index.yaml, processed_tasks.yaml
 └── .claude/             # block-local plugin: /tracer:* operating skills
 ```
 
