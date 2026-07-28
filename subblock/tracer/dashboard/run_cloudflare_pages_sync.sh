@@ -42,6 +42,7 @@ DASHBOARD_MAX_QUALITY_RECORDS_PER_DATASET="${DASHBOARD_MAX_QUALITY_RECORDS_PER_D
 TRACER_R2_UPLOAD="${TRACER_R2_UPLOAD:-0}"
 TRACER_R2_BUCKET="${TRACER_R2_BUCKET:-}"
 TRACER_R2_UPLOAD_LIMIT="${TRACER_R2_UPLOAD_LIMIT:-0}"
+TRACER_R2_UPLOAD_CURSOR_FILE="${TRACER_R2_UPLOAD_CURSOR_FILE:-$RUN_DIR/.cache/.r2_upload_cursor}"
 R2_MANIFEST_SCRIPT="$SCRIPT_DIR/export_r2_manifest.py"
 
 # SFT conversion in the loop: re-run convert_trajectories.sh (skip when
@@ -109,10 +110,22 @@ upload_r2_trajectories() {
   fi
 
   manifest="/tmp/tracer_r2_manifest.$$.tsv"
-  python3 "$R2_MANIFEST_SCRIPT" "${trial_fact_files[@]}" --limit "$TRACER_R2_UPLOAD_LIMIT" >"$manifest"
+  cursor=0
+  if [[ "$TRACER_R2_UPLOAD_LIMIT" -gt 0 && -f "$TRACER_R2_UPLOAD_CURSOR_FILE" ]]; then
+    cursor="$(tr -dc '0-9' <"$TRACER_R2_UPLOAD_CURSOR_FILE")"
+    cursor="${cursor:-0}"
+  fi
+  python3 "$R2_MANIFEST_SCRIPT" "${trial_fact_files[@]}" \
+    --offset "$cursor" --limit "$TRACER_R2_UPLOAD_LIMIT" >"$manifest"
   count="$(wc -l <"$manifest" | tr -d ' ')"
   if [[ "$count" == "0" ]]; then
-    log "no local trajectory JSON files found for R2 upload"
+    if [[ "$cursor" -gt 0 ]]; then
+      mkdir -p "$(dirname "$TRACER_R2_UPLOAD_CURSOR_FILE")"
+      printf '0\n' >"$TRACER_R2_UPLOAD_CURSOR_FILE"
+      log "R2 upload cursor reached the end; reset to the first trajectory for the next sync"
+    else
+      log "no local trajectory JSON files found for R2 upload"
+    fi
     rm -f "$manifest"
     return 0
   fi
@@ -131,6 +144,10 @@ upload_r2_trajectories() {
       }
   done <"$manifest"
   rm -f "$manifest"
+  if [[ "$TRACER_R2_UPLOAD_LIMIT" -gt 0 ]]; then
+    mkdir -p "$(dirname "$TRACER_R2_UPLOAD_CURSOR_FILE")"
+    printf '%s\n' "$((cursor + count))" >"$TRACER_R2_UPLOAD_CURSOR_FILE"
+  fi
   log "R2 trajectory upload complete"
 }
 

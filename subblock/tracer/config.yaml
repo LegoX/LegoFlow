@@ -85,7 +85,7 @@ runtime_info:
     sft_conversion:
       enabled: false                   # true = start.sh runs convert step after the Harbor job
       scaffold: auto                   # auto | claude_code | open_code | openhands_sdk | terminus2
-      tokenizer_name: Qwen/Qwen3-8B    # keep LF tokenization aligned with the current SFT base model
+      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base  # align conversion with trainer.model.model_name_or_path
       out_dir: artifacts/sft_data
       max_instances: null
       exclude_repos_file: ""           # "" = repo default artifacts/excluded_repos.txt

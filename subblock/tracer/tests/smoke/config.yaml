@@ -89,7 +89,7 @@ runtime_info:
     sft_conversion:
       enabled: false                   # SMOKE: skip conversion step
       scaffold: auto
-      tokenizer_name: Qwen/Qwen3-8B
+      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base
       out_dir: artifacts/sft_data
       max_instances: null
       exclude_repos_file: ""

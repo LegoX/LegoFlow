@@ -1252,7 +1252,11 @@ def safe_slug(value: Any, fallback: str = "unknown") -> str:
 
 
 def fact_instance_key(fact: dict[str, Any]) -> str:
-    return str(fact.get("task_name") or normalize_instance_id(fact.get("instance_id")) or "unknown")
+    for candidate in (fact.get("task_name"), fact.get("instance_id")):
+        normalized = normalize_instance_id(candidate).strip()
+        if normalized:
+            return normalized
+    return "unknown"
 
 
 def score_histogram(values: list[float], bins: int = 10) -> list[dict[str, Any]]:
@@ -3539,10 +3543,13 @@ function selectTrajectory(card, button) {{
   view.classList.remove('empty');
   const preview = card.preview ? `<h2>Preview</h2><div class="detail-preview">${{escapeHtml(card.preview)}}</div>` : '';
   const error = card.exception_type ? `<dt>Exception</dt><dd>${{escapeHtml(card.exception_type)}}</dd>` : '';
+  const loadAction = card.embedded_available || card.full_available
+    ? `<button id="loadFullTraj" type="button">${{card.embedded_available ? 'Open embedded trace' : 'Load full'}}</button>`
+    : '';
   view.innerHTML = `
     <div class="panel-head"><div><h2>${{escapeHtml(card.instance_id || card.task_name || card.id)}}</h2>
       <p class="hint">${{escapeHtml(card.kind)}} · ${{escapeHtml(card.job || card.dataset || '-')}} · ${{escapeHtml(card.status || '-')}}</p></div>
-      <div class="actions"><button class="copy-btn" data-copy="${{escapeHtml(card.r2_key || '')}}">Copy R2 key</button><button class="copy-btn" data-copy="${{escapeHtml(card.path || card.trajectory_path || '')}}">Copy local path</button><button id="loadFullTraj" type="button">${{card.embedded_available ? 'Open embedded trace' : 'Load full'}}</button></div></div>
+      <div class="actions"><button class="copy-btn" data-copy="${{escapeHtml(card.r2_key || '')}}">Copy R2 key</button><button class="copy-btn" data-copy="${{escapeHtml(card.path || card.trajectory_path || '')}}">Copy local path</button>${{loadAction}}</div></div>
     <dl class="kv">
       <dt>Language</dt><dd>${{escapeHtml(card.language || 'unknown')}}</dd>
       <dt>Domain</dt><dd>${{escapeHtml(card.domain || 'unknown')}} · ${{escapeHtml(card.category || 'unknown')}} · ${{escapeHtml(card.difficulty || 'unknown')}}</dd>

@@ -17,6 +17,7 @@ from typing import Any
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("trial_facts", type=Path, nargs="+")
+    parser.add_argument("--offset", type=int, default=0, help="Eligible rows to skip before emitting.")
     parser.add_argument("--limit", type=int, default=0, help="Maximum rows to emit. 0 means no limit.")
     return parser.parse_args()
 
@@ -40,6 +41,7 @@ def make_r2_key(row: dict[str, Any]) -> str:
 def main() -> int:
     args = parse_args()
     emitted = 0
+    eligible = 0
     for trial_fact in args.trial_facts:
         with trial_fact.open("r", encoding="utf-8", errors="ignore") as fh:
             for line in fh:
@@ -54,6 +56,10 @@ def main() -> int:
                 path = Path(str(row.get("trajectory_path") or ""))
                 if not r2_key.startswith("trajs/") or not path.is_file():
                     continue
+                if eligible < max(0, args.offset):
+                    eligible += 1
+                    continue
+                eligible += 1
                 print(f"{r2_key}\t{path}")
                 emitted += 1
                 if args.limit > 0 and emitted >= args.limit:

@@ -164,6 +164,24 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     ).splitlines()
     if len(limited) != 2:
         raise AssertionError(f"global R2 upload limit was not respected: {limited}")
+    advanced = subprocess.check_output(
+        [
+            sys.executable,
+            str(manifest_script),
+            *(str(path) for path in shards),
+            "--offset",
+            "2",
+            "--limit",
+            "1",
+        ],
+        text=True,
+    ).splitlines()
+    if len(advanced) != 1 or "row-2.json" not in advanced[0]:
+        raise AssertionError(f"R2 upload cursor did not advance across shards: {advanced}")
+
+    mirrored = {"task_name": "owner__repo-1__mirror-attempt-2"}
+    if dashboard.fact_instance_key(mirrored) != "owner__repo-1":
+        raise AssertionError("mirrored trial task name was not normalized before joining")
 
 print("PASS: dashboard privacy, latest-run status, R2 shards, and smoke config")
 PY

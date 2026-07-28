@@ -16,7 +16,7 @@ Live board: **[swe-tracer-databoard.pages.dev](https://swe-tracer-databoard.page
 | Harbor trials | `/storage/jierun/code/harbor/jobs/<job>/<trial>/result.json` by default | Instances/Trajectories pages: pass rate, reward, model/scaffold, failure drilldown |
 | SFT conversion | `artifacts/sft_data/<job>/lf.stats.json` | Operations page: SFT Datasets table |
 | SFT quality facts | `artifacts/sft_data/<job>/im.jsonl` score metadata | Instances/Trajectories pages: score distribution, low-score cards, score breakdown |
-| SFT samples | `artifacts/sft_data/<job>/im.jsonl` or `lf.json` | Trajectories page: bounded previews and optional full R2 load |
+| SFT samples | `artifacts/sft_data/<job>/im.jsonl` or `lf.json` | Trajectories page: bounded previews; full-load actions are shown only for Harbor payloads the R2 flow can upload |
 
 The page has four sidebar sections:
 
@@ -115,6 +115,7 @@ Configuration is read from `~/.config/trajgen_progress_cloudflare.env` (override
 | `TRACER_R2_UPLOAD` | Upload local Harbor `trajectory.json` files referenced by trial facts | `0` |
 | `TRACER_R2_BUCKET` | R2 bucket for full trajectory objects under `trajs/...` | empty |
 | `TRACER_R2_UPLOAD_LIMIT` | Maximum R2 objects to upload per loop; `0` means all manifest rows | `0` |
+| `TRACER_R2_UPLOAD_CURSOR_FILE` | Persistent cursor used to advance bounded uploads across loops | `dashboard/.cache/.r2_upload_cursor` |
 
 The generated `dashboard/site/_worker.js` handles `GET /api/traj?r2_key=trajs/...`.
 Bind the same R2 bucket to the Pages project as `TRACER_TRAJ_BUCKET` to enable full online trajectory loading. Without that binding, the public page still works for metrics and bounded previews, while `Load full` returns a controlled error.

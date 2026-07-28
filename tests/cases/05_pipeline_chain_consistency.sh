@@ -72,6 +72,20 @@ if get(trj, "runtime_info.input.sft_conversion.enabled") is not True:
     errs.append("tracer: sft_conversion.enabled must be true (trainer consumes the converted LF)")
 if get(trj, "runtime_info.input.sft_conversion.reward_min") != 1:
     errs.append("tracer: sft_conversion.reward_min must be 1 (reward==1 focus)")
+tracer_tokenizer = get(trj, "runtime_info.input.sft_conversion.tokenizer_name")
+trainer_model = get(trainer, "runtime_info.input.model.model_name_or_path")
+if tracer_tokenizer != trainer_model:
+    errs.append(
+        f"tracer: sft_conversion.tokenizer_name={tracer_tokenizer!r} must match "
+        f"trainer model.model_name_or_path={trainer_model!r}"
+    )
+prod_tracer_tokenizer = get(load_prod("tracer"), "runtime_info.input.sft_conversion.tokenizer_name")
+prod_trainer_model = get(load_prod("trainer"), "runtime_info.input.model.model_name_or_path")
+if prod_tracer_tokenizer != prod_trainer_model:
+    errs.append(
+        f"production tracer tokenizer={prod_tracer_tokenizer!r} must match "
+        f"production trainer model={prod_trainer_model!r}"
+    )
 
 # --- trainer: combine 512 fixture + tracer reward==1 LF, persist checkpoint -----
 tr_dep_val = get(trainer, "meta_info.dependencies.from", {}).get("source.upstream_lf_dir")
