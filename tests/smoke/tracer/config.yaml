@@ -40,7 +40,7 @@ meta_info:
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
       branch: main
-      commit: 76cb50cea432fb8687cf192c8ab3f09bb726cb07
+      commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
       path: repos/swe_data_process
       readonly: true
 
@@ -116,6 +116,7 @@ runtime_info:
       enabled: true
       reward_min: 1
       scaffold: auto
+      tokenizer_name: Qwen/Qwen3-8B
       out_dir: artifacts/sft_data
       max_instances: null
       exclude_repos_file: ""
@@ -134,4 +135,3 @@ runtime_info:
       path: artifacts/sft_data
       format: llamafactory_lf_v0.1
       trajectory_format: "artifacts/sft_data/<job>/lf.json"
-

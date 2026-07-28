@@ -6,7 +6,7 @@
 """Local HTML dashboard for the tracer subblock.
 
 Scans:
-  * config.yaml status                  - current operator state.
+  * artifacts/index.yaml                - latest archived run state.
   * artifacts/jobs/<job>/result.json   - Harbor rollout summary.
   * artifacts/sft_data/<job>/lf.stats.json - swe_data_process LF conversion
     statistics produced by scripts/convert_trajectories.sh.
@@ -44,7 +44,7 @@ DEFAULT_TASKS = BLOCK_DIR / "artifacts" / "tasks"
 DEFAULT_HARBOR_JOBS = Path(os.environ.get("HARBOR_JOBS_DIR", "/storage/jierun/code/harbor/jobs"))
 DEFAULT_HTML = SCRIPT_DIR / "site" / "index.html"
 DEFAULT_CACHE = SCRIPT_DIR / ".cache" / ".progress_monitor_cache.json"
-DEFAULT_CONFIG = BLOCK_DIR / "config.yaml"
+DEFAULT_INDEX = BLOCK_DIR / "artifacts" / "index.yaml"
 CACHE_VERSION = 1
 DEFAULT_EMBEDDED_TRAJ_LIMIT = 120
 DEFAULT_EMBEDDED_TRAJ_MAX_BYTES = 40_000_000
@@ -432,55 +432,47 @@ def parse_scalar(raw: str) -> Any:
     return value
 
 
-def read_status(config_path: Path) -> dict[str, Any]:
-    """Read the top-level config.yaml status block without adding a YAML dependency."""
-    if not config_path.is_file():
-        return {"_error": f"{config_path} not found"}
+def read_status(index_path: Path) -> dict[str, Any]:
+    """Read the latest run from artifacts/index.yaml without a YAML dependency."""
+    if not index_path.is_file():
+        return {"_error": f"{index_path} not found"}
     try:
-        lines = config_path.read_text(encoding="utf-8").splitlines()
+        lines = index_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
-        return {"_error": f"failed to read {config_path}: {exc}"}
+        return {"_error": f"failed to read {index_path}: {exc}"}
 
     start: int | None = None
     for i, line in enumerate(lines):
-        if line.rstrip() == "status:":
+        if line.rstrip() == "runs:":
             start = i + 1
             break
     if start is None:
-        return {"_error": "top-level status block not found"}
+        return {"_error": "top-level runs list not found"}
 
-    out: dict[str, Any] = {}
-    i = start
-    while i < len(lines):
-        line = lines[i]
-        if line and not line.startswith(" ") and not line.startswith("\t"):
+    runs: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    for line in lines[start:]:
+        if line and not line.startswith((" ", "\t", "- ")):
             break
         if not line.strip() or line.lstrip().startswith("#"):
-            i += 1
             continue
-        if not line.startswith("  "):
-            i += 1
+
+        item_match = re.match(r"^\s*-\s+([^:]+):\s*(.*)$", line)
+        if item_match:
+            if current is not None:
+                runs.append(current)
+            current = {item_match.group(1).strip(): parse_scalar(item_match.group(2))}
             continue
-        stripped = line.strip()
-        if ":" not in stripped:
-            i += 1
-            continue
-        key, raw_value = stripped.split(":", 1)
-        raw_value = raw_value.strip()
-        if raw_value in {"|", ">"}:
-            block_lines: list[str] = []
-            i += 1
-            while i < len(lines):
-                child = lines[i]
-                if child and not child.startswith("    "):
-                    break
-                block_lines.append(child[4:] if child.startswith("    ") else "")
-                i += 1
-            out[key] = "\n".join(block_lines).rstrip()
-            continue
-        out[key] = parse_scalar(raw_value)
-        i += 1
-    return out
+
+        field_match = re.match(r"^\s+([^:]+):\s*(.*)$", line)
+        if current is not None and field_match:
+            current[field_match.group(1).strip()] = parse_scalar(field_match.group(2))
+
+    if current is not None:
+        runs.append(current)
+    if not runs:
+        return {"_error": "artifacts/index.yaml contains no archived runs"}
+    return runs[-1]
 
 
 def parse_job_result(job_dir: Path) -> dict[str, Any] | None:
@@ -2600,7 +2592,7 @@ def render_html(
     jobs_dir: Path,
     sft_dir: Path,
     harbor_jobs_dir: Path,
-    config_path: Path,
+    index_path: Path,
 ) -> str:
     jobs_sorted = sorted(jobs, key=lambda j: j.get("started_at") or "", reverse=True)
     sft_sorted = sorted(sft, key=lambda s: s["job"])
@@ -2721,18 +2713,18 @@ def render_html(
         f'<div class="panel warn"><strong>Status unavailable.</strong> {html.escape(str(status_error))}</div>'
         if status_error else
         '<div class="grid status-grid">'
-        '<div class="card"><div class="label">Phase</div>'
-        f'<div class="value">{html.escape(str(status.get("phase") or "-"))}</div>'
-        f'<div class="sub">last_updated: {html.escape(str(status.get("last_updated") or "-"))}</div></div>'
-        '<div class="card"><div class="label">Progress</div>'
-        f'<div class="sub">{html.escape(str(status.get("progress") or "-"))}</div></div>'
-        '<div class="card"><div class="label">Blockers</div>'
-        f'<div class="sub">{html.escape(str(status.get("blockers") or "none"))}</div></div>'
+        '<div class="card"><div class="label">Latest Run</div>'
+        f'<div class="value">{html.escape(str(status.get("id") or "-"))}</div>'
+        f'<div class="sub">completed_at: {html.escape(str(status.get("completed_at") or "-"))}</div></div>'
+        '<div class="card"><div class="label">Status</div>'
+        f'<div class="sub">{html.escape(str(status.get("status") or "-"))}</div></div>'
+        '<div class="card"><div class="label">Archive</div>'
+        f'<div class="sub">{html.escape(str(status.get("archive") or "-"))}</div></div>'
         '</div>'
-        '<section class="panel"><div class="panel-head"><div><h2>Next Steps</h2>'
-        '<p class="hint">Source of truth: config.yaml -> status.next_steps</p></div>'
-        f'<button class="copy-btn" data-copy="{html.escape(str(config_path))}">Copy config path</button></div>'
-        f'<pre class="pre">{html.escape(str(status.get("next_steps") or "-"))}</pre></section>'
+        '<section class="panel"><div class="panel-head"><div><h2>Run Notes</h2>'
+        '<p class="hint">Source of truth: artifacts/index.yaml -> latest run</p></div>'
+        f'<button class="copy-btn" data-copy="{html.escape(str(index_path))}">Copy index path</button></div>'
+        f'<pre class="pre">{html.escape(str(status.get("notes") or "-"))}</pre></section>'
     )
     stale_warning = (
         f'<section class="panel warn"><strong>{missing_jobs} cached job(s)</strong> no longer have result.json under the current jobs directory. '
@@ -4067,7 +4059,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--output-html", type=Path, default=DEFAULT_HTML)
     p.add_argument("--cache-file", type=Path, default=DEFAULT_CACHE)
-    p.add_argument("--config-file", type=Path, default=DEFAULT_CONFIG)
+    p.add_argument("--index-file", type=Path, default=DEFAULT_INDEX,
+                   help="Archived-run index used by the dashboard status panel.")
     p.add_argument("--jobs-dir", type=Path, default=DEFAULT_JOBS)
     p.add_argument("--sft-dir", type=Path, default=DEFAULT_SFT)
     p.add_argument("--tasks-dir", type=Path, default=DEFAULT_TASKS)
@@ -4107,6 +4100,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
+def effective_embedded_trajectory_limits(args: argparse.Namespace, *, include_samples: bool) -> tuple[int, int]:
+    """Disable full trajectory exports whenever previews are disabled or public."""
+    if args.local_mode == "public" or args.public_no_samples or not include_samples:
+        return 0, 0
+    return (
+        max(0, int(args.embedded_traj_limit or 0)),
+        max(0, int(args.embedded_traj_max_bytes or 0)),
+    )
+
+
 def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
     cache = {"version": CACHE_VERSION, "jobs": {}, "sft": {}} if args.force_full_scan else load_cache(args.cache_file)
     include_samples = bool(args.include_samples)
@@ -4114,7 +4117,7 @@ def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
         include_samples = False
     jobs = collect_jobs(args.jobs_dir.resolve(), cache)
     sft = collect_sft(args.sft_dir.resolve(), cache)
-    status = read_status(args.config_file.resolve())
+    status = read_status(args.index_file.resolve())
     samples = collect_samples(
         args.sft_dir.resolve(),
         include_samples=include_samples,
@@ -4140,6 +4143,10 @@ def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
     analysis = build_analysis(task_dim, trial_facts, quality_facts, jobs)
     instances = build_instance_index(task_dim, trial_facts, quality_facts)
     all_traj_cards, embedded_traj_cards = build_traj_cards(trial_facts, quality_facts)
+    embedded_traj_limit, embedded_traj_max_bytes = effective_embedded_trajectory_limits(
+        args,
+        include_samples=include_samples,
+    )
     error_summary = build_error_summary(trial_facts, quality_facts)
     totals = compute_totals(jobs, sft)
     totals["coverage"] = build_coverage_summary(sft, trial_facts, quality_facts, instances)
@@ -4161,8 +4168,8 @@ def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
         error_summary=error_summary,
         totals=totals,
         harbor_jobs_dir=args.harbor_jobs_dir.resolve(),
-        embedded_traj_limit=max(0, int(args.embedded_traj_limit or 0)),
-        embedded_traj_max_bytes=max(0, int(args.embedded_traj_max_bytes or 0)),
+        embedded_traj_limit=embedded_traj_limit,
+        embedded_traj_max_bytes=embedded_traj_max_bytes,
     )
     write_worker_script(args.output_html)
     html_doc = render_html(
@@ -4180,7 +4187,7 @@ def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
         args.jobs_dir.resolve(),
         args.sft_dir.resolve(),
         args.harbor_jobs_dir.resolve(),
-        args.config_file.resolve(),
+        args.index_file.resolve(),
     )
     atomic_write_text(args.output_html, html_doc)
     return totals

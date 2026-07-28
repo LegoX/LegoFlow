@@ -92,17 +92,24 @@ upload_r2_trajectories() {
     log "TRACER_R2_UPLOAD=1 but TRACER_R2_BUCKET is empty; skipping R2 upload"
     return 0
   fi
-  if [[ ! -f "$PUBLIC_DIR/data/trial_fact.jsonl" ]]; then
-    log "trial_fact.jsonl not found; skipping R2 upload"
-    return 0
-  fi
   if [[ ! -f "$R2_MANIFEST_SCRIPT" ]]; then
     log "R2 manifest script not found at $R2_MANIFEST_SCRIPT; skipping R2 upload"
     return 0
   fi
 
+  trial_fact_files=()
+  while IFS= read -r path; do
+    trial_fact_files+=("$path")
+  done < <(find "$PUBLIC_DIR/data" -maxdepth 1 -type f \
+    \( -name 'trial_fact.jsonl' -o -name 'trial_fact.[0-9][0-9][0-9].jsonl' \) \
+    -print 2>/dev/null | sort)
+  if [[ "${#trial_fact_files[@]}" -eq 0 ]]; then
+    log "trial_fact JSONL exports not found; skipping R2 upload"
+    return 0
+  fi
+
   manifest="/tmp/tracer_r2_manifest.$$.tsv"
-  python3 "$R2_MANIFEST_SCRIPT" "$PUBLIC_DIR/data/trial_fact.jsonl" --limit "$TRACER_R2_UPLOAD_LIMIT" >"$manifest"
+  python3 "$R2_MANIFEST_SCRIPT" "${trial_fact_files[@]}" --limit "$TRACER_R2_UPLOAD_LIMIT" >"$manifest"
   count="$(wc -l <"$manifest" | tr -d ' ')"
   if [[ "$count" == "0" ]]; then
     log "no local trajectory JSON files found for R2 upload"

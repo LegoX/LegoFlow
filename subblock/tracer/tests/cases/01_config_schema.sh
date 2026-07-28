@@ -53,6 +53,7 @@ REQUIRED = [
     "runtime_info.input.agent.runtime_image",
     "runtime_info.input.agent.max_turns",
     "runtime_info.input.sft_conversion.enabled",
+    "runtime_info.input.sft_conversion.tokenizer_name",
 ]
 missing = [k for k in REQUIRED if get(cfg, k) in (None, "")]
 if missing:

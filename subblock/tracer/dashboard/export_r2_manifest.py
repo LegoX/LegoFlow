@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit R2 upload manifest rows from generated traj_cards.jsonl.
+"""Emit R2 upload manifest rows from generated trial-fact JSONL shards.
 
 Output format:
   <r2_key>\t<local_trajectory_path>
@@ -16,7 +16,7 @@ from typing import Any
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("traj_cards", type=Path)
+    parser.add_argument("trial_facts", type=Path, nargs="+")
     parser.add_argument("--limit", type=int, default=0, help="Maximum rows to emit. 0 means no limit.")
     return parser.parse_args()
 
@@ -40,23 +40,24 @@ def make_r2_key(row: dict[str, Any]) -> str:
 def main() -> int:
     args = parse_args()
     emitted = 0
-    with args.traj_cards.open("r", encoding="utf-8", errors="ignore") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row: dict[str, Any] = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            r2_key = make_r2_key(row)
-            path = Path(str(row.get("trajectory_path") or ""))
-            if not r2_key.startswith("trajs/") or not path.is_file():
-                continue
-            print(f"{r2_key}\t{path}")
-            emitted += 1
-            if args.limit > 0 and emitted >= args.limit:
-                break
+    for trial_fact in args.trial_facts:
+        with trial_fact.open("r", encoding="utf-8", errors="ignore") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row: dict[str, Any] = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                r2_key = make_r2_key(row)
+                path = Path(str(row.get("trajectory_path") or ""))
+                if not r2_key.startswith("trajs/") or not path.is_file():
+                    continue
+                print(f"{r2_key}\t{path}")
+                emitted += 1
+                if args.limit > 0 and emitted >= args.limit:
+                    return 0
     return 0
 
 
