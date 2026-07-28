@@ -75,7 +75,7 @@ runtime_info:
       timeout_multiplier: 5
 
     agent:
-      name: custom-claude-code
+      name: custom-claude-code   # Custom agent choices: custom-claude-code, custom-openhands-sdk, custom-opencode. For a non-default choice, also align import_path, api_protocol, version, runtime_image, runtime_host_path, and an explicit sft_conversion.scaffold.
       version: 2.1.118
       runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
       runtime_host_path: artifacts/agent-runtime/claude-code   # pre-extracted; see /tracer:check reference
