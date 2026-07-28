@@ -11,7 +11,7 @@ Live board: **[swe-tracer-databoard.pages.dev](https://swe-tracer-databoard.page
 
 | Source | Files | Shown as |
 | --- | --- | --- |
-| Current state | `config.yaml` → `status` | Operations page: phase, progress, blockers, next steps |
+| Latest archived run | `artifacts/index.yaml` → latest `runs` entry | Operations page: run id, completion time, status, archive, and notes |
 | Harbor jobs | `artifacts/jobs/<job>/result.json` | Operations page: Harbor Jobs table + expandable eval breakdown |
 | Harbor trials | `/storage/jierun/code/harbor/jobs/<job>/<trial>/result.json` by default | Instances/Trajectories pages: pass rate, reward, model/scaffold, failure drilldown |
 | SFT conversion | `artifacts/sft_data/<job>/lf.stats.json` | Operations page: SFT Datasets table |
@@ -23,7 +23,7 @@ The page has four sidebar sections:
 - **Overview** — KPI cards, programming-language distribution, and quality score histogram.
 - **Instances** — instance-level table plus multi-dimensional segment analysis by programming language, domain, category, difficulty, source, model, scaffold, or job.
 - **Trajectories** — searchable card explorer for failed, low-score, high-score, error-only, or random trajectories, with bounded preview and optional `/api/traj` full load.
-- **Operations** — live status from `config.yaml`, searchable Harbor/SFT artifact tables, copy-path actions, and per-job eval breakdowns.
+- **Operations** — latest archived-run status from `artifacts/index.yaml`, searchable Harbor/SFT artifact tables, copy-path actions, and per-job eval breakdowns.
 
 For each Harbor job it surfaces trial counts, error counts, per-eval reward means, and `reward == 1.0 / 0.0` outcome counts. For each SFT dataset it surfaces token-length, turn-count, score distributions, tool-call error rates, and on-disk sizes.
 
@@ -33,7 +33,7 @@ Each generation also writes analysis data under `dashboard/site/data/`:
 | --- | --- |
 | `summary.json` | generation time, source paths, indexed counts, global score/pass summaries |
 | `task_dim.json` | task metadata from `artifacts/tasks/**/task.toml` |
-| `trial_fact.jsonl` | one row per indexed Harbor trial result |
+| `trial_fact.*.jsonl` | sharded rows for indexed Harbor trial results |
 | `quality_fact.jsonl` | one row per scored SFT record |
 | `segments.json` | precomputed multi-dimensional aggregates used by the Instances page |
 | `instances.jsonl` | normalized task/instance aggregates with pass, score, token, tool, model, scaffold, and source fields |
@@ -70,7 +70,7 @@ The dashboard embeds bounded previews and trajectory cards by default, not full 
 | `--sample-limit` | `200` | Maximum samples per SFT dataset |
 | `--sample-preview-chars` | `1200` | Maximum characters per message preview |
 | `--sample-message-limit` | `12` | Maximum messages per sample preview |
-| `--config-file` | `config.yaml` | Status source |
+| `--index-file` | `artifacts/index.yaml` | Archived-run status source |
 | `--harbor-jobs-dir` | `/storage/jierun/code/harbor/jobs` | Local Harbor trial source for Instances and Trajectories |
 | `--tasks-dir` | `artifacts/tasks` | Task metadata source for programming language/domain/category/difficulty |
 | `--index-job` | none | Additional Harbor job name to include in trial-level analysis |

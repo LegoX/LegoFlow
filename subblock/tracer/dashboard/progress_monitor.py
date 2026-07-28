@@ -109,14 +109,16 @@ LANGUAGE_ALIASES = {
     "r": "R",
 }
 
-SEGMENT_DIMS = ["job", "language", "model", "scaffold", "domain", "difficulty"]
+SEGMENT_DIMS = ["job", "language", "model", "scaffold", "domain", "category", "difficulty", "source"]
 SEGMENT_LABELS = {
     "job": "Job",
     "language": "Programming language",
     "model": "Model",
     "scaffold": "Scaffold",
     "domain": "Domain",
+    "category": "Category",
     "difficulty": "Difficulty",
+    "source": "Source",
 }
 NATURAL_LANGUAGE_CODES = {"en", "zh", "zh-cn", "zh_cn", "ja", "ko", "fr", "de", "es", "ru"}
 DIFFICULTY_SCORES = {
@@ -1025,7 +1027,12 @@ def collect_quality_facts(
                 info = task_info(task_dim, task_name)
                 composite = safe_float(score.get("composite_score"))
                 if composite is None:
-                    composite = safe_float(score.get("composite_score_v4") or score.get("composite_score_v3"))
+                    composite_v4 = safe_float(score.get("composite_score_v4"))
+                    composite = (
+                        composite_v4
+                        if composite_v4 is not None
+                        else safe_float(score.get("composite_score_v3"))
+                    )
                 messages = row.get("messages") if isinstance(row.get("messages"), list) else []
                 cot = extract_cot_stats(messages)
                 preview = ""
@@ -1467,7 +1474,7 @@ def build_traj_cards(
             "tokens": fact.get("tokens"),
             "cost_usd": fact.get("cost_usd"),
             "preview": fact.get("preview"),
-            "full_available": True,
+            "full_available": False,
         }
         card["r2_key"] = traj_r2_key(card)
         cards.append(card)

@@ -79,6 +79,48 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     if status.get("id") != "latest-run" or status.get("status") != "completed":
         raise AssertionError(f"latest archived run was not selected: {status}")
 
+    sft_dir = tmp / "sft"
+    dataset_dir = sft_dir / "quality-dataset"
+    dataset_dir.mkdir(parents=True)
+    (dataset_dir / "im.jsonl").write_text(
+        json.dumps(
+            {
+                "meta_info": {
+                    "category": "repair",
+                    "query_source": "unit-test",
+                    "unique_info": {
+                        "_instance_id": "owner__repo-1",
+                        "_score": {
+                            "composite_score_v4": 0,
+                            "composite_score_v3": 0.9,
+                        },
+                    },
+                },
+                "messages": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    quality_facts = dashboard.collect_quality_facts(
+        sft_dir,
+        {},
+        max_records_per_dataset=0,
+        preview_chars=100,
+        include_previews=False,
+    )
+    if len(quality_facts) != 1 or quality_facts[0].get("score") != 0:
+        raise AssertionError(f"zero-valued v4 quality score was not preserved: {quality_facts}")
+    _, quality_cards = dashboard.build_traj_cards([], quality_facts)
+    if not quality_cards or quality_cards[0].get("full_available"):
+        raise AssertionError(f"quality card incorrectly advertises an unavailable full payload: {quality_cards}")
+    analysis = dashboard.build_analysis({}, [], quality_facts, [])
+    if not {"category", "source"}.issubset(analysis.get("dims", [])):
+        raise AssertionError(f"category/source segment dimensions are missing: {analysis.get('dims')}")
+    segment_keys = {(row.get("dim"), row.get("value")) for row in analysis.get("segments", [])}
+    if ("category", "repair") not in segment_keys or ("source", "unit-test") not in segment_keys:
+        raise AssertionError(f"category/source segment buckets are missing: {segment_keys}")
+
     data_dir = tmp / "site" / "data"
     data_dir.mkdir(parents=True)
     stale = data_dir / "traj_embedded.000.jsonl"
