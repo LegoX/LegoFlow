@@ -7,6 +7,7 @@ BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 python3 - "$BLOCK_DIR" <<'PY'
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -47,6 +48,10 @@ if dashboard.effective_embedded_trajectory_limits(full_args, include_samples=Tru
     dashboard.DEFAULT_EMBEDDED_TRAJ_MAX_BYTES,
 ):
     raise AssertionError("full local mode unexpectedly disables embedded trajectories")
+if "HARBOR_JOBS_DIR" not in os.environ and full_args.harbor_jobs_dir != dashboard.DEFAULT_JOBS:
+    raise AssertionError(
+        f"default Harbor jobs directory differs from the configured jobs directory: {full_args.harbor_jobs_dir}"
+    )
 
 smoke_cfg = yaml.safe_load((block / "tests" / "smoke" / "config.yaml").read_text()) or {}
 smoke_sft = smoke_cfg["runtime_info"]["input"]["sft_conversion"]
@@ -111,6 +116,16 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     )
     if len(quality_facts) != 1 or quality_facts[0].get("score") != 0:
         raise AssertionError(f"zero-valued v4 quality score was not preserved: {quality_facts}")
+    sample = dashboard.summarize_sample(
+        json.loads((dataset_dir / "im.jsonl").read_text(encoding="utf-8")),
+        dataset_dir.name,
+        "im.jsonl",
+        0,
+        100,
+        12,
+    )
+    if sample.get("score") != 0:
+        raise AssertionError(f"zero-valued v4 sample score was not preserved: {sample}")
     _, quality_cards = dashboard.build_traj_cards([], quality_facts)
     if not quality_cards or quality_cards[0].get("full_available"):
         raise AssertionError(f"quality card incorrectly advertises an unavailable full payload: {quality_cards}")
@@ -133,6 +148,38 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     )
     if exports or stale.exists():
         raise AssertionError("disabled trajectory embedding did not remove stale exports")
+
+    empty_jobs = tmp / "jobs"
+    empty_tasks = tmp / "tasks"
+    empty_jobs.mkdir()
+    empty_tasks.mkdir()
+    no_samples_args = dashboard.parse_args(
+        [
+            "--no-include-samples",
+            "--jobs-dir",
+            str(empty_jobs),
+            "--sft-dir",
+            str(sft_dir),
+            "--tasks-dir",
+            str(empty_tasks),
+            "--harbor-jobs-dir",
+            str(empty_jobs),
+            "--index-file",
+            str(index),
+            "--output-html",
+            str(tmp / "public-site" / "index.html"),
+            "--cache-file",
+            str(tmp / "dashboard-cache.json"),
+        ]
+    )
+    dashboard.run_once(no_samples_args, 60)
+    exported_quality = [
+        json.loads(line)
+        for line in (tmp / "public-site" / "data" / "quality_fact.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if exported_quality[0].get("preview"):
+        raise AssertionError("--no-include-samples still exported a quality preview")
 
     trajectories = []
     for idx in range(3):

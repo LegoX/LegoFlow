@@ -13,7 +13,7 @@ Live board: **[swe-tracer-databoard.pages.dev](https://swe-tracer-databoard.page
 | --- | --- | --- |
 | Latest archived run | `artifacts/index.yaml` → latest `runs` entry | Operations page: run id, completion time, status, archive, and notes |
 | Harbor jobs | `artifacts/jobs/<job>/result.json` | Operations page: Harbor Jobs table + expandable eval breakdown |
-| Harbor trials | `/storage/jierun/code/harbor/jobs/<job>/<trial>/result.json` by default | Instances/Trajectories pages: pass rate, reward, model/scaffold, failure drilldown |
+| Harbor trials | `artifacts/jobs/<job>/<trial>/result.json` by default | Instances/Trajectories pages: pass rate, reward, model/scaffold, failure drilldown |
 | SFT conversion | `artifacts/sft_data/<job>/lf.stats.json` | Operations page: SFT Datasets table |
 | SFT quality facts | `artifacts/sft_data/<job>/im.jsonl` score metadata | Instances/Trajectories pages: score distribution, low-score cards, score breakdown |
 | SFT samples | `artifacts/sft_data/<job>/im.jsonl` or `lf.json` | Trajectories page: bounded previews; full-load actions are shown only for Harbor payloads the R2 flow can upload |
@@ -71,7 +71,7 @@ The dashboard embeds bounded previews and trajectory cards by default, not full 
 | `--sample-preview-chars` | `1200` | Maximum characters per message preview |
 | `--sample-message-limit` | `12` | Maximum messages per sample preview |
 | `--index-file` | `artifacts/index.yaml` | Archived-run status source |
-| `--harbor-jobs-dir` | `/storage/jierun/code/harbor/jobs` | Local Harbor trial source for Instances and Trajectories |
+| `--harbor-jobs-dir` | `artifacts/jobs` | Local Harbor trial source for Instances and Trajectories; `HARBOR_JOBS_DIR` overrides it |
 | `--tasks-dir` | `artifacts/tasks` | Task metadata source for programming language/domain/category/difficulty |
 | `--index-job` | none | Additional Harbor job name to include in trial-level analysis |
 | `--max-trials-per-job` | `0` | Limit trial fact reads per Harbor job; `0` means all |
@@ -109,7 +109,7 @@ Configuration is read from `~/.config/trajgen_progress_cloudflare.env` (override
 | `DASHBOARD_SAMPLE_PREVIEW_CHARS` | Maximum characters per message preview | `1200` |
 | `DASHBOARD_SAMPLE_MESSAGE_LIMIT` | Maximum messages per sample preview | `12` |
 | `DASHBOARD_LOCAL_MODE` | `full` includes bounded analysis previews; `public` keeps metrics-only drilldown | `public` |
-| `DASHBOARD_HARBOR_JOBS_DIR` | Local Harbor jobs directory used by Instances and Trajectories | `/storage/jierun/code/harbor/jobs` |
+| `DASHBOARD_HARBOR_JOBS_DIR` | Local Harbor jobs directory used by Instances and Trajectories | `artifacts/jobs` |
 | `DASHBOARD_MAX_TRIALS_PER_JOB` | Trial fact limit per indexed Harbor job; `0` means all | `0` |
 | `DASHBOARD_MAX_QUALITY_RECORDS_PER_DATASET` | Quality fact limit per SFT dataset; `0` means all | `0` |
 | `TRACER_R2_UPLOAD` | Upload local Harbor `trajectory.json` files referenced by trial facts | `0` |

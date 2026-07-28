@@ -41,7 +41,7 @@ BLOCK_DIR = SCRIPT_DIR.parent
 DEFAULT_JOBS = BLOCK_DIR / "artifacts" / "jobs"
 DEFAULT_SFT = BLOCK_DIR / "artifacts" / "sft_data"
 DEFAULT_TASKS = BLOCK_DIR / "artifacts" / "tasks"
-DEFAULT_HARBOR_JOBS = Path(os.environ.get("HARBOR_JOBS_DIR", "/storage/jierun/code/harbor/jobs"))
+DEFAULT_HARBOR_JOBS = Path(os.environ.get("HARBOR_JOBS_DIR", str(DEFAULT_JOBS)))
 DEFAULT_HTML = SCRIPT_DIR / "site" / "index.html"
 DEFAULT_CACHE = SCRIPT_DIR / ".cache" / ".progress_monitor_cache.json"
 DEFAULT_INDEX = BLOCK_DIR / "artifacts" / "index.yaml"
@@ -1954,7 +1954,8 @@ def summarize_sample(row: dict[str, Any], dataset: str, source: str, idx: int, p
     instance_id = unique.get("_instance_id") or row.get("_instance_id") or f"{dataset}#{idx + 1}"
     composite = score.get("composite_score")
     if composite is None:
-        composite = score.get("composite_score_v4") or score.get("composite_score_v3")
+        composite_v4 = score.get("composite_score_v4")
+        composite = composite_v4 if composite_v4 is not None else score.get("composite_score_v3")
     return {
         "dataset": dataset,
         "source": source,
@@ -4152,7 +4153,7 @@ def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
         task_dim,
         max_records_per_dataset=max(0, int(args.max_quality_records_per_dataset or 0)),
         preview_chars=args.sample_preview_chars,
-        include_previews=args.local_mode == "full",
+        include_previews=include_samples,
     )
     analysis = build_analysis(task_dim, trial_facts, quality_facts, jobs)
     instances = build_instance_index(task_dim, trial_facts, quality_facts)
