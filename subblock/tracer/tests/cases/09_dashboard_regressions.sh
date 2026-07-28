@@ -149,6 +149,47 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     if exports or stale.exists():
         raise AssertionError("disabled trajectory embedding did not remove stale exports")
 
+    jobs_dir = tmp / "harbor-jobs"
+    trial_dir = jobs_dir / "test-job" / "owner__repo-1"
+    agent_dir = trial_dir / "agent"
+    agent_dir.mkdir(parents=True)
+    (trial_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "task_name": "owner__repo-1",
+                "trial_name": "owner__repo-1",
+                "agent_info": {"name": "custom-claude-code"},
+                "verifier_result": {"rewards": {"reward": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    raw_trajectory = agent_dir / "litellm-trajectory.jsonl"
+    raw_trajectory.write_text(
+        json.dumps({"request": 1}) + "\n" + json.dumps({"request": 2}) + "\n",
+        encoding="utf-8",
+    )
+    trial_facts = dashboard.collect_trial_facts(
+        jobs_dir,
+        ["test-job"],
+        {},
+        max_trials_per_job=0,
+    )
+    if len(trial_facts) != 1 or trial_facts[0].get("trajectory_path") != str(raw_trajectory):
+        raise AssertionError(f"raw LiteLLM trajectory artifact was not discovered: {trial_facts}")
+    _, trial_cards = dashboard.build_traj_cards(trial_facts, [])
+    embedded = dashboard.write_embedded_trajectory_shards(
+        data_dir,
+        trial_cards,
+        limit=1,
+        max_total_bytes=10_000,
+    )
+    if len(embedded) != 1:
+        raise AssertionError(f"raw LiteLLM trajectory artifact was not embedded: {embedded}")
+    embedded_row = json.loads((tmp / "site" / embedded[0]).read_text(encoding="utf-8"))
+    if embedded_row.get("record") != [{"request": 1}, {"request": 2}]:
+        raise AssertionError(f"embedded JSONL trajectory was not parsed as records: {embedded_row}")
+
     empty_jobs = tmp / "jobs"
     empty_tasks = tmp / "tasks"
     empty_jobs.mkdir()

@@ -49,6 +49,7 @@ CACHE_VERSION = 1
 DEFAULT_EMBEDDED_TRAJ_LIMIT = 120
 DEFAULT_EMBEDDED_TRAJ_MAX_BYTES = 40_000_000
 EMBEDDED_TRAJ_SHARD_BYTES = 8_000_000
+TRAJECTORY_ARTIFACT_NAMES = ("litellm-trajectory.jsonl", "trajectory.json")
 
 SCAFFOLD_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"openhands[-_]sdk", re.I), "openhands_sdk"),
@@ -881,6 +882,15 @@ def extract_reward(data: dict[str, Any]) -> float | None:
     return safe_float(rewards.get("reward"))
 
 
+def find_trial_trajectory(trial_dir: Path) -> Path | None:
+    agent_dir = trial_dir / "agent"
+    for name in TRAJECTORY_ARTIFACT_NAMES:
+        path = agent_dir / name
+        if path.is_file():
+            return path
+    return None
+
+
 def collect_trial_facts(
     harbor_jobs_dir: Path,
     job_names: list[str],
@@ -916,6 +926,7 @@ def collect_trial_facts(
             agent_result = data.get("agent_result") if isinstance(data.get("agent_result"), dict) else {}
             exception_info = data.get("exception_info")
             reward = extract_reward(data)
+            trajectory_path = find_trial_trajectory(trial_dir)
             tokens = sum(
                 safe_int(agent_result.get(key)) or 0
                 for key in ("n_input_tokens", "n_cache_tokens", "n_output_tokens")
@@ -949,7 +960,7 @@ def collect_trial_facts(
                 "started_at": data.get("started_at"),
                 "finished_at": data.get("finished_at"),
                 "path": str(result_file),
-                "trajectory_path": str(trial_dir / "agent" / "trajectory.json") if (trial_dir / "agent" / "trajectory.json").is_file() else "",
+                "trajectory_path": str(trajectory_path) if trajectory_path else "",
             }
             facts.append(fact)
             count += 1
@@ -1758,6 +1769,24 @@ def select_embedded_traj_cards(cards: list[dict[str, Any]], *, limit: int) -> li
     return selected[:limit]
 
 
+def read_trajectory_payload(path: Path) -> Any:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as document_error:
+        records: list[Any] = []
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError as line_error:
+                raise ValueError(f"invalid trajectory JSONL at line {line_number}") from line_error
+        if records:
+            return records
+        raise document_error
+
+
 def write_embedded_trajectory_shards(
     data_dir: Path,
     cards: list[dict[str, Any]],
@@ -1794,8 +1823,8 @@ def write_embedded_trajectory_shards(
     for card in select_embedded_traj_cards(cards, limit=limit):
         trajectory_path = Path(str(card.get("trajectory_path") or ""))
         try:
-            record = json.loads(trajectory_path.read_text(encoding="utf-8", errors="ignore"))
-        except (OSError, json.JSONDecodeError) as exc:
+            record = read_trajectory_payload(trajectory_path)
+        except (OSError, ValueError) as exc:
             print(f"WARN: failed to embed trajectory {trajectory_path}: {exc}", file=sys.stderr)
             continue
         row = {"id": card.get("id"), "record": record}
@@ -1835,7 +1864,7 @@ WORKER_JS = """export default {
       }
       const text = await object.text();
       try {
-        return json({ r2_key: r2Key, record: JSON.parse(text) }, 200);
+        return json({ r2_key: r2Key, record: parseTrajectory(text) }, 200);
       } catch (err) {
         return json({ r2_key: r2Key, text }, 200);
       }
@@ -1843,6 +1872,16 @@ WORKER_JS = """export default {
     return env.ASSETS.fetch(request);
   },
 };
+
+function parseTrajectory(text) {
+  try {
+    return JSON.parse(text);
+  } catch (documentError) {
+    const lines = text.split(/\\r?\\n/).filter(line => line.trim());
+    if (!lines.length) throw documentError;
+    return lines.map(line => JSON.parse(line));
+  }
+}
 
 function json(payload, status) {
   return new Response(JSON.stringify(payload), {
