@@ -33,7 +33,7 @@ Per-test exit codes: `0` pass · `77` skip · anything else fail.
 | 05 | HF dataset | `huggingface.co/api/datasets/<name>` reachable with the configured token (SKIP for `local` provider) | <1 s |
 | 06 | LiteLLM port | port from `litellm_proxy.port` is free, or held by a process the current uid owns | <1 s |
 | 07 | runtime image | `docker image inspect ${agent.runtime_image}` exits 0 (pre-pulled) | <1 s |
-| 08 | consumption ledger | ledger parses, every `done`/`failed`/`skipped` entry is also in `HARBOR_EXCLUDE_TASKS` | <1 s |
+| 08 | processed-tasks ledger | ledger parses, every `done`/`failed`/`skipped` entry is also in `HARBOR_EXCLUDE_TASKS` | <1 s |
 | 10 | **10-HF-task demo** *(smoke)* | swap config + `start.sh` against 10 HF tasks; ≥1 trial resolves within 30 min | up to 30 min |
 
 The 10-HF-task demo runs only with `--with-smoke` and is gated to `push`
@@ -58,7 +58,7 @@ events on `dev`/`main` and manual `workflow_dispatch` runs
 | 05: HF 404 | typo in `task_source.dataset_name` | fix in `config.yaml` |
 | 06: port held by another uid | someone else is on `litellm_proxy.port` | change the port, or kill the foreign process |
 | 07: image not pulled | runner's daemon lost the image | `docker pull docker.io/jierun/c-cc-2.1.118:v0.1` |
-| 08: ledger task not in `HARBOR_EXCLUDE_TASKS` | done/failed/skipped tasks would re-execute next run | add them to `environment.extra.HARBOR_EXCLUDE_TASKS` in `config.yaml` |
+| 08: ledger task not in `HARBOR_EXCLUDE_TASKS` | done/failed/skipped tasks would re-execute next run | add them to `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` in `config.yaml` |
 | 10: budget hit, no resolved trial | model regression, network slowness, or 10 unusually hard tasks | inspect `artifacts/jobs/smoke/<job>/*/result.json` for verifier output |
 
 ---
@@ -74,7 +74,6 @@ cases/                         cheap deterministic checks
   05_hf_dataset.sh
   06_litellm_port.sh
   07_runtime_image.sh
-  08_consumption_ledger.sh
 smoke/                         expensive end-to-end runs (--with-smoke gates them)
   10_hf_task_demo.sh
 run.sh                         aggregator
@@ -160,15 +159,6 @@ isn't on PATH.
 
 `docker image inspect ${agent.runtime_image}` exits 0 against the
 configured `DOCKER_HOST`. CI must not pay a multi-GB pull mid-job.
-</details>
-
-<details>
-<summary><code>cases/08_consumption_ledger.sh</code> — ledger ↔ HARBOR_EXCLUDE_TASKS</summary>
-
-Parses `artifacts/consumption_ledger.yaml` and enforces: (1) every entry's
-status is one of `{pending, running, done, failed, skipped}`; (2) every
-entry whose status is `done`/`failed`/`skipped` has its `task_id` listed in
-`environment.extra.HARBOR_EXCLUDE_TASKS`. Lists up to 10 offenders.
 </details>
 
 <details>

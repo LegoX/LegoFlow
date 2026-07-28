@@ -62,6 +62,17 @@ missing = [k for k in REQUIRED if get(cfg, k) in (None, "")]
 if missing:
     for k in missing: print(f"FAIL: missing or empty: {k}", file=sys.stderr)
     sys.exit(1)
+
+# meta_info.dependencies must be {from: {...}, to: {...}} (both keys, both mappings).
+deps = get(cfg, "meta_info.dependencies")
+if (
+    not isinstance(deps, dict)
+    or set(deps.keys()) != {"from", "to"}
+    or not isinstance(deps.get("from"), dict)
+    or not isinstance(deps.get("to"), dict)
+):
+    print("FAIL: meta_info.dependencies must have exactly `from` and `to` keys, each a mapping (use {} for no edges)", file=sys.stderr)
+    sys.exit(1)
 if get(cfg, "meta_info.name") != "evaluator":
     print("FAIL: meta_info.name != 'evaluator'", file=sys.stderr); sys.exit(1)
 
@@ -130,3 +141,15 @@ if not isinstance(summary_format, str) or not summary_format.endswith("/result.j
 print(f"PASS: {Path(sys.argv[1]).name} schema ({sys.argv[1]})")
 PY
 done
+
+# Shared block-contract validator (schema-only: `human` fill markers are
+# expected on a fresh clone and downgraded to warnings here).
+REPO_ROOT="$(cd "$BLOCK_DIR/../.." && pwd)"
+if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
+  for CONFIG in "${CONFIGS[@]}"; do
+    python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" --config "$CONFIG" --schema-only \
+      || { echo "FAIL: validate_config.py reported schema failures for $CONFIG"; exit 1; }
+  done
+else
+  echo "WARN: shared validator not found — skipping contract validation"
+fi

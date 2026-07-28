@@ -18,8 +18,11 @@ new blocks are only ever created at the root level), see
 | `/curator:dashboard` | Show progress per language: PRs collected, tasks generated, verifiable rate. |
 
 The unlisted `run/SKILL.md` is a uniform-interface compatibility adapter for
-the repository's standard plugin layout. Root targeting does not invoke it;
-`/root:run curator` directly executes Curator's all-language `scripts/start.sh`.
+the repository's standard plugin layout. `/root:run curator` executes Curator's
+all-language `scripts/start.sh`, which reads `llm_api.cc_provider_mode` from
+`config.yaml` and dispatches to the matching launcher — starting the local
+LiteLLM proxy first in `openai_proxy` mode — so no entry point can skip the
+proxy that OpenAI-only providers require.
 
 Per the block plugin guidelines, **no `/curator:create`** — new blocks are
 only created via `/root:create`.

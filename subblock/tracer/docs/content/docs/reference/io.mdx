@@ -19,7 +19,7 @@ tracer is configured entirely through [`config.yaml`](https://github.com/SWE-Leg
 | `sft_conversion` | Optional post-job conversion step | external |
 | `HARBOR_EXCLUDE_TASKS` | Space-separated task IDs Harbor must skip | derived |
 
-The only external value you normally fill is `runtime_info.input.llm_api`; the task source is wired from curator via `meta_info.dependencies`.
+The only external value you normally fill is `runtime_info.input.llm_api`; the task source is wired from curator via `meta_info.dependencies.from` (mirrored by curator's own `dependencies.to`).
 
 ## Active runtime values
 
@@ -28,7 +28,7 @@ Excerpted from `config.yaml`:
 ```yaml
 llm_api:
   api_key: dummy-key
-  api_base_url: "http://llm10.jierungogogo.com/v1"
+  api_base_url: "http://<your-production-endpoint>/v1"
   model: "openai/MiniMax-M2.7"
   protocols: [openai_compatible, anthropic_compatible]
   served_via: per_job_litellm_proxy

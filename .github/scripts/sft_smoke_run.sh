@@ -26,12 +26,26 @@ if [[ -n "$REMOTE_ENV_FILE" && -f "$REMOTE_ENV_FILE" ]]; then
   set +a
 fi
 
+# The tracked smoke template holds no credentials; materialise a run copy under
+# artifacts/ and inject them there. Injecting into the template itself is
+# refused by inject_smoke_secrets.py — it would dirty the working tree.
+prepare_smoke_config() {  # prepare_smoke_config <block_dir> -> echoes the run copy
+  local bd="$1"
+  local run_cfg="$bd/artifacts/.config.smoke-run.yaml"
+  mkdir -p "$bd/artifacts"
+  cp "$bd/tests/smoke/config.yaml" "$run_cfg"
+  [[ -f /gpufs/haoli/cicd/shared/.env ]] && source /gpufs/haoli/cicd/shared/.env
+  python3 "$bd/../../scripts/inject_smoke_secrets.py" "$run_cfg" >&2
+  echo "$run_cfg"
+}
+
 run_local() {
   cd "$BLOCK_DIR"
   bash tests/cases/02_repo_pins.sh
   bash tests/cases/03_uv_env_editable.sh
-  SFT_CONFIG="$BLOCK_DIR/tests/smoke/config.yaml" bash scripts/dryrun.sh
-  SFT_CONFIG="$BLOCK_DIR/tests/smoke/config.yaml" \
+  local run_cfg; run_cfg="$(prepare_smoke_config "$BLOCK_DIR")"
+  SFT_CONFIG="$run_cfg" bash scripts/dryrun.sh
+  SFT_CONFIG="$run_cfg" \
     SFT_SMOKE_CI_STRICT=1 \
     SFT_SMOKE_BUDGET="$BUDGET" \
     bash tests/smoke/10_train_demo.sh
@@ -97,8 +111,9 @@ ln -s "$runtime_dir/artifacts/env" artifacts/env
 ln -s "$runtime_dir/artifacts/data/examples" artifacts/data/examples
 bash tests/cases/02_repo_pins.sh
 bash tests/cases/03_uv_env_editable.sh
-SFT_CONFIG="$PWD/tests/smoke/config.yaml" bash scripts/dryrun.sh
-SFT_CONFIG="$PWD/tests/smoke/config.yaml" \
+RUN_CFG="$(prepare_smoke_config "$PWD")"
+SFT_CONFIG="$RUN_CFG" bash scripts/dryrun.sh
+SFT_CONFIG="$RUN_CFG" \
   SFT_SMOKE_CI_STRICT=1 \
   SFT_SMOKE_BUDGET="$budget" \
   bash tests/smoke/10_train_demo.sh

@@ -4,7 +4,7 @@ description: >
   Launch the tracer pipeline via `scripts/start.sh` after preflight passes,
   and do the tracer-specific post-run accounting: prepare/filter tasks, start
   the per-job LiteLLM proxy, run Harbor trajectories, clean up the proxy,
-  inspect artifacts/jobs/<job>/, update consumption_ledger.yaml and
+  inspect artifacts/jobs/<job>/, update processed_tasks.yaml and
   HARBOR_EXCLUDE_TASKS, and optionally produce LF-format SFT data under
   artifacts/sft_data/<job>/lf.json. Long-running. Triggers on phrases like
   "run tracer", "run a tracer job", "launch tracer", "generate
@@ -66,7 +66,7 @@ scripts/start.sh --update-repos  # refresh Harbor first (or TRAJGEN_UPDATE_REPOS
 3. generate the per-job LiteLLM config from `runtime_info.input.llm_api` +
    `litellm_proxy` and **start the proxy** on `runtime_info.input.litellm_proxy.port`;
 4. build and run the Harbor command from `config.yaml`, adding one
-   `--exclude-task-name <id>` per token in `environment.extra.HARBOR_EXCLUDE_TASKS`;
+   `--exclude-task-name <id>` per token in `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`;
 5. if `runtime_info.input.sft_conversion.enabled: true`, run
    `scripts/convert_trajectories.sh --job "$JOB_NAME"` after Harbor exits.
 
@@ -92,11 +92,11 @@ outcome and reward.
 Tracer **only** runs tasks listed in curator's `verifiable_tasks.txt`, and must
 never re-run a task it already processed. After every job:
 
-1. Update `artifacts/consumption_ledger.yaml` — one entry per task with
+1. Update `artifacts/processed_tasks.yaml` — one entry per task with
    `status` (`pending | running | done | failed | skipped`), `submitted_at`,
    `completed_at`, `trajectory_path`, `reward`, `note`.
 2. Add every task now `done`, `failed` (excluded), or `skipped` to
-   `environment.extra.HARBOR_EXCLUDE_TASKS` in `config.yaml`, so the next
+   `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` in `config.yaml`, so the next
    `start.sh` skips it.
 3. Update `config.yaml`'s status block (`phase`, `progress`, `next_steps`,
    `blockers`, `last_updated`). Remember `config.yaml` is one-shot per run —

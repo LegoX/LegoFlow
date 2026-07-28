@@ -2,19 +2,15 @@
 name: setup
 description: >
   Bootstrap the trainer block from a fresh clone to "/trainer:check passes":
-  preflight tooling (uv, system python3 + PyYAML), check out the
-  repos under repos/ (LLaMA-Factory, swe_data_process) at their pinned
-  commits — initialising the git submodules, rewriting the swe_data_process
-  SSH remote to https+token when needed — build the uv env at
-  meta_info.environment.sft_uv (artifacts/env/lf) via scripts/install_env.sh
-  (torch 2.10 cu128 + editable repos + metrics/DeepSpeed/Liger +
-  flash-attn + Qwen3.5 linear-attention dependencies + wandb), then fill in
-  runtime_info.input (source-specific fields, conversion.data_name,
-  model.model_name_or_path, training.output_dir, experiment.wandb_*),
-  prompting only for unset or placeholder values and keeping the WandB key
-  out of git. Idempotent; ends by handing off to /trainer:check (which owns the
-  dryrun + preflight report) rather than re-running dryrun itself. Triggers on
-  phrases like "set up trainer", "bootstrap trainer", "install LLaMA-Factory",
+  preflight tooling (uv, python3 + PyYAML), check out repos/ (LLaMA-Factory,
+  swe_data_process) at their pinned commits via git submodules, build the uv
+  env at artifacts/env/lf through scripts/install_env.sh (torch 2.10 cu128 +
+  editable repos + DeepSpeed/Liger + flash-attn + wandb), then fill in
+  runtime_info.input (source fields, conversion.data_name, model path,
+  training.output_dir, experiment.wandb_*), prompting only for unset or
+  placeholder values and keeping the WandB key out of git. Idempotent; hands
+  off to /trainer:check for the dryrun + preflight report. Triggers on phrases
+  like "set up trainer", "bootstrap trainer", "install LLaMA-Factory",
   "prepare trainer before training", "wire up trainer config".
 ---
 
@@ -120,9 +116,11 @@ filesystems. Suppress it with `export UV_LINK_MODE=copy` if it's noisy.
 
 ## Step 4 — Fill `runtime_info.input` (prompt only for gaps)
 
-Walk these keys; for each that is empty, `null`, or an obvious placeholder
-(a path that doesn't exist on this host), prompt with the current value as
-default. Write accepted values back into `config.yaml`, preserving comments
+Walk these keys; for each that is the literal `human` (the must-fill marker —
+always prompt for these), or an obvious placeholder (a path that doesn't exist
+on this host), prompt with the current value as default. `""` fields are
+env/auto-supplied and `null` is a semantic default — do not prompt for those
+unless their inline comment says otherwise. Write accepted values back into `config.yaml`, preserving comments
 and formatting (read–edit–write carefully; keep the inline `# choices: …`
 comments).
 
@@ -137,7 +135,7 @@ comments).
 | `dataset.name` | leave empty to auto-derive from `data_name` (recommended) |
 | `model.model_name_or_path` | Hub model ID or local base-model directory |
 | `training.output_dir` | run name → `artifacts/model/<basename>`; encode key hparams in the name as the existing value does |
-| `training.deepspeed` | ZeRO-3 config path (`artifacts/training_config/deepspeed/ds_z3_config.json`); confirm it exists |
+| `training.deepspeed` | ZeRO-3 config path (`scripts/deepspeed/ds_z3_config.json`); confirm it exists |
 | `experiment.wandb_mode` | `offline` (default) \| `online` \| `disabled` |
 | `credentials.wandb_api_key` | Leave empty in tracked config. For `wandb_mode: online`, export `WANDB_API_KEY` in the private runtime environment. |
 
@@ -169,3 +167,17 @@ doesn't exist on this host (model dir, `job_dir`) — fix those, not the env.
   Never write a real key into tracked `config.yaml`.
 - Never run training or data conversion here — that's `/trainer:run`.
 - Local block: don't SSH anywhere (`meta_info.resources.ip: null`).
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+### source.type mode matrix
+
+| mode | uses | ignores | conversion |
+|---|---|---|---|
+| `harbor_job` | `scaffold`, `job_dir` (wired from tracer via `meta_info.dependencies.from`, mirrored by tracer's own `dependencies.to`) | `hf_*`, `lf_path` | full trajectory → LF conversion |
+| `hf_lf` | `hf_hub_url`, `hf_file_name` (exact repo file; empty = full dataset config), `hf_subset` (ignored when hf_file_name set), `hf_split` | `scaffold`, `job_dir`, `lf_path` | skipped |
+| `local_lf` | `lf_path` (absolute or block-relative LF json) | `scaffold`, `job_dir`, `hf_*` | skipped |
+
+For `hf_lf` / `local_lf`, `conversion.data_name` is still used as the registered dataset key, and `conversion.max_instances` (>0) becomes the dataset's `num_samples` (random subsample). `dataset.name: ""` auto-derives from `conversion.data_name`.

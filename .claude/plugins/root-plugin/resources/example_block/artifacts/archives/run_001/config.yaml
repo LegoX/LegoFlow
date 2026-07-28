@@ -22,7 +22,7 @@ meta_info:
 
 runtime_info:
   # Only external inputs (API keys, human decisions, external paths).
-  # Inter-block values are wired through subblocks[].dependencies — not here.
+  # Inter-block values are wired via meta_info.dependencies — not here.
   input:
     dataset_path: null    # path to the labeled training dataset
     learning_rate: null   # float, e.g. 1e-4
@@ -31,8 +31,3 @@ runtime_info:
   output:
     model_checkpoint: null  # path to saved model checkpoint after training
 
-evolving:
-  description: Tune learning_rate and num_epochs to minimize validation loss.
-  tunable_params:
-    learning_rate: null   # range: 1e-5–1e-3
-    num_epochs: null      # range: 1–10, step 1

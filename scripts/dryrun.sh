@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Validate the root swe_lego_live block without side effects.
-# Checks local files, subblock configs, required runtime inputs, and SSH reachability.
-# Pass --full to also run each subblock's own dryrun on the remote node.
+# Config/schema/dependency validation is delegated to scripts/validate_config.py
+# (the shared block-contract validator). Pass --full to also run each subblock's
+# own dryrun.sh (locally, or on the remote node when resources.ip is remote).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,7 +22,7 @@ while [[ $# -gt 0 ]]; do
     --full) FULL=1; shift ;;
     -h|--help)
       echo "Usage: bash scripts/dryrun.sh [--full]"
-      echo "  --full   also run each subblock's dryrun.sh on the remote node"
+      echo "  --full   also run each subblock's dryrun.sh"
       exit 0
       ;;
     *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
@@ -52,13 +53,17 @@ else:
 PY
 }
 
+ROOT_CFG="$ROOT_DIR/config.yaml"
+
 echo "=== Block Dryrun: swe_lego_live ==="
 echo ""
 
 # ── 1. Local file checks ──────────────────────────────────────────────────────
 echo "1. Local files"
 
-for f in CLAUDE.md BLOCK_DEFINITION.md dashboard/overview.mdx artifacts/index.yaml; do
+for f in CLAUDE.md config.yaml \
+         .claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md \
+         scripts/validate_config.py; do
   if [[ -f "$ROOT_DIR/$f" ]]; then
     ok "$f"
   else
@@ -66,7 +71,16 @@ for f in CLAUDE.md BLOCK_DEFINITION.md dashboard/overview.mdx artifacts/index.ya
   fi
 done
 
-for d in dashboard artifacts scripts subblock; do
+# artifacts/index.yaml is runtime state written by scripts/archive_run.sh (the
+# start.sh EXIT trap), not a precondition — and it is gitignored, so a fresh
+# clone legitimately has none. Absence is INFO, never a failure.
+if [[ -f "$ROOT_DIR/artifacts/index.yaml" ]]; then
+  ok "artifacts/index.yaml"
+else
+  info "artifacts/index.yaml absent (auto-created by archive_run.sh after first run)"
+fi
+
+for d in artifacts scripts subblock; do
   if [[ -d "$ROOT_DIR/$d" ]]; then
     ok "dir: $d/"
   else
@@ -74,65 +88,92 @@ for d in dashboard artifacts scripts subblock; do
   fi
 done
 
-# ── 2. Subblock config checks ─────────────────────────────────────────────────
+# ── 2. Config validation (root + every subblock + cross-block deps) ──────────
 echo ""
-echo "2. Subblock configs"
+echo "2. Config validation (scripts/validate_config.py --root)"
 
-SWEGEN_CFG="$ROOT_DIR/subblock/curator/config.yaml"
-TRAJGEN_CFG="$ROOT_DIR/subblock/tracer/config.yaml"
+VALIDATOR_OUT="$(python3 "$ROOT_DIR/scripts/validate_config.py" --root "$ROOT_DIR" 2>&1)" && VALIDATOR_RC=0 || VALIDATOR_RC=$?
+echo "$VALIDATOR_OUT" | sed 's/^/    /'
+V_FAIL="$(echo "$VALIDATOR_OUT" | grep -c '^\[FAIL\]' || true)"
+V_WARN="$(echo "$VALIDATOR_OUT" | grep -c '^\[WARN\]' || true)"
+if [[ $VALIDATOR_RC -eq 0 ]]; then
+  ok "validate_config: no failures (${V_WARN} warnings)"
+else
+  fail "validate_config: ${V_FAIL} failures (${V_WARN} warnings) — see lines above"
+fi
+WARN=$((WARN+V_WARN))
 
-for cfg_file in "$SWEGEN_CFG" "$TRAJGEN_CFG"; do
-  label="${cfg_file#$ROOT_DIR/}"
-  if [[ ! -f "$cfg_file" ]]; then
-    fail "missing: $label"
-    continue
-  fi
-  ok "$label exists"
-  for section in meta_info runtime_info status; do
-    if grep -q "^${section}:" "$cfg_file"; then
-      ok "$label: has $section"
-    else
-      fail "$label: missing $section section"
-    fi
-  done
-done
-
-# ── 3. Runtime input checks ───────────────────────────────────────────────────
+# ── 3. Deployment & registry credentials ─────────────────────────────────────
 echo ""
-echo "3. Runtime inputs"
+echo "3. Deployment & registry credentials"
 
-if [[ -f "$SWEGEN_CFG" ]]; then
-  gh_tokens="$(cfg "$SWEGEN_CFG" "runtime_info.input.github_tokens")"
-  if [[ -n "$gh_tokens" && "$gh_tokens" != "null" ]]; then
-    ok "curator: github_tokens set"
-  else
-    warn "curator: github_tokens is empty — set runtime_info.input.github_tokens in subblock/curator/config.yaml"
-  fi
-
-  sw_api_key="$(cfg "$SWEGEN_CFG" "runtime_info.input.llm_api.api_key")"
-  sw_api_base="$(cfg "$SWEGEN_CFG" "runtime_info.input.llm_api.api_base_url")"
-  sw_pr_model="$(cfg "$SWEGEN_CFG" "runtime_info.input.llm_api.pr_model")"
-  [[ -n "$sw_api_key"  && "$sw_api_key"  != "null" ]] && ok "curator: llm_api.api_key set"      || warn "curator: llm_api.api_key is empty"
-  [[ -n "$sw_api_base" && "$sw_api_base" != "null" ]] && ok "curator: llm_api.api_base_url set"  || warn "curator: llm_api.api_base_url is empty"
-  [[ -n "$sw_pr_model" && "$sw_pr_model" != "null" ]] && ok "curator: llm_api.pr_model set"      || warn "curator: llm_api.pr_model is empty"
+# These are the tree-wide, OPTIONAL credentials declared in root config.yaml ->
+# runtime_info.input.{cloudflare,docker}. scripts/shared_credentials.sh resolves
+# them as env > root config.yaml > legacy per-block env file, and every subblock
+# reads them through the same helper, so what is reported here is exactly what
+# the blocks will see. Absence is always a WARN, never a FAIL.
+CF_ENV_FILE="${ENV_FILE:-$HOME/.config/trajgen_progress_cloudflare.env}"
+if [[ -f "$ROOT_DIR/scripts/shared_credentials.sh" ]]; then
+  CF_LEGACY_ENV_FILE="$CF_ENV_FILE"
+  # shellcheck source=/dev/null
+  source "$ROOT_DIR/scripts/shared_credentials.sh"
+  load_shared_credentials "$ROOT_DIR"
+else
+  fail "scripts/shared_credentials.sh missing — blocks cannot resolve shared cloudflare/docker credentials"
 fi
 
-if [[ -f "$TRAJGEN_CFG" ]]; then
-  tj_api_key="$(cfg "$TRAJGEN_CFG" "runtime_info.input.llm_api.api_key")"
-  tj_api_base="$(cfg "$TRAJGEN_CFG" "runtime_info.input.llm_api.api_base_url")"
-  tj_model="$(cfg "$TRAJGEN_CFG" "runtime_info.input.llm_api.model")"
-  [[ -n "$tj_api_key"  && "$tj_api_key"  != "null" ]] && ok "tracer: llm_api.api_key set"      || warn "tracer: llm_api.api_key is empty"
-  [[ -n "$tj_api_base" && "$tj_api_base" != "null" ]] && ok "tracer: llm_api.api_base_url set"  || warn "tracer: llm_api.api_base_url is empty"
-  [[ -n "$tj_model"    && "$tj_model"    != "null" ]] && ok "tracer: llm_api.model set"         || warn "tracer: llm_api.model is empty"
+if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+  ok "cloudflare: account_id + api_token resolved from ${SHARED_CLOUDFLARE_SOURCE}"
+  # Availability, not just presence: verify the token against the Cloudflare API.
+  CF_PROBE="$(shared_cloudflare_probe)" && ok "cloudflare: $CF_PROBE" \
+    || warn "cloudflare: $CF_PROBE — deploys will fail until the token is fixed"
+  [[ -n "${CLOUDFLARE_PAGES_PROJECT_PREFIX:-}" ]] && \
+    info "cloudflare: Pages project prefix '${CLOUDFLARE_PAGES_PROJECT_PREFIX}'"
+elif [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" || -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+  warn "cloudflare: only one of account_id/api_token is set (from ${SHARED_CLOUDFLARE_SOURCE}) — both are required; deploys will fail"
+else
+  warn "cloudflare: not configured (optional) — set runtime_info.input.cloudflare in root config.yaml, or export CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID. Without it docs/deploy_cloudflare_pages.sh and every block's dashboard publish are unavailable; local dashboards still work."
+fi
+
+if [[ -n "${DOCKER_USERNAME:-}" && -n "${DOCKER_PASSWORD:-}" ]]; then
+  ok "docker registry: credentials resolved from ${SHARED_DOCKER_SOURCE} for ${DOCKER_REGISTRY:-docker.io}"
+elif [[ -n "${DOCKER_USERNAME:-}" || -n "${DOCKER_PASSWORD:-}" ]]; then
+  warn "docker registry: only one of username/password is set (from ${SHARED_DOCKER_SOURCE}) — both are required"
+else
+  info "docker registry: no credentials in root config.yaml runtime_info.input.docker (optional) — falling back to any existing docker login below"
+fi
+[[ -n "${DOCKER_MIRROR:-}" ]] && info "docker registry: pull-through mirror configured (${DOCKER_MIRROR})"
+
+# Docker Hub login — anonymous pulls are limited to 100 per 6h per IP;
+# tracer/evaluator pull task + agent-runtime images and can hit the limit
+# mid-job (manifest errors that surface as agent/verifier failures).
+DOCKER_CFG="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+if ! command -v docker >/dev/null 2>&1; then
+  warn "docker: CLI not found — skipping registry-auth check (required by curator/tracer/evaluator)"
+elif [[ -f "$DOCKER_CFG" ]] && python3 - "$DOCKER_CFG" <<'PY'
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+auths = cfg.get("auths") or {}
+if any("docker.io" in k for k in auths if (auths.get(k) or {}).get("auth")):
+    sys.exit(0)
+if cfg.get("credsStore") or any("docker.io" in k for k in (cfg.get("credHelpers") or {})):
+    sys.exit(0)
+sys.exit(1)
+PY
+then
+  ok "docker: Docker Hub login found in $DOCKER_CFG"
+else
+  warn "docker: no Docker Hub login in $DOCKER_CFG — anonymous pulls are capped at 100/6h per IP; run \`bash scripts/docker_login.sh\` (uses the credentials above) or \`docker login\` to avoid mid-job pull failures in tracer/evaluator"
 fi
 
 # ── 4. SSH reachability ───────────────────────────────────────────────────────
 echo ""
 echo "4. SSH reachability"
 
-REMOTE_IP="$(cfg "$SWEGEN_CFG" "meta_info.resources.ip" 2>/dev/null || echo "")"
-REMOTE_USER="$(cfg "$SWEGEN_CFG" "meta_info.resources.user" 2>/dev/null || echo "root")"
-REMOTE_DIR="$(cfg "$SWEGEN_CFG" "meta_info.resources.directory" 2>/dev/null || echo "")"
+REMOTE_IP="$(cfg "$ROOT_CFG" "meta_info.resources.ip" 2>/dev/null || echo "")"
+REMOTE_USER="$(cfg "$ROOT_CFG" "meta_info.resources.user" 2>/dev/null || echo "root")"
+REMOTE_DIR="$(cfg "$ROOT_CFG" "meta_info.resources.directory" 2>/dev/null || echo "")"
+[[ -z "$REMOTE_USER" || "$REMOTE_USER" == "null" ]] && REMOTE_USER="root"
 
 SSH_OK=0
 if [[ -z "$REMOTE_IP" || "$REMOTE_IP" == "null" || "$REMOTE_IP" == "local" ]]; then
@@ -146,39 +187,56 @@ else
   else
     warn "SSH to ${REMOTE_USER}@${REMOTE_IP} failed — node may be unreachable from this machine"
   fi
-fi
 
-# ── 5. Remote directory check ─────────────────────────────────────────────────
-if [[ $SSH_OK -eq 1 && -n "$REMOTE_DIR" && "$REMOTE_DIR" != "null" ]]; then
-  echo ""
-  echo "5. Remote directory"
-  REMOTE_REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
-  if ssh -o BatchMode=yes "${REMOTE_USER}@${REMOTE_IP}" \
-       "test -d '${REMOTE_REPO_DIR}'" 2>/dev/null; then
-    ok "remote dir exists: ${REMOTE_REPO_DIR}"
-  else
-    warn "remote dir not found: ${REMOTE_REPO_DIR} — run scripts/start.sh to sync"
+  if [[ $SSH_OK -eq 1 && -n "$REMOTE_DIR" && "$REMOTE_DIR" != "null" ]]; then
+    REMOTE_REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
+    if ssh -o BatchMode=yes "${REMOTE_USER}@${REMOTE_IP}" \
+         "test -d '${REMOTE_REPO_DIR}'" 2>/dev/null; then
+      ok "remote dir exists: ${REMOTE_REPO_DIR}"
+    else
+      warn "remote dir not found: ${REMOTE_REPO_DIR} — run scripts/start.sh to sync"
+    fi
   fi
 fi
 
-# ── 6. Full subblock dryruns (optional) ───────────────────────────────────────
-if [[ $FULL -eq 1 && $SSH_OK -eq 1 ]]; then
+# ── 5. Full subblock dryruns (optional) ───────────────────────────────────────
+if [[ $FULL -eq 1 ]]; then
   echo ""
-  echo "6. Subblock dryruns (--full)"
-  REMOTE_REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
+  echo "5. Subblock dryruns (--full)"
 
-  for subblock in curator tracer; do
-    info "running subblock/${subblock}/scripts/dryrun.sh on remote ..."
-    if ssh -o BatchMode=yes "${REMOTE_USER}@${REMOTE_IP}" \
-         "cd '${REMOTE_REPO_DIR}/subblock/${subblock}' && bash scripts/dryrun.sh" 2>&1 \
-         | sed "s/^/    [${subblock}] /"; then
-      ok "subblock/${subblock} dryrun passed"
+  SUBBLOCKS="$(python3 - "$ROOT_CFG" <<'PY'
+import sys, yaml
+with open(sys.argv[1], encoding="utf-8") as fh:
+    cfg = yaml.safe_load(fh) or {}
+print(" ".join((cfg.get("meta_info") or {}).get("subblocks") or {}))
+PY
+)"
+
+  for subblock in $SUBBLOCKS; do
+    if [[ ! -f "$ROOT_DIR/subblock/${subblock}/scripts/dryrun.sh" ]]; then
+      warn "subblock/${subblock} has no scripts/dryrun.sh"
+      continue
+    fi
+    if [[ $SSH_OK -eq 1 ]]; then
+      REMOTE_REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
+      info "running subblock/${subblock}/scripts/dryrun.sh on remote ..."
+      if ssh -o BatchMode=yes "${REMOTE_USER}@${REMOTE_IP}" \
+           "cd '${REMOTE_REPO_DIR}/subblock/${subblock}' && bash scripts/dryrun.sh" 2>&1 \
+           | sed "s/^/    [${subblock}] /"; then
+        ok "subblock/${subblock} dryrun passed"
+      else
+        fail "subblock/${subblock} dryrun failed"
+      fi
     else
-      fail "subblock/${subblock} dryrun failed"
+      info "running subblock/${subblock}/scripts/dryrun.sh locally ..."
+      if (cd "$ROOT_DIR/subblock/${subblock}" && bash scripts/dryrun.sh) 2>&1 \
+           | sed "s/^/    [${subblock}] /"; then
+        ok "subblock/${subblock} dryrun passed"
+      else
+        fail "subblock/${subblock} dryrun failed"
+      fi
     fi
   done
-elif [[ $FULL -eq 1 && $SSH_OK -eq 0 ]]; then
-  warn "--full requested but SSH unavailable; skipping subblock dryruns"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────

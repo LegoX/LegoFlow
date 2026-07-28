@@ -209,9 +209,9 @@ except ImportError:
 with open(sys.argv[1], encoding="utf-8") as fh:
     data = yaml.safe_load(fh) or {}
 
-env = ((data.get("environment") or {}).get("extra") or {})
+env = (((data.get("runtime_info") or {}).get("input") or {}).get("env_extra") or {})
 if not isinstance(env, dict):
-    print("ERROR: environment.extra must be a mapping", file=sys.stderr)
+    print("ERROR: runtime_info.input.env_extra must be a mapping", file=sys.stderr)
     sys.exit(2)
 
 for key, value in env.items():
@@ -378,12 +378,49 @@ if [[ -z "$RUN_COMMAND" ]]; then
   fi
   # Never retry timed-out tasks — they'll just time out again and waste budget
   EXTRA_ARGS="$EXTRA_ARGS --retry-exclude AgentTimeoutError"
-  # Add any extra exclude-task-name flags from HARBOR_EXCLUDE_TASKS (space-separated list)
-  if [[ -n "$HARBOR_EXCLUDE_TASKS" ]]; then
-    for _excl_task in $HARBOR_EXCLUDE_TASKS; do
-      EXTRA_ARGS="$EXTRA_ARGS --exclude-task-name $(printf '%q' "$_excl_task")"
-    done
+  # Tasks to skip come from two independent places, and only one of them is
+  # config:
+  #
+  #   HARBOR_EXCLUDE_TASKS — hand-maintained. Tasks a human decided never to run
+  #     again (chronic timeouts, OOMs). Belongs in config.yaml: it is a decision,
+  #     not an observation.
+  #
+  #   artifacts/processed_tasks.yaml — the ledger. Which tasks this block already
+  #     consumed. Pure runtime state, derived here at launch instead of being
+  #     mirrored into config.yaml. Mirroring it by hand is what previously let the
+  #     two drift apart, and what made a smoke run exclude every task it had just
+  #     generated.
+  #
+  # A smoke re-runs the same fixture tasks on purpose, so it opts out of the
+  # ledger-derived half via HARBOR_LEDGER_EXCLUDE=0.
+  _LEDGER_FILE="$BLOCK_DIR/artifacts/processed_tasks.yaml"
+  _LEDGER_EXCLUDE=""
+  if [[ "${HARBOR_LEDGER_EXCLUDE:-1}" != "0" && -f "$_LEDGER_FILE" ]]; then
+    _LEDGER_EXCLUDE="$(LEDGER="$_LEDGER_FILE" python3 - <<'PY' 2>/dev/null || true
+import os
+try:
+    import yaml
+except ImportError:
+    raise SystemExit(0)
+try:
+    doc = yaml.safe_load(open(os.environ["LEDGER"], encoding="utf-8")) or {}
+except Exception:
+    raise SystemExit(0)
+runs = doc.get("runs")
+if not isinstance(runs, list):
+    raise SystemExit(0)
+terminal = {"done", "failed", "skipped"}
+ids = {e.get("task_id") for e in runs
+       if isinstance(e, dict) and e.get("status") in terminal and e.get("task_id")}
+print(" ".join(sorted(ids)))
+PY
+)"
+    [[ -n "$_LEDGER_EXCLUDE" ]] && \
+      echo "[start] excluding $(wc -w <<<"$_LEDGER_EXCLUDE") already-processed task(s) from artifacts/processed_tasks.yaml"
   fi
+  for _excl_task in $HARBOR_EXCLUDE_TASKS $_LEDGER_EXCLUDE; do
+    EXTRA_ARGS="$EXTRA_ARGS --exclude-task-name $(printf '%q' "$_excl_task")"
+  done
   RUN_COMMAND="uv run harbor run --path $(printf '%q' "$HARBOR_DATASET_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$TRAJGEN_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$TRAJGEN_JOB_NAME") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'
 import json
 import os

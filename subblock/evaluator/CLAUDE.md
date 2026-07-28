@@ -28,7 +28,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 - `runtime_info.input.task_source`: benchmark selection — `provider: harbor_registry`, `dataset_name` (one of `swebench-verified`, `swebench-verified-100`, `swebench_multilingual`, `swebench_multilingual-100`, `swebenchpro`, `swebenchpro-100`, `terminal-bench`, `aider-polyglot`, `livecodebench`, `humanevalfix`, `bigcodebench-hard-complete`), `version`, and `registry_path` pointing at `repos/harbor/registry.json`
 - `runtime_info.input.harbor_job`: jobs directory, concurrency, retries, timeout multiplier, optional `n_tasks` smoke cap
 - `runtime_info.input.agent`: agent name, version, runtime image, max turns, temperature
-- `environment.extra.HARBOR_EXCLUDE_TASKS`: space-separated list of task IDs Harbor must skip (prior timeouts/OOMs)
+- `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`: space-separated list of task IDs Harbor must skip (prior timeouts/OOMs)
 
 **Outputs** (written to `config.yaml` → `runtime_info.output`):
 - `eval_results_dir`: Harbor job directories with per-task evaluation outputs at `artifacts/jobs/<job>/<task>/{agent,verifier}/`, plus LiteLLM trajectory logs at `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
@@ -144,7 +144,7 @@ Steps:
 - `scripts/start.sh`: run dryrun + real-completion preflight → generate LiteLLM config → start proxy on `runtime_info.input.litellm_proxy.port` → run Harbor job with `--dataset <name>@<version> --registry-path repos/harbor/registry.json` and any `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS` → **post-eval job analysis** (unless disabled).
 - `scripts/analyze_job.sh [<job_dir>]`: run the Harbor `job_analysis` pipeline on a completed job and write results into `<job_dir>/analysis/` (the layout the dashboard reads). No arg → newest job under `jobs_dir`. Safe to re-run and to run on old jobs. `start.sh` calls this automatically after each eval (non-fatal). If the gold dataset is missing it auto-invokes `prepare_dataset.sh` first (disable with `JOB_ANALYSIS_PREPARE_DATASET=0`).
 - `scripts/prepare_dataset.sh [<dataset_name>]`: generate a Harbor gold dataset under `artifacts/datasets/<gold_base>/` for analysis — step 1 runs the matching `repos/harbor/adapters/<name>` adapter (from HuggingFace) to produce `tests/config.json` gold; step 2 runs `repos/harbor/scripts/task_analysis/tag_task_metadata.py` to complete each `task.toml`'s `[language, area, topic, bug_class]` + difficulty tags via an LLM. Idempotent (skips populated datasets unless `PREP_FORCE=1`). Tagging is best-effort: gold is still produced if it fails.
-- `scripts/clean.sh`: remove disposable logs and generated proxy state while preserving jobs, prepared datasets, runtime extractions, environments, archives, and `index.yaml`.
+- `scripts/clean.sh`: remove disposable logs and generated proxy state while preserving jobs, prepared datasets, runtime extractions, environments, archives, and `index.yaml`. `--all` wipes `artifacts/` entirely except git-tracked files, confirming twice.
 
 Evaluator scripts need PyYAML in the runtime Python (used by inline `python3 -` config readers). If you see `ERROR: PyYAML is required`, `pip install pyyaml` into the active interpreter.
 

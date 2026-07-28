@@ -1,8 +1,0 @@
-# terminalgen block runtime dependencies.
-#
-# The wrapped terminal-lego pipeline only needs `requests`, but this block's own
-# scripts (read_params.py, bucket_questions.py, dryrun.sh, tests, dashboard) parse
-# config.yaml with PyYAML. Install this file, not repos/terminal-lego/requirements.txt
-# directly, so the venv has everything the block needs.
--r repos/terminal-lego/requirements.txt
-PyYAML>=6.0

@@ -9,7 +9,7 @@ description: >
   `task_source.provider: huggingface`) probes HF dataset reachability;
   confirms LiteLLM proxy port is free or held by current user; verifies
   the agent runtime_image is present on the local Docker daemon; sanity-
-  checks `artifacts/consumption_ledger.yaml` and cross-checks every
+  checks `artifacts/processed_tasks.yaml` and cross-checks every
   done/failed/skipped entry against `HARBOR_EXCLUDE_TASKS`. Read-only.
   Reports all failures in one pass. Triggers on phrases like "check
   tracer", "preflight tracer", "is tracer ready", "diagnose tracer",
@@ -31,13 +31,65 @@ escalating).
    probe, HF dataset auth probe, port-4001 ownership, Docker image
    presence, ledger validity, and the ledger↔`HARBOR_EXCLUDE_TASKS`
    cross-check.
-2. Report PASS / WARN / FAIL counts and a structured summary back to
-   the user. Use the dryrun's section headings.
+2. Fold every `dryrun.sh` line into the Step 3 report below — never
+   re-run a probe or overrule an `OK`.
+
+## Step 3 — The report (always the last thing you print)
+
+The report **is** the deliverable. Print it every single time — even
+on an abort (then: heading + a `NO` verdict whose reason is the abort
+message, nothing else). Fill this template exactly; drop only truly
+inapplicable rows.
+
+````
+## tracer block check — CWD=<relative path>
+
+**SAFE TO RUN: <✅ YES | ❌ NO>** — <R> required · <A> advisory · <W> warnings
+
+| Layer | Check | Status | Detail |
+|-------|-------|:------:|--------|
+| det  | schema · repos/commits · harbor-uv · litellm-venv · swe-data-process-uv | ✓ | ok=<N> |
+| det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim dryrun line> |
+| det  | llm endpoint          | <✓/⚠/✗> | <GET /models 2xx \| CF-gated 401 (WARN) \| unreachable> |
+| det  | hf dataset auth       | <✓/⚠/✗/·> | <reachable \| 401/403 \| skipped (not a huggingface source)> |
+| det  | litellm port 4001     | <✓/✗>   | <free \| held by pid <P>> |
+| det  | agent runtime_image   | <✓/⚠>   | <present \| not pulled locally> |
+| det  | processed-tasks ledger    | <✓/✗>   | <clean \| leak: <task_id> not in HARBOR_EXCLUDE_TASKS> |
+| det  | dependency wiring | <✓/✗> | <ok: N edges, both ends \| dep:link-mismatch … \| suppressed: smoke overlay> |
+| det  | cloudflare (optional) | <✓/⚠>   | <ok (source: env\|root-config\|legacy-file) \| missing npx/credentials, see /root:setup> |
+| det  | docker registry (optional) | <✓/⚠> | <ok (source: …) \| no credentials, pulls capped at 100/6h per IP> |
+
+**Run configuration**
+```
+task_source: <provider> / <dataset_name or local task dir>
+llm:         <api_base_url> / <model>
+litellm:     port <port>, proxy config <template>
+harbor_job:  jobs_dir=<jobs_dir> concurrency=<n> retries=<n> timeout_mult=<x>
+agent:       <agent.name>@<agent.version>, image <runtime_image>
+sft:         <sft_conversion.enabled> → out_dir=<out_dir>
+excluded:    <n> task ids in HARBOR_EXCLUDE_TASKS
+```
+
+**Next steps**
+1. <one per failure, required first; quote the dryrun line verbatim>
+2. ...
+Re-run `/tracer:check`.
+````
+
+**The three invariants:**
+
+1. **Verdict** — `✅ YES` iff `R == 0`, where `R` = dryrun `FAIL` count
+   **+** any unresolved ledger leak **+** a held litellm port. Advisory
+   items (agent image not pulled, HF network blip) and warnings *never*
+   change it.
+2. **Glyphs** — `✓` pass · `✗` blocks · `⚠` advisory/warning · `·` skipped.
+3. **Collapse** — fold all passing `det` checks into the first row; add
+   a row only for each `det` check that is `✗` or `⚠`.
 
 ## Interpreting results
 
 - **LLM endpoint 401 from this shell**: when the configured base URL is
-  `llm10.jierungogogo.com` (or similar CF-gated production endpoint),
+  `<your-production-endpoint>` (or similar CF-gated production endpoint),
   `dummy-key` is the real production key and the 401 is a network
   artifact specific to Claude Code's sandboxed shell — see memory
   `project-swegen-llm-endpoint`. Dryrun downgrades 401/403 to WARN for
@@ -61,9 +113,31 @@ escalating).
   registry-auth surprises surface now.
 
 - **ledger leak**: every entry with `status: done|failed|skipped` MUST
-  also appear in `environment.extra.HARBOR_EXCLUDE_TASKS`. If dryrun
+  also appear in `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`. If dryrun
   reports leaks, Harbor will re-run them — fix the exclude list
   before running.
+
+## Dependency wiring (cross-checked inside dryrun)
+
+`scripts/dryrun.sh` runs `scripts/validate_config.py --block .`, which
+cross-checks `meta_info.dependencies` against the real `runtime_info` on **both**
+ends of every edge. These findings are easy to lose in the dryrun output, and
+they are exactly what breaks a hand-off silently — surface them in the report.
+
+| Finding | Meaning | Verdict |
+|---|---|---|
+| `dep:bad-key` | a `from` key is not a real dot-path in this block's own `runtime_info.input`, or a `to` key is not a declared `runtime_info.output` key | FAIL |
+| `dep:bad-ref` | malformed ref, or the named block / output key / input path does not exist | FAIL |
+| `dep:link-mismatch` | the edge is declared by only one end — the other end does not point back | FAIL |
+| `dep:unresolved` | a required upstream output has neither `value` nor `path` yet | FAIL (WARN when the edge is `required: false`) |
+| `dep:path-mismatch` | this block's configured value resolves outside the producer's declared output path — usually a stale path after a rename | WARN |
+| `output:orphan` | an output with no `dependencies.to` entry; normal for a terminal output, suspicious for one that is supposed to feed the next stage | WARN |
+| `dep:smoke-overlay` | a root smoke currently holds some block's config, so the tree mixes two config sets; every cross-block finding above is downgraded to a warning for the duration | INFO |
+
+Any `dep:*` FAIL blocks `SAFE TO RUN` — it means this block is wired to something
+the other end does not actually provide. The one exception is when
+`dep:smoke-overlay` is present: those findings are artifacts of the running
+smoke, not real drift, and must not be reported as such.
 
 ## When to escalate to FAIL vs WARN
 
@@ -76,6 +150,8 @@ failures unless the user asks. The four current real-world warnings:
 | `agent runtime_image not pulled locally` | First task pays the pull cost. |
 | `HF dataset network error` | Likely transient; retry once. |
 | LLM endpoint 401/403 from this shell | Likely CF-gating artifact (see memory). |
+| `cloudflare: missing npx/credentials` | Only affects `/tracer:dashboard`'s public sync; local HTML dashboard is unaffected. Credentials resolve env > root `config.yaml` → `runtime_info.input.cloudflare` > `~/.config/trajgen_progress_cloudflare.env`; the reported source says which won. Point the user at `/root:setup`'s optional Cloudflare extra — never blocks `/tracer:run`. A common cause on this host: node installed under `~/.nvm` is not on the PATH of a non-interactive shell, so `npx` looks missing to the script but present to the user. |
+| `docker registry: no credentials` | Anonymous Docker Hub pulls are capped at 100 per 6h per IP; a long Harbor run pulls one image per task environment and can hit the cap mid-job, where it surfaces as agent/verifier failures rather than an auth error. Fix with `bash <repo_root>/scripts/docker_login.sh` (uses root `config.yaml` → `runtime_info.input.docker`) or a plain `docker login`. Never blocks `/tracer:run`. |
 
 ## Mandatory before `/tracer:run`
 
@@ -89,3 +165,11 @@ must run AND the user must explicitly confirm before any
   no `git clone`. All checks are < 30 s in aggregate.
 - Fixing failures: this skill only diagnoses. Setup fixes belong in
   `/tracer:setup`.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **LiteLLM proxy port**: 4001 is squatted by an unowned stale LiteLLM and 4002 is reserved for the host-wide root-owned LiteLLM — that is why `litellm_proxy.port` defaults to 4003. Flag a config that moves back onto 4001/4002.
+- **Smoke overlays**: test/smoke runs use their own configs — `tests/smoke/config.yaml` (per-block) and `<repo_root>/tests/smoke/tracer/config.yaml` (root chain) — never the production config.yaml.
+- **agent.runtime_host_path** must be pre-extracted from `runtime_image` via `docker cp` and user-owned: gpufs root_squash blocks docker-daemon writes to root-owned dirs.

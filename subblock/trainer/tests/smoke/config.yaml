@@ -16,7 +16,11 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    trajectories_dir: tracer.output.raw_trajectories_dir
+    from:
+      source.job_dir:
+        from: tracer.output.raw_trajectories_dir
+        when: {source.type: harbor_job}
+    to: {}
 
   resources:
     ip: local
@@ -53,7 +57,7 @@ runtime_info:
       # SMOKE: production uses hf_lf + hf_file_name. Smoke reads a staged
       # snapshot of that exact file from artifacts/data/examples/lf_512.json
       # (seeded by subblock/trainer/tests/smoke/prepare_smoke_data.sh).
-      type: local_lf
+      type: hf_lf
       scaffold: openhands-sdk
       job_dir: ""
       hf_hub_url: "SWE-Lego/samples_for_llama_factory_sft"
@@ -64,7 +68,7 @@ runtime_info:
 
     conversion:
       max_instances: 0
-      exclude_repos_file: artifacts/data/excluded_repos.txt
+      exclude_repos_file: scripts/excluded_repos.txt
       # SMOKE: stable throwaway key — the verifier removes this entry from
       # dataset_info.json after the smoke so it doesn't accumulate.
       data_name: "_smoke_train_ci"
@@ -79,7 +83,7 @@ runtime_info:
     training:
       stage: sft
       finetuning_type: full
-      deepspeed: artifacts/training_config/deepspeed/ds_z3_config.json
+      deepspeed: scripts/deepspeed/ds_z3_config.json
       template: qwen3_5
       cutoff_len: 131072
       rope_scaling: null
@@ -99,7 +103,7 @@ runtime_info:
       learning_rate: 5.0e-5
       weight_decay: 0.01
       max_grad_norm: 1.0
-      max_steps: 4                      # SMOKE: cap at 4 optimizer steps
+      max_steps: 8                      # SMOKE: cap at 4 optimizer steps
       num_train_epochs: 3.0
       lr_scheduler_type: cosine
       warmup_ratio: 0.0                 # SMOKE: was 0.1 (meaningless over 4 steps)
@@ -136,11 +140,3 @@ runtime_info:
       description: Final training metrics from LLaMA-Factory
       value: null
 
-evolving:
-  description: SFT training pipeline with tunable hyperparameters.
-  tunable_params:
-    learning_rate: "Learning rate (1e-5 to 1e-3)"
-    num_train_epochs: "Number of training epochs"
-    per_device_train_batch_size: "Batch size per GPU"
-    gradient_accumulation_steps: "Gradient accumulation steps"
-    max_instances: "Maximum training instances"

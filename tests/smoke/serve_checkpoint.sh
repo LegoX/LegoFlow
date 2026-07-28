@@ -62,9 +62,15 @@ PY
 }
 
 # --- Resolve the remote pod from the trainer block's resources ------------------
-R_IP="$(cfg "$SFT_CFG" meta_info.resources.ip)"
-R_USER="$(cfg "$SFT_CFG" meta_info.resources.user)"
-R_KEY="$(cfg "$SFT_CFG" meta_info.resources.key)"
+# The trainer stage restores its config when it finishes, so by the time the
+# evaluator stage runs, the block config is the value-free template again and
+# ip/key read back empty — the pod address only ever exists in the overlaid
+# copy. Fall back to the same env the injector uses, so serving the checkpoint
+# does not depend on a config that has already been rolled back.
+[[ -f /gpufs/haoli/cicd/shared/.env ]] && { set -a; . /gpufs/haoli/cicd/shared/.env; set +a; }
+R_IP="$(cfg "$SFT_CFG" meta_info.resources.ip)";   R_IP="${R_IP:-${SMOKE_REMOTE_IP:-}}"
+R_USER="$(cfg "$SFT_CFG" meta_info.resources.user)"; R_USER="${R_USER:-${SMOKE_REMOTE_USER:-}}"
+R_KEY="$(cfg "$SFT_CFG" meta_info.resources.key)";  R_KEY="${R_KEY:-${SMOKE_REMOTE_KEY:-}}"
 R_PORT="$(cfg "$SFT_CFG" meta_info.resources.port)"
 R_DIR="$(cfg "$SFT_CFG" meta_info.resources.directory)"
 OUTPUT_DIR="$(cfg "$SFT_CFG" runtime_info.input.training.output_dir)"
@@ -95,10 +101,24 @@ fi
 VLLM_CONDA_ENV="${VLLM_CONDA_ENV:-vllm_0.18.1}"
 CONDA_SH="${CONDA_SH:-/anaconda3/etc/profile.d/conda.sh}"
 
-remote() {
-  ssh -i "$R_KEY" -p "$R_PORT" \
+_remote_raw() {
+  ssh -i "$R_KEY" -p "$R_PORT" -o ControlMaster=auto -o ControlPath=/tmp/.ssh-smoke-%r@%h:%p -o ControlPersist=900 \
       -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20 \
       "$R_USER@$R_IP" "$@"
+}
+# The pod refuses individual handshakes under load while staying up, so a lone
+# refusal must not be read as a failure. Retry ONLY on 255 (ssh's own "could not
+# connect"); any other code is the remote command's result and passes through —
+# callers here test remote state with commands whose non-zero answers are
+# meaningful (e.g. "is vLLM up yet?").
+remote() {
+  local t rc
+  for t in 1 2 3 4 5; do
+    _remote_raw "$@"; rc=$?
+    [[ "$rc" -ne 255 ]] && return "$rc"
+    [[ "$t" -lt 5 ]] && sleep $((t * 6))
+  done
+  return "$rc"
 }
 
 open_tunnel() {  # localhost:VLLM_PORT -> pod 127.0.0.1:VLLM_PORT
@@ -156,6 +176,27 @@ case "$ACTION" in
       echo "SKIP: no checkpoint (config.json) under $MODEL_ROOT on the pod (trainer stage didn't persist a model)"
       exit 77
     fi
+
+    # Normalise the checkpoint's tokenizer_config for the serving env. The
+    # training env (transformers 5.6.0) writes extra_special_tokens as a LIST;
+    # the pod's vLLM env (transformers 4.57.6) expects a mapping and dies with
+    # "AttributeError: 'list' object has no attribute 'keys'" deep inside
+    # tokenizer init — surfacing only as "Engine core initialization failed".
+    # The tokens are fully described by added_tokens_decoder, so dropping the
+    # redundant key costs nothing and lets an older server load a newer
+    # checkpoint. Idempotent, and skipped when the value is already a mapping.
+    remote "python3 - <<'PYEOF'
+import json, os
+p = os.path.join('$CKPT_REMOTE', 'tokenizer_config.json')
+try:
+    d = json.load(open(p))
+except Exception:
+    raise SystemExit(0)
+if isinstance(d.get('extra_special_tokens'), list):
+    d.pop('extra_special_tokens')
+    json.dump(d, open(p, 'w'), ensure_ascii=False, indent=2)
+    print('normalised extra_special_tokens (list -> removed) for older transformers')
+PYEOF" || echo "WARN: could not normalise tokenizer_config (continuing)"
 
     # data_parallel_size: explicit config, else count FREE GPUs (shared pod —
     # never claim a GPU someone else is using).

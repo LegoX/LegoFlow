@@ -150,35 +150,105 @@ swegen validate \
 Expected result: NOP reward is `0` and Oracle reward is `1`. If the sample
 task is missing, report that `/curator:setup` must initialize the submodule.
 
+## Step 4b - Shared credentials (optional, never blocking)
+
+`dryrun.sh` also reports the two tree-wide optional credentials, resolved by
+`<repo_root>/scripts/shared_credentials.sh` in the order **env > root
+`config.yaml` → `runtime_info.input.{cloudflare,docker}` > this block's legacy
+`~/.config/swegen_progress_cloudflare.env`**. The reported source tells the user
+which of the three won, so say it in the report rather than just "configured".
+
+- **Cloudflare Pages** — needs an `npx`/node toolchain on `PATH` plus
+  `account_id` + `api_token`. Purely for publishing the databoard online (the
+  manual `npx wrangler pages deploy` from `dashboard/site/` documented in
+  `dashboard/README.md`); nothing in `/curator:create-tasks` depends on it.
+- **Container registry** — `username` + `password`. Anonymous Docker Hub pulls
+  are capped at 100 per 6h per IP, and a long multi-language create run pulls one
+  image per task environment, so hitting the cap mid-run is realistic; it shows
+  up as image-pull/manifest errors rather than as an obvious auth error. Fix with
+  `bash <repo_root>/scripts/docker_login.sh` or a plain `docker login`.
+
+Both are always a `WARN`, never a reason to block `SAFE TO RUN`. If either is
+missing, mention `/root:setup`'s optional extras as the fix, but do not offer to
+configure credentials yourself (see that skill's guardrail on secrets).
+
+## Dependency wiring (cross-checked inside dryrun)
+
+`scripts/dryrun.sh` runs `scripts/validate_config.py --block .`, which
+cross-checks `meta_info.dependencies` against the real `runtime_info` on **both**
+ends of every edge. These findings are easy to lose in the dryrun output, and
+they are exactly what breaks a hand-off silently — surface them in the report.
+
+| Finding | Meaning | Verdict |
+|---|---|---|
+| `dep:bad-key` | a `from` key is not a real dot-path in this block's own `runtime_info.input`, or a `to` key is not a declared `runtime_info.output` key | FAIL |
+| `dep:bad-ref` | malformed ref, or the named block / output key / input path does not exist | FAIL |
+| `dep:link-mismatch` | the edge is declared by only one end — the other end does not point back | FAIL |
+| `dep:unresolved` | a required upstream output has neither `value` nor `path` yet | FAIL (WARN when the edge is `required: false`) |
+| `dep:path-mismatch` | this block's configured value resolves outside the producer's declared output path — usually a stale path after a rename | WARN |
+| `output:orphan` | an output with no `dependencies.to` entry; normal for a terminal output, suspicious for one that is supposed to feed the next stage | WARN |
+| `dep:smoke-overlay` | a root smoke currently holds some block's config, so the tree mixes two config sets; every cross-block finding above is downgraded to a warning for the duration | INFO |
+
+Any `dep:*` FAIL blocks `SAFE TO RUN` — it means this block is wired to something
+the other end does not actually provide. The one exception is when
+`dep:smoke-overlay` is present: those findings are artifacts of the running
+smoke, not real drift, and must not be reported as such.
+
 ## Step 5 - Run the block dryrun
 
 Run `bash scripts/dryrun.sh` and include its OK/WARN/FAIL lines in the
 report. This script verifies the installed package, YAML parsing, key env
-vars, the Claude Code proxy endpoint, and Docker availability.
+vars, the Claude Code proxy endpoint, Docker availability, and (Step 4b)
+the shared Cloudflare/registry credentials.
 
-## Step 6 - Final report
+## Step 6 - The report (always the last thing you print)
 
-Always end with a compact summary:
+The report **is** the deliverable. Print it every single time — even
+on an abort (then: heading + a `NO` verdict whose reason is the abort
+message, nothing else). Fill this template exactly; drop only truly
+inapplicable rows.
 
-```text
-curator check - <CWD>
-  config          : <ok|fail>
-  repos/swegen    : <sha or missing>
-  github          : <N tokens ok, total remaining K>
-  llm (openai)    : <base> / <model> / <ok|fail>
-  cc path         : <mode> / <anthropic_base_url> / <ok|down|native>
-  docker          : <server version> at <DOCKER_HOST or unset>
-  languages       : <enabled list with timeout/cc_timeout/n_concurrent>
-  swe tasks       : <per-language generated + verified counts>
-  dryrun          : <pass|warn|fail>
-  smoke           : <skipped|pass|fail>
+````
+## curator block check — CWD=<relative path>
 
-SAFE TO RUN: <YES|NO>
+**SAFE TO RUN: <✅ YES | ❌ NO>** — <R> required · <A> advisory · <W> warnings
+
+| Layer | Check | Status | Detail |
+|-------|-------|:------:|--------|
+| det  | config · repos/swegen pin · scripts present | ✓ | ok=<N> |
+| det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim detail> |
+| det  | github tokens   | <✓/✗>   | <N tokens ok, total remaining K> |
+| det  | llm (openai)    | <✓/✗>   | <base> / <model> |
+| det  | cc path         | <✓/⚠/✗> | <mode> / <anthropic_base_url> / <ok/down/native> |
+| det  | docker          | <✓/✗>   | <server version> at <DOCKER_HOST or unset> |
+| det  | dependency wiring | <✓/✗> | <ok: N edges, both ends \| dep:link-mismatch … \| suppressed: smoke overlay> |
+| det  | cloudflare      | <✓/⚠>   | <ok (source: env\|root-config\|legacy-file) \| missing npx/credentials (optional, see /root:setup)> |
+| det  | docker registry | <✓/⚠>   | <ok (source: …) \| no credentials, pulls capped at 100/6h per IP> |
+| det  | dryrun          | <✓/⚠/✗> | <pass/warn/fail> |
+| live | smoke           | <✓/·/✗> | <skipped \| NOP=0 Oracle=1 \| fail: <detail>> |
+
+**Run configuration**
+```
+languages:  <enabled list with timeout/cc_timeout/n_concurrent>
+swe tasks:  <per-language generated + verified counts>
+pr_ids:     <artifacts/collected_prs/{lang}_pr_ids.txt present? counts>
 ```
 
-`SAFE TO RUN` is `NO` if config, package install, GitHub, LLM, Docker, or
-dryrun failed, or if `cc_provider_mode=openai_proxy` and the CC proxy is down.
-A skipped smoke does not block unless the user explicitly requested smoke.
+**Next steps**
+1. <one per failure, required first; quote the underlying error verbatim>
+2. ...
+Re-run `/curator:check`.
+````
+
+**The three invariants:**
+
+1. **Verdict** — `✅ YES` iff `R == 0`, where `R` = config/GitHub/LLM/Docker/
+   dryrun `FAIL` count **+** a down CC proxy when
+   `cc_provider_mode=openai_proxy`. A skipped smoke never changes it unless
+   the user explicitly requested smoke and it failed.
+2. **Glyphs** — `✓` pass · `✗` blocks · `⚠` advisory/warning · `·` skipped.
+3. **Collapse** — fold all passing `det` checks into the first row; add
+   a row only for each `det` check that is `✗` or `⚠`.
 
 ## Guardrails
 
@@ -187,3 +257,10 @@ A skipped smoke does not block unless the user explicitly requested smoke.
 - Do not launch `scripts/start.sh` or `swegen create`; that is `/curator:create-tasks`.
 - Do not hide credential or provider errors. Quote the provider error
   message, but never print secret values.
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **Silent verification failure**: the Claude Code path (task_model / cc_provider_mode / anthropic_base_url) is what writes `verifiable_tasks.txt`. If the mode is wrong for the provider, verification fails **silently** — task skeletons stay templates, no task is verified, yet batch state still reports success. Always verify the CC path end-to-end, not just the OpenAI path.
+- **pr_collection.filters**: a null/absent filter is not an error — it means "use the collector's built-in default". Only flag values that are set but out of range.

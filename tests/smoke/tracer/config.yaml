@@ -3,12 +3,10 @@
 # Schema-compatible with production tracer; deltas from production tagged
 # "# ROOT:".
 #
-# Unlike the per-subblock tracer smoke (which pulls a 10-task HuggingFace
-# slice), this stage consumes the REAL verified tasks swegen (stage 1) just
-# produced — task_source.provider=local pointing at curator's smoke output dir,
-# manifest-filtered by its verifiable_tasks.txt — runs Harbor to generate agent
-# trajectories, and converts the reward==1 (resolved) trajectories into LF SFT
-# data that sft (stage 3) trains on.
+# Unlike the per-block tracer smoke (a 10-task HuggingFace slice), this consumes
+# the real verified tasks curator just produced (provider=local, filtered by its
+# verifiable_tasks.txt), runs Harbor, and converts the reward==1 trajectories
+# into the LF SFT data trainer trains on.
 
 meta_info:
   name: tracer
@@ -17,7 +15,13 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    task_source_dir: curator.output.swe_tasks_dir
+    from:
+      task_source.dataset_name:
+        from: curator.output.swe_tasks_dir
+        when: {task_source.provider: local}
+    # stage 2 -> 3; the chain wires the LF dir, not the raw job dir production uses
+    to:
+      sft_data_dir: trainer.input.source.upstream_lf_dir
 
   resources:
     ip: local
@@ -52,9 +56,9 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      api_key: dummy-cf
-      api_base_url: "https://llm.jierungogogo.com/v1"
-      model: "openai/Qwen3.6-35B-A3B"
+      api_key: ""
+      api_base_url: ""
+      model: ""
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
@@ -73,7 +77,7 @@ runtime_info:
     # output dir at launch.
     task_source:
       provider: local
-      dataset_name: ../swegen/artifacts/swe_tasks/py-cc-root-smoke
+      dataset_name: ../curator/artifacts/swe_tasks/py-cc-root-smoke
       split: train
 
     # ROOT: harbor has no native "run a task N times" knob, and max_retries only
@@ -116,28 +120,18 @@ runtime_info:
       max_instances: null
       exclude_repos_file: ""
 
+    env_extra:
+      HARBOR_EXCLUDE_TASKS: ""
+      LITELLM_NUM_WORKERS: "1"
+
   output:
     raw_trajectories_dir:
       description: Harbor job directories with LiteLLM trajectory logs
       path: artifacts/jobs
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
-      consumer_block: sft
     sft_data_dir:
       description: LF-format JSON arrays converted from reward==1 Harbor trajectories, ready for LLaMA-Factory SFT.
       path: artifacts/sft_data
       format: llamafactory_lf_v0.1
       trajectory_format: "artifacts/sft_data/<job>/lf.json"
-      consumer_block: sft
 
-environment:
-  extra:
-    HARBOR_EXCLUDE_TASKS: ""
-    LITELLM_NUM_WORKERS: "1"
-
-evolving:
-  description: Generates agent trajectories using Harbor.
-  tunable_params:
-    temperature: "Agent sampling temperature (0.0-1.0)"
-    max_turns: "Maximum agent turns per task"
-    n_concurrent: "Harbor concurrent tasks"
-    timeout_multiplier: "Task timeout multiplier"

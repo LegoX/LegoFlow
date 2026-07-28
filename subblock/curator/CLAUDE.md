@@ -35,7 +35,9 @@ vars by hand. The mapping is:
 | `anthropic_base_url` | `ANTHROPIC_BASE_URL` | Claude Code path endpoint (task completion + verification) |
 | `cc_provider_mode` | `SWEGEN_CC_PROVIDER_MODE` | `native` or `openai_proxy` (see below) |
 | `cc_proxy_port` | `SWEGEN_CC_PROXY_PORT` | local LiteLLM proxy port (openai_proxy only) |
-| `github_tokens` (top-level input) | none | External-input contract marker; runtime tokens come from `GITHUB_TOKENS`, `GITHUB_TOKEN`, or local token files. |
+
+GitHub tokens are never stored in `config.yaml`: runtime tokens come from
+`GITHUB_TOKENS`, `GITHUB_TOKEN`, or local token files (`gh_token.txt`).
 
 `scripts/load_runtime_env.sh` imports selected variables from the interactive
 shell, then sources the block's `.env`, so `.env` overrides the imported shell
@@ -84,8 +86,14 @@ skeletons stay as templates, no task is verified, yet batch state still reports
 
 ### Install
 
+`/curator:setup` does this for you (submodule init, venv, `pip install -e`,
+dryrun). To do it by hand, create the venv at the path the scripts and skills
+expect — `config.yaml`'s `meta_info.environment.venv_path`
+(`artifacts/envs/swegen-env`); `dryrun.sh` and `load_runtime_env.sh` look for it
+there:
+
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv artifacts/envs/swegen-env && source artifacts/envs/swegen-env/bin/activate
 pip install -e repos/swegen/
 ```
 
@@ -177,6 +185,12 @@ swegen create \
   --max-source-files 10
 ```
 
+The `--timeout`/`--cc-timeout` here are illustrative. The per-language
+`scripts/create_<lang>.sh` read the real values from `config.yaml`
+(`languages.<lang>.params`, e.g. py `3200`/`2400`); `--timeout` is the overall
+per-case budget and must stay >= `--cc-timeout`. Prefer the scripts over a
+hand-written invocation.
+
 Output: task directories under `artifacts/swe_tasks/{lang}-cc/`. Verified task IDs appended to `verifiable_tasks.txt`.
 
 `--min-source-files` controls the yield/difficulty tradeoff: `1` keeps the most PRs (including small fixes, highest throughput), while higher values keep only larger changes. Use `1` for maximum data; every current per-language script uses `2`.
@@ -220,14 +234,29 @@ tasks — no need to wait for the full run.
 ### Step 3: Validate (optional, built into create)
 
 ```bash
-swegen validate ./artifacts/swe_tasks/py-cc --max-parallel 8
+swegen validate ./artifacts/swe_tasks/py-cc --max-parallel 8 \
+  --jobs-dir artifacts/experiments/validate-jobs
 ```
 
-### Step 4: Score Tasks
+`--jobs-dir` defaults to `.swegen/harbor-jobs` (relative to CWD) if omitted —
+always pass it explicitly so Harbor job artifacts land under `artifacts/`,
+not the block root.
+
+### Step 4: Difficulty + metadata tagging
+
+Difficulty is scored inline during `swegen create` (via `swegen.scoring`), so a
+separate batch scoring pass is no longer required. Dataset-level difficulty +
+the 4-tag `[language, area, topic, bug_class]` metadata (used by the databoard)
+are produced by the **single canonical tagger**,
+`repos/swegen/tools/tag_task_metadata.py`, over unified JSONL datasets:
 
 ```bash
-python repos/swegen/tools/score_tasks.py --dir artifacts/swe_tasks/py-cc --update-toml
+# from subblock/curator/dashboard/ (datasets exported to datasets/<id>/tasks.jsonl)
+python3 ../repos/swegen/tools/tag_task_metadata.py \
+  --datasets-dir datasets --dataset all --jobs 64 --retries 3
 ```
+
+See `dashboard/README.md` for dataset export and endpoint configuration.
 
 ### Step 5: Extract Verified Tasks
 
@@ -262,7 +291,7 @@ Each task directory contains:
 ```
 repos/swegen/         # Core Python package + tools
   src/swegen/         # Python package (CLI, task generation, validation, scoring)
-  tools/              # Standalone scripts (PR collection, batch scoring)
+  tools/              # Standalone scripts (PR collection; tag_task_metadata.py difficulty + 4-tag tagging)
 scripts/              # Per-language create scripts and the two mode-specific launchers
 artifacts/
   collected_prs/      # PR ID lists (input to swegen create)

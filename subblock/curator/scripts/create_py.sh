@@ -8,14 +8,17 @@ echo 'activate swegen-env'
 
 load_runtime_env
 
-pip install -e repos/swegen/
+python -c 'import swegen' 2>/dev/null || pip install -e repos/swegen/  # standalone fallback; create_all_bg.sh pre-installs once
 
-export OPENAI_MODEL="${OPENAI_MODEL:-glm-5-urg}"
-export ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
+# OPENAI_MODEL / ANTHROPIC_MODEL come from config.yaml via load_runtime_env.
 
 set -euo pipefail
 
-cd "$(dirname "$0")"
+# swegen writes its state dir AND any stray tool output into the CWD;
+# keep both under artifacts/ instead of polluting scripts/.
+STATE_DIR="${PROJECT_ROOT}/artifacts/state/swegen-py"
+mkdir -p "$STATE_DIR"
+cd "$STATE_DIR"
 mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
 # Read per-language params from config.yaml
 eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang py --config-yaml "${PROJECT_ROOT}/config.yaml")
@@ -31,10 +34,10 @@ swegen create \
   --max-pr "${SWEGEN_MAX_PR:-5000}" \
   --n-concurrent "${N_CONCURRENT}" \
   --output "${PROJECT_ROOT}/artifacts/swe_tasks/py-cc" \
-  --state-dir .swegen-py \
+  --state-dir "$STATE_DIR" \
   --timeout "${TIMEOUT}" \
   --cc-timeout "${CC_TIMEOUT}" \
   --no-require-issue \
   --min-source-files 2 \
   --max-source-files 10 \
-  2>&1 | tee "${PROJECT_ROOT}/artifacts/logs/swegen-create/cc_py_March.txt"
+  2>&1 | tee "${PROJECT_ROOT}/artifacts/logs/swegen-create/cc_py_$(date -u +%Y%m%dT%H%M%SZ).txt"

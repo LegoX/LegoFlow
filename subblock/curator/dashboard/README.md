@@ -1,112 +1,93 @@
-# SWE-gen Task Progress Dashboard
+# SWE Datasets Dashboard
 
-This directory holds the generation and deployment code for the SWE-gen task
-progress monitoring page. By default the generator reads live SWE task data
-under `$SWEGEN_HOME/SWE-gen` and writes runtime files into the current
-`subblock/curator/dashboard/` directory.
+Generation and deployment code for the SWE **dataset analytics** dashboard at
+[swe-databoard.pages.dev](https://swe-databoard.pages.dev/). It compares four
+datasets — the Curator self-made set plus three open-source sets — along a
+single, consistent axis: **difficulty** and **semantic tags** produced by the
+same pipeline for every task.
 
-The page style follows the MDX dashboard contract from `subblock/evaluator/dashboard`
-on the `yuxin/eval` branch of `SWE-Lego-Live`: a restrained, document-style
-layout with clear Overview / Inputs & Outputs / Status / Method Notes sections,
-compact tables, and operational handoff notes. The board shows only SWE task
-progress, no other data panels.
+## Datasets
 
-## Configuration variables
-
-The Cloudflare sync script reads its configuration from
-`~/.config/swegen_progress_cloudflare.env` by default. If the config file lives
-elsewhere, set `ENV_FILE=/path/to/file` when starting it.
-
-```bash
-CLOUDFLARE_API_TOKEN="..."
-CLOUDFLARE_ACCOUNT_ID="..."
-PROJECT_NAME="swe-databoard"
-BRANCH_NAME="swegen"
-LOOP_SECONDS="3600"
-PORT="8000"
-SWEGEN_HOME="$HOME"
-SWEGEN_DATA_ROOT="$SWEGEN_HOME/SWE-gen"
-SWEGEN_TASK_ROOT="$SWEGEN_DATA_ROOT/tasks/March"
-SWEGEN_PR_DIR="$SWEGEN_DATA_ROOT/collected_prs"
-SWEGEN_DASHBOARD_ROOT="subblock/curator/dashboard"
-```
-
-| Variable | How to fill | Default |
+| id | Display | Source |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with access to the target account and Pages project edit/deploy permissions. | none, required |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID, from the Cloudflare console account page. | none, required |
-| `PROJECT_NAME` | Cloudflare Pages project name. | `swe-databoard` |
-| `BRANCH_NAME` | Cloudflare Pages deploy branch name. | `swegen` |
-| `LOOP_SECONDS` | Seconds the sync script waits between generate-and-deploy rounds. | `3600` |
-| `PORT` | Local preview HTTP server port. | `8000` |
-| `SWEGEN_HOME` | Base home directory on the machine holding SWE-gen data. | current user's `$HOME` |
-| `SWEGEN_DATA_ROOT` | SWE-gen data and code root. | `$SWEGEN_HOME/SWE-gen` |
-| `SWEGEN_TASK_ROOT` | SWE-gen task output directory. | `$SWEGEN_DATA_ROOT/tasks/March` |
-| `SWEGEN_PR_DIR` | PR ID file directory. | `$SWEGEN_DATA_ROOT/collected_prs` |
-| `SWEGEN_DASHBOARD_ROOT` | Dashboard runtime output directory. | the script's own directory, i.e. `subblock/curator/dashboard` |
+| `self_made` | SWE-Lego-Live-Instances | Curator `swegen-selfmade` (non-top5k 260301-260721 + top5k 260301-260622) |
+| `swe_rebench` | SWE-rebench | `nebius/SWE-rebench` |
+| `openswe_filtered` | OpenSWE-filtered | `SWE-Lego/openswe_filtered_for_rl` |
+| `scale_swe` | Scale-SWE | `AweAI-Team/Scale-SWE` |
 
-## Local generation
+Each dataset lives under `datasets/<id>/` as:
 
-Run from the repository root:
+- `tasks.jsonl` — unified records `{instance_id, problem_statement, patch, ...}` (git-ignored, large)
+- `tags.jsonl` — one metadata record per task produced by tagging (git-ignored)
 
-```bash
-python3 subblock/curator/dashboard/progress_monitor_all.py \
-  --output-html subblock/curator/dashboard/site/index.html \
-  --state-file subblock/curator/dashboard/memory/.progress_monitor_all_state.jsonl \
-  --cache-file subblock/curator/dashboard/memory/.progress_monitor_all_cache.json
+## Pipeline
+
+```text
+export_self_made.py             -> datasets/self_made/tasks.jsonl   (from local HF tarballs)
+repos/swegen/tools/tag_task_metadata.py -> datasets/<id>/tags.jsonl (difficulty + 4 tags via LLM)
+progress_monitor_multi.py       -> site/index.html                 (multi-dataset HTML)
 ```
 
-After generation, open `subblock/curator/dashboard/site/index.html`, or start a
-local server:
+Tagging is done by the **canonical** `tag_task_metadata.py`, which lives in the
+`swegen` submodule (`repos/swegen/tools/tag_task_metadata.py`) so the dashboard
+and the SWE-gen pipeline share one implementation.
+
+### 1. Export each dataset to `datasets/<id>/tasks.jsonl`
+
+Each dataset needs a `datasets/<id>/tasks.jsonl` before tagging. Export methods
+differ per source:
+
+| Dataset | How `tasks.jsonl` is produced |
+| --- | --- |
+| `self_made` | `python3 export_self_made.py` — union of two local HF export tarballs under `~/SWE-gen/exports_hf/` |
+| `openswe_filtered` | `python3 export_openswe_filtered.py` — downloads `SWE-Lego/openswe_filtered_for_rl` from HuggingFace |
+| `swe_rebench` | Prepared externally from `nebius/SWE-rebench` (no export script in-repo); drop the normalized JSONL at `datasets/swe_rebench/tasks.jsonl` |
+| `scale_swe` | Prepared externally from `AweAI-Team/Scale-SWE` (no export script in-repo); drop the normalized JSONL at `datasets/scale_swe/tasks.jsonl` |
+
+All exporters normalize to the same record schema consumed by the tagger:
+`{instance_id, problem_statement, patch, test_patch, repo, language, dataset_source}`.
+
+### 2. Difficulty + tag generation
+
+Difficulty scoring and tagging follow the harbor `scripts/task_analysis`
+methodology (see `docs`). Difficulty is a 5-dimension weighted, log-scaled
+score (1-10 → easy/medium/hard). Tags are the 4-tuple
+`[language, area, topic, bug_class]` generated by an LLM, where
+`area ∈ {backend, frontend, fullstack, cli, library, framework}`.
 
 ```bash
-python3 subblock/curator/dashboard/progress_monitor_all.py --serve
+# run from subblock/curator/dashboard/ ; --datasets-dir points the shared
+# tagger at this dashboard's datasets/ directory
+python3 ../repos/swegen/tools/tag_task_metadata.py \
+  --datasets-dir datasets --dataset all --jobs 64 --retries 3
 ```
 
-## State and cache files
+Defaults target the shared endpoint (override with flags or env vars):
 
-The repo contains two generator runtime-state files:
+| Flag | Env | Default |
+| --- | --- | --- |
+| `--model` | `TAGGING_MODEL` | `Qwen3.6-35B-A3B` |
+| `--api-key` | `TAGGING_API_KEY` | `dummy-cf` |
+| `--base-url` | `TAGGING_API_BASE_URL` | `http://<your-openai-compatible-endpoint>/v1` |
+| `--datasets-dir` | `TAGGING_DATASETS_DIR` | `./datasets` |
+| `--jobs` | — | `64` |
 
-- `memory/.progress_monitor_all_state.jsonl`: historical snapshot file. Each
-  generator run appends one JSON line recording per-language PR counts,
-  processed counts, verifiable task counts, and other summary data at that
-  moment. The 1-hour and 24-hour deltas on the page come from this file.
-- `memory/.progress_monitor_all_cache.json`: incremental cache file. When the
-  generator scans task directories and batch state, it writes file signatures
-  and statistics here, so the next run can reuse stats for unchanged files
-  instead of fully re-parsing large amounts of task data each time.
+The run is resumable: already-tagged `instance_id`s are skipped, and failed
+tasks are automatically retried at lower concurrency at the end.
 
-These two files are generated or updated by the command below:
+### 3. Generate the dashboard
 
 ```bash
-python3 subblock/curator/dashboard/progress_monitor_all.py \
-  --output-html subblock/curator/dashboard/site/index.html \
-  --state-file subblock/curator/dashboard/memory/.progress_monitor_all_state.jsonl \
-  --cache-file subblock/curator/dashboard/memory/.progress_monitor_all_cache.json
+python3 progress_monitor_multi.py --output-html site/index.html
 ```
 
-The sync script `subblock/curator/dashboard/run_cloudflare_pages_sync.sh` calls
-the same generator internally, so running the sync script also updates these
-two files.
-
-## Cloudflare Pages sync
-
-Start the sync:
+## Deploy to Cloudflare Pages
 
 ```bash
-bash subblock/curator/dashboard/run_cloudflare_pages_sync.sh
+cd site
+CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... \
+  npx wrangler@latest pages deploy . --project-name=swe-databoard --branch=main --commit-dirty=true
 ```
 
-Each round, the script first generates
-`subblock/curator/dashboard/site/index.html`, then deploys it to Cloudflare Pages
-with `wrangler pages deploy`.
-
-## Difference between `--serve` and the sync script
-
-- `python3 subblock/curator/dashboard/progress_monitor_all.py --serve`: generates
-  and previews the page locally only, starting a local HTTP server — good for
-  debugging or viewing local results. It does not deploy to Cloudflare.
-- `bash subblock/curator/dashboard/run_cloudflare_pages_sync.sh`: for long-running
-  online sync. It loops generating the page, starts a local preview server, and
-  publishes `subblock/curator/dashboard/site/` to Cloudflare Pages via
-  `wrangler pages deploy`.
+The page style is a restrained, document-style dark/light layout matching the
+other SWE-Lego dashboards.

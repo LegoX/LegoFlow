@@ -21,7 +21,7 @@ Read from `config.yaml` → `runtime_info.input`:
 | `experiment` | WandB mode and run name | external |
 | `credentials` | WandB API key, `hf_token` (private `hf_lf` datasets) | external |
 
-When `source.type` is `harbor_job` (the default), `source.job_dir` is the handoff from tracer, wired via `meta_info.dependencies.trajectories_dir` (`tracer.output.raw_trajectories_dir`). For `hf_lf`, setting `hf_file_name` downloads and registers only that file; leaving it empty loads the Hub dataset config/split at train time. `local_lf` registers `lf_path` directly. See [Input sources](/docs/data-pipeline#input-sources).
+When `source.type` is `harbor_job`, `source.job_dir` is the handoff from tracer, wired via `meta_info.dependencies.from.source.job_dir` (`tracer.output.raw_trajectories_dir`), mirrored by tracer's own `dependencies.to.raw_trajectories_dir`. For `hf_lf`, setting `hf_file_name` downloads and registers only that file; leaving it empty loads the Hub dataset config/split at train time. `local_lf` registers `lf_path` directly. See [Input sources](/docs/data-pipeline#input-sources).
 
 ## Active runtime values
 
@@ -36,7 +36,7 @@ source:
   hf_split: "train"
 conversion:
   max_instances: 0
-  exclude_repos_file: artifacts/data/excluded_repos.txt
+  exclude_repos_file: scripts/excluded_repos.txt
   data_name: "glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5"
 model:
   model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base
@@ -44,7 +44,7 @@ model:
 training:
   stage: sft
   finetuning_type: full
-  deepspeed: artifacts/training_config/deepspeed/ds_z3_config.json
+  deepspeed: scripts/deepspeed/ds_z3_config.json
   template: qwen3_5
   cutoff_len: 131072
   rope_scaling: null

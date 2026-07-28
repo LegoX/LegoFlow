@@ -40,7 +40,7 @@ Every check lives in **exactly one** layer:
 
 | Layer | Run by | Covers |
 |---|---|---|
-| **Deterministic** | `scripts/dryrun.sh` | config schema · uv env + python · repos · source-specific Harbor/HF/local fields · converter when applicable · data paths · dataset registration (including exact `hf_file_name`) · base model · `output_dir` + train-YAML target · WandB mode/key · GPU count |
+| **Deterministic** | `scripts/dryrun.sh` | config schema · uv env + python · repos · source-specific Harbor/HF/local fields · converter when applicable · data paths · dataset registration (including exact `hf_file_name`) · base model · `output_dir` + train-YAML target · WandB mode/key · GPU count · Cloudflare quick tunnel binary (optional, dashboard-only) · shared Cloudflare/registry credentials from root `config.yaml` (informational — trainer needs neither: its tunnel is anonymous and it pulls no images) |
 | **Live (judgment)** | this skill | is a training process already alive? · are the GPUs idle / ours / foreign? · will training overwrite an existing checkpoint? |
 
 ---
@@ -92,6 +92,28 @@ exits non-zero iff `FAIL > 0`. Two lines need follow-up:
 run-config table in Step 3 from the `[INFO]`/`[OK]` lines it printed
 (scaffold, data_name, dataset, model path, template/epochs/lr, output_dir,
 WandB mode, GPU count).
+
+## Dependency wiring (cross-checked inside dryrun)
+
+`scripts/dryrun.sh` runs `scripts/validate_config.py --block .`, which
+cross-checks `meta_info.dependencies` against the real `runtime_info` on **both**
+ends of every edge. These findings are easy to lose in the dryrun output, and
+they are exactly what breaks a hand-off silently — surface them in the report.
+
+| Finding | Meaning | Verdict |
+|---|---|---|
+| `dep:bad-key` | a `from` key is not a real dot-path in this block's own `runtime_info.input`, or a `to` key is not a declared `runtime_info.output` key | FAIL |
+| `dep:bad-ref` | malformed ref, or the named block / output key / input path does not exist | FAIL |
+| `dep:link-mismatch` | the edge is declared by only one end — the other end does not point back | FAIL |
+| `dep:unresolved` | a required upstream output has neither `value` nor `path` yet | FAIL (WARN when the edge is `required: false`) |
+| `dep:path-mismatch` | this block's configured value resolves outside the producer's declared output path — usually a stale path after a rename | WARN |
+| `output:orphan` | an output with no `dependencies.to` entry; normal for a terminal output, suspicious for one that is supposed to feed the next stage | WARN |
+| `dep:smoke-overlay` | a root smoke currently holds some block's config, so the tree mixes two config sets; every cross-block finding above is downgraded to a warning for the duration | INFO |
+
+Any `dep:*` FAIL blocks `SAFE TO RUN` — it means this block is wired to something
+the other end does not actually provide. The one exception is when
+`dep:smoke-overlay` is present: those findings are artifacts of the running
+smoke, not real drift, and must not be reported as such.
 
 ## Step 2 — Live checks
 
@@ -174,8 +196,11 @@ rows.
 |-------|-------|:------:|--------|
 | det  | config · uv-env · repos · imports · converter · paths · dataset · model · output_dir | ✓ | ok=<N> |
 | det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim dryrun line> |
+| det  | dependency wiring | <✓/✗> | <ok: N edges, both ends \| dep:link-mismatch … \| suppressed: smoke overlay> |
 | det  | wandb         | <✓/✗>   | <mode=offline/online/disabled · key set?> |
 | det  | gpu-count     | <✓/⚠>   | <nvidia-smi N vs config N_GPUS> |
+| det  | cloudflare tunnel (optional) | <✓/⚠> | <cloudflared found \| missing, dashboard TUNNEL=true will be local-only> |
+| det  | cloudflare account (optional) | <✓/·> | <shared credentials present (source: …) \| not configured — the quick tunnel needs none> |
 | live | job           | <✓/✗>   | <job:none / job:running pid=<P>> |
 | live | gpu           | <✓/⚠/✗> | <gpu:idle / gpu:mine / gpu:foreign pid=<P> mem=<M>> |
 | live | checkpoint    | <✓/⚠>   | <ckpt:clean / ckpt:clobber: <dir>> |
@@ -221,3 +246,11 @@ Re-run `/trainer:check`.
 - `kill` a process — surface the conflict, let the user decide
 - SSH to other nodes — this block runs locally (`meta_info.resources.ip:
   null`); `/trainer:check` is head-node only
+
+---
+
+## Config reference (moved from config.yaml — do not re-add as comments)
+
+- **overwrite_output_dir: false** means an existing `training.output_dir` will NOT be replaced — an explicit env override is required to overwrite a previous run. Treat an existing output dir + false as "will refuse", not as an error.
+- **credentials.hf_token** is only required for private `source.type: hf_lf` datasets; empty is normal for public ones. `wandb_api_key` stays empty — the key flows via `$WANDB_API_KEY`.
+- **runtime_info.output** is written back by `scripts/train.sh` STEP 3 (comment-preserving, flock-guarded). Its pre-run shape (value: null entries) is the contract — do not "fix" the nulls.

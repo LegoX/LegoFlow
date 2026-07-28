@@ -33,7 +33,7 @@ project-wide aggregate.
 
 ## TODO
 
-- [ ] Choose the dashboard tech (reuse `subblock/rl/.../webui`, or a new
+- [ ] Choose the dashboard tech (reuse an existing block webui, or a new
       lightweight aggregator).
 - [ ] Spec the well-known port and `/health` contract.
 - [ ] Decide whether the dashboard auto-launches on `/root:run`, or stays

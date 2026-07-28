@@ -28,6 +28,9 @@ except ImportError:
 root = sys.argv[1]
 def load(b):
     return yaml.safe_load(open(os.path.join(root, "tests", "smoke", b, "config.yaml"), encoding="utf-8")) or {}
+def load_prod(b):
+    """The block's real config — used where the smoke must not drift from it."""
+    return yaml.safe_load(open(os.path.join(root, "subblock", b, "config.yaml"), encoding="utf-8")) or {}
 def get(d, dotted, default=None):
     cur = d
     for p in dotted.split("."):
@@ -53,8 +56,10 @@ if not swe_subdir:
     errs.append("curator: smoke.output_subdir must be set (where verified tasks land)")
 
 # --- tracer: consume the curator subdir; convert reward==1 -------------------
-if get(trj, "meta_info.dependencies.task_source_dir") != "curator.output.swe_tasks_dir":
-    errs.append("tracer: meta_info.dependencies.task_source_dir must be curator.output.swe_tasks_dir")
+trj_dep_val = get(trj, "meta_info.dependencies.from", {}).get("task_source.dataset_name")
+trj_dep_from = trj_dep_val.get("from") if isinstance(trj_dep_val, dict) else trj_dep_val
+if trj_dep_from != "curator.output.swe_tasks_dir":
+    errs.append("tracer: meta_info.dependencies.from['task_source.dataset_name'] must reference curator.output.swe_tasks_dir")
 prov = get(trj, "runtime_info.input.task_source.provider")
 if prov != "local":
     errs.append(f"tracer: task_source.provider={prov!r} — root smoke must be 'local' (consume the curator handoff, not a HF slice)")
@@ -69,13 +74,27 @@ if get(trj, "runtime_info.input.sft_conversion.reward_min") != 1:
     errs.append("tracer: sft_conversion.reward_min must be 1 (reward==1 focus)")
 
 # --- trainer: combine 512 fixture + tracer reward==1 LF, persist checkpoint -----
-if get(trainer, "meta_info.dependencies.training_data") != "tracer.output.sft_data_dir":
-    errs.append("trainer: meta_info.dependencies.training_data must be tracer.output.sft_data_dir")
+tr_dep_val = get(trainer, "meta_info.dependencies.from", {}).get("source.upstream_lf_dir")
+tr_dep_from = tr_dep_val.get("from") if isinstance(tr_dep_val, dict) else tr_dep_val
+if tr_dep_from != "tracer.output.sft_data_dir":
+    errs.append("trainer: meta_info.dependencies.from['source.upstream_lf_dir'] must reference tracer.output.sft_data_dir")
 if get(trainer, "runtime_info.input.source.type") != "combined_lf":
     errs.append("trainer: source.type must be 'combined_lf' (512 fixture + tracer reward==1 LF)")
+# The smoke must train on the SAME dataset as the production block, so that what
+# it exercises is the real training setup rather than a stand-in. The two configs
+# carry that dataset differently — production is source.type=hf_lf and names it in
+# hf_file_name (fetched from the Hub); the smoke is combined_lf and points
+# fixture_lf at the already-downloaded local copy — so compare the file name, not
+# the path. Asserting a hard-coded name here instead is what went stale when the
+# fixture was switched to the production dataset in e7f7d94.
 fixture = str(get(trainer, "runtime_info.input.source.fixture_lf", ""))
-if "lf_512" not in fixture:
-    errs.append(f"trainer: source.fixture_lf={fixture!r} should point at the 512-sample fixture (lf_512.json)")
+prod_file = str(get(load_prod("trainer"), "runtime_info.input.source.hf_file_name", ""))
+if not prod_file:
+    errs.append("trainer: production config has no source.hf_file_name to pin the smoke fixture against "
+                "(did source.type change away from hf_lf? update this check together with it)")
+elif os.path.basename(fixture) != prod_file:
+    errs.append(f"trainer: smoke source.fixture_lf={fixture!r} does not match the production "
+                f"dataset {prod_file!r} — the smoke would train on a different dataset than the block")
 up = str(get(trainer, "runtime_info.input.source.upstream_lf_dir", ""))
 if "sft_data" not in up:
     errs.append(f"trainer: source.upstream_lf_dir={up!r} should reference tracer's sft_data dir")
@@ -83,8 +102,10 @@ if str(get(trainer, "runtime_info.input.training.output_dir", "")).startswith("_
     errs.append("trainer: training.output_dir is a throwaway _smoke dir — root smoke must PERSIST the checkpoint for evaluator")
 
 # --- evaluator: evaluate trainer's checkpoint on swebench-verified, 100 tasks ---------
-if get(ev, "meta_info.dependencies.model_checkpoint") != "trainer.output.checkpoint_path":
-    errs.append("evaluator: meta_info.dependencies.model_checkpoint must be trainer.output.checkpoint_path")
+ev_dep_val = get(ev, "meta_info.dependencies.from", {}).get("llm_api.api_base_url")
+ev_dep_from = ev_dep_val.get("from") if isinstance(ev_dep_val, dict) else ev_dep_val
+if ev_dep_from != "trainer.output.checkpoint_path":
+    errs.append("evaluator: meta_info.dependencies.from['llm_api.api_base_url'] must reference trainer.output.checkpoint_path")
 ds = get(ev, "runtime_info.input.task_source.dataset_name")
 if ds != "swebench-verified":
     errs.append(f"evaluator: task_source.dataset_name={ds!r}, expected 'swebench-verified'")

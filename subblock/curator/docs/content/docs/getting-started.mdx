@@ -86,9 +86,14 @@ export OPENAI_API_KEY="..."
 export ANTHROPIC_API_KEY="$OPENAI_API_KEY"
 export OPENAI_API_BASE_URL="https://your-openai-compatible-endpoint/v1"
 export ANTHROPIC_BASE_URL="https://your-anthropic-compatible-endpoint"
-export OPENAI_MODEL="openai/MiniMax-M2.7"
-export ANTHROPIC_MODEL="claude-sonnet-4-6"
+export OPENAI_MODEL="<your-pr-model>"        # e.g. the config default Qwen3.6-35B-A3B
+export ANTHROPIC_MODEL="<your-task-model>"   # e.g. claude-sonnet-4-6
 ```
+
+`config.yaml` is the source of truth for model names (`llm_api.pr_model` /
+`llm_api.task_model`); `scripts/load_runtime_env.sh` exports them as
+`OPENAI_MODEL` / `ANTHROPIC_MODEL`. The manual exports above are only for
+running the collector/CLI outside the block scripts.
 
 The pinned collector accepts both `GITHUB_TOKENS` and `GITHUB_TOKEN` and
 combines them with `repos/swegen/gh_token.txt` (or
@@ -129,42 +134,34 @@ dependencies. Fix dry-run failures before launching generation.
 
 ## 5. Run a smoke generation
 
-For a small first pass against a block-local PR pool, first complete
-`/curator:collect-prs`, then use a direct `swegen create` command with explicit
-limits and shared output paths. This differs from `/curator:create-tasks` smoke
-mode, which uses the submodule's bundled sample:
+Use the plugin for a small first pass:
 
-```bash
-swegen create \
-  --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
-  --max-pr 1 \
-  --n-concurrent 1 \
-  --output artifacts/swe_tasks/py-cc \
-  --state-dir scripts/.swegen-py \
-  --timeout 2400 \
-  --cc-timeout 1800 \
-  --no-require-issue \
-  --min-source-files 1 \
-  --max-source-files 10 \
-  --docker-prune-batch 0
+```text
+/curator:create-tasks    # choose "smoke" when prompted
 ```
 
-The language scripts are intended for production batches and assign concurrency
-from `config.yaml`, so prefixing `N_CONCURRENT=1` is overwritten.
+Smoke mode uses a sample PR file bundled in `repos/swegen` and does not
+require `/curator:collect-prs` first. Success means
+`artifacts/experiments/quick-verify/swe_tasks/py-cc/verifiable_tasks.txt`
+contains at least one verified task ID.
+
+For a smoke pass against your own collected PR pool instead, run
+`/curator:collect-prs` first, then `/curator:create-tasks` and choose
+`single-language` with a small language scope.
 
 For the full multi-language run:
 
-```bash
-bash scripts/create_all_bg.sh
+```text
+/curator:create-tasks    # choose "full" when prompted
 ```
 
-This starts all eight language scripts with `nohup`, ignores their `enabled`
-values, and returns immediately. Per-language scripts are available for `py`,
-`js`, `ts`, `go`, `c`, `cpp`, `java`, and `rust`; invoke them individually to
-limit the language set. If `cc_provider_mode` is `openai_proxy`, keep a
-compatible proxy alive for the detached workers—the current
-`start_with_openai_api.sh` wrapper stops its owned proxy when the launcher
-returns.
+This starts all eight language workers in the background. Per-language
+generation parameters (concurrency, timeouts) come from `config.yaml` — edit
+that file, not the scripts, to tune a run. Monitor progress with
+`/curator:dashboard`.
+
+See [Run Generation](/docs/run-generation) for the full command reference,
+config.yaml schema, and manual (non-plugin) commands for debugging.
 
 ## 6. Resume after moving nodes
 
