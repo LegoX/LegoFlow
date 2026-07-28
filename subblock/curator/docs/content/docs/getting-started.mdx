@@ -23,6 +23,11 @@ loads, then:
 /curator:dashboard      # local preview or Cloudflare Pages sync
 ```
 
+A sixth command, `/curator:run`, is a uniform-interface compatibility adapter
+that forwards to `/curator:create-tasks` so every block exposes the same
+`/<block>:run` verb; operate Curator directly through the specific skills above.
+See [Run Generation](/docs/run-generation) for the full command reference.
+
 `collect-prs` and `create-tasks` are separate commands. Wait for the background
 collector to finish before running production generation; `create-tasks` reads
 existing PR ID files and never starts collection. Its smoke mode is independent
