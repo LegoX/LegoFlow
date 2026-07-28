@@ -42,6 +42,8 @@ Useful flags:
 | `--out-dir <dir>` | Output root (default `artifacts/sft_data`) |
 | `--max-instances <n>` | Cap the number of converted instances |
 | `--exclude-repos-file <path>` | Exclude trajectories from listed repos (default `artifacts/excluded_repos.txt`) |
+| `--reasoning-check-mode <strict\|adaptive>` | Reasoning-content filter mode; default is `adaptive` |
+| `--reasoning-content-ratio-threshold <0..1>` | Adaptive reasoning-content ratio threshold; default is `0.5` |
 
 To run conversion automatically after every job, set `sft_conversion.enabled: true` in `config.yaml`; `start.sh` then runs the convert step once Harbor exits.
 

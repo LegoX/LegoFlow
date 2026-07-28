@@ -57,7 +57,7 @@ Generic lifecycle via the repo-wide `root` plugin: `/root:check tracer` to prefl
 |---|---|---|
 | `/tracer:setup` | `update_repos.sh`, `setup_harbor_env.sh`, `setup_swe_data_process_env.sh`, `dryrun.sh` | Clone/update repos, build uv envs |
 | `/tracer:check` | `dryrun.sh` | Read-only preflight |
-| `/tracer:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh`, `convert_trajectories.sh` | Local HTML board / Cloudflare online sync / SFT stats refresh |
+| `/tracer:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh`, `convert_trajectories.sh` | Interactive HTML board (Analyze quality/pass slices, status/artifacts/SFT samples) / Cloudflare online sync / SFT stats refresh |
 | `/tracer:run` | `dryrun.sh`, `start.sh` | Full pipeline: prepare_tasks → Harbor → optional convert + post-run bookkeeping |
 
 `scripts/clean.sh` (no flags) removes only a run's temporary output — LiteLLM state, logs, launch logs, `dashboard/site/`, `dashboard/.cache/`. It keeps the uv env, `jobs/`, `tasks/`, `sft_data/`, `agent-runtime/` and `processed_tasks.yaml`. `--all` wipes `artifacts/` entirely except git-tracked files and confirms twice. Tracer scripts need PyYAML in the runtime Python; on `ERROR: PyYAML is required`, `pip install pyyaml`.

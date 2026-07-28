@@ -799,8 +799,35 @@ case "$SFT_SCAFFOLD" in
     fail "runtime_info.input.sft_conversion.scaffold must be one of: auto, claude_code, open_code, openhands_sdk, terminus2 (got: $SFT_SCAFFOLD)"
     ;;
 esac
+SFT_TOKENIZER_NAME="$(cfg runtime_info.input.sft_conversion.tokenizer_name)"
+[[ -n "$SFT_TOKENIZER_NAME" ]] && ok "runtime_info.input.sft_conversion.tokenizer_name = $SFT_TOKENIZER_NAME" || fail "runtime_info.input.sft_conversion.tokenizer_name is required"
 SFT_OUT_DIR="$(cfg runtime_info.input.sft_conversion.out_dir)"
 [[ -n "$SFT_OUT_DIR" ]] && ok "runtime_info.input.sft_conversion.out_dir = $SFT_OUT_DIR" || fail "runtime_info.input.sft_conversion.out_dir is required"
+SFT_REASONING_MODE="$(cfg runtime_info.input.sft_conversion.reasoning_check_mode)"
+[[ -n "$SFT_REASONING_MODE" ]] || SFT_REASONING_MODE="adaptive"
+case "$SFT_REASONING_MODE" in
+  strict|adaptive)
+    ok "runtime_info.input.sft_conversion.reasoning_check_mode = $SFT_REASONING_MODE"
+    ;;
+  *)
+    fail "runtime_info.input.sft_conversion.reasoning_check_mode must be one of: strict, adaptive (got: $SFT_REASONING_MODE)"
+    ;;
+esac
+SFT_REASONING_THRESHOLD="$(cfg runtime_info.input.sft_conversion.reasoning_content_ratio_threshold)"
+[[ -n "$SFT_REASONING_THRESHOLD" ]] || SFT_REASONING_THRESHOLD="0.2"
+if python3 - "$SFT_REASONING_THRESHOLD" <<'PY'
+import sys
+try:
+    value = float(sys.argv[1])
+except (TypeError, ValueError):
+    raise SystemExit(1)
+raise SystemExit(0 if 0 <= value <= 1 else 1)
+PY
+then
+  ok "runtime_info.input.sft_conversion.reasoning_content_ratio_threshold = $SFT_REASONING_THRESHOLD"
+else
+  fail "runtime_info.input.sft_conversion.reasoning_content_ratio_threshold must be between 0 and 1 (got: $SFT_REASONING_THRESHOLD)"
+fi
 SFT_DATA_DIR_OUT="$(cfg runtime_info.output.sft_data_dir.path)"
 [[ -n "$SFT_DATA_DIR_OUT" ]] && ok "runtime_info.output.sft_data_dir.path = $SFT_DATA_DIR_OUT" || fail "runtime_info.output.sft_data_dir.path is required"
 

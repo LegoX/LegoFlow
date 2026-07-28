@@ -15,7 +15,7 @@ procedure, so the contract stays short and the detail lives here.
 | --- | --- |
 | `/tracer:setup` | Bootstrap: clone or update the read-only `harbor` and `swe_data_process` repos at their pinned commits, build the uv/venv environments, initialise the ledger if needed, and run dryrun. Task staging is handled by `scripts/start.sh` or an explicit `prepare_tasks.sh` request. |
 | `/tracer:check` | Preflight: schema + uv envs + LLM endpoint `/models` + curator task source + LiteLLM port free + processed-tasks ledger sanity. Read-only. |
-| `/tracer:dashboard` | Generate or serve the local HTML progress board, run/restart the Cloudflare Pages sync loop (`tracer-cf` tmux session), and manually refresh one job's SFT data/stats via `scripts/convert_trajectories.sh`. |
+| `/tracer:dashboard` | Generate or serve the interactive HTML board (Overview, Instances, Trajectories, Operations), run/restart the Cloudflare Pages sync loop (`tracer-cf` tmux session), optionally load full trajectories through R2, and manually refresh one job's SFT data/stats via `scripts/convert_trajectories.sh`. |
 | `/tracer:run` | Preflight via `/tracer:check`, then `scripts/start.sh` — `prepare_tasks.sh` → Harbor → optional conversion — plus post-run ledger / exclude-list / status bookkeeping. |
 
 ## Relationship to `/root:run`
