@@ -32,7 +32,7 @@ Per-test exit codes: `0` pass · `77` skip · anything else fail.
 | 04 | LLM endpoint | `GET ${api_base_url}/models` returns 200 and the configured model is in `data[].id` | ~1 s |
 | 05 | HF dataset | `huggingface.co/api/datasets/<name>` reachable with the configured token (SKIP for `local` provider) | <1 s |
 | 06 | LiteLLM port | port from `litellm_proxy.port` is free, or held by a process the current uid owns | <1 s |
-| 07 | runtime image | `docker image inspect ${agent.runtime_image}` exits 0 (pre-pulled) | <1 s |
+| 07 | runtime image | reports whether `${agent.runtime_image}` is pre-pulled (SKIP when the runner cache is cold) | <1 s |
 | 08 | processed-tasks ledger | ledger parses, every `done`/`failed`/`skipped` entry is also in `HARBOR_EXCLUDE_TASKS` | <1 s |
 | 09 | dashboard regressions | public/no-sample exports omit full trajectories, latest archived run is shown, R2 reads every JSONL shard, smoke config matches production | <1 s |
 | 10 | **10-HF-task demo** *(smoke)* | swap config + `start.sh` against 10 HF tasks; ≥1 trial resolves within 30 min | up to 30 min |
@@ -160,7 +160,9 @@ isn't on PATH.
 <summary><code>cases/07_runtime_image.sh</code> — agent runtime pre-pulled</summary>
 
 `docker image inspect ${agent.runtime_image}` exits 0 against the
-configured `DOCKER_HOST`. CI must not pay a multi-GB pull mid-job.
+configured `DOCKER_HOST`. A present image passes; a cold runner cache skips
+because CI must not pay a multi-GB pull mid-job. Missing Docker access still
+fails as a runner configuration error.
 </details>
 
 <details>
