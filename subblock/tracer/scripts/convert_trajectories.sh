@@ -179,6 +179,7 @@ SWE_DP_UV_RAW="$(cfg meta_info.environment.swe_data_process_uv)"
 HARBOR_JOBS_DIR_RAW="$(cfg runtime_info.input.harbor_job.jobs_dir)"
 AGENT_NAME="$(cfg runtime_info.input.agent.name)"
 SCAFFOLD_CFG="$(cfg runtime_info.input.sft_conversion.scaffold)"
+TOKENIZER_NAME_CFG="$(cfg runtime_info.input.sft_conversion.tokenizer_name)"
 OUT_DIR_CFG="$(cfg runtime_info.input.sft_conversion.out_dir)"
 MAX_INSTANCES_CFG="$(cfg runtime_info.input.sft_conversion.max_instances)"
 EXCLUDE_REPOS_CFG="$(cfg runtime_info.input.sft_conversion.exclude_repos_file)"
@@ -190,6 +191,7 @@ REASONING_THRESHOLD_CFG="$(cfg runtime_info.input.sft_conversion.reasoning_conte
 [[ -n "$HARBOR_JOBS_DIR_RAW" ]] || { echo "ERROR: runtime_info.input.harbor_job.jobs_dir is empty" >&2; exit 1; }
 [[ -n "$AGENT_NAME" ]] || { echo "ERROR: runtime_info.input.agent.name is empty" >&2; exit 1; }
 [[ -n "$SCAFFOLD_CFG" ]] || SCAFFOLD_CFG="auto"
+[[ -n "$TOKENIZER_NAME_CFG" ]] || { echo "ERROR: runtime_info.input.sft_conversion.tokenizer_name is empty" >&2; exit 1; }
 [[ -n "$OUT_DIR_CFG" ]] || OUT_DIR_CFG="artifacts/sft_data"
 [[ -n "$REASONING_CHECK_MODE_CFG" ]] || REASONING_CHECK_MODE_CFG="adaptive"
 [[ -n "$REASONING_THRESHOLD_CFG" ]] || REASONING_THRESHOLD_CFG="0.2"
@@ -281,7 +283,8 @@ PY
 CMD=("$SWE_DP_UV_ABS/bin/python" "-m" "$MODULE"
      "--job-dir" "$JOB_DIR"
      "--im-output" "$IM_OUTPUT"
-     "--lf-output" "$LF_OUTPUT")
+     "--lf-output" "$LF_OUTPUT"
+     "--tokenizer-name" "$TOKENIZER_NAME_CFG")
 REASONING_FILTER_SUPPORTED=0
 if supports_reasoning_filter "$SCAFFOLD"; then
   REASONING_FILTER_SUPPORTED=1
@@ -303,7 +306,7 @@ SIG_FILE="$OUT_DIR/.convert_sig.json"
 # instance set (the only thing the converter consumes) plus scaffold/limits, so
 # it is stable while result.json metadata churns during a running job.
 compute_convert_sig() {
-  python3 - "$JOB_DIR/result.json" "$SCAFFOLD" "${MAX_INSTANCES:-}" "${EXCLUDE_REPOS_FILE:-}" "$REASONING_FILTER_SUPPORTED" "$REASONING_CHECK_MODE" "$REASONING_CONTENT_RATIO_THRESHOLD" <<'PY'
+  python3 - "$JOB_DIR/result.json" "$SCAFFOLD" "$TOKENIZER_NAME_CFG" "${MAX_INSTANCES:-}" "${EXCLUDE_REPOS_FILE:-}" "$REASONING_FILTER_SUPPORTED" "$REASONING_CHECK_MODE" "$REASONING_CONTENT_RATIO_THRESHOLD" <<'PY'
 import hashlib
 import json
 import sys
@@ -311,13 +314,14 @@ import sys
 (
     result_path,
     scaffold,
+    tokenizer_name,
     max_instances,
     exclude_file,
     reasoning_filter_supported,
     reasoning_check_mode,
     reasoning_content_ratio_threshold,
-) = sys.argv[1:8]
-parts = [scaffold, max_instances, exclude_file, reasoning_filter_supported]
+) = sys.argv[1:9]
+parts = [scaffold, tokenizer_name, max_instances, exclude_file, reasoning_filter_supported]
 if reasoning_filter_supported == "1":
     parts.extend([reasoning_check_mode, reasoning_content_ratio_threshold])
 try:
@@ -371,6 +375,7 @@ echo "Job:       $JOB_NAME"
 echo "Job dir:   $JOB_DIR"
 echo "Scaffold:  $SCAFFOLD"
 echo "Module:    $MODULE"
+echo "Tokenizer: $TOKENIZER_NAME_CFG"
 if [[ "$REASONING_FILTER_SUPPORTED" == "1" ]]; then
   echo "Reasoning: $REASONING_CHECK_MODE (threshold=$REASONING_CONTENT_RATIO_THRESHOLD)"
 else

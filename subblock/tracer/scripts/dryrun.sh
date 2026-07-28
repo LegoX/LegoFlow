@@ -799,6 +799,8 @@ case "$SFT_SCAFFOLD" in
     fail "runtime_info.input.sft_conversion.scaffold must be one of: auto, claude_code, open_code, openhands_sdk, terminus2 (got: $SFT_SCAFFOLD)"
     ;;
 esac
+SFT_TOKENIZER_NAME="$(cfg runtime_info.input.sft_conversion.tokenizer_name)"
+[[ -n "$SFT_TOKENIZER_NAME" ]] && ok "runtime_info.input.sft_conversion.tokenizer_name = $SFT_TOKENIZER_NAME" || fail "runtime_info.input.sft_conversion.tokenizer_name is required"
 SFT_OUT_DIR="$(cfg runtime_info.input.sft_conversion.out_dir)"
 [[ -n "$SFT_OUT_DIR" ]] && ok "runtime_info.input.sft_conversion.out_dir = $SFT_OUT_DIR" || fail "runtime_info.input.sft_conversion.out_dir is required"
 SFT_REASONING_MODE="$(cfg runtime_info.input.sft_conversion.reasoning_check_mode)"
