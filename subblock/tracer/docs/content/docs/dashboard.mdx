@@ -94,12 +94,16 @@ tmux new-session -d -s tracer-cf \
   "ENV_FILE=.env.cf bash dashboard/run_cloudflare_pages_sync.sh 2>&1 | tee /tmp/tracer_cf_sync.log"
 ```
 
-Configuration is read from `~/.config/trajgen_progress_cloudflare.env` (override with `ENV_FILE`). The required values are:
+Configuration can come from exported environment variables, the root
+`config.yaml` → `runtime_info.input.cloudflare`, or the legacy
+`~/.config/trajgen_progress_cloudflare.env` file (override its path with
+`ENV_FILE`). Environment/file values take precedence over the shared root
+config. The required values are:
 
 | Variable | How to fill it | Default |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | API token with account-level `Cloudflare Pages: Edit` | required |
-| `CLOUDFLARE_ACCOUNT_ID` | 32-char Account ID from the dashboard | required |
+| `CLOUDFLARE_API_TOKEN` | API token with account-level `Cloudflare Pages: Edit`; keep it out of tracked config | required |
+| `CLOUDFLARE_ACCOUNT_ID` | 32-char Account ID from the dashboard; may live in root config | required |
 | `PROJECT_NAME` | Cloudflare Pages project (sets the public URL) | `swe-tracer-databoard` |
 | `LOOP_SECONDS` | Seconds between generate/deploy iterations | `3600` |
 | `CONVERT_ENABLED` | Auto-run SFT conversion in the loop (`0` disables) | `1` |
@@ -124,7 +128,11 @@ Bind the same R2 bucket to the Pages project as `TRACER_TRAJ_BUCKET` to enable f
 `wrangler pages deploy` needs the account-level `Cloudflare Pages: Edit` permission. None of the built-in templates map to it exactly, so create a Custom Token with `Account` -> `Cloudflare Pages` -> `Edit`. The Account ID is separate from the token.
 </Callout>
 
-The same loop optionally re-runs `scripts/convert_trajectories.sh --skip-unchanged` at most every `CONVERT_EVERY_SECONDS`, so the SFT stats on the board also stay fresh online without coupling heavy conversion to the deploy cadence.
+The same loop optionally re-runs
+`scripts/convert_trajectories.sh --skip-unchanged` at most every
+`CONVERT_EVERY_SECONDS`. It derives a scaffold override from the target job
+name when possible, so historical jobs do not silently use an unrelated
+current `agent.name`.
 
 For a lighter public page, set `DASHBOARD_SAMPLE_LIMIT` to a smaller value, `DASHBOARD_INCLUDE_SAMPLES=0`, `DASHBOARD_LOCAL_MODE=public`, or nonzero max fact limits in the sync environment.
 

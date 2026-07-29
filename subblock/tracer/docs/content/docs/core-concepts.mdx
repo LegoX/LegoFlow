@@ -7,9 +7,17 @@ tracer has the following core concepts:
 
 ## Verified task and manifest
 
-A **task** is a single Harbor task directory: an instruction, a container environment, and a test script. tracer does not author tasks — it consumes them from the upstream `curator` block.
+A **task** is a single Harbor task directory: an instruction, a container
+environment, and tests. Tracer does not author tasks. It consumes either the
+upstream curator output or a compatible Hugging Face dataset.
 
-A task is only eligible for a rollout if it appears in the source's **manifest**, `verifiable_tasks.txt`. curator writes this file to mark which tasks have passed NOP/Oracle validation. `scripts/prepare_tasks.sh` filters strictly through the manifest, so unverified tasks never reach a job.
+For a local source, curator can provide a **manifest**,
+`verifiable_tasks.txt`, containing the task IDs that passed verification.
+`scripts/prepare_tasks.sh` filters strictly through it when it is present. The
+current compatibility behavior for a local source without a manifest is to
+copy all structurally valid task directories, with a message explaining the
+fallback. Hugging Face sources are staged from their compatible packaged task
+directories.
 
 ## Trajectory
 
@@ -39,13 +47,25 @@ A **scaffold** is the agent harness that drives the model through a task — for
 
 ## Processed-tasks ledger
 
-The **processed-tasks ledger** (`artifacts/processed_tasks.yaml`) is the source of truth for which task IDs tracer has already processed (`pending | running | done | failed | skipped`). Every task that is `done`, excluded, or `skipped` is also added to `HARBOR_EXCLUDE_TASKS` so Harbor never rolls it out again. Together the manifest and the ledger guarantee each verified task is consumed exactly once.
+The **processed-tasks ledger** (`artifacts/processed_tasks.yaml`) is the source
+of truth for task states (`pending | running | done | failed | skipped`).
+`start.sh` reads terminal entries (`done | failed | skipped`) directly and
+adds Harbor exclusion flags at launch. They are not copied into
+`HARBOR_EXCLUDE_TASKS`.
+
+`HARBOR_EXCLUDE_TASKS` is a separate, human-maintained decision list for tasks
+that should remain blocked independently of the ledger, such as chronic
+timeouts or OOMs. The tracer plugin updates the ledger after inspecting each
+job; without that bookkeeping, a completed task is not protected on a future
+run.
 
 ## SFT data (IM and LF)
 
 tracer converts raw trajectories into training data in two stages:
 
-- **IM** (intermediate) — OpenAI-style messages with `tool_calls`, one JSONL row per trajectory, auto-scored for quality.
+- **IM** (intermediate) — PangUML v2 records containing OpenAI-style messages,
+  tools, metadata, and an optional TQS score, one JSONL row per converted
+  trajectory.
 - **LF** (LLaMA-Factory) — ShareGPT-style messages as a JSON array, ready to feed the `trainer` block.
 
 See [SFT Data](/docs/sft-data) for the full conversion pipeline.

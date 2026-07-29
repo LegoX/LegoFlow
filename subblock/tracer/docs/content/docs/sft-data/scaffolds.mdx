@@ -3,7 +3,11 @@ title: Scaffolds
 description: Supported agent formats and their converters
 ---
 
-The **scaffold** is the agent harness that produced a trajectory. Because each scaffold logs in its own shape, the converter that reshapes a trajectory into IM format is scaffold-specific. tracer ships converters for the four scaffolds below via the [`swe_data_process`](https://github.com/SWE-Lego/swe_data_process) package.
+The **scaffold** describes the harness that produced a trajectory. Because each
+harness logs a different shape, Raw → IM conversion is scaffold-specific.
+Tracer's pinned
+[`swe_data_process`](https://github.com/SWE-Lego/swe_data_process) checkout
+provides four converters.
 
 ## Supported scaffolds
 
@@ -16,15 +20,21 @@ The **scaffold** is the agent harness that produced a trajectory. Because each s
 
 ## Automatic detection
 
-By default the scaffold is detected automatically (`--scaffold auto`):
+With `--scaffold auto`, `scripts/convert_trajectories.sh` derives the key from
+the current `runtime_info.input.agent.name`, for example
+`custom-claude-code → claude_code`.
 
-- `scripts/convert_trajectories.sh` derives it from `runtime_info.input.agent.name` in `config.yaml` (for example `custom-claude-code` → `claude_code`).
-- The dashboard's online sync derives it from the **job directory name** instead, because the live job name may differ from `agent.name`.
+The long-running dashboard sync first tries to derive the scaffold from the
+target job directory name and passes that value explicitly. If the name has no
+known scaffold marker, the converter falls back to the current config's
+`agent.name`.
 
 You can always override detection by passing `--scaffold <key>` explicitly.
 
 <Callout title="Pick the scaffold that matches the run" type="warn">
-Converting a trajectory with the wrong scaffold key produces malformed IM rows. If the agent that generated a job does not match `agent.name` in the current config, pass `--scaffold` explicitly.
+Converting a trajectory with the wrong scaffold key produces malformed IM
+rows. Because a historical job may have been created with a different agent
+than the current config, pass `--scaffold` explicitly in that case.
 </Callout>
 
 ## What a converter does
@@ -35,4 +45,6 @@ Each converter normalizes its scaffold's raw log into the shared IM schema:
 - Splits reasoning from actions where the scaffold separates them (for example Terminus-2's analysis/plan/command structure).
 - Deduplicates repeated trajectory prefixes so a single clean sequence remains.
 
-The result is uniform across scaffolds, so downstream scoring and LF conversion are scaffold-agnostic.
+The result is a PangUML v2 IM record with normalized messages, tools, instance
+metadata, and score metadata. Downstream scoring and LF conversion can then be
+shared across scaffolds.

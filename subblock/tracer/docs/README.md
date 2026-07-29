@@ -9,10 +9,14 @@ Live site: **<https://swe-tracer-docs.pages.dev>**
 The prose lives in `content/docs/`; everything else is the minimal app shell
 needed to render and deploy it.
 
+The root documentation site imports this same `content/docs/` tree as its
+`/docs/sub-block/tracer` module. Edit tracer prose here only; do not create a
+second copy under the root docs.
+
 ## Requirements
 
-Node **>= 20** (Next 16 + fumadocs 16). This host's system Node is 18, so a
-newer Node is installed via [nvm](https://github.com/nvm-sh/nvm). Activate it
+Node **>= 20** (Next 16 + fumadocs 16). On hosts whose system Node is older,
+install a newer Node via [nvm](https://github.com/nvm-sh/nvm) and activate it
 before any `npm` command here:
 
 ```bash
