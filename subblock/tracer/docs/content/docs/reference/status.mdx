@@ -1,22 +1,38 @@
 ---
 title: Status
-description: Where the live operational state lives
+description: Where current job state and archived run history live
 ---
 
-The live operational state of the block is not kept in these docs — it lives in the files the scripts read and write, so it never goes stale.
+Tracer does not keep mutable status in `config.yaml`. The config has only
+`meta_info` and `runtime_info`; it is copied into each job and run archive to
+record what was launched.
 
-## Source of truth
+## Sources of truth
 
-- **`config.yaml` -> `status`** — the current `phase`, `progress`, `next_steps`, and `blockers`.
-- **`artifacts/index.yaml`** — archived run records (one entry per run).
-- **[dashboard](/docs/dashboard)** — a live visual view of jobs and SFT stats.
+| State | Source |
+| --- | --- |
+| Archived run history | `artifacts/index.yaml` |
+| One run's immutable metadata | `artifacts/archives/run_NNN/metadata.yaml` |
+| Harbor job progress and aggregate results | `artifacts/jobs/<job>/result.json` |
+| Per-task outcome and trajectory | `artifacts/jobs/<job>/<task>/` |
+| Launch/proxy output | `artifacts/logs/tracer_*.log` |
+| Processed-task protection | `artifacts/processed_tasks.yaml` |
+| Combined visual view | [Dashboard](/docs/dashboard) |
 
-Read `config.yaml` -> `status` for what is happening now, and `artifacts/index.yaml` for run history.
-
-## Time convention
-
-`started_at` and `last_updated` are recorded in UTC. Existing job directory names may include the local launch timestamp (`UTC+8`) so they continue to match the actual artifact path.
+`scripts/start.sh` installs an EXIT trap. On success, failure, SIGINT, or
+SIGTERM, it stops its LiteLLM proxy, snapshots the config and scripts under
+`artifacts/archives/run_NNN/`, and appends a
+`completed | failed | interrupted` entry to `artifacts/index.yaml`.
 
 ## During a run
 
-While a job is active, monitor `artifacts/jobs/<job>` and update the `status` block in `config.yaml` after inspection. Use `status.next_steps` as the live operator checklist.
+Monitor the active `artifacts/jobs/<job>/` directory, the launch log, or the
+dashboard. Do not edit `config.yaml` to record progress: it represents the
+profile used to construct the command. After the job, the tracer run procedure
+inspects task outcomes and updates `processed_tasks.yaml`.
+
+## Time convention
+
+Archive timestamps are written in UTC. Job directory names are generated with
+the launch host's local clock, so their timestamp may use a different timezone
+while still identifying the correct on-disk job.

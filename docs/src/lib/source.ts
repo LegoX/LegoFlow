@@ -57,6 +57,42 @@ function blockFolder(name: BlockName) {
   };
 }
 
+function resolveBlockHref(
+  name: BlockName,
+  href: string,
+  parent: any,
+) {
+  // Subblock prose is shared with each standalone docs site, where internal
+  // links use /docs/.... When mounted in the root site, preserve the block
+  // namespace instead of letting fumadocs resolve against the mounted page's
+  // final slug (which can produce /docs/sub-block/<page>/...).
+  const blockBase = `/docs/sub-block/${name}`;
+  if (href === blockBase || href.startsWith(`${blockBase}/`) || href.startsWith(`${blockBase}#`)) {
+    return href;
+  }
+
+  // fumadocs may already have resolved a standalone /docs/... link against
+  // the mounted page before this hook runs, yielding
+  // /docs/sub-block/<current-section>/<target>. Strip that synthetic current
+  // section before applying the real block namespace.
+  const parentPath = String(parent.url ?? '').slice(blockBase.length);
+  const currentSection = parentPath.split('/').filter(Boolean)[0];
+  const syntheticBase = `/docs/sub-block/${currentSection ?? 'undefined'}`;
+  if (
+    (href === syntheticBase ||
+      href.startsWith(`${syntheticBase}/`) ||
+      href.startsWith(`${syntheticBase}#`))
+  ) {
+    return `${blockBase}${href.slice(syntheticBase.length)}`;
+  }
+
+  if (href === '/docs' || href.startsWith('/docs/') || href.startsWith('/docs#')) {
+    return `${blockBase}${href.slice('/docs'.length)}`;
+  }
+
+  return blockSources[name].resolveHref(href, parent);
+}
+
 function mergedPageTree() {
   const tree = rootSource.pageTree;
 
@@ -136,19 +172,19 @@ export const source = {
 
   resolveHref(href: string, parent: any) {
     if (parent.url?.startsWith('/docs/sub-block/curator')) {
-      return blockSources.curator.resolveHref(href, parent);
+      return resolveBlockHref('curator', href, parent);
     }
 
     if (parent.url?.startsWith('/docs/sub-block/tracer')) {
-      return blockSources.tracer.resolveHref(href, parent);
+      return resolveBlockHref('tracer', href, parent);
     }
 
     if (parent.url?.startsWith('/docs/sub-block/trainer')) {
-      return blockSources.trainer.resolveHref(href, parent);
+      return resolveBlockHref('trainer', href, parent);
     }
 
     if (parent.url?.startsWith('/docs/sub-block/evaluator')) {
-      return blockSources.evaluator.resolveHref(href, parent);
+      return resolveBlockHref('evaluator', href, parent);
     }
 
     return rootSource.resolveHref(href, parent);
