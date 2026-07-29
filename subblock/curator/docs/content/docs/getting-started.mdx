@@ -1,188 +1,45 @@
 ---
 title: Getting Started
-description: Set up the Curator block and run the first task generation pass
+description: What Curator needs and the fastest way to run it
 ---
 
 Curator wraps the pinned `repos/swegen` checkout in the SWE-Lego-Live block
-layout. The pinned repository is recorded as a gitlink under
-`subblock/curator/repos/swegen`.
-
-## Recommended: operate via the Claude plugin
-
-The block ships a Claude Code plugin (`curator-plugin`) that drives the whole
-lifecycle through slash commands. This is the recommended way to run curator —
-each command performs the preflight, confirmation, and bookkeeping steps for
-you. Launch Claude from inside `subblock/curator/` so the block-local plugin
-loads, then:
-
-```text
-/curator:setup          # init submodule, build venv, install swegen, dryrun
-/curator:check          # preflight: config, GitHub tokens, LLM endpoint, docker
-/curator:collect-prs    # collect PR IDs and wait for completion
-/curator:create-tasks   # generate and verify tasks from existing PR IDs
-/curator:dashboard      # dataset analytics: difficulty + tags (swe-databoard)
-```
-
-A sixth command, `/curator:run`, is a uniform-interface compatibility adapter
-that forwards to `/curator:create-tasks` so every block exposes the same
-`/<block>:run` verb; operate Curator directly through the specific skills above.
-See [Run Generation](/docs/run-generation) for the full command reference.
-
-`collect-prs` and `create-tasks` are separate commands. Wait for the background
-collector to finish before running production generation; `create-tasks` reads
-existing PR ID files and never starts collection. Its smoke mode is independent
-and uses a sample PR file bundled in `repos/swegen`.
-
-The knobs these commands read live in `config.yaml` — LLM endpoint under
-`runtime_info.input.llm_api`, PR collection under
-`runtime_info.input.pr_collection`, and per-language generation params under
-`runtime_info.input.languages`. Edit `config.yaml`, not the scripts.
-
-The rest of this page documents the underlying commands the plugin runs, for
-manual operation or debugging.
+layout (recorded as a gitlink under `subblock/curator/repos/swegen`). You drive
+it through the `curator-plugin` Claude Code plugin: each slash command runs its
+own preflight, confirmation, and bookkeeping, so you operate the block through
+commands rather than raw scripts.
 
 ## Prerequisites
 
-- Docker - task validation and task execution use containerized Harbor tasks.
-- Python - install the SWE-gen package from `repos/swegen`.
-- GitHub tokens - used for PR collection and PR metadata lookup.
-- OpenAI-compatible LLM endpoint - used for PR evaluation and task instruction generation.
-- Claude-compatible task model - used by the task completion stage.
+- **Docker** — task validation and execution run in containerized Harbor tasks.
+- **Python** — the `swegen` package installs from `repos/swegen`.
+- **GitHub tokens** — for PR collection and PR metadata lookup.
+- **OpenAI-compatible LLM endpoint** — PR evaluation and instruction generation.
+- **Claude-compatible task model** — the task-completion and verification stage.
 
-## 1. Enter the block
+## Fastest start: one prompt
 
-Run commands from the block root:
+Launch Claude from inside `subblock/curator/` (so the block-local plugin loads),
+then describe the run in plain language. The agent fills the environment, runs
+preflight, and chains the plugins for you — you don't even need to edit
+`config.yaml`. Grab the copy-paste prompt from
+[Run Generation → The simplest way](/docs/run-generation#the-simplest-way-one-prompt).
 
-```bash
-cd subblock/curator
-```
+## The stages
 
-Confirm the pinned repo is checked out:
+Whether you prompt for them or run them yourself, the pipeline is five commands:
 
-```bash
-git rev-parse HEAD:repos/swegen
-```
+- `/curator:setup` — one-time: init the submodule, build the venv, install `swegen`.
+- `/curator:check` — read-only preflight (config, tokens, a live LLM call, Docker).
+- `/curator:collect-prs` — collect GitHub PR IDs as a background job.
+- `/curator:create-tasks` — generate tasks from collected PRs and verify each.
+- `/curator:dashboard` — dataset analytics (difficulty + tags), not run progress.
 
-This prints the gitlink commit recorded for the submodule. `/curator:setup`
-initializes it if the `repos/swegen/` working tree is empty.
+A sixth command, `/curator:run`, is a compatibility adapter that forwards to
+`/curator:create-tasks` so every block exposes the same `/<block>:run` verb.
 
-## 2. Install the environment
+## Next
 
-Create the block virtual environment and install SWE-gen:
-
-```bash
-python3 -m venv artifacts/envs/swegen-env
-source artifacts/envs/swegen-env/bin/activate
-pip install -U pip
-pip install -e repos/swegen/
-```
-
-If you already maintain a compatible environment, activate it before running
-the scripts. The important requirement is that `swegen` resolves to the pinned
-checkout.
-
-## 3. Configure credentials
-
-Set runtime inputs in the shell or in a local env file that is not committed:
-
-```bash
-export GITHUB_TOKENS="ghp_xxx,ghp_yyy"
-export OPENAI_API_KEY="..."
-export ANTHROPIC_API_KEY="$OPENAI_API_KEY"
-export OPENAI_API_BASE_URL="https://your-openai-compatible-endpoint/v1"
-export ANTHROPIC_BASE_URL="https://your-anthropic-compatible-endpoint"
-export OPENAI_MODEL="<your-pr-model>"        # e.g. the config default Qwen3.6-35B-A3B
-export ANTHROPIC_MODEL="<your-task-model>"   # e.g. claude-sonnet-4-6
-```
-
-`config.yaml` is the source of truth for model names (`llm_api.pr_model` /
-`llm_api.task_model`); `scripts/load_runtime_env.sh` exports them as
-`OPENAI_MODEL` / `ANTHROPIC_MODEL`. The manual exports above are only for
-running the collector/CLI outside the block scripts.
-
-The pinned collector accepts both `GITHUB_TOKENS` and `GITHUB_TOKEN` and
-combines them with `repos/swegen/gh_token.txt` (or
-`COLLECT_GITHUB_TOKEN_FILE`). `scripts/load_runtime_env.sh` imports variables
-from the interactive shell, including `~/.bashrc`, then sources the block's
-ignored `.env`. Do not commit tokens or local env files. Keep the
-OpenAI-compatible and Anthropic-compatible variables aligned with the same
-provider setup you intend to use for the run.
-
-> **Important — the `ANTHROPIC_BASE_URL` path also drives verification.**
-> It runs task completion *and* the step that writes `verifiable_tasks.txt`.
-> If your provider is OpenAI-only (Qwen, GLM, sglang, vLLM, most self-hosted
-> endpoints), it rejects `role:system` on `/v1/messages` and verification fails
-> silently. Set `llm_api.cc_provider_mode: openai_proxy` in `config.yaml` and
-> point `ANTHROPIC_BASE_URL` at a local LiteLLM proxy rather than the raw
-> provider URL. Use `native` only when the provider already speaks the
-> Anthropic Messages API. See the "LLM provider modes" section of the block
-> `CLAUDE.md`.
-
-For reproducible runs on shared machines, use a clean Claude Code config
-directory so user-level hooks and plugins do not affect task completion:
-
-```bash
-export CLAUDE_CONFIG_DIR="$PWD/artifacts/claude-config/swegen-clean"
-mkdir -p "$CLAUDE_CONFIG_DIR"
-```
-
-## 4. Run a dry run
-
-Check the block before starting a large batch:
-
-```bash
-bash scripts/dryrun.sh
-```
-
-This validates expected directories, config values, and basic runtime
-dependencies. Fix dry-run failures before launching generation.
-
-## 5. Run a smoke generation
-
-Use the plugin for a small first pass:
-
-```text
-/curator:create-tasks    # choose "smoke" when prompted
-```
-
-Smoke mode uses a sample PR file bundled in `repos/swegen` and does not
-require `/curator:collect-prs` first. Success means
-`artifacts/experiments/quick-verify/swe_tasks/py-cc/verifiable_tasks.txt`
-contains at least one verified task ID.
-
-For a smoke pass against your own collected PR pool instead, run
-`/curator:collect-prs` first, then `/curator:create-tasks` and choose
-`single-language` with a small language scope.
-
-For the full multi-language run:
-
-```text
-/curator:create-tasks    # choose "full" when prompted
-```
-
-This starts all eight language workers in the background. Per-language
-generation parameters (concurrency, timeouts) come from `config.yaml` — edit
-that file, not the scripts, to tune a run. Track progress through the batch
-logs and `verifiable_tasks.txt`; `/curator:dashboard` publishes dataset
-difficulty and tag analytics, not live run progress.
-
-See [Run Generation](/docs/run-generation) for the full command reference,
-config.yaml schema, and manual (non-plugin) commands for debugging.
-
-## 6. Resume after moving nodes
-
-If you restored a March state package into a new clone, check the batch state
-before running generation. Curator stores batch state under a filename derived
-from `input_ids_file.resolve()`. A new clone path creates a new hash even when
-the relative input file is the same.
-
-For portable recovery, keep these files together:
-
-- `artifacts/swe_tasks/<lang>-cc/`
-- `artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt`
-- `artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/*.json`
-- the matching PR input files in `artifacts/collected_prs/`
-
-If the clone path changes, rewrite or regenerate the `.swegen-create-batch`
-state filenames so they match the current resolved input file paths before
-launching `scripts/create_{lang}.sh`.
+- [Run Generation](/docs/run-generation) — the full flow, per-command reference, `config.yaml` schema, and manual commands.
+- [Core Concepts](/docs/core-concepts) — PR pools, task skeletons, validation, and manifests.
+- [Outputs](/docs/outputs) — task directories, manifests, logs, and resuming after moving nodes.
