@@ -27,6 +27,30 @@ Every command is documented in full under [Command reference](#command-reference
 
 ## Recommended workflow
 
+### The simplest way: one prompt
+
+The simplest way to run Curator is to paste a prompt like the one below into a
+Claude session started inside `subblock/curator/` — you don't even need to fill
+in `config.yaml`. The agent fills the environment, runs preflight, and chains
+the plugins for you. Just give it three things: your **LLM endpoint + key**,
+**where your GitHub tokens live**, and **how many verifiable tasks** you want.
+
+```text
+Run the whole curator pipeline through its plugins and build me at least <N> verifiable SWE task(s), python only.
+LLM: base_url <BASE_URL>, model <MODEL>, key <API_KEY>. GitHub tokens are in the file <TOKEN_FILE>.
+Go through the stages in order: /curator:setup → /curator:check → /curator:collect-prs →
+/curator:create-tasks (--max-pr 5 is enough for a pipeline check) → /curator:dashboard.
+```
+
+The agent writes your key into a gitignored `.env` (never `config.yaml`) and
+reports the verified task at the end.
+
+You can also do it by hand: edit `config.yaml` first, then run the commands one
+by one — that gives you precise control over every parameter and lets you review
+each stage's output before moving on.
+
+### Run the stages by hand
+
 From a Claude session inside `subblock/curator/`, run the stages in order.
 Bootstrap and preflight are one-time; collection and generation are the two
 pipeline stages:
