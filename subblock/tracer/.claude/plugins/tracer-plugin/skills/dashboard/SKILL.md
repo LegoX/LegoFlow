@@ -67,7 +67,7 @@ pages.
 
 `dashboard/run_cloudflare_pages_sync.sh` loop-generates the HTML and deploys
 `dashboard/site/` to Cloudflare Pages via `wrangler`, yielding a public URL
-(current: <https://swe-tracer-databoard.pages.dev>). Each iteration also calls
+(current: <https://swe-tracer-databoard-eir.pages.dev/>). Each iteration also calls
 `scripts/convert_trajectories.sh --skip-unchanged` every `CONVERT_EVERY_SECONDS`
 to refresh SFT stats. Config is read from `~/.config/trajgen_progress_cloudflare.env`
 (override with `ENV_FILE`); `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
