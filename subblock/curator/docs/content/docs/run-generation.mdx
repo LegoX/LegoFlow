@@ -3,58 +3,55 @@ title: Run Generation
 description: Launch SWE task generation using Claude plugin commands
 ---
 
-SWE task generation is driven by Curator's Claude plugin. The plugin provides
-slash commands that handle preflight checks, configuration loading, and
-workflow orchestration automatically.
+SWE task generation is driven by Curator's Claude plugin. Each slash command
+runs its own preflight, loads configuration from `config.yaml`, and orchestrates
+one stage of the workflow, so you operate the block through commands rather than
+raw scripts.
 
-## Plugin Commands
+## Plugin commands
 
-Curator ships six slash commands. Five drive the lifecycle you run by hand; the
-sixth is a compatibility adapter for generic block runners. Launch Claude from
-inside `subblock/curator/` so the block-local plugin loads.
+Curator ships six slash commands. Launch Claude from inside `subblock/curator/`
+so the block-local plugin loads. Five commands drive the workflow you run by
+hand; `/curator:run` is a compatibility adapter for generic block runners.
 
-| Command | Stage | What it does |
+| Command | Stage | Purpose |
 | --- | --- | --- |
-| `/curator:setup` | one-time bootstrap | Init the `repos/swegen/` submodule, build the venv, install `swegen` editable, and ensure the LLM / GitHub / Docker env vars are set. Idempotent. |
-| `/curator:check` | preflight | Read-only validation of config, repo pin, GitHub tokens, a real LLM completion, and the Docker daemon. Mandatory before `create-tasks`. |
-| `/curator:collect-prs` | stage 1 | Collect qualifying GitHub PRs into `artifacts/collected_prs/{lang}_pr_ids.txt`. Long-running background job. |
-| `/curator:create-tasks` | stage 2 | Generate tasks from existing PR IDs and NOP/Oracle-verify them into `verifiable_tasks.txt`. Never collects PRs. |
-| `/curator:dashboard` | monitoring | Read-only progress view per language; optional Cloudflare Pages sync. |
-| `/curator:run` | adapter | Uniform-interface shim that forwards to `/curator:create-tasks`. Prefer the specific skills for direct operation. |
+| `/curator:setup` | Bootstrap (once) | Initializes the `repos/swegen/` submodule, builds the virtualenv, installs `swegen`, and sets the LLM, GitHub, and Docker environment variables. Safe to re-run. |
+| `/curator:check` | Preflight | Validates config, the pinned repo, GitHub tokens, a live LLM completion, and the Docker daemon. Read-only, and required before generating tasks. |
+| `/curator:collect-prs` | Stage 1 — collect | Collects qualifying GitHub PRs into `artifacts/collected_prs/{lang}_pr_ids.txt`. Runs as a long-lived background job. |
+| `/curator:create-tasks` | Stage 2 — generate | Turns collected PR IDs into tasks and verifies each with NOP/Oracle checks, recording verified IDs in `verifiable_tasks.txt`. Does not collect PRs. |
+| `/curator:dashboard` | Dataset analytics | Regenerates and publishes the dataset databoard — per-task difficulty scores and semantic tags across the curated datasets. It analyzes datasets, not run progress. |
+| `/curator:run` | Adapter | Forwards its arguments to `/curator:create-tasks` so every block exposes a `/<block>:run` entry point. Operate Curator through the specific commands above; this exists for generic runners. |
 
-Each command is documented in full under [Command Reference](#command-reference)
-below.
+Every command is documented in full under [Command reference](#command-reference).
 
-## Recommended Workflow
+## Recommended workflow
 
-From a Claude session started inside `subblock/curator/`, run the lifecycle in
-order — bootstrap and preflight once, then the two pipeline stages, watching
-progress on the dashboard:
+From a Claude session inside `subblock/curator/`, run the stages in order.
+Bootstrap and preflight are one-time; collection and generation are the two
+pipeline stages:
 
 ```text
-/curator:setup          # one-time: init swegen submodule, build venv, install swegen
-/curator:check          # read-only preflight: config, GitHub tokens, LLM endpoint, docker
-/curator:collect-prs    # stage 1: collect PR IDs into artifacts/collected_prs/, wait for completion
-/curator:create-tasks   # stage 2: generate + verify tasks from existing PR IDs
-/curator:dashboard      # monitor progress (local preview or Cloudflare Pages sync)
+/curator:setup          # once: init swegen submodule, build venv, install swegen
+/curator:check          # preflight: config, GitHub tokens, LLM endpoint, Docker
+/curator:collect-prs    # stage 1: collect PR IDs; wait for the background job to finish
+/curator:create-tasks   # stage 2: generate and verify tasks from collected PR IDs
 ```
 
-`/curator:run` also exists as a uniform-interface compatibility adapter: it
-forwards directly to `/curator:create-tasks` so every block exposes the same
-`/<block>:run` verb. Operate Curator directly through the specific skills above;
-reach for `/curator:run` only when a generic block runner invokes it.
+Track run progress through the batch logs, `verifiable_tasks.txt`, and
+`artifacts/index.yaml` — not through `/curator:dashboard`, which analyzes
+finished datasets rather than live runs (see [Dashboard](/docs/dashboard)).
 
-These commands read all configuration from `config.yaml`:
-- `/curator:setup` and `/curator:check` read `runtime_info.input.llm_api` to build the env and probe the endpoint
-- `/curator:collect-prs` uses `runtime_info.input.pr_collection` for scope and filters
-- `/curator:create-tasks` uses `runtime_info.input.languages` for per-language timeouts and concurrency
-- All of them use `runtime_info.input.llm_api` for LLM endpoint configuration
+Each command reads its parameters from `config.yaml`:
 
-Edit `config.yaml` to adjust parameters, then re-run the command.
+- `/curator:setup` and `/curator:check` read `runtime_info.input.llm_api` to build the environment and probe the endpoint.
+- `/curator:collect-prs` reads `runtime_info.input.pr_collection` for scope and filters.
+- `/curator:create-tasks` reads `runtime_info.input.languages` for per-language timeouts and concurrency.
 
-**Important:** `collect-prs` and `create-tasks` are separate stages.
-`/curator:create-tasks` never starts the collector. Wait for the background
-collector to finish before running generation.
+Edit `config.yaml`, then re-run the command.
+
+**Collection and generation are separate stages.** `/curator:create-tasks`
+never starts the collector — wait for `/curator:collect-prs` to finish first.
 
 
 ## Configuration Guide
@@ -208,28 +205,27 @@ The plugin runs preflight checks automatically:
 
 ### /curator:dashboard
 
-Read-only progress view for Curator. It reads `artifacts/swe_tasks/<lang>-cc/`
-and the per-language manifests without launching generation or editing
-configuration, then reports:
-- Per-language progress (success / total PRs)
-- Tasks generated and the `verifiable_tasks.txt` count
-- NOP/Oracle pass rate
-- Recent failures and last-run duration
-- Estimated completion time
+Regenerates the **dataset analytics databoard** and, optionally, deploys it to
+Cloudflare Pages. It scores every task's difficulty and assigns the four
+semantic tags `[language, area, topic, bug_class]` with the canonical tagger
+(`repos/swegen/tools/tag_task_metadata.py`), then renders a single-page
+comparison across the curated datasets, published at `swe-databoard.pages.dev`.
 
-A textual summary needs no live server; when a webui is present it can launch
-on a configured port and optionally sync the built page to Cloudflare Pages.
+This command analyzes finished datasets, not live run progress. To follow a
+running generation, read the batch logs, `verifiable_tasks.txt`, and
+`artifacts/index.yaml`. See [Dashboard](/docs/dashboard) for the scoring and
+tagging methodology.
 
 ### /curator:run
 
-Uniform-interface compatibility adapter. It forwards the user's complete
-request and arguments to `/curator:create-tasks` unchanged, so the repository's
-standard `/<block>:run` layout holds for every block. It adds no preflight,
-confirmation, or reporting logic of its own — `create-tasks` owns all of that.
-For direct Curator operation, use the specific skills; this adapter mainly
-exists for generic block runners. (Note: `/root:run curator` does **not** go
-through this adapter — root targeting directly executes Curator's all-language
-`scripts/start.sh`.)
+A compatibility adapter that forwards its full request and arguments to
+`/curator:create-tasks` unchanged, so every block offers the same
+`/<block>:run` entry point. It adds no preflight or reporting of its own —
+`create-tasks` owns all of that. Prefer the specific commands for day-to-day
+Curator work; this adapter mainly serves generic block runners.
+
+Note: `/root:run curator` does **not** go through this adapter. Root targeting
+runs Curator's all-language `scripts/start.sh` directly.
 
 ---
 
@@ -307,8 +303,9 @@ Before running a large-scale generation:
 5. ✅ Check Docker daemon is running: `docker ps`
 6. ✅ Ensure sufficient disk space for state and artifacts
 7. ✅ Start collection: `/curator:collect-prs`
-8. ✅ Wait for collection to finish (monitor logs)
+8. ✅ Wait for collection to finish (watch the collector logs)
 9. ✅ Start generation: `/curator:create-tasks` → choose "full"
-10. ✅ Monitor progress: `/curator:dashboard`
+10. ✅ Track progress via batch logs, `verifiable_tasks.txt`, and `artifacts/index.yaml`
 
-Open the [Dashboard](/docs/dashboard) for the live progress view.
+After a run, open the [Dashboard](/docs/dashboard) to review dataset difficulty
+and tag composition.

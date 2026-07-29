@@ -117,7 +117,7 @@ smoke and single-language modes do not:
 | `/curator:check` | `scripts/dryrun.sh` + token/LLM/docker probes | Read-only preflight |
 | `/curator:collect-prs` | `scripts/collect_all_bg.sh` / collector | Collect PR IDs and wait for completion (Step 1 below) |
 | `/curator:create-tasks` | Full: `scripts/start_with_*.sh` → `create_all_bg.sh`; smoke/single: direct command | Generate and verify tasks from existing PR IDs (Step 2) |
-| `/curator:dashboard` | `dashboard/` generator + Cloudflare sync | Progress monitoring |
+| `/curator:dashboard` | `dashboard/` tagger + HTML generator + Cloudflare deploy | Dataset analytics (difficulty + tags), not run-progress monitoring |
 
 `/curator:create-tasks` does not invoke `/curator:collect-prs`. For production modes,
 wait for collection to finish before starting generation; the create scripts

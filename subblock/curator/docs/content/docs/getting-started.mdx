@@ -20,7 +20,7 @@ loads, then:
 /curator:check          # preflight: config, GitHub tokens, LLM endpoint, docker
 /curator:collect-prs    # collect PR IDs and wait for completion
 /curator:create-tasks   # generate and verify tasks from existing PR IDs
-/curator:dashboard      # local preview or Cloudflare Pages sync
+/curator:dashboard      # dataset analytics: difficulty + tags (swe-databoard)
 ```
 
 A sixth command, `/curator:run`, is a uniform-interface compatibility adapter
@@ -162,8 +162,9 @@ For the full multi-language run:
 
 This starts all eight language workers in the background. Per-language
 generation parameters (concurrency, timeouts) come from `config.yaml` — edit
-that file, not the scripts, to tune a run. Monitor progress with
-`/curator:dashboard`.
+that file, not the scripts, to tune a run. Track progress through the batch
+logs and `verifiable_tasks.txt`; `/curator:dashboard` publishes dataset
+difficulty and tag analytics, not live run progress.
 
 See [Run Generation](/docs/run-generation) for the full command reference,
 config.yaml schema, and manual (non-plugin) commands for debugging.
