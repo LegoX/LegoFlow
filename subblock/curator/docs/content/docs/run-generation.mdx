@@ -74,10 +74,6 @@ Each command reads its parameters from `config.yaml`:
 
 Edit `config.yaml`, then re-run the command.
 
-**Collection and generation are separate stages.** `/curator:create-tasks`
-never starts the collector — wait for `/curator:collect-prs` to finish first.
-
-
 ## Configuration Guide
 
 All generation parameters live in `config.yaml` under `runtime_info.input`.
@@ -116,7 +112,15 @@ LiteLLM proxy to translate Anthropic calls to OpenAI format.
 **Never commit real API keys to config.yaml.** Use environment variables or
 `.env` files instead.
 
-### PR Collection Configuration
+### PR collection and per-language parameters
+
+PR collection (`pr_collection`: languages, `repo_num`, `max_prs_per_repo`,
+filters) and per-language generation (`languages.<lang>.params`: `timeout`,
+`cc_timeout`, `n_concurrent`) are configured in `config.yaml` and documented
+inline there. Edit that file, then re-run the command.
+
+<details>
+<summary>Example config.yaml blocks (click to expand)</summary>
 
 ```yaml
 pr_collection:
@@ -135,25 +139,19 @@ pr_collection:
     min_files_changed: 1
     max_files_changed: 25
     max_lines_changed: 1500
-```
 
-### Per-Language Generation Parameters
-
-```yaml
 languages:
   py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 20 } }
   js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
   ts:   { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }
-  go:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-  java: { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-  c:    { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-  cpp:  { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-  rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }
+  # …one row per language
 ```
 
 - `timeout`: whole PR case timeout (seconds)
 - `cc_timeout`: Claude Code task completion timeout (seconds)
 - `n_concurrent`: parallel PR workers per language
+
+</details>
 
 ### GitHub Tokens
 
@@ -318,18 +316,15 @@ not set them by hand. `--timeout` is the overall per-case budget and must stay
 
 ## Production Checklist
 
-Before running a large-scale generation:
+Before a large-scale run, confirm the essentials that `/curator:check` does not
+decide for you:
 
-1. ✅ Verify `config.yaml` has correct LLM endpoint and credentials
-2. ✅ Ensure GitHub tokens are fresh (check `repos/swegen/gh_token.txt`)
-3. ✅ Run smoke test: `/curator:create-tasks` → choose "smoke"
-4. ✅ Verify smoke generates 1 task in `artifacts/experiments/quick-verify/`
-5. ✅ Check Docker daemon is running: `docker ps`
-6. ✅ Ensure sufficient disk space for state and artifacts
-7. ✅ Start collection: `/curator:collect-prs`
-8. ✅ Wait for collection to finish (watch the collector logs)
-9. ✅ Start generation: `/curator:create-tasks` → choose "full"
-10. ✅ Track progress via batch logs, `verifiable_tasks.txt`, and `artifacts/index.yaml`
+1. ✅ `config.yaml` LLM endpoint, `cc_provider_mode`, and credentials are correct
+2. ✅ GitHub tokens are fresh (`repos/swegen/gh_token.txt` or `GITHUB_TOKENS`)
+3. ✅ A smoke pass produced a task (`/curator:create-tasks` → "smoke")
+4. ✅ Docker is running and there is enough disk for state and artifacts
 
-After a run, open the [Dashboard](/docs/dashboard) to review dataset difficulty
-and tag composition.
+Then collect (`/curator:collect-prs`), wait for it to finish, and generate
+(`/curator:create-tasks` → "full"). Track progress via the batch logs,
+`verifiable_tasks.txt`, and `artifacts/index.yaml`; open the
+[Dashboard](/docs/dashboard) afterward to review difficulty and tag composition.
