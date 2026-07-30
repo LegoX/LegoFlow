@@ -142,7 +142,39 @@ until curl -sf --max-time 10 "http://127.0.0.1:${PORT}/health/liveliness" >/dev/
     exit 5
   fi
 done
-echo "[start_with_openai_api] LiteLLM proxy ready on :${PORT}."
+echo "[start_with_openai_api] LiteLLM proxy is up on :${PORT}."
+
+# /health/liveliness only proves the process is up — it checks no dependencies,
+# so a wrong upstream model or key still answers 200. Without a routing check
+# the launcher would hand a dead proxy to every detached worker, and CC
+# verification fails silently for the whole run. Probe the Anthropic path the
+# Claude Code SDK actually uses, and refuse to launch workers if it has no text.
+CC_TASK_MODEL="$("$PY_BIN" -c "
+import yaml
+c=yaml.safe_load(open('config.yaml'))
+print((c.get('runtime_info',{}).get('input',{}).get('llm_api',{}) or {}).get('task_model',''))
+")"
+CC_API_KEY="$("$PY_BIN" -c "
+import yaml
+c=yaml.safe_load(open('config.yaml'))
+print((c.get('runtime_info',{}).get('input',{}).get('llm_api',{}) or {}).get('api_key',''))
+")"
+PROBE="$(cd "$BLOCK_DIR/../.." && pwd)/scripts/probe_llm_endpoint.py"
+if [ -f "$PROBE" ]; then
+  if python3 "$PROBE" --anthropic-only --attempts 3 \
+       --label "CC proxy model routing" \
+       --base-url "http://127.0.0.1:${PORT}" \
+       --anthropic-base-url "http://127.0.0.1:${PORT}" \
+       --anthropic-model "$CC_TASK_MODEL" \
+       --api-key "$CC_API_KEY"; then
+    echo "[start_with_openai_api] CC proxy routes ${CC_TASK_MODEL} to the upstream."
+  else
+    echo "ERROR: the proxy is up but cannot complete a request for '${CC_TASK_MODEL}'." >&2
+    echo "  Workers would burn their whole run on failing agent calls; not launching." >&2
+    tail -30 "$PROXY_LOG" >&2 || true
+    exit 6
+  fi
+fi
 
 # Startup succeeded (or we reused an existing proxy) -- disarm the
 # startup-failure trap so a healthy proxy is never killed just because this

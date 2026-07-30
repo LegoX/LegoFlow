@@ -23,6 +23,12 @@ mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
 # Read per-language params from config.yaml
 eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang go --config-yaml "${PROJECT_ROOT}/config.yaml")
 : "${SWE_TASKS_DIR:?read_params.py emitted no SWE_TASKS_DIR — check runtime_info.output.swe_tasks_dir.path in config.yaml}"
+# `all` = no cap: swegen's --max-pr defaults to every entry, so omit the flag.
+MAX_PR_ARGS=()
+_max_pr="${SWEGEN_MAX_PR:-${MAX_VERIFIED_TASKS:-}}"
+if [[ -n "$_max_pr" && "$_max_pr" != "all" ]]; then
+  MAX_PR_ARGS=(--max-pr "$_max_pr")
+fi
 echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 
 # Go projects are usually deterministic, but module download/build can still be expensive.
@@ -30,7 +36,7 @@ echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 # of truth for already successful tasks; external Feb skip files are no longer needed.
 swegen create \
   --input-ids-file "${PROJECT_ROOT}/artifacts/collected_prs/go_pr_ids.txt" \
-  --max-pr "${SWEGEN_MAX_PR:-${MAX_VERIFIED_TASKS:-5000}}" \
+  ${MAX_PR_ARGS[@]+"${MAX_PR_ARGS[@]}"} \
   --n-concurrent "${N_CONCURRENT}" \
   --output "${SWE_TASKS_DIR}/go-cc" \
   --state-dir "$STATE_DIR" \

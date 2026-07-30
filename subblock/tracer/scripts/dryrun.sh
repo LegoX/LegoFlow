@@ -784,13 +784,19 @@ if [[ -z "$RUNTIME_HOST_PATH" ]]; then
   ok "agent.runtime_host_path is empty; runtime is mounted from runtime_image"
 else
   RUNTIME_HOST_ABS="$(abspath "$RUNTIME_HOST_PATH")"
+  # Each scaffold extracts a different executable; mirrors evaluator's dryrun.
+  case "$(cfg runtime_info.input.agent.name)" in
+    custom-openhands-sdk) RUNTIME_EXECUTABLE="bin/python" ;;
+    custom-opencode)      RUNTIME_EXECUTABLE="bin/opencode" ;;
+    *)                    RUNTIME_EXECUTABLE="bin/claude" ;;
+  esac
   RUNTIME_ROOT="$(cfg runtime_info.input.runtime_mount.container_runtime_root)"
   [[ -z "$RUNTIME_ROOT" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]] &&
     RUNTIME_ROOT="/opt/custom-agent-runtime/claude-code"
   if [[ ! -d "$RUNTIME_HOST_ABS" ]]; then
     fail "agent.runtime_host_path does not exist: $RUNTIME_HOST_PATH — start.sh would bind-mount it empty. Pre-extract it from $value (docker create + docker cp <cid>:$RUNTIME_ROOT), or set the field to \"\" to mount from the image."
-  elif [[ ! -x "$RUNTIME_HOST_ABS/bin/claude" ]]; then
-    fail "agent.runtime_host_path exists but has no executable bin/claude: $RUNTIME_HOST_PATH — re-extract it from $value"
+  elif [[ ! -x "$RUNTIME_HOST_ABS/$RUNTIME_EXECUTABLE" ]]; then
+    fail "agent.runtime_host_path exists but has no executable $RUNTIME_EXECUTABLE: $RUNTIME_HOST_PATH — re-extract it from $value"
   else
     ok "agent runtime_host_path is pre-extracted: $RUNTIME_HOST_PATH"
   fi

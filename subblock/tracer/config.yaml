@@ -64,7 +64,7 @@ runtime_info:
 
     task_source:
       provider: local                  # local (curator) | huggingface — see /tracer:setup reference
-      dataset_name: ../curator/artifacts/merged_swe_tasks
+      dataset_name: ../curator/artifacts/merged_swe_tasks_copy
       split: train
 
     harbor_job:
