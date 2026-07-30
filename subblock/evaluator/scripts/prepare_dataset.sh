@@ -77,17 +77,18 @@ PY
 fi
 [[ -n "$DATASET_NAME" ]] || { echo "ERROR: no dataset_name (pass as arg or set in config.yaml)" >&2; exit 2; }
 
-# dataset_name -> (gold_base, adapter dir). Strip the -100 subset suffix: the base
-# adapter generates the full dataset and any subset job references a subset of it.
+# dataset_name -> (gold_base, adapter dir). Strip the -100 subset suffix and the
+# -nohack hardened suffix: gold comes from the ordinary adapter either way.
 BASE="$DATASET_NAME"
 [[ "$BASE" == *-100 ]] && BASE="${BASE%-100}"
+[[ "$BASE" == *-nohack ]] && BASE="${BASE%-nohack}"
 case "$BASE" in
   swebench-verified)      GOLD_BASE="swebench-verified";      ADAPTER="swebench" ;;
   swebench_multilingual)  GOLD_BASE="swebench_multilingual";  ADAPTER="swebench_multilingual" ;;
   swebenchpro)            GOLD_BASE="swebenchpro";            ADAPTER="swebenchpro" ;;
   *)
     echo "ERROR: no adapter mapping for dataset '$DATASET_NAME'." >&2
-    echo "       Supported: swebench-verified, swebench_multilingual, swebenchpro (and -100 subsets)." >&2
+    echo "       Supported: swebench-verified, swebench_multilingual, swebenchpro (and -100 / -nohack variants)." >&2
     echo "       Generate manually from repos/harbor/adapters/<name>/run_adapter.py." >&2
     exit 2 ;;
 esac

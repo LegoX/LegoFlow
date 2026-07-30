@@ -1,46 +1,92 @@
 ---
 title: Scoring
-description: Rule-based and LLM-based trajectory quality scoring
+description: TQS V2 rule scoring and optional LLM judges
 ---
 
-Not every successful rollout makes good training data. tracer scores each trajectory's quality during IM conversion so you can filter for the best examples. Two complementary scorers are available, both operating on IM-format trajectories.
+Not every successful rollout makes useful training data. The pinned
+`swe_data_process` package provides one deterministic scorer that runs during
+conversion and two optional LLM-as-judge scorers. Their results coexist in the
+IM record's `_score` metadata.
 
-## Rule-based scoring (automatic)
+## TQS V2 rule scoring
 
-`rule_score.py` (v5) runs automatically inside the converters and attaches a `composite_score` in `[0, 1]`. It evaluates each trajectory across 5 dimensions and 10 sub-metrics, and works for all scaffolds:
+`rule_score.py` runs automatically after Raw → IM conversion. TQS V2 uses a
+fail-soft weighted aggregate: a component with insufficient evidence is
+`null` and is omitted from both the numerator and denominator.
 
 ```text
-composite_score = 0.20 x Efficiency
-                + 0.15 x Style
-                + 0.25 x Tool Mastery
-                + 0.25 x Completion
-                + 0.15 x Precision
+composite_score =
+  Σ(weight × transformed_component) / Σ(active_weights)
 ```
 
-| Dimension | Weight | Sub-metrics |
-| --- | --- | --- |
-| Efficiency | 0.20 | error-retry cycles, step ratio |
-| Style | 0.15 | action diversity, observation utilization |
-| Tool Mastery | 0.25 | tool-call success rate, tool parallelism |
-| Completion | 0.25 | submission completeness, test verification |
-| Precision | 0.15 | file-edit focus, delete-then-edit |
+Five components have non-zero weights:
 
-Because it is rule-based, this scorer is fast and free — it runs on every conversion with no external calls.
+| Component | Weight | Meaning |
+| --- | ---: | --- |
+| `SUB` | 0.33 | Submission completeness, including how the trajectory ends and late-run quality |
+| `STP` | 0.27 | Step efficiency based on assistant-turn count |
+| `TVR` | 0.23 | Test-writing, test execution, and late successful verification |
+| `FEC` | 0.10 | File-edit concentration; aggregated as `FEC^5` |
+| `DPI` | 0.07 | Dirty-pattern penalty for truncation, no successful write, loops, and repeated errors; aggregated as `DPI^3` |
 
-## LLM-as-judge scoring (optional)
+The scorer also emits diagnostic-only components with zero aggregate weight:
+`OEC` (observation entropy collapse), `IAC` (intent/action consistency), `PED`
+(perception/edit drift), `PSN` (path stability), `TTE` (tool-transition
+entropy), and `SCP` (successful-change position).
 
-`llm_score.py` (v2) adds a semantic quality signal using an LLM judge against a fixed checklist of 5 categories and 15 checks (categories F-J, so they never collide with the rule-based A-E). The judge rates each check on a 1-5 scale, normalized to `[0, 1]`.
+TQS V2 supports Claude Code, OpenCode, OpenHands/OpenHands SDK, and Terminus-2.
+It normalizes renamed tools by their parameter schema before detection and
+limits command-output error matching to execution tools, avoiding false
+positives from source code returned by read/edit tools.
+
+Main-agent records receive `_score`; subagent records are retained with
+`_score: null`. Scores are copied into LF metadata and summarized in
+`lf.stats.json`.
+
+## Fixed-checklist LLM scoring
+
+`llm_score.py` is optional. An OpenAI-compatible judge rates a fixed checklist
+of 15 checks on a 1–5 scale:
 
 | Category | Focus |
 | --- | --- |
-| Problem Understanding | diagnosis depth, scope precision, plan quality |
-| Solution Quality | fix elegance, minimal change, robustness |
-| Reasoning Quality | coherence, hypothesis-driven, adaptability |
-| Verification Rigor | reproduction, fix verification, test quality |
-| Efficiency | navigation, tool proficiency, iteration economy |
+| F | Problem understanding |
+| G | Solution quality |
+| H | Reasoning quality |
+| I | Verification rigor |
+| J | Efficiency |
 
-LLM scoring is optional and requires an OpenAI-compatible endpoint (enabled by the `llm` extra in the `swe_data_process` environment, configured via `swe_data_process_extras` in `config.yaml`). A checklist-based variant (`llm_checklist_score.py`) aligned with OctoBench is also available.
+Each category and the overall `llm_composite_score` are normalized to `[0, 1]`
+and stored with an `llm_` prefix. This scorer makes one judge call per
+main-agent record and supports dry-run cost estimation.
+
+## Dynamic-checklist LLM scoring
+
+`llm_checklist_score.py` is an optional OctoBench-aligned alternative. It first
+generates 15–35 binary checks from the user request, system prompt, tool
+schema, and repository policies, then makes a second call to judge the
+trajectory.
+
+It reports:
+
+- `llm_checklist_isr` — `1.0` only when every required check passes.
+- `llm_checklist_csr` — the fraction of individual checks that pass.
+- Category-level CSR values and the generated checklist/judgement evidence.
+
+The fixed and dynamic LLM scores are independent of TQS V2. Run either only
+when its semantic signal justifies the additional endpoint cost.
 
 ## Using scores
 
-Scores are written into the IM rows and summarized in `lf.stats.json` (min/mean/max). Use them to filter or curriculum-order the LF dataset before SFT — for example keeping only trajectories above a `composite_score` threshold. The full scoring rubrics live in the `swe_data_process` docs (`rule_score_details.md`, `llm_score_details.md`, `llm_checklist_score_details.md`).
+Use `composite_score`, `llm_composite_score`, or checklist ISR/CSR to inspect,
+filter, or curriculum-order data. Keep main and subagent records bundled when
+filtering an instance; `swe_data_process` provides bundled score filtering for
+that purpose.
+
+The complete rubrics and CLI options live in the pinned checkout:
+
+```text
+repos/swe_data_process/docs/rule_score_details.md
+repos/swe_data_process/docs/llm_score_details.md
+repos/swe_data_process/docs/llm_checklist_score_details.md
+```

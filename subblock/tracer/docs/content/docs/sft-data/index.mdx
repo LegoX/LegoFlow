@@ -3,7 +3,9 @@ title: SFT Data
 description: Convert raw trajectories into ready-to-train datasets
 ---
 
-A finished job leaves you with raw trajectories. tracer turns those into supervised fine-tuning data that the downstream `trainer` block (LLaMA-Factory) can train on directly — with quality scoring baked in so you can filter for the best examples.
+A finished job leaves raw trajectories. Tracer can turn reward-1.0 instances
+into supervised fine-tuning data for the downstream trainer, with deterministic
+quality scoring and token statistics generated during conversion.
 
 Conversion is powered by the [`swe_data_process`](https://github.com/SWE-Lego/swe_data_process) package and driven by `scripts/convert_trajectories.sh`.
 
@@ -18,7 +20,9 @@ Raw trajectories (per-scaffold format)
 ```
 
 1. **Raw → IM** — a scaffold-specific converter reshapes the raw trajectory into the intermediate "IM" format: OpenAI-style messages carrying `tool_calls`, one JSONL row per trajectory.
-2. **Scoring** — `rule_score.py` runs automatically to attach a `composite_score`; `llm_score.py` (LLM-as-judge) can run optionally. See [Scoring](/docs/sft-data/scoring).
+2. **Scoring** — the TQS V2 `rule_score.py` runs automatically for main-agent
+   records and attaches a `composite_score`; fixed-checklist and dynamic
+   checklist LLM scorers are optional. See [Scoring](/docs/sft-data/scoring).
 3. **IM → LF** — the scored IM is reshaped into the LLaMA-Factory "LF" format: a ShareGPT-style JSON array ready for SFT.
 
 ## Running conversion
@@ -42,16 +46,27 @@ Useful flags:
 | `--out-dir <dir>` | Output root (default `artifacts/sft_data`) |
 | `--max-instances <n>` | Cap the number of converted instances |
 | `--exclude-repos-file <path>` | Exclude trajectories from listed repos (default `artifacts/excluded_repos.txt`) |
+| `--reasoning-check-mode <strict\|adaptive>` | Reasoning-content filter mode; default is `adaptive` |
+| `--reasoning-content-ratio-threshold <0..1>` | Adaptive reasoning-content ratio threshold; current default is `0.2` |
+| `--skip-unchanged` | Reuse output when the reward-1.0 instance set and conversion inputs match `.convert_sig.json` |
 
-To run conversion automatically after every job, set `sft_conversion.enabled: true` in `config.yaml`; `start.sh` then runs the convert step once Harbor exits.
+The tokenizer is required and comes from
+`sft_conversion.tokenizer_name`; keep it aligned with the trainer model. The
+reasoning filter applies to Claude Code, OpenCode, and OpenHands SDK conversion
+but not Terminus-2.
+
+To run conversion automatically after every successful Harbor command, set
+`sft_conversion.enabled: true` in `config.yaml`; `start.sh` then invokes the
+converter for that job.
 
 ## Outputs
 
 ```text
 artifacts/sft_data/<job>/
-├── im.jsonl        # intermediate, scored
-├── lf.json         # LLaMA-Factory ShareGPT array (trainer block input)
-└── lf.stats.json   # token / turn / score statistics
+├── im.jsonl           # PangUML v2 intermediate records, scored
+├── lf.json            # LLaMA-Factory ShareGPT array
+├── lf.stats.json      # token / turn / score statistics
+└── .convert_sig.json  # conversion signature
 ```
 
 `lf.json` is the block's `sft_data_dir` output, consumed by the `trainer` block. `lf.stats.json` powers the [dashboard](/docs/dashboard).

@@ -45,7 +45,10 @@ CLAUDE_SDK="${CLAUDE_SDK:-1}"
 # policy=first early-exit so these are just upper bounds on the wait.
 # trainer: 50 steps at 128K cutoff on an 8B model (DeepSpeed ZeRO-3) is ~4 min/step
 # (~3.3h), plus model load + tokenization — 4h cap.
-declare -A BUDGET=( [curator]=14400 [tracer]=10800 [trainer]=14400 [evaluator]=5400 )
+# Per-stage wall-clock ceilings. curator and tracer were 4h and 3h, which is far
+# longer than a smoke should ever hold the pipeline: the point is to prove the
+# chain works, not to accumulate data. Both are 2h.
+declare -A BUDGET=( [curator]=7200 [tracer]=7200 [trainer]=14400 [evaluator]=5400 )
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -86,6 +89,12 @@ overlay() {  # overlay <block>
   cp "$prod" "$prod.root-smoke-bak.$$"
   _BACKUPS+=("$prod")
   cp "$smoke" "$prod"
+  # The smoke template carries structure only — endpoints, keys and remote hosts
+  # come from the shared env file at run time. Inject into the COPY; the
+  # template itself is tracked and must stay value-free.
+  [[ -f /gpufs/haoli/cicd/shared/.env ]] && source /gpufs/haoli/cicd/shared/.env
+  python3 "$ROOT_DIR/scripts/inject_smoke_secrets.py" "$prod" || {
+    echo "FAIL: could not inject smoke secrets into $prod"; exit 1; }
   sync
   # The shared filesystem (aliyun-alinas-efc) can lag: the cp returns before the
   # new bytes are consistent for a fresh open(), so the cfg reads right after
@@ -326,6 +335,30 @@ PY
     # swegen-create, so it must start the proxy itself — otherwise dryrun.sh's
     # /health check fails and verification SILENTLY banks 0 tasks (the failure
     # that sank the first root run). No-op when cc_provider_mode != openai_proxy;
+    # Start from nothing. A smoke must prove THIS run produced tasks, so its own
+    # output and state dirs are wiped first. Leaving them made the gate below
+    # count leftovers from a previous smoke: on 2026-07-26 curator "banked 8
+    # verified tasks" 2 minutes in, with its endpoint hard down and not one task
+    # generated — the 8 were residue. Same reason the ledger is never consulted
+    # here (see HARBOR_LEDGER_EXCLUDE=0 at the tracer stage): a smoke depends on
+    # no history but its own.
+    #
+    # Agent containers write some files as root, so rm can fail on them; move the
+    # dir aside instead of failing the run, and never touch anything outside the
+    # smoke's own subdirs.
+    if [[ "$DRY_RUN" == 1 ]]; then
+      log "[DRY-RUN] would clear curator smoke output ($BASE/$SUB) and state ($BASE/$STATE)"
+    else
+      for _stale in "$SB/$BASE/$SUB" "$SB/$BASE/$STATE"; do
+        [[ -e "$_stale" ]] || continue
+        if ! rm -rf "$_stale" 2>/dev/null; then
+          mv "$_stale" "${_stale}.stale-$(date +%s)" 2>/dev/null \
+            || log "WARN: could not clear $_stale — the gate may count stale tasks"
+        fi
+      done
+      log "cleared curator smoke output ($BASE/$SUB) and state ($BASE/$STATE)"
+    fi
+
     # torn down after the curator gate. shellcheck source=/dev/null
     source "$SB/scripts/cc_proxy_lib.sh"
     [[ "$DRY_RUN" == 1 ]] || cc_proxy_start "$SB" "$CFG" \
@@ -429,9 +462,51 @@ PY
   # zero — masking a broken curator→tracer handoff.
   TRAJ_OUT="$(cfg "$CFG" runtime_info.input.sft_conversion.out_dir)"; TRAJ_OUT="${TRAJ_OUT:-artifacts/sft_data}"
   if [[ "$DRY_RUN" != 1 ]]; then
-    rm -rf "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" "$TB/$TRAJ_OUT"
+    # Agent containers write session files as root, so a plain rm -rf silently
+    # leaves the dir behind and the "stale job" it was meant to prevent survives
+    # (seen 2026-07-26: a previous job dir outlived three rm attempts). Fall back
+    # to moving it aside, which only needs write permission on the parent.
+    # NOTE: scope each entry to the smoke's OWN artifacts. `jobs_dir` is already
+    # smoke-specific (artifacts/jobs/root-smoke), but `sft_conversion.out_dir` is
+    # the shared artifacts/sft_data root — the converter writes per job into
+    # <out_dir>/<job>/, so only those subdirs belong to the smoke. Clearing the
+    # whole out_dir wipes every real converted dataset in the block (seen
+    # 2026-07-27: a full artifacts/sft_data/ was destroyed by a smoke run).
+    #
+    # The per-job conversion dirs are named after the JOB, not after jobs_dir:
+    # start.sh names each job <dataset>-<agent>-<model>-<timestamp>, so
+    # <out_dir>/$(basename $JOBS) — i.e. .../sft_data/root-smoke — never exists
+    # and nothing was ever cleared. Enumerate the actual job names under the
+    # jobs root instead, or a repeat smoke leaves every previous conversion in
+    # place and the trainer stage merges those stale trajectories into the run.
+    _sft_stale=()
+    if [[ -d "$TB/$JOBS" ]]; then
+      for _job in "$TB/$JOBS"/*/; do
+        [[ -d "$_job" ]] || continue
+        _sft_stale+=("$TB/$TRAJ_OUT/$(basename "$_job")")
+      done
+    fi
+    # NOT $STAGE_DIR: it was filled from curator moments ago by the copy above,
+    # which already rmtree's it first. Clearing it here deleted this run's own
+    # task source, so prepare_tasks.sh had nothing to stage and tracer's dryrun
+    # failed with "Harbor tasks are not prepared" — harbor never launched and the
+    # stage sat out its whole budget waiting for a job that did not exist.
+    for _stale in "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" \
+                  "${_sft_stale[@]}"; do
+      [[ -e "$_stale" ]] || continue
+      if ! rm -rf "$_stale" 2>/dev/null; then
+        mv "$_stale" "${_stale}.stale-$(date +%s)" 2>/dev/null \
+          || log "WARN: could not clear $_stale — a stale result may be picked up"
+      fi
+    done
+    log "cleared tracer smoke jobs/tasks/sft_data"
   fi
-  RUN="nohup bash scripts/start.sh >> artifacts/logs/root-smoke-tracer.log 2>&1 &"
+  # A smoke deliberately re-runs its fixture tasks, and curator regenerates the
+  # same task ids from the same PR pool every time. Excluding what the ledger
+  # already consumed would leave harbor with nothing to do (0 trials -> SKIP),
+  # so the ledger-derived half of the exclude list is off for smoke runs. The
+  # hand-maintained HARBOR_EXCLUDE_TASKS still applies.
+  RUN="nohup env HARBOR_LEDGER_EXCLUDE=0 bash scripts/start.sh >> artifacts/logs/root-smoke-tracer.log 2>&1 &"
   ( cd "$TB" && mkdir -p artifacts/logs && \
     { [[ "$DRY_RUN" == 1 ]] && echo "[DRY-RUN] prepare_tasks.sh" || bash scripts/prepare_tasks.sh || log "WARN: prepare_tasks.sh non-zero"; } && \
     claude_launch tracer \
@@ -473,7 +548,12 @@ if want trainer && [[ "$CHAIN_RC" == 0 ]]; then
     # Stage the 512 fixture if it isn't present yet.
     if [[ ! -s "$FB/$FIXTURE" ]]; then
       log "fixture $FIXTURE absent — staging via subblock/trainer/tests/smoke/prepare_smoke_data.sh"
-      bash "$FB/tests/smoke/prepare_smoke_data.sh" "$FB/$FIXTURE" || log "WARN: could not stage 512 fixture"
+      # The dataset repo is private, so staging needs HF_TOKEN from the shared
+      # env — without it the download fails with "Invalid username or password"
+      # and the merge silently proceeds with tracer output alone.
+      ( [[ -f /gpufs/haoli/cicd/shared/.env ]] && { set -a; . /gpufs/haoli/cicd/shared/.env; set +a; }
+        bash "$FB/tests/smoke/prepare_smoke_data.sh" "$FB/$FIXTURE" ) \
+        || log "WARN: could not stage the fixture dataset"
     fi
     FIXTURE_ABS="$FB/$FIXTURE"; TRAJ_SFT_ABS="$TRAJ_SFT" MERGED="$MERGED_ABS" FIX="$FIXTURE_ABS" python3 - <<'PY'
 import json, os, glob
@@ -555,8 +635,19 @@ import sys, os, yaml
 p = sys.argv[1]; d = yaml.safe_load(open(p)) or {}
 api = d["runtime_info"]["input"]["llm_api"]
 api["api_base_url"] = os.environ["BASE_URL"]
+# The edge this declares — llm_api.api_base_url <- trainer.output.checkpoint_path
+# — has just been satisfied for real: the checkpoint is served and its URL is
+# written above. Leaving the declaration makes validate_config resolve it
+# against the trainer block, which restored its template config when its stage
+# ended, so checkpoint_path reads null and the whole dryrun fails. Worse, that
+# one failure trips dryrun's `FAIL -eq 0` gate and blanks every later config
+# read, surfacing as ~12 phantom failures ("harbor.url is empty", ...).
+dep = (d.get("meta_info") or {}).get("dependencies") or {}
+if isinstance(dep.get("from"), dict):
+    dep["from"].pop("llm_api.api_base_url", None)
 yaml.safe_dump(d, open(p, "w"), sort_keys=False, allow_unicode=True)
 print(f"wired evaluator llm_api.api_base_url -> {os.environ['BASE_URL']}")
+print("cleared the now-satisfied dependency on trainer.output.checkpoint_path")
 PY
     fi
   fi

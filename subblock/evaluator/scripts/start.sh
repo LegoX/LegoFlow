@@ -2,8 +2,10 @@
 # Run the configured Harbor evaluation command.
 #
 # Mirrors tracer/scripts/start.sh, but the evaluator block invokes Harbor with
-# `--dataset <name>@<version> --registry-path repos/harbor/registry.json` so the
-# benchmark is resolved from Harbor's registry (no local task copy).
+# `--dataset <name>@<version> --registry-path …` so the benchmark is resolved from
+# Harbor's registry (no local task copy). When task_source.no_hack is true,
+# start.sh prepares the local swebench-verified-nohack registry and passes
+# --agent-extra-allowed-host for the LiteLLM host.
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -238,14 +240,12 @@ HARBOR_JOBS_DIR_RAW="$(cfg runtime_info.input.harbor_job.jobs_dir)"
 
 DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
 DATASET_VERSION="$(cfg runtime_info.input.task_source.version)"
-HARBOR_DATASET_SPEC="$DATASET_NAME"
-if [[ -n "$DATASET_VERSION" ]]; then
-  HARBOR_DATASET_SPEC="${DATASET_NAME}@${DATASET_VERSION}"
-fi
 REGISTRY_RAW="$(cfg runtime_info.input.task_source.registry_path)"
 if [[ -z "$REGISTRY_RAW" && -n "$HARBOR_PATH_RAW" ]]; then
   REGISTRY_RAW="$HARBOR_PATH_RAW/registry.json"
 fi
+NO_HACK="$(cfg runtime_info.input.task_source.no_hack)"
+NO_HACK="${NO_HACK:-false}"
 
 PRODUCER_BLOCK="$(cfg producer_block)"
 if [[ -z "$PRODUCER_BLOCK" ]]; then
@@ -265,15 +265,6 @@ if [[ -z "$AGENT_MODEL_NAME" ]]; then
   fi
   AGENT_MODEL_NAME="${AGENT_MODEL_NAME##*/}"
 fi
-JOB_NAME_PREFIX="$(cfg runtime_info.input.harbor_job.job_name_prefix)"
-if [[ -z "$JOB_NAME_PREFIX" ]]; then
-  JOB_NAME_PREFIX="${DATASET_NAME}-${AGENT_NAME}-${AGENT_VERSION}-${AGENT_MODEL_NAME}"
-fi
-JOB_NAME="${JOB_NAME_PREFIX}-$(date +%Y%m%d%H%M%S)"
-JOB_DIR_RAW="$(cfg job_dir)"
-if [[ -z "$JOB_DIR_RAW" ]]; then
-  JOB_DIR_RAW="${HARBOR_JOBS_DIR_RAW%/}/$JOB_NAME"
-fi
 N_CONCURRENT="$(cfg runtime_info.input.harbor_job.n_concurrent)"
 N_TASKS="$(cfg runtime_info.input.harbor_job.n_tasks)"
 MAX_RETRIES="$(cfg runtime_info.input.harbor_job.max_retries)"
@@ -291,12 +282,48 @@ TEMPERATURE="$(cfg runtime_info.input.agent.temperature)"
 [[ -n "$N_CONCURRENT" ]] || { echo "ERROR: runtime_info.input.harbor_job.n_concurrent is empty" >&2; exit 1; }
 [[ -n "$MAX_RETRIES" ]] || { echo "ERROR: runtime_info.input.harbor_job.max_retries is empty" >&2; exit 1; }
 [[ -n "$TIMEOUT_MULTIPLIER" ]] || { echo "ERROR: runtime_info.input.harbor_job.timeout_multiplier is empty" >&2; exit 1; }
-[[ -n "$JOB_DIR_RAW" ]] || { echo "ERROR: job_dir is empty" >&2; exit 1; }
 
 HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
-REGISTRY_ABS="$(abspath "$REGISTRY_RAW")"
 [[ -e "$HARBOR_DIR/.git" ]] || { echo "ERROR: $HARBOR_PATH_RAW missing; run bash scripts/update_repos.sh" >&2; exit 1; }
+
+# no_hack: remap to the local hardened swebench-verified-nohack dataset + registry.
+# Keeps config.yaml's dataset_name as the source benchmark (swebench-verified).
+SOURCE_DATASET_NAME="$DATASET_NAME"
+if [[ "$NO_HACK" == "true" ]]; then
+  if [[ "$DATASET_NAME" != "swebench-verified" ]]; then
+    echo "ERROR: task_source.no_hack requires dataset_name=swebench-verified (got $DATASET_NAME)." >&2
+    echo "       -100 subsets are not supported with no_hack (the remap would silently run the full 500-task set);" >&2
+    echo "       cap a smoke run with harbor_job.n_tasks instead." >&2
+    exit 1
+  fi
+  PREPARE_ARGS=()
+  if [[ -n "$N_TASKS" ]]; then
+    PREPARE_ARGS+=(--limit "$N_TASKS")
+  fi
+  NOHACK_REGISTRY_ABS="$(bash "$BLOCK_DIR/scripts/prepare_nohack.sh" "${PREPARE_ARGS[@]}")"
+  DATASET_NAME="swebench-verified-nohack"
+  DATASET_VERSION="1.0"
+  REGISTRY_RAW="$NOHACK_REGISTRY_ABS"
+  echo "no_hack=true: using dataset=$DATASET_NAME registry=$NOHACK_REGISTRY_ABS (source=$SOURCE_DATASET_NAME)"
+fi
+
+HARBOR_DATASET_SPEC="$DATASET_NAME"
+if [[ -n "$DATASET_VERSION" ]]; then
+  HARBOR_DATASET_SPEC="${DATASET_NAME}@${DATASET_VERSION}"
+fi
+REGISTRY_ABS="$(abspath "$REGISTRY_RAW")"
 [[ -f "$REGISTRY_ABS" ]] || { echo "ERROR: registry.json not found at $REGISTRY_RAW" >&2; exit 1; }
+
+JOB_NAME_PREFIX="$(cfg runtime_info.input.harbor_job.job_name_prefix)"
+if [[ -z "$JOB_NAME_PREFIX" ]]; then
+  JOB_NAME_PREFIX="${DATASET_NAME}-${AGENT_NAME}-${AGENT_VERSION}-${AGENT_MODEL_NAME}"
+fi
+JOB_NAME="${JOB_NAME_PREFIX}-$(date +%Y%m%d%H%M%S)"
+JOB_DIR_RAW="$(cfg job_dir)"
+if [[ -z "$JOB_DIR_RAW" ]]; then
+  JOB_DIR_RAW="${HARBOR_JOBS_DIR_RAW%/}/$JOB_NAME"
+fi
+[[ -n "$JOB_DIR_RAW" ]] || { echo "ERROR: job_dir is empty" >&2; exit 1; }
 if [[ -n "$UV_PROJECT_ENVIRONMENT_RAW" ]]; then
   export UV_PROJECT_ENVIRONMENT="$(abspath "$UV_PROJECT_ENVIRONMENT_RAW")"
 fi
@@ -407,6 +434,11 @@ if [[ -z "$RUN_COMMAND" ]]; then
     for _excl_task in $HARBOR_EXCLUDE_TASKS; do
       EXTRA_ARGS="$EXTRA_ARGS --exclude-task-name $(printf '%q' "$_excl_task")"
     done
+  fi
+  # no_hack: allow agent egress only to the LiteLLM host (task.toml allowlist is empty by default).
+  if [[ "$NO_HACK" == "true" ]]; then
+    AGENT_ALLOWED_LLM_HOST="${AGENT_ALLOWED_LLM_HOST:-$LITELLM_HOST_IP}"
+    EXTRA_ARGS="$EXTRA_ARGS --agent-extra-allowed-host $(printf '%q' "$AGENT_ALLOWED_LLM_HOST")"
   fi
   # Per-agent kwargs/env flags. MAX_TURNS is reused as max_iterations for openhands-sdk (same semantics).
   # openhands-sdk uses litellm internally and needs a provider-prefixed model name.

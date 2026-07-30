@@ -62,7 +62,7 @@ task-staging checks and adds eval-specific coverage:
 
 - **No `swe_data_process` env** (case 03 checks 2 envs, not 3) — evaluator does not
   convert trajectories.
-- **No HF-dataset / consumption-ledger cases** — evaluator stages no tasks locally;
+- **No HF-dataset / processed-tasks cases** — evaluator stages no tasks locally;
   case 07 (registry resolution) replaces tracer's HF reachability check.
 - **Case 08 (agent runtime)** is evaluator-specific: the bind-mounted agent runtime
   is the single most common cause of a green preflight that still produces zero

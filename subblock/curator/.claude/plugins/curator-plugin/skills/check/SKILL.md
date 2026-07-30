@@ -150,11 +150,56 @@ swegen validate \
 Expected result: NOP reward is `0` and Oracle reward is `1`. If the sample
 task is missing, report that `/curator:setup` must initialize the submodule.
 
+## Step 4b - Shared credentials (optional, never blocking)
+
+`dryrun.sh` also reports the two tree-wide optional credentials, resolved by
+`<repo_root>/scripts/shared_credentials.sh` in the order **env > root
+`config.yaml` → `runtime_info.input.{cloudflare,docker}` > this block's legacy
+`~/.config/swegen_progress_cloudflare.env`**. The reported source tells the user
+which of the three won, so say it in the report rather than just "configured".
+
+- **Cloudflare Pages** — needs an `npx`/node toolchain on `PATH` plus
+  `account_id` + `api_token`. Purely for publishing the databoard online (the
+  manual `npx wrangler pages deploy` from `dashboard/site/` documented in
+  `dashboard/README.md`); nothing in `/curator:create-tasks` depends on it.
+- **Container registry** — `username` + `password`. Anonymous Docker Hub pulls
+  are capped at 100 per 6h per IP, and a long multi-language create run pulls one
+  image per task environment, so hitting the cap mid-run is realistic; it shows
+  up as image-pull/manifest errors rather than as an obvious auth error. Fix with
+  `bash <repo_root>/scripts/docker_login.sh` or a plain `docker login`.
+
+Both are always a `WARN`, never a reason to block `SAFE TO RUN`. If either is
+missing, mention `/root:setup`'s optional extras as the fix, but do not offer to
+configure credentials yourself (see that skill's guardrail on secrets).
+
+## Dependency wiring (cross-checked inside dryrun)
+
+`scripts/dryrun.sh` runs `scripts/validate_config.py --block .`, which
+cross-checks `meta_info.dependencies` against the real `runtime_info` on **both**
+ends of every edge. These findings are easy to lose in the dryrun output, and
+they are exactly what breaks a hand-off silently — surface them in the report.
+
+| Finding | Meaning | Verdict |
+|---|---|---|
+| `dep:bad-key` | a `from` key is not a real dot-path in this block's own `runtime_info.input`, or a `to` key is not a declared `runtime_info.output` key | FAIL |
+| `dep:bad-ref` | malformed ref, or the named block / output key / input path does not exist | FAIL |
+| `dep:link-mismatch` | the edge is declared by only one end — the other end does not point back | FAIL |
+| `dep:unresolved` | a required upstream output has neither `value` nor `path` yet | FAIL (WARN when the edge is `required: false`) |
+| `dep:path-mismatch` | this block's configured value resolves outside the producer's declared output path — usually a stale path after a rename | WARN |
+| `output:orphan` | an output with no `dependencies.to` entry; normal for a terminal output, suspicious for one that is supposed to feed the next stage | WARN |
+| `dep:smoke-overlay` | a root smoke currently holds some block's config, so the tree mixes two config sets; every cross-block finding above is downgraded to a warning for the duration | INFO |
+
+Any `dep:*` FAIL blocks `SAFE TO RUN` — it means this block is wired to something
+the other end does not actually provide. The one exception is when
+`dep:smoke-overlay` is present: those findings are artifacts of the running
+smoke, not real drift, and must not be reported as such.
+
 ## Step 5 - Run the block dryrun
 
 Run `bash scripts/dryrun.sh` and include its OK/WARN/FAIL lines in the
 report. This script verifies the installed package, YAML parsing, key env
-vars, the Claude Code proxy endpoint, and Docker availability.
+vars, the Claude Code proxy endpoint, Docker availability, and (Step 4b)
+the shared Cloudflare/registry credentials.
 
 ## Step 6 - The report (always the last thing you print)
 
@@ -176,6 +221,9 @@ inapplicable rows.
 | det  | llm (openai)    | <✓/✗>   | <base> / <model> |
 | det  | cc path         | <✓/⚠/✗> | <mode> / <anthropic_base_url> / <ok/down/native> |
 | det  | docker          | <✓/✗>   | <server version> at <DOCKER_HOST or unset> |
+| det  | dependency wiring | <✓/✗> | <ok: N edges, both ends \| dep:link-mismatch … \| suppressed: smoke overlay> |
+| det  | cloudflare      | <✓/⚠>   | <ok (source: env\|root-config\|legacy-file) \| missing npx/credentials (optional, see /root:setup)> |
+| det  | docker registry | <✓/⚠>   | <ok (source: …) \| no credentials, pulls capped at 100/6h per IP> |
 | det  | dryrun          | <✓/⚠/✗> | <pass/warn/fail> |
 | live | smoke           | <✓/·/✗> | <skipped \| NOP=0 Oracle=1 \| fail: <detail>> |
 

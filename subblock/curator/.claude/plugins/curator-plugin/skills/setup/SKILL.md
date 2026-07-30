@@ -85,6 +85,26 @@ For GitHub collection, `repos/swegen/tools/collect_prs_wo_image.py` reads
 tokens from `repos/swegen/gh_token.txt` by default; set
 `COLLECT_GITHUB_TOKEN_FILE` when using a different token file.
 
+## Step 3b - Start the local LiteLLM CC proxy (openai_proxy mode only)
+
+When `runtime_info.input.llm_api.cc_provider_mode == openai_proxy` and
+`api_key`/`api_base_url`/`pr_model` are filled (not `human`), the Claude Code
+verification path needs the local LiteLLM proxy running — do this now instead
+of leaving it for the user:
+
+1. If `scripts/litellm_cc_proxy.yaml` is missing or still has
+   `<UPSTREAM_OPENAI_BASE_URL>`/`<UPSTREAM_MODEL>`/`<API_KEY>` placeholders,
+   copy it from `scripts/litellm_cc_proxy.example.yaml` and substitute those
+   three placeholders with `llm_api.api_base_url` / `llm_api.pr_model` /
+   `llm_api.api_key` (the CC path maps `claude-*` aliases to `pr_model`, not
+   `task_model`).
+2. Run `bash scripts/start_with_openai_api.sh --proxy-only` — it reuses an
+   already-healthy proxy on `cc_proxy_port` or starts one, waits for
+   `/health`, then exits without touching `create_all_bg`/`start.sh`.
+
+This step is skipped when `cc_provider_mode == native` (no local proxy) or
+when `llm_api` is still unfilled.
+
 ## Step 4 - Create expected local directories
 
 Create directories used by scripts and smoke tests:
@@ -134,7 +154,7 @@ Fill `llm_api` first; `cc_provider_mode` decides which launcher to use.
 ```yaml
 llm_api:
   api_key: dummy-cf
-  api_base_url: https://llm.jierungogogo.com/v1
+  api_base_url: https://<your-openai-compatible-endpoint>/v1
   pr_model: Qwen3.6-35B-A3B
   task_model: claude-sonnet-4-6        # any claude-* alias; proxy maps it to pr_model
   cc_provider_mode: openai_proxy
@@ -146,11 +166,11 @@ llm_api:
 ```yaml
 llm_api:
   api_key: <YOUR_KEY>
-  api_base_url: https://yunwu.ai/v1            # OpenAI-compatible side of the same gateway
+  api_base_url: https://<your-anthropic-gateway>/v1            # OpenAI-compatible side of the same gateway
   pr_model: claude-opus-4-6
   task_model: claude-opus-4-6
   cc_provider_mode: native
-  anthropic_base_url: https://yunwu.ai         # provider Anthropic root, no /v1
+  anthropic_base_url: https://<your-anthropic-gateway>         # provider Anthropic root, no /v1
   # cc_proxy_port not used in native mode
 ```
 
@@ -160,4 +180,4 @@ llm_api:
 
 ### languages
 
-`languages.<lang>.params` (timeout / cc_timeout / n_concurrent) are read by `scripts/read_params.py` + `scripts/create_<lang>.sh`. `enabled` is used by checks/dashboard only; `create_all_bg.sh` starts all eight scripts — run a specific `create_<lang>.sh` to limit generation.
+`languages.<lang>.params` (timeout / cc_timeout / n_concurrent) are read by `scripts/read_params.py` + `scripts/create_<lang>.sh`. `enabled` selects which languages `create_all_bg.sh` launches (`python scripts/read_params.py --list-enabled` shows the current set) — set it to `false` to drop a language, or run a specific `create_<lang>.sh` to generate just one.

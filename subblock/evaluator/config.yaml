@@ -5,7 +5,7 @@ meta_info:
   parent: swe_lego_live
   subblocks: {}
   dependencies:
-    from: {}   # standalone terminal block; benchmark comes from Harbor's registry
+    from: {}
     to: {}
 
   resources:
@@ -20,24 +20,25 @@ meta_info:
     harbor:
       url: https://github.com/SWE-Lego/harbor.git
       branch: main
-      commit: 0bdee0a6943afa8839e79038acb19a9016e27fb2   # tracks current registry (independent of tracer's pin)
+      commit: 0bdee0a6943afa8839e79038acb19a9016e27fb2
       path: repos/harbor
       readonly: true
 
   environment:
     harbor_uv: artifacts/env/harbor-uv
-    litellm_uv: artifacts/env/litellm-venv   # separate venv; harbor env is managed by uv run
+    litellm_uv: artifacts/env/litellm-venv
     litellm:
       python_version: "3.13"
       litellm_version: "1.83.14"
 
 runtime_info:
   input:
-    # MODE B (local vLLM checkpoint) active; MODE A (remote API) example: /evaluator:setup reference
+    # MODE A (remote API) example: /evaluator:setup reference; MODE B (local vLLM checkpoint) active;
+    # How to fill: docs/content/docs/reference/io.mdx -> LLM endpoint
     llm_api:
-      api_key: dummy-key                       # must match vLLM --api-key
-      api_base_url: "http://127.0.0.1:8000/v1"
-      model: "openai/Qwen3.5-35B-A3B"          # openai/<vLLM --served-model-name>
+      api_key: human
+      api_base_url: human
+      model: "openai/Qwen3.5-35B-A3B"
       description: Example local checkpoint served via vLLM; see scripts/serve_local_model.sh.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
@@ -58,10 +59,13 @@ runtime_info:
       dataset_name: swebench-verified
       version: "1.0"
       registry_path: repos/harbor/registry.json
+      # When true: generate/use local swebench-verified-nohack (agent egress allowlist to
+      # LiteLLM only; verifier stays public). Currently supports swebench-verified only.
+      no_hack: true
 
     harbor_job:
       jobs_dir: artifacts/jobs
-      n_concurrent: 4
+      n_concurrent: 24
       n_tasks: null                            # null = full benchmark; int = smoke cap
       max_retries: 2
       timeout_multiplier: 1
@@ -73,12 +77,11 @@ runtime_info:
         model: ""
         api_key: ""
 
-    # Switch agents by editing all four of name/version/runtime_image/runtime_host_path
-    # together — presets and the runtime pre-extract recipe: /evaluator:setup reference
+    # reference to /evaluator:setup 
     agent:
       name: custom-openhands-sdk
-      version: 1.14.0
-      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.5
+      version: 1.33.0
+      runtime_image: docker.io/jierun/c-oh-sdk-1.33.0:v0.1
       runtime_host_path: artifacts/runtime/openhands-sdk
       max_turns: 200
       temperature: 1.0

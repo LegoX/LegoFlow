@@ -8,6 +8,7 @@ artifacts/
 # Dashboard generator outputs and cache (progress_monitor.py).
 dashboard/site/
 dashboard/.cache/
+.wrangler/
 
 # Docs site (fumadocs/Next.js) build artifacts and deps.
 docs/node_modules/

@@ -68,7 +68,7 @@ Defaults target the shared endpoint (override with flags or env vars):
 | --- | --- | --- |
 | `--model` | `TAGGING_MODEL` | `Qwen3.6-35B-A3B` |
 | `--api-key` | `TAGGING_API_KEY` | `dummy-cf` |
-| `--base-url` | `TAGGING_API_BASE_URL` | `http://llm.jierungogogo.com/v1` |
+| `--base-url` | `TAGGING_API_BASE_URL` | `http://<your-openai-compatible-endpoint>/v1` |
 | `--datasets-dir` | `TAGGING_DATASETS_DIR` | `./datasets` |
 | `--jobs` | — | `64` |
 

@@ -132,14 +132,16 @@ Walk `runtime_info.input` and prompt only for unset fields (the literal `human` 
 - `litellm_proxy.{config_template, port, master_key}` — defaults
   (`scripts/serve_llm/litellm_config.example.yaml`, port `4101`) are
   usually fine; the template path is resolved relative to `repos/harbor`.
-- `task_source.{dataset_name, version}` — must resolve to an entry in
-  `repos/harbor/registry.json`. Suggest a benchmark from the curated
-  `CLAUDE.md` table (e.g. `swebench-verified@1.0`, or a `-100` subset for
-  a smoke run). Keep `provider: harbor_registry` and
+- `task_source.{dataset_name, version, no_hack}` — `(dataset_name, version)`
+  must resolve to an entry in `repos/harbor/registry.json`. Suggest a
+  benchmark from the curated `CLAUDE.md` table (e.g. `swebench-verified@1.0`,
+  or a `-100` subset for a smoke run). Keep `provider: harbor_registry` and
   `registry_path: repos/harbor/registry.json` — evaluator does **not** stage
-  tasks locally. If the user picks a benchmark **outside** the curated
-  table, surface the agent-compatibility caveat from `CLAUDE.md`
-  ("Other registry entries").
+  tasks locally. `no_hack` defaults to `false`; set `true` only with
+  `swebench-verified` to run the hardened local `swebench-verified-nohack`
+  registry (agent egress allowlisted to LiteLLM). If the user picks a
+  benchmark **outside** the curated table, surface the agent-compatibility
+  caveat from `CLAUDE.md` ("Other registry entries").
 - `harbor_job.{jobs_dir, n_concurrent, n_tasks, max_retries,
   timeout_multiplier}` and `agent.{name, version, runtime_image,
   runtime_host_path, max_turns, temperature}` — config defaults are
@@ -176,12 +178,15 @@ docker pull "$RUNTIME_IMAGE" && \
 CID=$(docker create "$RUNTIME_IMAGE") && \
 rm -rf "$HOST_DIR" && mkdir -p "$(dirname "$HOST_DIR")" && \
 docker cp "$CID:/opt/custom-agent-runtime/$SUBPATH" "$HOST_DIR" && \
-docker rm "$CID"
+docker rm "$CID" && \
+echo "$RUNTIME_IMAGE" > "$HOST_DIR/.source-image"
 ```
 
 `dryrun.sh` §8 checks the per-agent marker file (`bin/claude`,
 `runtime-env.sh`, or `bin/opencode`) so a bad extraction surfaces in
-preflight.
+preflight, and compares the `.source-image` stamp against the configured
+`runtime_image` so a stale extraction (image bumped, dir not re-extracted)
+fails instead of silently running the old runtime.
 
 ### 6. Credentials
 
@@ -247,7 +252,7 @@ llm_api:
 # custom-claude-code (Anthropic protocol, validated end-to-end)
 agent: {name: custom-claude-code, version: 2.1.118, runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1, runtime_host_path: artifacts/runtime/claude-code}
 # custom-openhands-sdk (OpenAI protocol; max_turns is reused as max_iterations)
-agent: {name: custom-openhands-sdk, version: 1.14.0, runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.5, runtime_host_path: artifacts/runtime/openhands-sdk}
+agent: {name: custom-openhands-sdk, version: 1.33.0, runtime_image: docker.io/jierun/c-oh-sdk-1.33.0:v0.1, runtime_host_path: artifacts/runtime/openhands-sdk}
 # custom-opencode (OpenAI-compatible via @ai-sdk/openai-compatible)
 agent: {name: custom-opencode, version: 1.14.22, runtime_image: docker.io/jierun/c-oc-1.14.22:v0.1, runtime_host_path: artifacts/runtime/opencode}
 ```
@@ -264,5 +269,6 @@ docker pull "$RUNTIME_IMAGE" && \
 CID=$(docker create "$RUNTIME_IMAGE") && \
 rm -rf "$HOST_DIR" && mkdir -p "$(dirname "$HOST_DIR")" && \
 docker cp "$CID:/opt/custom-agent-runtime/$SUBPATH" "$HOST_DIR" && \
-docker rm "$CID"
+docker rm "$CID" && \
+echo "$RUNTIME_IMAGE" > "$HOST_DIR/.source-image"
 ```

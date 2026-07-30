@@ -14,7 +14,7 @@ evaluator is configured entirely through [`config.yaml`](https://github.com/SWE-
 | `llm_api` | Raw upstream model API used by the per-job LiteLLM proxy | external |
 | `local_model_serving` | Checkpoint path / served name for local vLLM serving | external |
 | `litellm_proxy` | LiteLLM config template, port, and master key | external |
-| `task_source` | Benchmark selection (`provider: harbor_registry`, `dataset_name`, `version`, `registry_path`) | external |
+| `task_source` | Benchmark selection (`provider: harbor_registry`, `dataset_name`, `version`, `registry_path`, `no_hack`) | external |
 | `harbor_job` | jobs dir, concurrency, retries, timeout multiplier, smoke cap | external |
 | `job_analysis` | Post-eval analysis toggle and tagging endpoint | external |
 | `agent` | Harbor agent scaffold, version, runtime image/host path, sampling controls | external |
@@ -44,6 +44,7 @@ task_source:
   dataset_name: swebench-verified
   version: "1.0"
   registry_path: repos/harbor/registry.json
+  no_hack: false              # true = hardened swebench-verified-nohack + agent allowlist
 harbor_job:
   jobs_dir: artifacts/jobs
   n_concurrent: 2

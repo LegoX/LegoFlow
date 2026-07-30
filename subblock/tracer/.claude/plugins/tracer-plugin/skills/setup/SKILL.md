@@ -5,7 +5,7 @@ description: >
   `~/.local/bin` is root-owned), clone+pin Harbor and swe_data_process,
   build the three uv/venv environments (harbor uv, LiteLLM venv on Python
   3.13, swe_data_process uv), fill in `runtime_info.input` only for unset
-  fields, initialise `artifacts/consumption_ledger.yaml`, and (when
+  fields, initialise `artifacts/processed_tasks.yaml`, and (when
   `task_source.provider: huggingface`) prompt for a HF token if the
   dataset is gated. Idempotent. Ends by running `scripts/dryrun.sh` so the
   user sees whether the block is now check-passing. Triggers on phrases
@@ -81,7 +81,7 @@ read-only worktree, run `uv sync`, and re-lock on EXIT.
 Walk `runtime_info.input` and prompt only for unset fields (the literal `human` marker always counts as unset; `""` fields are env/auto-supplied — do not prompt for those):
 
 - `llm_api.{api_key, api_base_url, model}` — pick the configured upstream
-  (e.g. `https://az.gptplus5.com/v1` with `openai/deepseek-v4-flash`).
+  (e.g. `https://<an-alternate-provider>/v1` with `openai/deepseek-v4-flash`).
 - `litellm_proxy.{port, master_key}` — defaults are usually fine.
 - `task_source` — either:
   - `{provider: huggingface, dataset_name, split}` — production default
@@ -106,15 +106,15 @@ Walk `runtime_info.input` and prompt only for unset fields (the literal `human` 
 - **LLM endpoint**: a live probe (`GET <api_base_url>/models`) is now part
   of `scripts/dryrun.sh`, so setup does not need to repeat it. Note: when
   running inside Claude Code's sandboxed shell, some endpoints (e.g.
-  `llm10.jierungogogo.com`) return 401 due to CF gating — see memory
+  `<your-production-endpoint>`) return 401 due to CF gating — see memory
   `project-swegen-llm-endpoint`. That is not a credential failure.
 
 ### 6. Ledger
 
-If `artifacts/consumption_ledger.yaml` is missing, create it:
+If `artifacts/processed_tasks.yaml` is missing, create it:
 
 ```yaml
-description: "Tracer task consumption ledger — statuses: pending | running | done | failed | skipped."
+description: "Tracer task processed-tasks ledger — statuses: pending | running | done | failed | skipped."
 runs: []
 ```
 

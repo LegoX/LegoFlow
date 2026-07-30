@@ -9,11 +9,19 @@ LOG="$DASH/pipeline.log"
 
 log() { echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 
-# Credentials
-export HF_TOKEN="$(grep -oP '(?<=HF_TOKEN=)[^ ]+' ~/.bashrc | tr -d '"'"'"'' | head -1)"
-export TAGGING_API_BASE_URL="http://llm.jierungogogo.com/v1"
-export TAGGING_API_KEY="dummy-cf"
-export TAGGING_MODEL="Qwen3.6-35B-A3B"
+# Credentials — never hard-coded here. The shared env file is the one place
+# they live; it is outside the repo, so nothing lands in git history.
+SHARED_ENV="${SHARED_ENV:-/gpufs/haoli/cicd/shared/.env}"
+[[ -f "$SHARED_ENV" ]] && source "$SHARED_ENV"
+export HF_TOKEN="${HF_TOKEN:-$(grep -oP '(?<=HF_TOKEN=)[^ ]+' ~/.bashrc 2>/dev/null | tr -d '"'"'"'' | head -1)}"
+export TAGGING_API_BASE_URL="${TAGGING_API_BASE_URL:-${SMOKE_LLM_BASE_URL:-}}"
+export TAGGING_API_KEY="${TAGGING_API_KEY:-${SMOKE_LLM_API_KEY:-}}"
+export TAGGING_MODEL="${TAGGING_MODEL:-${SMOKE_LLM_PR_MODEL:-}}"
+if [[ -z "$TAGGING_API_BASE_URL" || -z "$TAGGING_MODEL" ]]; then
+  echo "ERROR: tagging endpoint not configured. Set TAGGING_API_BASE_URL / TAGGING_MODEL," >&2
+  echo "       or provide SMOKE_LLM_BASE_URL / SMOKE_LLM_PR_MODEL in $SHARED_ENV" >&2
+  exit 2
+fi
 TAGGER="$DASH/../repos/swegen/tools/tag_task_metadata.py"
 JOBS=64
 

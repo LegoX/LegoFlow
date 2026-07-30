@@ -378,12 +378,21 @@ if [[ -z "$RUN_COMMAND" ]]; then
   fi
   # Never retry timed-out tasks — they'll just time out again and waste budget
   EXTRA_ARGS="$EXTRA_ARGS --retry-exclude AgentTimeoutError"
-  # Add any extra exclude-task-name flags from HARBOR_EXCLUDE_TASKS (space-separated list)
-  if [[ -n "$HARBOR_EXCLUDE_TASKS" ]]; then
-    for _excl_task in $HARBOR_EXCLUDE_TASKS; do
-      EXTRA_ARGS="$EXTRA_ARGS --exclude-task-name $(printf '%q' "$_excl_task")"
-    done
+  # Exclusions resolve from the ledger, which records both what this block
+  # consumed and what a human retired. A smoke re-runs its fixtures on purpose,
+  # so it opts out of the ledger-derived ids via HARBOR_LEDGER_EXCLUDE=0.
+  _LEDGER_FILE="$BLOCK_DIR/artifacts/processed_tasks.yaml"
+  _EXCLUDE_IDS="$(python3 "$BLOCK_DIR/scripts/resolve_exclude_tasks.py" \
+    --block-dir "$BLOCK_DIR" \
+    --spec "${HARBOR_EXCLUDE_TASKS:-}" \
+    --ledger "$_LEDGER_FILE" \
+    --ledger-exclude "${HARBOR_LEDGER_EXCLUDE:-1}" 2>/dev/null || true)"
+  if [[ -n "$_EXCLUDE_IDS" ]]; then
+    echo "[start] excluding $(wc -w <<<"$_EXCLUDE_IDS") task(s) resolved from HARBOR_EXCLUDE_TASKS + artifacts/processed_tasks.yaml"
   fi
+  for _excl_task in $_EXCLUDE_IDS; do
+    EXTRA_ARGS="$EXTRA_ARGS --exclude-task-name $(printf '%q' "$_excl_task")"
+  done
   RUN_COMMAND="uv run harbor run --path $(printf '%q' "$HARBOR_DATASET_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$TRAJGEN_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$TRAJGEN_JOB_NAME") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'
 import json
 import os

@@ -49,8 +49,12 @@ Thumbs.db
 *.safetensors
 artifacts/files/
 
-# Runtime run index — written by archive_run.sh, not committed
-artifacts/index.yaml
+# Root artifacts/ is generated state end to end — run indexes, smoke logs,
+# monitor output. Ignore all of it; keep only the .gitkeep that holds the
+# directory in the tree, because scripts/dryrun.sh checks the dir exists and
+# git does not track empty directories.
+artifacts/*
+!artifacts/.gitkeep
 subblock/*/artifacts/index.yaml
 
 # SWE-gen subblock — generated data and virtual env
@@ -64,3 +68,8 @@ subblock/tracer/artifacts/*
 # Dashboard transient runtime output
 subblock/curator/dashboard/memory/.progress_monitor_all_state.jsonl.*
 subblock/curator/dashboard/dashboard_sync.log
+
+# Local harbor venv + root-level run outputs (machine-specific, never committed)
+.venv-harbor/
+artifacts/prod-run/
+artifacts/root-smoke-monitor/

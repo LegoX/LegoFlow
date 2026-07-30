@@ -117,7 +117,7 @@ smoke and single-language modes do not:
 | `/curator:check` | `scripts/dryrun.sh` + token/LLM/docker probes | Read-only preflight |
 | `/curator:collect-prs` | `scripts/collect_all_bg.sh` / collector | Collect PR IDs and wait for completion (Step 1 below) |
 | `/curator:create-tasks` | Full: `scripts/start_with_*.sh` → `create_all_bg.sh`; smoke/single: direct command | Generate and verify tasks from existing PR IDs (Step 2) |
-| `/curator:dashboard` | `dashboard/` generator + Cloudflare sync | Progress monitoring |
+| `/curator:dashboard` | `dashboard/` tagger + HTML generator + Cloudflare deploy | Dataset analytics (difficulty + tags), not run-progress monitoring |
 
 `/curator:create-tasks` does not invoke `/curator:collect-prs`. For production modes,
 wait for collection to finish before starting generation; the create scripts
@@ -213,9 +213,10 @@ bash scripts/start_with_anthropic_api.sh
 bash scripts/start_with_openai_api.sh
 ```
 
-`create_all_bg.sh` starts all eight language workers with `nohup` and returns
-immediately; it does not consult each language's `enabled` value or wait for
-workers. Consequently, `start.sh` archives launcher completion, not worker
+`create_all_bg.sh` starts one `nohup` worker per language whose `enabled` is
+`true` and returns immediately; it does not wait for workers, and it exits
+non-zero if every language is disabled rather than reporting success having
+started nothing. Consequently, `start.sh` archives launcher completion, not worker
 completion. In `openai_proxy` mode the wrapper also stops its LiteLLM proxy when
 the launcher returns, so the current wrapper does not supervise that proxy for
 the detached workers' full lifetime.
@@ -234,8 +235,13 @@ tasks — no need to wait for the full run.
 ### Step 3: Validate (optional, built into create)
 
 ```bash
-swegen validate ./artifacts/swe_tasks/py-cc --max-parallel 8
+swegen validate ./artifacts/swe_tasks/py-cc --max-parallel 8 \
+  --jobs-dir artifacts/experiments/validate-jobs
 ```
+
+`--jobs-dir` defaults to `.swegen/harbor-jobs` (relative to CWD) if omitted —
+always pass it explicitly so Harbor job artifacts land under `artifacts/`,
+not the block root.
 
 ### Step 4: Difficulty + metadata tagging
 
@@ -322,8 +328,8 @@ artifacts/
 | `n_concurrent` | concurrent task workers |
 
 `scripts/create_<lang>.sh` reads these via `scripts/read_params.py` before launching `swegen create`. Edit them in `config.yaml`; no auto-tuning is performed.
-The current all-language launcher ignores `enabled`; invoke only the desired
-`scripts/create_<lang>.sh` files to limit the language set.
+The all-language launcher honors `enabled`; set it to `false` to drop a
+language, or invoke a single `scripts/create_<lang>.sh` directly.
 
 ```bash
 eval $(python scripts/read_params.py --lang py --config-yaml config.yaml)

@@ -27,7 +27,7 @@ meta_info:
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
       branch: main
-      commit: 67aadd1e029c6e9a4b3c4b18bfc68557edb6d3c5
+      commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
       path: repos/swe_data_process
       readonly: true
 
@@ -39,8 +39,7 @@ meta_info:
       - repos/swe_data_process
 
 runtime_info:
-  input:
-    # source.type mode matrix (which fields apply per mode): /trainer:setup reference
+  input: 
     source:
       type: hf_lf                 # harbor_job | hf_lf | local_lf
       scaffold: openhands-sdk     # harbor_job only: openhands-sdk | claude-code | open-code | terminus2
@@ -53,7 +52,7 @@ runtime_info:
 
     conversion:                   # harbor_job only; for hf_lf/local_lf just data_name + max_instances apply
       max_instances: 0            # 0 = all samples; >0 = random subsample via num_samples
-      exclude_repos_file: artifacts/data/excluded_repos.txt
+      exclude_repos_file: scripts/excluded_repos.txt
       data_name: "glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5"
 
     dataset:
@@ -66,7 +65,7 @@ runtime_info:
     training:
       stage: sft
       finetuning_type: full
-      deepspeed: artifacts/training_config/deepspeed/ds_z3_config.json
+      deepspeed: scripts/deepspeed/ds_z3_config.json
       template: qwen3_5
       cutoff_len: 131072
       rope_scaling: null          # Qwen3.5 supports 128K natively

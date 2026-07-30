@@ -59,6 +59,7 @@ the active job directory (see [Status](/docs/reference/status)).
 
 `scripts/clean.sh` removes disposable logs, generated LiteLLM state, and other
 unrecognized entries. It preserves `env/`/`envs/`, `index.yaml`, `archives/`,
-`jobs/`, `datasets/`, and `runtime/`. Pass `-n`/`--dry-run` to preview the
-deletions. It does not touch `repos/`; remove sensitive job/archive data
-explicitly before packaging a worktree.
+`jobs/`, `datasets/`, `runtime/`, and any git-tracked file. Pass `-n`/`--dry-run`
+to preview the deletions. `--all` wipes `artifacts/` entirely except git-tracked
+files, after confirming twice. It does not touch `repos/`; remove sensitive
+job/archive data explicitly before packaging a worktree.

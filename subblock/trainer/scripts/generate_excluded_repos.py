@@ -26,7 +26,7 @@ from swe_data_process.utils import (
     load_reference_repos_from_hf,
 )
 
-DEFAULT_OUTPUT = BLOCK_DIR / "artifacts" / "data" / "excluded_repos.txt"
+DEFAULT_OUTPUT = BLOCK_DIR / "scripts" / "excluded_repos.txt"
 
 
 def parse_args() -> argparse.Namespace:

@@ -27,7 +27,7 @@ Read from `config.yaml` before running (details in `docs/content/docs/reference/
 - `runtime_info.input.harbor_job` — jobs_dir, concurrency, retries, timeout multiplier
 - `runtime_info.input.agent` — agent name, version, runtime image, max turns, temperature
 - `runtime_info.input.sft_conversion` — optional post-Harbor conversion (`enabled`, `scaffold`, `out_dir`, …)
-- `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` — space-separated task IDs Harbor must skip
+- `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` — exclusion sources Harbor must skip: `excluded_tasks.txt` (human decisions, git-tracked) + `artifacts/processed_tasks.yaml` (run history); literal task IDs also accepted
 
 Write to `config.yaml` → `runtime_info.output` after running:
 - `raw_trajectories_dir` — `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl` (consumed by `trainer`)
@@ -37,8 +37,8 @@ Write to `config.yaml` → `runtime_info.output` after running:
 
 Tracer **only** runs tasks listed in curator's `verifiable_tasks.txt`, and never re-runs one it already processed:
 1. `prepare_tasks.sh` copies only manifest-listed task IDs into `artifacts/tasks/<dataset>/`.
-2. `artifacts/consumption_ledger.yaml` is the source of truth for processed task IDs (`pending | running | done | failed | skipped`).
-3. Every `done`/`failed`/`skipped` task must also appear in `HARBOR_EXCLUDE_TASKS` so Harbor skips it next time.
+2. `artifacts/processed_tasks.yaml` is the source of truth for processed task IDs (`pending | running | done | failed | skipped`).
+3. `start.sh` resolves `HARBOR_EXCLUDE_TASKS` through that ledger, so recording a task there is what makes Harbor skip it next time. Retire a task permanently by appending its id to the git-tracked `excluded_tasks.txt` — the ledger lives under gitignored `artifacts/`.
 
 Operating detail for the run + post-run bookkeeping is in the `/tracer:run` skill.
 
@@ -57,10 +57,10 @@ Generic lifecycle via the repo-wide `root` plugin: `/root:check tracer` to prefl
 |---|---|---|
 | `/tracer:setup` | `update_repos.sh`, `setup_harbor_env.sh`, `setup_swe_data_process_env.sh`, `dryrun.sh` | Clone/update repos, build uv envs |
 | `/tracer:check` | `dryrun.sh` | Read-only preflight |
-| `/tracer:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh`, `convert_trajectories.sh` | Local HTML board / Cloudflare online sync / SFT stats refresh |
+| `/tracer:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh`, `convert_trajectories.sh` | Interactive HTML board (Analyze quality/pass slices, status/artifacts/SFT samples) / Cloudflare online sync / SFT stats refresh |
 | `/tracer:run` | `dryrun.sh`, `start.sh` | Full pipeline: prepare_tasks → Harbor → optional convert + post-run bookkeeping |
 
-`scripts/clean.sh` removes gitignored runtime outputs (`artifacts/sft_data`, `dashboard/site/`, `dashboard/.cache/`). Tracer scripts need PyYAML in the runtime Python; on `ERROR: PyYAML is required`, `pip install pyyaml`.
+`scripts/clean.sh` (no flags) removes only a run's temporary output — LiteLLM state, logs, launch logs, `dashboard/site/`, `dashboard/.cache/`. It keeps the uv env, `jobs/`, `tasks/`, `sft_data/`, `agent-runtime/` and `processed_tasks.yaml`. `--all` wipes `artifacts/` entirely except git-tracked files and confirms twice. Tracer scripts need PyYAML in the runtime Python; on `ERROR: PyYAML is required`, `pip install pyyaml`.
 
 ## Artifact archiving
 

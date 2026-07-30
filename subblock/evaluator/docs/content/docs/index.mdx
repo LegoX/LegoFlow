@@ -1,20 +1,20 @@
 ---
 title: Motivation
-description: Why we built eval
+description: Why we built evaluator
 ---
 
-eval runs registered evaluation benchmarks through Harbor against any configurable upstream LLM, and stores per-task results and trajectories.
+evaluator runs registered evaluation benchmarks through Harbor against any configurable upstream LLM, and stores per-task results and trajectories.
 
-It is the evaluation stage of the [SWE-Lego-Live](https://github.com/SWE-Lego/SWE-Lego-Live) pipeline — a leaf block with no downstream consumer. Where `tracer` generates training data and `trainer` produces checkpoints, eval measures how good any model is on a chosen benchmark. It mirrors tracer's runtime shell (a pinned [Harbor](https://github.com/SWE-Lego/harbor) checkout fronted by a per-job LiteLLM proxy), but loads its task set from Harbor's `registry.json` instead of a locally-staged swegen export.
+It is the evaluation stage of the [SWE-Lego-Live](https://github.com/SWE-Lego/SWE-Lego-Live) pipeline — a leaf block with no downstream consumer. Where `tracer` generates training data and `trainer` produces checkpoints, evaluator measures how good any model is on a chosen benchmark. It mirrors tracer's runtime shell (a pinned [Harbor](https://github.com/SWE-Lego/harbor) checkout fronted by a per-job LiteLLM proxy), but loads its task set from Harbor's `registry.json` instead of a locally-staged swegen export.
 
 ```text
 curator ─▶ tracer ─▶ trainer
                               │
                               ▼
-                            eval   ← benchmarks any model (remote API or local checkpoint)
+                            evaluator   ← benchmarks any model (remote API or local checkpoint)
 ```
 
-eval provides:
+evaluator provides:
 
 - **Registry-driven benchmark selection** — switch between SWE-bench Verified, Multilingual, Pro, Terminal-Bench, and a dozen other benchmarks by editing two config fields; no local task staging
 - **A per-job LiteLLM proxy** fronting your model API with OpenAI- and Anthropic-compatible endpoints and trajectory logging

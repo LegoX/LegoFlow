@@ -22,5 +22,16 @@ meta_info:
     public_storage: null
 
 runtime_info:
-  input: {}    # all external inputs are per-block; root owns none
-  output: {}   # pipeline outputs are read from leaf configs (e.g. trainer.output.checkpoint_path)
+  # Optionally shared credentials, by default they are set to "" (off)
+  input:
+    cloudflare:
+      account_id: ""
+      api_token: ""
+      pages_project_prefix: "swe-lego-live"
+    docker:
+      registry: ""            # "" = docker.io
+      username: ""
+      password: ""
+      mirror: ""
+      host: ""                 # "" = daemon default; recommended: unix:///var/run/docker.sock
+  output: {}

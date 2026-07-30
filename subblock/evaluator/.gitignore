@@ -24,3 +24,7 @@ venv/
 
 # Editor/sync backup artifacts (e.g. .efc_<hashes>_<name>).
 .efc_*
+
+# Local backups of config.yaml (e.g. config.yaml.prod-bak)
+config.yaml.*-bak
+*.bak

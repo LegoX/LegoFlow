@@ -1,15 +1,12 @@
-# ROOT SMOKE — stage 1/4: swegen.
-# Overlaid onto subblock/curator/config.yaml by tests/smoke/run_pipeline.sh
-# before the Claude-SDK launcher kicks off the run. Schema-compatible with the
-# production swegen config: every shared key keeps its name/meaning; production
-# fields this stage doesn't read are pruned; root-smoke-only knobs live under
+# ROOT SMOKE — stage 1/4: curator.
+# Overlaid onto subblock/curator/config.yaml by tests/smoke/run_pipeline.sh.
+# Schema-compatible with production; smoke-only knobs live under
 # runtime_info.input.smoke.*.
 #
-# Delta from the per-subblock swegen smoke (subblock/curator/tests/smoke/
-# config.yaml): that smoke iterates a committed 10-PR list and stops at the
-# FIRST verified task. The ROOT smoke instead COLLECTS ~200 PRs from scratch
-# (smoke.collect.*) and generates tasks, stopping after `smoke.max_pr` verified
-# ones — those verified tasks are the real handoff tracer (stage 2) consumes.
+# Unlike the per-block curator smoke (which replays a committed 10-PR list and
+# stops at the first verified task), this collects ~200 PRs from scratch and
+# generates until `smoke.max_pr` are verified — those are the real handoff
+# tracer consumes in stage 2.
 
 meta_info:
   name: curator
@@ -19,7 +16,11 @@ meta_info:
   subblocks: {}
   dependencies:
     from: {}
-    to: {}
+    # stage 1 -> 2; mirrors tracer's own `from`
+    to:
+      swe_tasks_dir:
+        to: tracer.input.task_source.dataset_name
+        when: {tracer.input.task_source.provider: local}
 
   repos:
     swegen:
@@ -38,19 +39,15 @@ meta_info:
 
 runtime_info:
   input:
-    # Reliable OpenAI-only endpoint (llm12 / Qwen3.6-35B-A3B) reached through a
-    # local LiteLLM CC proxy — the SAME setup the per-block swegen smoke verifies
-    # cleanly with (10_pr_demo.sh). History: llm10/GLM-5 native-anthropic failed
-    # categorically (0/46), and az.gptplus5/deepseek-v4-flash "drove the SDK" but
-    # was flaky — 0–3 verified between runs, and 0 verified FAILED the whole root
-    # chain at stage 1. openai_proxy + Qwen is the stable path; run_pipeline.sh's
-    # swegen stage starts the proxy on cc_proxy_port (no real key — llm12 takes
-    # the dummy-cf CF token).
+    # OpenAI-only endpoint via a local LiteLLM CC proxy, started by
+    # run_pipeline.sh on cc_proxy_port. native-anthropic was abandoned: one model
+    # failed categorically (0/46), another was flaky (0–3 verified per run), and
+    # 0 verified fails the whole chain at stage 1.
     llm_api:
-      api_key: dummy-cf
-      api_base_url: https://llm.jierungogogo.com/v1
-      pr_model: Qwen3.6-35B-A3B
-      task_model: claude-sonnet-4-6
+      api_key: ""
+      api_base_url: ""
+      pr_model: ""
+      task_model: ""
       cc_provider_mode: openai_proxy
       anthropic_base_url: http://127.0.0.1:4010
       cc_proxy_port: 4010
@@ -59,8 +56,8 @@ runtime_info:
       py:
         enabled: true
         params:
-          # Root smoke: full-ish per-task budget so verified tasks actually
-          # materialize (the 1-PR subblock smoke can afford to be stingier).
+          # Fuller per-task budget than the 1-PR block smoke, so tasks actually
+          # materialize.
           timeout: 3000
           cc_timeout: 2200
           n_concurrent: 4

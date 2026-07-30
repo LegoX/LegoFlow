@@ -43,6 +43,7 @@ REQUIRED = [
     "runtime_info.input.task_source.dataset_name",
     "runtime_info.input.task_source.version",
     "runtime_info.input.task_source.registry_path",
+    "runtime_info.input.task_source.no_hack",
     "runtime_info.input.harbor_job.jobs_dir",
     "runtime_info.input.harbor_job.n_concurrent",
     "runtime_info.input.harbor_job.max_retries",
@@ -58,10 +59,31 @@ REQUIRED = [
     "runtime_info.output.eval_results_dir.trajectory_format",
     "runtime_info.output.eval_results_dir.results_summary_format",
 ]
-missing = [k for k in REQUIRED if get(cfg, k) in (None, "")]
+# The smoke template must keep its credential fields blank: scripts/
+# inject_smoke_secrets.py fills a field only when it is "", so a placeholder
+# here is never replaced — which is how the smoke ended up pointing at a vLLM
+# nobody starts. Structure is still required in both configs; only these three
+# values are supplied at run time.
+RUNTIME_SUPPLIED = {
+    "runtime_info.input.llm_api.api_key",
+    "runtime_info.input.llm_api.api_base_url",
+    "runtime_info.input.llm_api.model",
+}
+is_smoke = Path(sys.argv[1]).parent.name == "smoke"
+missing = [
+    k for k in REQUIRED
+    if get(cfg, k) is None or (get(cfg, k) == "" and not (is_smoke and k in RUNTIME_SUPPLIED))
+]
 if missing:
     for k in missing: print(f"FAIL: missing or empty: {k}", file=sys.stderr)
     sys.exit(1)
+if is_smoke:
+    filled = [k for k in RUNTIME_SUPPLIED if get(cfg, k) not in (None, "")]
+    if filled:
+        for k in filled:
+            print(f"FAIL: smoke config must leave {k} blank for "
+                  f"inject_smoke_secrets.py to fill", file=sys.stderr)
+        sys.exit(1)
 
 # meta_info.dependencies must be {from: {...}, to: {...}} (both keys, both mappings).
 deps = get(cfg, "meta_info.dependencies")
@@ -80,6 +102,11 @@ if get(cfg, "meta_info.name") != "evaluator":
 prov = get(cfg, "runtime_info.input.task_source.provider")
 if prov != "harbor_registry":
     print(f"FAIL: task_source.provider must be 'harbor_registry' (got {prov!r})", file=sys.stderr)
+    sys.exit(1)
+
+no_hack = get(cfg, "runtime_info.input.task_source.no_hack")
+if not isinstance(no_hack, bool):
+    print(f"FAIL: task_source.no_hack must be a bool (got {no_hack!r})", file=sys.stderr)
     sys.exit(1)
 
 # Harbor jobs_dir prefix check (mirrors dryrun.sh section 8). Catches a smoke

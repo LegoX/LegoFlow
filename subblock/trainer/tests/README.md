@@ -84,7 +84,7 @@ Qwen3.5-35B model), and `SFT_SMOKE_BUDGET` (timeout seconds, default 2700).
 | 04: module not importable | scaffold/converter drift between `config.yaml` and `train.sh` | confirm `source.scaffold` is one of the four supported scaffolds |
 | 05: SKIPped | the tracer `job_dir` isn't on this host | not a failure; stage it, or repoint `source.job_dir` |
 | 06: SKIPped | the base model isn't staged on the cases runner | not a failure; a real run needs it present |
-| 07: `deepspeed config missing` | `artifacts/training_config/deepspeed/*.json` got deleted | `git restore subblock/trainer/artifacts/training_config/deepspeed/` |
+| 07: `deepspeed config missing` | `scripts/deepspeed/*.json` got deleted | `git restore subblock/trainer/scripts/deepspeed/` |
 | 08: SKIPped | runner has no `nvidia-smi` | not a failure on a CPU cases runner |
 | 09: smoke contract missing | workflow/runner drifted away from guarded synchronous training | restore `.github/scripts/sft_smoke_run.sh` integration |
 
@@ -178,7 +178,7 @@ Hugging Face Hub model ID SKIPs the local-filesystem check.
 
 Asserts the `training.deepspeed` file exists, parses as JSON, and declares a
 `zero_optimization.stage`. Guards the regression where the
-`artifacts/training_config/deepspeed/ds_z*.json` files get deleted while
+`scripts/deepspeed/ds_z*.json` files get deleted while
 `config.yaml` still points at one.
 </details>
 

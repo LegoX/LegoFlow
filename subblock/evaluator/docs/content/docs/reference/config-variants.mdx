@@ -22,10 +22,11 @@ so a run can always be reproduced from its own snapshot.
 
 ## Tunable parameters
 
-The knobs worth tuning between runs all live under `runtime_info.input` in `config.yaml`. For eval, the **primary lever is benchmark selection** (`task_source.dataset_name`); the rest mirror tracer:
+The knobs worth tuning between runs all live under `runtime_info.input` in `config.yaml`. For evaluator, the **primary lever is benchmark selection** (`task_source.dataset_name`); the rest mirror tracer:
 
 | Parameter | Meaning |
 | --- | --- |
+| `task_source.no_hack` | `true` = run hardened `swebench-verified-nohack` (agent egress → LiteLLM only) |
 | `temperature` | Agent sampling temperature (0.0–1.0) |
 | `max_turns` | Maximum agent turns per task |
 | `n_concurrent` | Harbor concurrent tasks |

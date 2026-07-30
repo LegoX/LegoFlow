@@ -3,7 +3,30 @@ title: Getting Started
 description: Set up the block and run your first benchmark
 ---
 
-This page walks through preparing the evaluator block and running a benchmark end to end. eval wraps a pinned [Harbor](https://github.com/SWE-Lego/harbor) checkout, so most steps are about getting that runtime in place — there is no task staging step, because the benchmark is resolved from Harbor's registry.
+This page walks through preparing the evaluator block and running a benchmark end to end. evaluator wraps a pinned [Harbor](https://github.com/SWE-Lego/harbor) checkout, so most steps are about getting that runtime in place — there is no task staging step, because the benchmark is resolved from Harbor's registry.
+
+## Recommended: operate via the Claude plugin
+
+The block ships a Claude Code plugin (`evaluator-plugin`) that drives the whole
+lifecycle through slash commands. This is the recommended way to run evaluator —
+each command performs the preflight, confirmation, and bookkeeping steps for
+you. Launch Claude from inside `subblock/evaluator/` so the block-local plugin
+loads, then:
+
+```text
+/evaluator:setup          # update repo, build envs, fill config
+/evaluator:check          # dryrun preflight: config, repo, envs, LLM endpoint, registry
+/evaluator:run            # LiteLLM proxy + Harbor benchmark execution + analysis
+/evaluator:dashboard      # browse jobs, reports, and trajectories
+```
+
+The knobs these commands read live in `config.yaml` — benchmark selection under
+`runtime_info.input.task_source`, Harbor job settings under
+`runtime_info.input.harbor_job`, and the LLM endpoint under
+`runtime_info.input.llm_api`. Edit `config.yaml`, not the scripts.
+
+The rest of this page documents the underlying commands the plugin runs, for
+manual operation or debugging.
 
 ## Prerequisites
 
@@ -14,7 +37,7 @@ This page walks through preparing the evaluator block and running a benchmark en
 - **An OpenAI- or Anthropic-compatible LLM endpoint** — the model the agent will call, fronted by a per-job LiteLLM proxy. This can be a remote API or a local checkpoint served with vLLM (see [Local Model](/docs/local-model)).
 
 <Callout title="Where to run" type="info">
-eval runs on the node declared in `config.yaml` (`meta_info.resources.ip`; the checked-in default is `local`). For a configured remote hostname/IP, connect using SSH keys or `~/.ssh/config`. Run scripts inside a `tmux` session (e.g. `eval`) so a job survives shell disconnects, and never commit host credentials.
+evaluator runs on the node declared in `config.yaml` (`meta_info.resources.ip`; the checked-in default is `local`). For a configured remote hostname/IP, connect using SSH keys or `~/.ssh/config`. Run scripts inside a `tmux` session (e.g. `evaluator`) so a job survives shell disconnects, and never commit host credentials.
 </Callout>
 
 <Callout title="Keep private runtime state out of releases" type="warn">
@@ -23,7 +46,7 @@ eval runs on the node declared in `config.yaml` (`meta_info.resources.ip`; the c
 
 ## 1. Update the managed repo
 
-eval depends on one local-only repository, `harbor`, pinned to a specific commit in `config.yaml`. Clone or update it to the pinned ref:
+evaluator depends on one local-only repository, `harbor`, pinned to a specific commit in `config.yaml`. Clone or update it to the pinned ref:
 
 ```bash
 bash scripts/update_repos.sh
@@ -33,7 +56,7 @@ The script clones/fetches, checks out the pinned `commit` detached, initializes 
 
 ## 2. Build the environments
 
-eval has **no `setup_*_env.sh` helper scripts** (unlike tracer). The two environments are built with explicit `uv` commands — `scripts/dryrun.sh` also prints these when an env is missing. There is no `swe_data_process` env, because eval does not convert trajectories.
+evaluator has **no `setup_*_env.sh` helper scripts** (unlike tracer). The two environments are built with explicit `uv` commands — `scripts/dryrun.sh` also prints these when an env is missing. There is no `swe_data_process` env, because evaluator does not convert trajectories.
 
 ```bash
 # Harbor uv env — build from inside the read-only repo, to a path OUTSIDE it
@@ -48,7 +71,7 @@ The Harbor env path **must be outside `repos/harbor`** while the repo is read-on
 
 ## 3. Pick a benchmark
 
-evaluator is registry-driven and stages no tasks locally. Select a benchmark by editing two fields in `config.yaml → runtime_info.input.task_source`:
+evaluator is registry-driven and stages no tasks locally. Select a benchmark by editing `config.yaml → runtime_info.input.task_source`:
 
 ```yaml
 task_source:
@@ -56,9 +79,10 @@ task_source:
   dataset_name: swebench-verified   # or any supported benchmark
   version: "1.0"
   registry_path: repos/harbor/registry.json
+  no_hack: false                    # true = swebench-verified with agent egress allowlist
 ```
 
-See [Select Benchmark](/docs/run-jobs/select-benchmark) for the full table. For a fast first run, pick a `-100` subset (e.g. `swebench-verified-100`) or set `harbor_job.n_tasks` to a small integer.
+See [Select Benchmark](/docs/run-jobs/select-benchmark) for the full table and the `no_hack` option. For a fast first run, pick a `-100` subset (e.g. `swebench-verified-100`) or set `harbor_job.n_tasks` to a small integer.
 
 ## 4. Validate the config
 
@@ -75,7 +99,7 @@ Fix anything it reports before launching a job.
 
 ## 5. Launch a job
 
-Only after both gates pass, launch the eval. `start.sh` repeats them, generates a per-job LiteLLM config, starts the proxy on the configured port, builds the Harbor command (`--dataset <name>@<version> --registry-path repos/harbor/registry.json`, plus any `--exclude-task-name` flags), runs the job, and then runs post-eval job analysis:
+Only after both gates pass, launch the evaluator. `start.sh` repeats them, generates a per-job LiteLLM config, starts the proxy on the configured port, builds the Harbor command (`--dataset <name>@<version> --registry-path repos/harbor/registry.json`, plus any `--exclude-task-name` flags), runs the job, and then runs post-eval job analysis:
 
 ```bash
 bash scripts/start.sh
@@ -91,15 +115,3 @@ artifacts/jobs/<job>/<task>/verifier/          # per-task verdict, scoring, test
 ```
 
 Post-eval analysis lands under `artifacts/jobs/<job>/analysis/`. For a visual view, open the [dashboard](/docs/dashboard).
-
-## Operating with the agent plugin
-
-If you operate the block through its Claude plugin, the same lifecycle maps to slash commands:
-
-```text
-/root:check eval     # preflight: config, repo, envs, LLM endpoint, registry lookup
-/evaluator:setup          # update repo, build envs, fill config
-/evaluator:check          # dryrun preflight
-/evaluator:run            # LiteLLM proxy + Harbor benchmark execution + analysis
-/evaluator:dashboard      # browse jobs, reports, and trajectories
-```

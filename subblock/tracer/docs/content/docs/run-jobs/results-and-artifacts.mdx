@@ -25,9 +25,10 @@ When conversion runs (automatically when `sft_conversion.enabled` is `true`, or 
 
 ```text
 artifacts/sft_data/<job>/
-├── im.jsonl        # intermediate OpenAI-style messages, auto-scored
-├── lf.json         # LLaMA-Factory ShareGPT array (the trainer block's input)
-└── lf.stats.json   # token/turn/score statistics for the dashboard
+├── im.jsonl           # PangUML v2 intermediate records + TQS metadata
+├── lf.json            # LLaMA-Factory ShareGPT array
+├── lf.stats.json      # token/turn/score statistics
+└── .convert_sig.json  # resolved-input signature for --skip-unchanged
 ```
 
 This is the block's `sft_data_dir` output. See [SFT Data](/docs/sft-data) for the conversion pipeline.
@@ -38,18 +39,19 @@ After each run, a snapshot is archived under:
 
 ```text
 artifacts/archives/run_NNN/
-├── metadata.yaml   # run id, timestamps, results, repo commit ids, copy of inputs
+├── metadata.yaml   # run id, timestamps, exit status, notes, repo commit ids
 ├── config.yaml     # config as it was at run time
-├── scripts/        # copy of executed scripts
-├── session.log     # session record
-└── monitor.md      # monitor output
+└── scripts/        # copy of the block scripts
 ```
 
-and one entry is appended to `artifacts/index.yaml`. During a run, inspect the
-active job directory or dashboard. After it exits, the newest index entry is
-the source of truth for the run's terminal state (see
-[Status](/docs/reference/status)).
+The operator may add `session.log` or `monitor.md`, but the archive helper does
+not create them automatically.
+
+One entry is appended to `artifacts/index.yaml`. Use it for run history,
+`artifacts/jobs/<job>/result.json` for live or completed Harbor state, and the
+[dashboard](/docs/dashboard) for the combined view. `config.yaml` is the run
+profile, not a mutable status store; see [Status](/docs/reference/status).
 
 ## Cleaning up
 
-`scripts/clean.sh` removes gitignored runtime outputs, including `artifacts/sft_data`, `dashboard/site/`, and the dashboard cache. It does not touch archived runs.
+`scripts/clean.sh` with no flags removes only a run's temporary output — LiteLLM state, logs, launch logs, `dashboard/site/`, and the dashboard cache. It keeps the uv env, `jobs/`, `tasks/`, `sft_data/`, `agent-runtime/`, `processed_tasks.yaml`, and archived runs. `--all` wipes `artifacts/` entirely except git-tracked files, after confirming twice.
