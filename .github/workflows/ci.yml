@@ -96,8 +96,10 @@ jobs:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -173,8 +175,10 @@ jobs:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
         with:
@@ -255,8 +259,10 @@ jobs:
         # workspace not owned by uid 1000 back to us. Idempotent.
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
         with:
@@ -332,8 +338,10 @@ jobs:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
         with:
@@ -423,8 +431,10 @@ jobs:
         # us. Idempotent.
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + envs come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -498,8 +508,10 @@ jobs:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
         with:
@@ -575,8 +587,10 @@ jobs:
         # never trips on EACCES.
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -650,8 +664,10 @@ jobs:
         # killed prior smoke (the in-script trap normally removes them).
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
       - uses: actions/checkout@v4
@@ -723,8 +739,10 @@ jobs:
       - name: Pre-checkout — reclaim root-owned residue from prior runs
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "find /x -type d -name sessions -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/root-smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/root-smoke-src-tasks /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/root-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-root-smoke /x/SWE-Lego-Live/subblock/trainer/artifacts/model/root_smoke_model 2>/dev/null; find /x ! -user 1000 -exec chown 1000:1000 {} + 2>/dev/null; find /x -type d -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
         with:
