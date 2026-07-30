@@ -14,13 +14,11 @@ the form:
 owner/repo:pr-123
 ```
 
-The block stores PR pools under `artifacts/collected_prs/`. The main language
-scripts pass these files to `swegen create` through `--input-ids-file`.
-Collection and generation are separate stages. The collector may append to a
-pool over time, while `swegen create` parses the file once at startup; wait for
-collection to finish when all newly collected PRs must be included. The
-production create scripts use the fixed `artifacts/collected_prs/` paths rather
-than `pr_collection.output_dir`.
+The block stores PR pools under `artifacts/collected_prs/`, and the production
+create scripts read those fixed paths (not `pr_collection.output_dir`) via
+`swegen create --input-ids-file`. Because `swegen create` parses the file once
+at startup, collection and generation are run as separate stages — see
+[Run Generation](/docs/run-generation).
 
 ## Task skeleton
 
@@ -65,25 +63,17 @@ Each language output directory has a manifest:
 artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt
 ```
 
-This file is the authoritative downstream contract. A task may exist on disk
-because it is in progress, failed, or partially generated, but it is only safe
-for tracer or other consumers when its task ID appears in
-`verifiable_tasks.txt`.
+This file is the authoritative downstream contract: a task ID is only safe for
+tracer or other consumers once it appears here, regardless of what exists on
+disk.
 
 ## Batch state
 
-Long runs resume through per-output batch state:
-
-```text
-artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/<hash>.json
-```
-
-The hash is based on the resolved absolute path of the input PR file. That
-means moving a restored run to a different clone path requires relocating or
-regenerating the batch state filename before continuing.
-
-Batch state records each PR case, attempts, status, errors, model fingerprint,
-elapsed time, and selected task ID.
+Long runs resume through per-output batch state under
+`artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/<hash>.json`, keyed by the
+resolved absolute path of the input PR file. See
+[Outputs](/docs/outputs#batch-state) for what it records and how to move it
+between clones.
 
 ## Language outputs
 
@@ -102,12 +92,7 @@ Curator uses one output directory per language:
 
 ## Difficulty scoring
 
-Curator can add static difficulty metadata to `task.toml`. The score is derived
-from the patch, tests, instruction, and file scope. The resulting fields are
-used for dataset analysis and sampling:
-
-- `difficulty_score`
-- `difficulty_label`
-- `difficulty`
-- `category`
-- `tags`
+Curator adds static difficulty metadata to `task.toml` (`difficulty_score`,
+`difficulty_label`, `difficulty`, `category`, `tags`) for dataset analysis and
+sampling. The scoring and tagging method is documented on the
+[Dashboard](/docs/dashboard#difficulty-and-tag-methodology) page.

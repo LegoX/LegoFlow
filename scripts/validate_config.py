@@ -9,6 +9,13 @@ Usage:
       Validate one block and its outgoing dependencies (sibling configs are
       read but not validated). --config substitutes an overlay config file
       (smoke tests) for the block's own config.yaml.
+  python3 scripts/validate_config.py --root <repo_root> --overlay-dir <dir>
+      Validate an alternate SET of configs as one coherent tree: every block,
+      including the siblings consulted for cross-checks, is read from
+      <dir>/<block>/config.yaml. Use this for tests/smoke/ — validating a smoke
+      config with --config alone cross-checks it against the PRODUCTION siblings
+      and reports edges that differ between the two sets as drift, which is a
+      false positive: the smoke set is internally consistent, just different.
 
 Output: one finding per line, "[OK]|[WARN]|[FAIL] <label> <message>".
 Exit 0 iff no FAIL findings.
@@ -136,13 +143,71 @@ def resolve_output(entry):
     return None
 
 
+# When set (by --overlay-dir), every sibling lookup resolves to
+# <OVERLAY_DIR>/<block>/config.yaml instead of the block's real location, so a
+# whole alternate config set validates as one self-consistent tree.
+OVERLAY_DIR = None
+
+
 def sibling_config_path(block_dir, src_name):
     return os.path.join(os.path.dirname(os.path.abspath(block_dir)), src_name, "config.yaml")
 
 
+def live_overlay(config_path):
+    """Name of the backup proving a RUNNING smoke currently overlays this config.
+
+    A smoke swaps a block's config for its own, leaving a backup tagged with the
+    owning pid (`config.yaml.root-smoke-bak.<pid>`). While that holds, this
+    block's config comes from the smoke set but every sibling it is cross-checked
+    against still comes from the production set, so the two disagree and every
+    cross-block finding is noise. The pid is what makes the suppression safe: a
+    backup whose process is gone is debris from a crashed run and must NOT
+    silence anything. Mirrors tests/cases/09.
+    """
+    d = os.path.dirname(os.path.abspath(config_path))
+    base = os.path.basename(config_path)
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return None
+    for n in names:
+        if not n.startswith(base + ".root-smoke-bak."):
+            continue
+        pid = n.rsplit(".", 1)[-1]
+        if pid.isdigit() and os.path.exists(f"/proc/{pid}"):
+            return n
+    return None
+
+
+def any_live_overlay(block_dir, is_root):
+    """Is ANY block in the tree currently overlaid by a running smoke?
+
+    Checking only the block under validation is not enough: a cross-block
+    finding is equally bogus when the *other* end is the overlaid one (block A
+    validates fine, reads sibling B from the smoke set, and reports the edge as
+    drift). While a smoke holds any block, the tree is a mix of two config sets
+    and no cross-block conclusion is trustworthy — so scope the suppression to
+    the whole tree, and name the block that caused it.
+    """
+    base = os.path.join(block_dir, "subblock") if is_root else os.path.dirname(os.path.abspath(block_dir))
+    try:
+        siblings = sorted(os.listdir(base))
+    except OSError:
+        return None
+    for sib in siblings:
+        cfg = os.path.join(base, sib, "config.yaml")
+        if os.path.isfile(cfg):
+            held = live_overlay(cfg)
+            if held:
+                return f"{sib} ({held})"
+    return None
+
+
 def load_sibling(block_dir, other_name, is_root, sibling_cache):
     """Load another block's config by name, using/populating sibling_cache."""
-    if is_root:
+    if OVERLAY_DIR:
+        cfg_path = os.path.join(OVERLAY_DIR, other_name, "config.yaml")
+    elif is_root:
         cfg_path = os.path.join(block_dir, "subblock", other_name, "config.yaml")
     else:
         cfg_path = sibling_config_path(block_dir, other_name)
@@ -177,6 +242,20 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
         fail("schema:parse-error", f"{label_prefix} config is not a mapping")
         return None
     ok("schema:parse", f"{label_prefix} config parses")
+
+    # A running smoke makes every CROSS-BLOCK finding unreliable (this block is
+    # read from the smoke set, its siblings from production), so downgrade those
+    # to warnings for the duration. Schema checks below stay authoritative —
+    # they only look at this one file. Not applicable under --overlay-dir, where
+    # both ends already come from the same set.
+    overlaid = None if OVERLAY_DIR else any_live_overlay(block_dir, is_root)
+    if overlaid:
+        emit("INFO", "dep:smoke-overlay",
+             f"{label_prefix} a running smoke currently overlays {overlaid} — "
+             f"cross-block findings below are reported as warnings, not failures")
+
+    def dep_fail(label, msg):
+        (warn if overlaid else fail)(label, msg)
 
     # --- top-level shape ---
     for section in ("meta_info", "runtime_info"):
@@ -261,11 +340,11 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
         # inactive/optional deps — a dangling ref is always an authoring error)
         src_cfg_path, src_cfg = load_sibling(block_dir, src, is_root, sibling_cache)
         if src_cfg is None:
-            fail("dep:bad-ref", f"{label_prefix} dependencies.from.{dep_key}: producer block `{src}` has no readable config at {src_cfg_path}")
+            dep_fail("dep:bad-ref", f"{label_prefix} dependencies.from.{dep_key}: producer block `{src}` has no readable config at {src_cfg_path}")
             continue
         src_outputs = (src_cfg.get("runtime_info") or {}).get("output") or {}
         if out_key not in src_outputs:
-            fail("dep:bad-ref", f"{label_prefix} dependencies.from.{dep_key}: `{src}.output.{out_key}` does not exist in {src}'s runtime_info.output")
+            dep_fail("dep:bad-ref", f"{label_prefix} dependencies.from.{dep_key}: `{src}.output.{out_key}` does not exist in {src}'s runtime_info.output")
             continue
 
         # cross-check: the producer's own `to` should declare this exact edge back
@@ -279,7 +358,10 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
             elif isinstance(to_entry, dict):
                 back_ref = to_entry.get("to")
         if back_ref != f"{name}.input.{dep_key}":
-            warn("dep:link-mismatch", f"{label_prefix} dependencies.from.{dep_key} -> {src}.output.{out_key}, but {src}'s dependencies.to.{out_key} does not point back to {name}.input.{dep_key}")
+            # FAIL, not WARN: an edge declared by only one end is the most common
+            # way this wiring rots (someone edits the producer and forgets the
+            # consumer, or vice versa), and as a warning it simply accumulated.
+            dep_fail("dep:link-mismatch", f"{label_prefix} dependencies.from.{dep_key} -> {src}.output.{out_key}, but {src}'s dependencies.to.{out_key} does not point back to {name}.input.{dep_key}")
 
         # `when` gate: dep only enforced while the named inputs hold the named values
         if when is not None:
@@ -294,7 +376,7 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
         resolved = resolve_output(src_outputs[out_key])
         if resolved is None:
             if required:
-                fail("dep:unresolved", f"{label_prefix} dependencies.from.{dep_key}: `{src}.output.{out_key}` has neither a non-null `value` nor a `path` yet")
+                dep_fail("dep:unresolved", f"{label_prefix} dependencies.from.{dep_key}: `{src}.output.{out_key}` has neither a non-null `value` nor a `path` yet")
             else:
                 warn("dep:unresolved", f"{label_prefix} dependencies.from.{dep_key}: optional upstream `{src}.output.{out_key}` not produced yet")
             continue
@@ -310,7 +392,15 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
             and "/" in consumer_val
             and "://" not in consumer_val
         ):
-            producer_abs = os.path.abspath(os.path.join(os.path.dirname(src_cfg_path), producer_path))
+            # Resolve the producer's declared path against its real block
+            # directory, NOT against wherever its config was read from. Under
+            # --overlay-dir the config lives in the overlay set while the
+            # consumer's relative path (`../curator/artifacts/...`) still points
+            # at the real tree, so using the config's dirname would compare two
+            # unrelated roots and flag every edge.
+            producer_base = (os.path.join(os.path.dirname(os.path.abspath(block_dir)), src)
+                             if OVERLAY_DIR else os.path.dirname(src_cfg_path))
+            producer_abs = os.path.abspath(os.path.join(producer_base, producer_path))
             consumer_abs = os.path.abspath(os.path.join(block_dir, consumer_val))
             if not (consumer_abs == producer_abs or consumer_abs.startswith(producer_abs + os.sep)):
                 warn("dep:path-mismatch", f"{label_prefix} runtime_info.input.{dep_key} = `{consumer_val}` resolves outside {src}'s declared output path `{producer_path}`")
@@ -338,12 +428,12 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
 
         consumer_cfg_path, consumer_cfg = load_sibling(block_dir, consumer, is_root, sibling_cache)
         if consumer_cfg is None:
-            fail("dep:bad-ref", f"{label_prefix} dependencies.to.{out_key}: consumer block `{consumer}` has no readable config at {consumer_cfg_path}")
+            dep_fail("dep:bad-ref", f"{label_prefix} dependencies.to.{out_key}: consumer block `{consumer}` has no readable config at {consumer_cfg_path}")
             continue
         consumer_input = (consumer_cfg.get("runtime_info") or {}).get("input") or {}
         found, _ = dot_get(consumer_input, consumer_path)
         if not found:
-            fail("dep:bad-ref", f"{label_prefix} dependencies.to.{out_key}: `{consumer}.input.{consumer_path}` is not a path in {consumer}'s runtime_info.input")
+            dep_fail("dep:bad-ref", f"{label_prefix} dependencies.to.{out_key}: `{consumer}.input.{consumer_path}` is not a path in {consumer}'s runtime_info.input")
             continue
 
         # cross-check: the consumer's own `from` should declare this exact edge back
@@ -357,7 +447,7 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
             elif isinstance(from_entry, dict):
                 back_ref = from_entry.get("from")
         if back_ref != f"{name}.output.{out_key}":
-            warn("dep:link-mismatch", f"{label_prefix} dependencies.to.{out_key} -> {consumer}.input.{consumer_path}, but {consumer}'s dependencies.from.{consumer_path} does not point back to {name}.output.{out_key}")
+            dep_fail("dep:link-mismatch", f"{label_prefix} dependencies.to.{out_key} -> {consumer}.input.{consumer_path}, but {consumer}'s dependencies.from.{consumer_path} does not point back to {name}.output.{out_key}")
 
         # `to.when` gate: keys are fully-qualified <consumer>.input.<path> (the
         # condition lives on the consumer's own state, not this block's)
@@ -399,6 +489,16 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
                     fail("input:placeholder", f"{label_prefix} runtime_info.input.{leaf_path} = `{leaf_val}` is a legacy placeholder — use `human` for must-fill fields")
                     break
 
+    # --- orphan outputs ---
+    # An output nobody declares a `to` for is produced for no declared consumer.
+    # That is legitimate for a terminal block or a purely local artifact, so this
+    # is a warning: it flags a hand-off that was renamed or dropped on one side
+    # without the other end noticing, which `dep:link-mismatch` cannot see (that
+    # check only fires once an edge exists at one of the two ends).
+    for out_key in rt_output:
+        if out_key not in deps_to:
+            warn("output:orphan", f"{label_prefix} runtime_info.output.{out_key} has no `dependencies.to` entry — nothing downstream declares it as an input")
+
     # --- output shape ---
     for out_key, entry in rt_output.items():
         if not isinstance(entry, dict) or ("path" not in entry and "value" not in entry):
@@ -414,11 +514,17 @@ def main():
     target.add_argument("--block", metavar="DIR", help="one block directory (e.g. subblock/tracer)")
     parser.add_argument("--config", metavar="FILE", help="overlay config file to validate instead of <block>/config.yaml")
     parser.add_argument("--schema-only", action="store_true", help="downgrade `human` fill markers to warnings (CI schema tests on fresh-clone configs)")
+    parser.add_argument("--overlay-dir", metavar="DIR",
+                        help="validate the config SET under DIR/<block>/config.yaml as one tree "
+                             "(siblings resolve there too); for tests/smoke/")
     args = parser.parse_args()
 
     if args.config and not args.block:
         parser.error("--config requires --block")
+    if args.overlay_dir and args.block:
+        parser.error("--overlay-dir applies to a whole tree; use it with --root")
 
+    global OVERLAY_DIR
     sibling_cache = {}
     if args.root:
         root_dir = os.path.abspath(args.root)
@@ -429,6 +535,22 @@ def main():
             d for d in (os.listdir(subblock_dir) if os.path.isdir(subblock_dir) else [])
             if os.path.isfile(os.path.join(subblock_dir, d, "config.yaml"))
         )
+        if args.overlay_dir:
+            # Point every lookup — the block's own config and each sibling it
+            # cross-checks against — at the overlay set. The root config keeps
+            # coming from the real root: the overlay sets under tests/smoke/ hold
+            # per-block configs only, and the roster/identity being validated is
+            # the tree's, not the overlay's.
+            OVERLAY_DIR = os.path.abspath(args.overlay_dir)
+            names = [n for n in names
+                     if os.path.isfile(os.path.join(OVERLAY_DIR, n, "config.yaml"))]
+            if not names:
+                fail("overlay:empty", f"root: no <block>/config.yaml found under {OVERLAY_DIR}")
+            for child in names:
+                check_block(os.path.join(subblock_dir, child),
+                            config_path=os.path.join(OVERLAY_DIR, child, "config.yaml"),
+                            sibling_cache=sibling_cache, schema_only=args.schema_only)
+            names = []
         for child in names:
             child_dir = os.path.join(subblock_dir, child)
             if os.path.isdir(child_dir):

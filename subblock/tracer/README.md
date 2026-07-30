@@ -40,7 +40,7 @@ subblock/tracer/
 ├── memory/notes.md      # long-form notes, repo policy, decisions
 ├── scripts/             # update_repos, setup env, prepare_tasks, dryrun, start, convert, clean
 ├── repos/               # managed local-only deps (gitignored): harbor, swe_data_process
-├── artifacts/           # tasks/, jobs/, sft_data/, env/, index.yaml, consumption_ledger.yaml
+├── artifacts/           # tasks/, jobs/, sft_data/, env/, index.yaml, processed_tasks.yaml
 └── .claude/             # block-local plugin: /tracer:* operating skills
 ```
 
@@ -65,7 +65,7 @@ Run from the repo root with the `block` plugin loaded, or from this directory.
 /root:check tracer     # preflight: config, repos, envs, tasks, LLM endpoint
 /tracer:setup           # clone/update repos, build uv envs, run dryrun
 /root:run tracer       # execute scripts/start.sh (proxy + Harbor) and archive
-/tracer:dashboard       # view progress locally or sync online
+/tracer:dashboard       # view overview/instances/trajectories/operations locally or sync online
 ```
 
 After a job, do the tracer-specific bookkeeping (ledger + `HARBOR_EXCLUDE_TASKS`
@@ -83,12 +83,12 @@ generic lifecycle (`/root:check`, `/root:run`); these are tracer-specific:
 | `/tracer:setup` | Clone/update `harbor` + `swe_data_process`, build uv envs, initialise ledger if needed, run dryrun |
 | `/tracer:check` | Read-only preflight |
 | `/tracer:run` | LiteLLM proxy + Harbor job + post-run ledger / exclude-list / status bookkeeping |
-| `/tracer:dashboard` | Local HTML board, Cloudflare Pages online sync, or SFT stats refresh |
+| `/tracer:dashboard` | Interactive HTML board (Overview, Instances, Trajectories, Operations), Cloudflare Pages online sync, optional R2 full trajectory loading, or SFT stats refresh |
 
 ## Where things live
 
 - **Run it**: `scripts/` (or the skills above). `scripts/start.sh` runs the job; `scripts/dryrun.sh` validates without side effects.
-- **Read status**: `config.yaml` → `status` and `artifacts/index.yaml` (newest entry). For a visual view, the dashboard at <https://swe-tracer-databoard.pages.dev>.
+- **Read status and quality**: `config.yaml` → `status` and `artifacts/index.yaml` (newest entry). For a visual view, the dashboard at <https://swe-tracer-databoard-eir.pages.dev/> includes instance/trajectory analysis by programming language/domain/category/difficulty/source/model/scaffold/job, status, artifact tables, bounded previews, and optional R2 full trajectory loading.
 - **Outputs**: trajectories under `artifacts/jobs/`, SFT data under `artifacts/sft_data/`.
 - **History**: per-run snapshots under `artifacts/archives/run_NNN/`.
 

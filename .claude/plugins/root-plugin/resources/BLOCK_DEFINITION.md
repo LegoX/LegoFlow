@@ -49,7 +49,7 @@ Key invariants the template encodes:
 | `CLAUDE.md` | Agent or human | Agent contract: role, I/O, run rules, archiving rules |
 | `config.yaml` | Agent or human | Identity, resources, runtime I/O, tunable params. One-shot per run — no live state. |
 | `dashboard/overview.mdx` | Agent | Human-readable current state: done, in progress, next |
-| `artifacts/index.yaml` | `archive_run.sh` (and agent for `notes`) | Append-only run index. Example: [`example_block/artifacts/index.yaml`](./example_block/artifacts/index.yaml). |
+| `artifacts/index.yaml` | `archive_run.sh` (and agent for `notes`) | Append-only run index. **Local runtime state — gitignored, never committed**; a fresh clone has none and `archive_run.sh` creates it on the first run, so every `dryrun.sh` must treat its absence as INFO, not a failure. The tracked format reference is [`example_block/artifacts/index.yaml`](./example_block/artifacts/index.yaml). |
 | `memory/notes.md` | Agent | Long-form observations, decisions, postmortems |
 
 ### 1.5 `repos/` is read-only by default
@@ -84,7 +84,7 @@ Each run produces `artifacts/archives/run_NNN/` containing:
 |---|---|---|
 | `metadata.yaml` | Full per-run record. Example: [`example_block/artifacts/archives/run_001/metadata.yaml`](./example_block/artifacts/archives/run_001/metadata.yaml). | `archive_run.sh` |
 | `config.yaml` | Snapshot of `config.yaml` as it was at run time | `archive_run.sh` |
-| `scripts/` | Copy of all scripts (top-level files + non-hidden subdirs; hidden state dirs like `.swegen-py` are skipped) | `archive_run.sh` |
+| `scripts/` | Copy of all scripts (top-level files + non-hidden subdirs; hidden state dirs are skipped) | `archive_run.sh` |
 | `session.log` *(optional)* | Claude Code session record (tool calls, agent reasoning, decisions) | Agent, manually after the run |
 | `monitor.md` *(optional)* | Human-readable monitor output produced by the agent during the run | Agent, manually after the run |
 

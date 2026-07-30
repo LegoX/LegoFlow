@@ -47,6 +47,17 @@ for b in BLOCKS:
         extra = set(scfg) - set(pcfg)
         if extra:
             errs.append(f"tests/smoke/{b}/config.yaml has top-level keys absent from production: {sorted(extra)}")
+        if b == "tracer":
+            prod_sft = (((pcfg.get("runtime_info") or {}).get("input") or {}).get("sft_conversion") or {})
+            smoke_sft = (((scfg.get("runtime_info") or {}).get("input") or {}).get("sft_conversion") or {})
+            if not smoke_sft.get("tokenizer_name"):
+                errs.append("tests/smoke/tracer/config.yaml missing required sft_conversion.tokenizer_name")
+            elif smoke_sft["tokenizer_name"] != prod_sft.get("tokenizer_name"):
+                errs.append("tests/smoke/tracer/config.yaml tokenizer_name differs from production")
+            prod_pin = (((pcfg.get("meta_info") or {}).get("repositories") or {}).get("swe_data_process") or {}).get("commit")
+            smoke_pin = (((scfg.get("meta_info") or {}).get("repositories") or {}).get("swe_data_process") or {}).get("commit")
+            if smoke_pin != prod_pin:
+                errs.append("tests/smoke/tracer/config.yaml swe_data_process pin differs from production")
 
 if errs:
     for e in errs: print("FAIL:", e, file=sys.stderr)

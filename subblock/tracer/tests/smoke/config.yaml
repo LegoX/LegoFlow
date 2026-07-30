@@ -34,7 +34,7 @@ meta_info:
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
       branch: main
-      commit: 76cb50cea432fb8687cf192c8ab3f09bb726cb07
+      commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
       path: repos/swe_data_process
       readonly: true
 
@@ -50,9 +50,9 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      api_key: dummy-cf
-      api_base_url: "https://llm.jierungogogo.com/v1"
-      model: "openai/Qwen3.6-35B-A3B"
+      api_key: ""
+      api_base_url: ""
+      model: ""
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
@@ -89,6 +89,7 @@ runtime_info:
     sft_conversion:
       enabled: false                   # SMOKE: skip conversion step
       scaffold: auto
+      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base
       out_dir: artifacts/sft_data
       max_instances: null
       exclude_repos_file: ""
@@ -109,4 +110,3 @@ runtime_info:
       path: artifacts/sft_data
       format: llamafactory_lf_v0.1
       trajectory_format: "artifacts/sft_data/<job>/lf.json"
-

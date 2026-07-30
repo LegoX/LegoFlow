@@ -43,3 +43,10 @@ docs/out/
 # Python
 __pycache__/
 *.pyc
+
+# uv environment built by scripts/install_env.sh (large, rebuildable)
+artifacts/env
+# Symlinked smoke dataset (the dir-form rule above misses the symlink)
+artifacts/data/examples
+# Editor/sync backup artifacts (e.g. .efc_<hashes>_<name>)
+.efc_*

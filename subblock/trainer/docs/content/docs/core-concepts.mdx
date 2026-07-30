@@ -41,4 +41,4 @@ A **checkpoint** is a saved model state under `artifacts/model/<run>/checkpoint-
 
 ## Repo exclusion filter
 
-`artifacts/data/excluded_repos.txt` lists `owner/repo` entries from the SWE-bench benchmark sets (Verified, Pro, Multilingual). All converters filter these out by default so eval repos never leak into training data. Regenerate it with `scripts/generate_excluded_repos.py`; disable per-experiment with `--exclude-repos-file ""`.
+`scripts/excluded_repos.txt` lists `owner/repo` entries from the SWE-bench benchmark sets (Verified, Pro, Multilingual). All converters filter these out by default so eval repos never leak into training data. Regenerate it with `scripts/generate_excluded_repos.py`; disable per-experiment with `--exclude-repos-file ""`.

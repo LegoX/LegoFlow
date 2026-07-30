@@ -26,10 +26,16 @@ The knobs worth tuning between runs all live under `runtime_info.input` in `conf
 
 | Parameter | Meaning |
 | --- | --- |
-| `temperature` | Agent sampling temperature (0.0-1.0) |
-| `max_turns` | Maximum agent turns per task |
-| `n_concurrent` | Harbor concurrent rollouts |
-| `timeout_multiplier` | Per-task timeout multiplier |
+| `agent.temperature` | Agent sampling temperature (0.0-1.0) |
+| `agent.max_turns` | Maximum agent turns per task |
+| `harbor_job.n_concurrent` | Harbor concurrent rollouts |
+| `harbor_job.n_tasks` | Maximum tasks selected for this job; `null` means all |
+| `harbor_job.timeout_multiplier` | Per-task timeout multiplier |
+| `sft_conversion.tokenizer_name` | Tokenizer used for LF statistics; align it with trainer |
+
+Changing `agent.name` requires an internally consistent preset: import path,
+API protocol, version, runtime image/host path, and an explicit conversion
+scaffold when automatic mapping is unavailable.
 
 ## Build and deploy the docs site
 
@@ -37,7 +43,8 @@ These docs are a [fumadocs](https://fumadocs.dev/) (Next.js) site under `docs/`,
 
 ### Requirements
 
-The site needs **Node >= 20**. This host's system Node is 18 (apt-pinned), so a newer Node is installed via [`nvm`](https://github.com/nvm-sh/nvm). Activate it before building:
+The site needs **Node >= 20**. If the host's system Node is older, activate a
+newer release through [`nvm`](https://github.com/nvm-sh/nvm) before building:
 
 ```bash
 export NVM_DIR="$HOME/.nvm"
@@ -63,4 +70,13 @@ npm run build     # static export to docs/out/
 bash docs/deploy_cloudflare_pages.sh
 ```
 
-It activates Node 22 via nvm, runs the static build, and deploys `docs/out/` with `wrangler pages deploy`. It reuses the same Cloudflare credentials as the dashboard (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or `~/.config/trajgen_progress_cloudflare.env`); set `PROJECT_NAME=swe-tracer-docs` to keep the docs project independent.
+It activates Node 22 via nvm, runs the static build, and deploys `docs/out/`
+with `wrangler pages deploy`. It reads `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` from the environment or `ENV_FILE` (default
+`~/.config/trajgen_progress_cloudflare.env`).
+
+The docs target defaults to `swe-tracer-docs`. Use `DOCS_PROJECT_NAME` /
+`DOCS_BRANCH_NAME` inside a shared dashboard env file, or set
+`PROJECT_NAME` / `BRANCH_NAME` before invocation. Dashboard target variables
+loaded from the shared file are intentionally ignored so a docs deploy cannot
+overwrite the dashboard.

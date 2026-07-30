@@ -34,20 +34,30 @@ The most important output is:
 artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt
 ```
 
-Downstream consumers should filter through this manifest. It is the difference
-between "a task directory exists" and "the task is validated and safe to use".
+Downstream consumers must filter through this manifest — see
+[Core Concepts](/docs/core-concepts#verified-task-manifest) for why a task
+directory existing is not the same as the task being verified.
 
 ## Batch state
 
 Batch state lives next to each language output:
 
 ```text
-artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/
+artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/<hash>.json
 ```
 
-This directory is needed for resume, deduplication, failure analysis, and
-progress accounting. It should be included in state packages, but not committed
-to Git.
+It records each PR case, attempts, status, errors, model fingerprint, elapsed
+time, and selected task ID — the basis for resume, deduplication, failure
+analysis, and progress accounting. Include it in state packages, but do not
+commit it to Git.
+
+The `<hash>` is derived from the **resolved absolute path** of the input PR
+file, so moving a restored run to a different clone path changes the hash. To
+resume after moving nodes, keep the language output dir, its
+`verifiable_tasks.txt`, the `.swegen-create-batch/*.json`, and the matching
+`artifacts/collected_prs/` input files together, and relocate or regenerate the
+state filename to match the new resolved input path before relaunching
+`scripts/create_{lang}.sh`.
 
 ## Logs
 
@@ -80,17 +90,10 @@ layout. Manifest-gated in-place consumption is preferred for large runs.
 
 ## State packages
 
-When moving to another node, package runtime state separately from source code.
-A complete resume package should include:
-
-- `artifacts/swe_tasks/<lang>-cc/`
-- `verifiable_tasks.txt`
-- `.swegen-create-batch/*.json`
-- PR input files in `artifacts/collected_prs/`
-- optional logs for audit
-
-Do not commit large runtime state to Git. Store it in Cloud storage, a release
-artifact, or a shared filesystem.
+When moving to another node, package runtime state (the files listed under
+[Batch state](#batch-state), plus optional logs for audit) separately from
+source code. Do not commit large runtime state to Git — store it in cloud
+storage, a release artifact, or a shared filesystem.
 
 ## Dataset handoff
 

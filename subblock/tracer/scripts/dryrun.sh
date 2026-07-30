@@ -148,17 +148,29 @@ echo ""
 echo "--- 1. Block files ---"
 # Note: meta_info and status are merged into config.yaml in this block, so
 # standalone metainfo.yaml / status.yaml are not expected.
-for file in CLAUDE.md config.yaml docs/content/docs/index.mdx artifacts/index.yaml; do
+for file in CLAUDE.md config.yaml docs/content/docs/index.mdx; do
   if [[ -f "$BLOCK_DIR/$file" ]]; then
     ok "$file exists"
   else
     fail "$file missing"
   fi
 done
+# artifacts/index.yaml is runtime state written by scripts/archive_run.sh (the
+# start.sh EXIT trap), not a precondition — and it is gitignored, so a fresh
+# clone legitimately has none. Absence is INFO, never a failure.
+if [[ -f "$BLOCK_DIR/artifacts/index.yaml" ]]; then
+  ok "artifacts/index.yaml exists"
+else
+  info "artifacts/index.yaml absent (auto-created by archive_run.sh after first run)"
+fi
 
 echo ""
 echo "--- 2. YAML syntax ---"
-for file in "$CONFIG" "$BLOCK_DIR/artifacts/index.yaml"; do
+# config.yaml must always parse; index.yaml is validated only if it exists yet
+# (a corrupt one would break archive_run.sh's next-run-id / append logic).
+yaml_files=("$CONFIG")
+[[ -f "$BLOCK_DIR/artifacts/index.yaml" ]] && yaml_files+=("$BLOCK_DIR/artifacts/index.yaml")
+for file in "${yaml_files[@]}"; do
   if python3 - "$file" <<'PY' >/dev/null 2>&1
 import sys
 import yaml
@@ -787,17 +799,44 @@ case "$SFT_SCAFFOLD" in
     fail "runtime_info.input.sft_conversion.scaffold must be one of: auto, claude_code, open_code, openhands_sdk, terminus2 (got: $SFT_SCAFFOLD)"
     ;;
 esac
+SFT_TOKENIZER_NAME="$(cfg runtime_info.input.sft_conversion.tokenizer_name)"
+[[ -n "$SFT_TOKENIZER_NAME" ]] && ok "runtime_info.input.sft_conversion.tokenizer_name = $SFT_TOKENIZER_NAME" || fail "runtime_info.input.sft_conversion.tokenizer_name is required"
 SFT_OUT_DIR="$(cfg runtime_info.input.sft_conversion.out_dir)"
 [[ -n "$SFT_OUT_DIR" ]] && ok "runtime_info.input.sft_conversion.out_dir = $SFT_OUT_DIR" || fail "runtime_info.input.sft_conversion.out_dir is required"
+SFT_REASONING_MODE="$(cfg runtime_info.input.sft_conversion.reasoning_check_mode)"
+[[ -n "$SFT_REASONING_MODE" ]] || SFT_REASONING_MODE="adaptive"
+case "$SFT_REASONING_MODE" in
+  strict|adaptive)
+    ok "runtime_info.input.sft_conversion.reasoning_check_mode = $SFT_REASONING_MODE"
+    ;;
+  *)
+    fail "runtime_info.input.sft_conversion.reasoning_check_mode must be one of: strict, adaptive (got: $SFT_REASONING_MODE)"
+    ;;
+esac
+SFT_REASONING_THRESHOLD="$(cfg runtime_info.input.sft_conversion.reasoning_content_ratio_threshold)"
+[[ -n "$SFT_REASONING_THRESHOLD" ]] || SFT_REASONING_THRESHOLD="0.2"
+if python3 - "$SFT_REASONING_THRESHOLD" <<'PY'
+import sys
+try:
+    value = float(sys.argv[1])
+except (TypeError, ValueError):
+    raise SystemExit(1)
+raise SystemExit(0 if 0 <= value <= 1 else 1)
+PY
+then
+  ok "runtime_info.input.sft_conversion.reasoning_content_ratio_threshold = $SFT_REASONING_THRESHOLD"
+else
+  fail "runtime_info.input.sft_conversion.reasoning_content_ratio_threshold must be between 0 and 1 (got: $SFT_REASONING_THRESHOLD)"
+fi
 SFT_DATA_DIR_OUT="$(cfg runtime_info.output.sft_data_dir.path)"
 [[ -n "$SFT_DATA_DIR_OUT" ]] && ok "runtime_info.output.sft_data_dir.path = $SFT_DATA_DIR_OUT" || fail "runtime_info.output.sft_data_dir.path is required"
 
 echo ""
-echo "--- 8c. Consumption ledger ---"
-LEDGER_PATH="$BLOCK_DIR/artifacts/consumption_ledger.yaml"
+echo "--- 8c. Processed-tasks ledger ---"
+LEDGER_PATH="$BLOCK_DIR/artifacts/processed_tasks.yaml"
 EXCLUDE_TASKS_RAW="$(cfg runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS)"
 if [[ ! -f "$LEDGER_PATH" ]]; then
-  fail "artifacts/consumption_ledger.yaml is missing — initialise with: printf 'description: %s\nruns: []\n' \"Tracer task consumption ledger\" > '$LEDGER_PATH'"
+  fail "artifacts/processed_tasks.yaml is missing — initialise with: printf 'description: %s\nruns: []\n' \"Tracer task processed-tasks ledger\" > '$LEDGER_PATH'"
 else
   LEDGER_REPORT="$(LEDGER_PATH="$LEDGER_PATH" EXCLUDE_TASKS="$EXCLUDE_TASKS_RAW" python3 - <<'PY' 2>&1
 import os, sys
@@ -849,11 +888,13 @@ PY
         fail "ledger has $bad entries with invalid status"
         grep '^BAD_STATUS:' <<<"$LEDGER_REPORT" | sed 's/^/         /'
       fi
-      if [[ "$leak" == "0" ]]; then
-        ok "every done/failed/skipped ledger entry is in HARBOR_EXCLUDE_TASKS"
-      else
-        fail "$leak ledger task(s) marked done/failed/skipped are NOT in HARBOR_EXCLUDE_TASKS — Harbor will re-run them"
-        grep '^LEAK:' <<<"$LEDGER_REPORT" | sed 's/^/         /'
+      # No cross-check against HARBOR_EXCLUDE_TASKS any more. start.sh derives
+      # the already-processed set straight from this ledger at launch, so the
+      # two cannot drift and config.yaml no longer carries a hand-copied mirror
+      # of runtime state. HARBOR_EXCLUDE_TASKS is now only the human decision
+      # list (chronic timeouts/OOMs), which is unrelated to what the ledger saw.
+      if [[ "$leak" != "0" ]]; then
+        info "$leak terminal ledger entr(ies) not in HARBOR_EXCLUDE_TASKS — expected; start.sh excludes them from the ledger itself"
       fi
       ;;
     PARSE:*)
@@ -874,6 +915,44 @@ if [[ -n "$RUN_COMMAND" ]]; then
   ok "command_override is configured"
 else
   ok "command_override is empty; scripts/start.sh will build the default Harbor command"
+fi
+
+echo ""
+echo "--- 10. Cloudflare Pages / registry credentials (optional) ---"
+# Only needed for /tracer:dashboard's public sync (dashboard/run_cloudflare_pages_sync.sh)
+# and for authenticated image pulls. Never blocks scripts/start.sh -- always
+# warn(), never fail() here.
+#
+# Credentials resolve through scripts/shared_credentials.sh: env > root
+# config.yaml (runtime_info.input.cloudflare/docker) > this block's legacy env
+# file, which stays supported so existing setups keep working untouched.
+CF_ENV_FILE="${ENV_FILE:-${SWEGEN_HOME:-$HOME}/.config/trajgen_progress_cloudflare.env}"
+SHARED_CREDS="$BLOCK_DIR/../../scripts/shared_credentials.sh"
+if [[ -f "$SHARED_CREDS" ]]; then
+  CF_LEGACY_ENV_FILE="$CF_ENV_FILE"
+  # shellcheck source=/dev/null
+  source "$SHARED_CREDS"
+  load_shared_credentials "$BLOCK_DIR"
+else
+  warn "cloudflare/docker: scripts/shared_credentials.sh not found at repo root -- falling back to env vars only"
+fi
+
+if command -v npx >/dev/null 2>&1 && [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+  ok "cloudflare: npx available, credentials from ${SHARED_CLOUDFLARE_SOURCE:-env}"
+else
+  missing=()
+  command -v npx >/dev/null 2>&1 || missing+=("npx/node")
+  [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || \
+    missing+=("CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID (root config.yaml runtime_info.input.cloudflare, env, or $CF_ENV_FILE)")
+  warn "cloudflare: missing ${missing[*]} -- dashboard/run_cloudflare_pages_sync.sh will fail; local HTML dashboard still works. See /root:setup optional extras."
+fi
+
+# Registry auth lifts the anonymous 100-pulls-per-6h cap that otherwise fails
+# task/agent image pulls mid-job.
+if [[ -n "${DOCKER_USERNAME:-}" && -n "${DOCKER_PASSWORD:-}" ]]; then
+  ok "docker registry: credentials from ${SHARED_DOCKER_SOURCE:-env} (run scripts/docker_login.sh to authenticate pulls)"
+else
+  warn "docker registry: no credentials (root config.yaml runtime_info.input.docker or DOCKER_USERNAME/DOCKER_PASSWORD) -- pulls stay anonymous and capped at 100/6h per IP"
 fi
 
 echo ""

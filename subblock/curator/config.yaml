@@ -7,7 +7,7 @@ meta_info:
   dependencies:
     from: {}   # task source block; no upstream
     to:
-      swe_tasks_dir:
+      merged_tasks_dir:
         to: tracer.input.task_source.dataset_name
         when: {tracer.input.task_source.provider: local}
 
@@ -36,8 +36,6 @@ meta_info:
 
 runtime_info:
   input:
-    # Knobs for tools/collect_prs_wo_image.py, exported by scripts/load_runtime_env.sh
-    # as SWEGEN_COLLECT_* / SWEGEN_PR_* / COLLECT_TOKEN_LIMIT. Null filter = collector default.
     pr_collection:
       enabled: true
       languages: [c, cpp, go, java, javascript, typescript, python, rust]

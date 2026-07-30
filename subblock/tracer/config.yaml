@@ -7,7 +7,7 @@ meta_info:
   dependencies:
     from:
       task_source.dataset_name:
-        from: curator.output.swe_tasks_dir
+        from: curator.output.merged_tasks_dir
         when: {task_source.provider: local}
     to:
       raw_trajectories_dir:
@@ -32,7 +32,7 @@ meta_info:
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
       branch: main
-      commit: 76cb50cea432fb8687cf192c8ab3f09bb726cb07
+      commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5   # origin/main HEAD (verified 2026-07-28), defaults reasoning-check-mode to adaptive
       path: repos/swe_data_process
       readonly: true
 
@@ -64,7 +64,7 @@ runtime_info:
 
     task_source:
       provider: local                  # local (curator) | huggingface — see /tracer:setup reference
-      dataset_name: ../curator/artifacts/swe_tasks/py-cc
+      dataset_name: ../curator/artifacts/merged_swe_tasks
       split: train
 
     harbor_job:
@@ -75,7 +75,7 @@ runtime_info:
       timeout_multiplier: 5
 
     agent:
-      name: custom-claude-code
+      name: custom-claude-code   # Custom agent choices: custom-claude-code, custom-openhands-sdk, custom-opencode. For a non-default choice, also align import_path, api_protocol, version, runtime_image, runtime_host_path, and an explicit sft_conversion.scaffold.
       version: 2.1.118
       runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
       runtime_host_path: artifacts/agent-runtime/claude-code   # pre-extracted; see /tracer:check reference
@@ -85,12 +85,15 @@ runtime_info:
     sft_conversion:
       enabled: false                   # true = start.sh runs convert step after the Harbor job
       scaffold: auto                   # auto | claude_code | open_code | openhands_sdk | terminus2
+      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base  # align conversion with trainer.model.model_name_or_path
       out_dir: artifacts/sft_data
       max_instances: null
       exclude_repos_file: ""           # "" = repo default artifacts/excluded_repos.txt
+      reasoning_check_mode: adaptive
+      reasoning_content_ratio_threshold: 0.2
 
     env_extra:
-      # Prior failures (timeout/OOM) + tasks consumed per artifacts/consumption_ledger.yaml
+      # Prior failures (timeout/OOM) + tasks consumed per artifacts/processed_tasks.yaml
       HARBOR_EXCLUDE_TASKS: elastic__elasticsearch-py-3329 elastic__elasticsearch-py-3332 cartography-cncf__cartography-1673 agentscope-ai__agentscope-885 agentscope-ai__agentscope-1342 aider-ai__aider-4146 agentscope-ai__agentscope-964 django-guardian__django-guardian-677 567-labs__instructor-1897 cartography-cncf__cartography-1751 cartography-cncf__cartography-2031
 
   output:

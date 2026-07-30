@@ -41,7 +41,7 @@ Training runs for a long time. Start it inside a `tmux` session on the GPU node 
 
 `scripts/train.sh` launches LLaMA-Factory through its torchrun path on the current node, with `NPROC_PER_NODE` wired from `infrastructure.n_gpus_per_node`. `FORCE_TORCHRUN=1` is set so distributed training is enabled even for a single process group. The block currently targets single-node launches; keep `n_gpus_per_node` aligned with the actual visible GPU count.
 
-Parallelism uses DeepSpeed ZeRO-3 (`artifacts/training_config/deepspeed/ds_z3_config.json`) — required for 30B+ models and safe for smaller ones, so it is the default for all 8-GPU runs.
+Parallelism uses DeepSpeed ZeRO-3 (`scripts/deepspeed/ds_z3_config.json`) — required for 30B+ models and safe for smaller ones, so it is the default for all 8-GPU runs.
 
 ## Generated, not checked in
 
@@ -50,4 +50,4 @@ The executed LLaMA-Factory YAML is **generated at runtime** from `config.yaml`, 
 ## Data-only and cleanup
 
 - `scripts/dataprep.sh` — run Harbor conversion only, to prepare and inspect converted data without training.
-- `scripts/clean.sh` — remove script-local `__pycache__`. Artifact deletion requires `--artifacts --yes`; repo-cache cleanup requires `--repo-cache --yes`.
+- `scripts/clean.sh` — remove a run's temporary output under `artifacts/` (logs, the generated training YAML, offline WandB state), keeping the uv env, `data/` and `model/`. `--all` wipes `artifacts/` entirely except git-tracked files and confirms twice; `--dry-run` previews either mode.

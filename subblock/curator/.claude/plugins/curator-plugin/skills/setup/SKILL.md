@@ -134,7 +134,7 @@ Fill `llm_api` first; `cc_provider_mode` decides which launcher to use.
 ```yaml
 llm_api:
   api_key: dummy-cf
-  api_base_url: https://llm.jierungogogo.com/v1
+  api_base_url: https://<your-openai-compatible-endpoint>/v1
   pr_model: Qwen3.6-35B-A3B
   task_model: claude-sonnet-4-6        # any claude-* alias; proxy maps it to pr_model
   cc_provider_mode: openai_proxy
@@ -146,11 +146,11 @@ llm_api:
 ```yaml
 llm_api:
   api_key: <YOUR_KEY>
-  api_base_url: https://yunwu.ai/v1            # OpenAI-compatible side of the same gateway
+  api_base_url: https://<your-anthropic-gateway>/v1            # OpenAI-compatible side of the same gateway
   pr_model: claude-opus-4-6
   task_model: claude-opus-4-6
   cc_provider_mode: native
-  anthropic_base_url: https://yunwu.ai         # provider Anthropic root, no /v1
+  anthropic_base_url: https://<your-anthropic-gateway>         # provider Anthropic root, no /v1
   # cc_proxy_port not used in native mode
 ```
 

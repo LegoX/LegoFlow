@@ -3,18 +3,42 @@ title: Dashboard
 description: Monitor job and SFT progress locally or online
 ---
 
-tracer ships a self-contained progress dashboard that scans your artifacts and renders a single HTML page — open it locally, or publish it to Cloudflare Pages for remote viewing.
+tracer ships a self-contained progress dashboard that scans your current status and artifacts, then renders a single interactive HTML page — open it locally, or publish it to Cloudflare Pages for remote viewing.
 
-Live board: **[swe-tracer-databoard.pages.dev](https://swe-tracer-databoard.pages.dev)**
+Live board: **[swe-tracer-databoard-eir.pages.dev](https://swe-tracer-databoard-eir.pages.dev/)**
 
 ## What it monitors
 
 | Source | Files | Shown as |
 | --- | --- | --- |
-| Harbor jobs | `artifacts/jobs/<job>/result.json` | Harbor Jobs table + per-job eval breakdown |
-| SFT conversion | `artifacts/sft_data/<job>/lf.stats.json` | SFT Datasets table |
+| Latest archived run | `artifacts/index.yaml` → latest `runs` entry | Operations page: run id, completion time, status, archive, and notes |
+| Harbor jobs | `artifacts/jobs/<job>/result.json` | Operations page: Harbor Jobs table + expandable eval breakdown |
+| Harbor trials | `artifacts/jobs/<job>/<trial>/result.json` by default | Instances/Trajectories pages: pass rate, reward, model/scaffold, failure drilldown |
+| SFT conversion | `artifacts/sft_data/<job>/lf.stats.json` | Operations page: SFT Datasets table |
+| SFT quality facts | `artifacts/sft_data/<job>/im.jsonl` score metadata | Instances/Trajectories pages: score distribution, low-score cards, score breakdown |
+| SFT samples | `artifacts/sft_data/<job>/im.jsonl` or `lf.json` | Trajectories page: bounded previews; full-load actions are shown only for Harbor payloads the R2 flow can upload |
 
-For each Harbor job it surfaces trial counts, error counts, per-eval reward means, and `reward == 1.0 / 0.0` outcome counts. For each SFT dataset it surfaces token-length, turn-count, and score distributions plus on-disk sizes.
+The page has four sidebar sections:
+
+- **Overview** — KPI cards, programming-language distribution, and quality score histogram.
+- **Instances** — instance-level table plus multi-dimensional segment analysis by programming language, domain, category, difficulty, source, model, scaffold, or job.
+- **Trajectories** — searchable card explorer for failed, low-score, high-score, error-only, or random trajectories, with bounded preview and optional `/api/traj` full load.
+- **Operations** — latest archived-run status from `artifacts/index.yaml`, searchable Harbor/SFT artifact tables, copy-path actions, and per-job eval breakdowns.
+
+For each Harbor job it surfaces trial counts, error counts, per-eval reward means, and `reward == 1.0 / 0.0` outcome counts. For each SFT dataset it surfaces token-length, turn-count, score distributions, tool-call error rates, and on-disk sizes.
+
+Each generation also writes analysis data under `dashboard/site/data/`:
+
+| File | Contents |
+| --- | --- |
+| `summary.json` | generation time, source paths, indexed counts, global score/pass summaries |
+| `task_dim.json` | task metadata from `artifacts/tasks/**/task.toml` |
+| `trial_fact.*.jsonl` | sharded rows for indexed Harbor trial results |
+| `quality_fact.jsonl` | one row per scored SFT record |
+| `segments.json` | precomputed multi-dimensional aggregates used by the Instances page |
+| `instances.jsonl` | normalized task/instance aggregates with pass, score, token, tool, model, scaffold, and source fields |
+| `traj_cards.jsonl` | bounded trajectory-card export used by the public Trajectories page |
+| `error_summary.json` | status counts, exception counts, per-job/per-language aggregates, and score histogram |
 
 When operating through the tracer plugin, `/tracer:dashboard` covers both the visual dashboard and one-off SFT data/stat refreshes via `scripts/convert_trajectories.sh`.
 
@@ -26,9 +50,40 @@ The generator is `dashboard/progress_monitor.py`. It carries [PEP 723](https://p
 ./dashboard/progress_monitor.py                              # one-shot generate
 ./dashboard/progress_monitor.py --serve --open               # generate + local preview
 ./dashboard/progress_monitor.py --loop 60 --serve --port 8765  # auto-refresh every 60s
+./dashboard/progress_monitor.py --sample-limit 50            # smaller published page
+./dashboard/progress_monitor.py --no-include-samples         # disable sample browser payload
+./dashboard/progress_monitor.py --index-job <harbor-job>     # add an extra local Harbor batch to Instances/Trajectories
+./dashboard/progress_monitor.py --local-mode public --public-no-samples  # metrics-only public payload
 ```
 
 Then open `dashboard/site/index.html` directly, or visit `http://127.0.0.1:8765/index.html`. The page self-refreshes so an open tab stays current while `--loop` keeps writing snapshots.
+
+Use the header's **Black / White** toggle to switch between light and dark monochrome themes. The selected theme is stored in browser `localStorage`; first load follows the system color-scheme preference.
+
+## Trajectory previews
+
+The dashboard embeds bounded previews and trajectory cards by default, not full multi-GB data files. This keeps the HTML portable:
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `--include-samples` / `--no-include-samples` | enabled | Toggle embedded sample previews |
+| `--sample-limit` | `200` | Maximum samples per SFT dataset |
+| `--sample-preview-chars` | `1200` | Maximum characters per message preview |
+| `--sample-message-limit` | `12` | Maximum messages per sample preview |
+| `--index-file` | `artifacts/index.yaml` | Archived-run status source |
+| `--harbor-jobs-dir` | `artifacts/jobs` | Local Harbor trial source for Instances and Trajectories; `HARBOR_JOBS_DIR` overrides it |
+| `--tasks-dir` | `artifacts/tasks` | Task metadata source for programming language/domain/category/difficulty |
+| `--index-job` | none | Additional Harbor job name to include in trial-level analysis |
+| `--max-trials-per-job` | `0` | Limit trial fact reads per Harbor job; `0` means all |
+| `--max-quality-records-per-dataset` | `0` | Limit scored SFT rows per dataset; `0` means all |
+| `--local-mode` | `full` | `full` includes bounded analysis previews; `public` keeps metrics only |
+| `--public-no-samples` | disabled | Disable embedded preview payload for public publishing |
+
+Use the defaults for local inspection. For public Cloudflare deploys, reduce `--sample-limit` or use `--no-include-samples` if the generated `dashboard/site/index.html` is too large or the sample content should not be published.
+
+<Callout title="Preview only" type="info">
+The Trajectories page is intentionally bounded. It shows instance id, score, reward, turns, token usage, local paths, R2 object key, and truncated previews where available. Full `im.jsonl` / `lf.json` files stay on disk unless explicitly published to R2.
+</Callout>
 
 ## Publish to Cloudflare Pages
 
@@ -39,22 +94,47 @@ tmux new-session -d -s tracer-cf \
   "ENV_FILE=.env.cf bash dashboard/run_cloudflare_pages_sync.sh 2>&1 | tee /tmp/tracer_cf_sync.log"
 ```
 
-Configuration is read from `~/.config/trajgen_progress_cloudflare.env` (override with `ENV_FILE`). The required values are:
+Configuration can come from exported environment variables, the root
+`config.yaml` → `runtime_info.input.cloudflare`, or the legacy
+`~/.config/trajgen_progress_cloudflare.env` file (override its path with
+`ENV_FILE`). Environment/file values take precedence over the shared root
+config. The required values are:
 
 | Variable | How to fill it | Default |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | API token with account-level `Cloudflare Pages: Edit` | required |
-| `CLOUDFLARE_ACCOUNT_ID` | 32-char Account ID from the dashboard | required |
+| `CLOUDFLARE_API_TOKEN` | API token with account-level `Cloudflare Pages: Edit`; keep it out of tracked config | required |
+| `CLOUDFLARE_ACCOUNT_ID` | 32-char Account ID from the dashboard; may live in root config | required |
 | `PROJECT_NAME` | Cloudflare Pages project (sets the public URL) | `swe-tracer-databoard` |
 | `LOOP_SECONDS` | Seconds between generate/deploy iterations | `3600` |
 | `CONVERT_ENABLED` | Auto-run SFT conversion in the loop (`0` disables) | `1` |
 | `CONVERT_EVERY_SECONDS` | Minimum interval between conversion attempts | `7200` |
+| `DASHBOARD_INCLUDE_SAMPLES` | Embed bounded trajectory preview payload (`0` disables payload) | `1` |
+| `DASHBOARD_SAMPLE_LIMIT` | Maximum sample previews per SFT dataset | `200` |
+| `DASHBOARD_SAMPLE_PREVIEW_CHARS` | Maximum characters per message preview | `1200` |
+| `DASHBOARD_SAMPLE_MESSAGE_LIMIT` | Maximum messages per sample preview | `12` |
+| `DASHBOARD_LOCAL_MODE` | `full` includes bounded analysis previews; `public` keeps metrics-only drilldown | `public` |
+| `DASHBOARD_HARBOR_JOBS_DIR` | Local Harbor jobs directory used by Instances and Trajectories | `artifacts/jobs` |
+| `DASHBOARD_MAX_TRIALS_PER_JOB` | Trial fact limit per indexed Harbor job; `0` means all | `0` |
+| `DASHBOARD_MAX_QUALITY_RECORDS_PER_DATASET` | Quality fact limit per SFT dataset; `0` means all | `0` |
+| `TRACER_R2_UPLOAD` | Upload local Harbor `trajectory.json` files referenced by trial facts | `0` |
+| `TRACER_R2_BUCKET` | R2 bucket for full trajectory objects under `trajs/...` | empty |
+| `TRACER_R2_UPLOAD_LIMIT` | Maximum R2 objects to upload per loop; `0` means all manifest rows | `0` |
+| `TRACER_R2_UPLOAD_CURSOR_FILE` | Persistent cursor used to advance bounded uploads across loops | `dashboard/.cache/.r2_upload_cursor` |
+
+The generated `dashboard/site/_worker.js` handles `GET /api/traj?r2_key=trajs/...`.
+Bind the same R2 bucket to the Pages project as `TRACER_TRAJ_BUCKET` to enable full online trajectory loading. Without that binding, the public page still works for metrics and bounded previews, while `Load full` returns a controlled error.
 
 <Callout title="Token scope" type="info">
 `wrangler pages deploy` needs the account-level `Cloudflare Pages: Edit` permission. None of the built-in templates map to it exactly, so create a Custom Token with `Account` -> `Cloudflare Pages` -> `Edit`. The Account ID is separate from the token.
 </Callout>
 
-The same loop optionally re-runs `scripts/convert_trajectories.sh --skip-unchanged` at most every `CONVERT_EVERY_SECONDS`, so the SFT stats on the board also stay fresh online without coupling heavy conversion to the deploy cadence.
+The same loop optionally re-runs
+`scripts/convert_trajectories.sh --skip-unchanged` at most every
+`CONVERT_EVERY_SECONDS`. It derives a scaffold override from the target job
+name when possible, so historical jobs do not silently use an unrelated
+current `agent.name`.
+
+For a lighter public page, set `DASHBOARD_SAMPLE_LIMIT` to a smaller value, `DASHBOARD_INCLUDE_SAMPLES=0`, `DASHBOARD_LOCAL_MODE=public`, or nonzero max fact limits in the sync environment.
 
 <Callout title="Two different Cloudflare projects" type="info">
 This is the **progress dashboard** project. The documentation site you are reading is a separate Cloudflare Pages project (`swe-tracer-docs`); see [Build & deploy the docs site](/docs/reference/config-variants#build-and-deploy-the-docs-site).

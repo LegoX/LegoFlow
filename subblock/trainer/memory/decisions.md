@@ -83,7 +83,7 @@ current node, with `NPROC_PER_NODE` wired from `infrastructure.n_gpus_per_node`.
 second layer of Slurm wrapper logic while still making the GPU count explicit in config.
 
 ## 2026-04: Repo exclusion filter enabled by default
-**Decision:** All data converters default to filtering out repos in `artifacts/data/excluded_repos.txt`.
+**Decision:** All data converters default to filtering out repos in `scripts/excluded_repos.txt`.
 **Why:** Prevents eval benchmark repos (SWE-bench_Verified, SWE-bench_Pro,
 SWE-bench_Multilingual) from leaking into training data. Pass `--exclude-repos-file ""`
 to disable for specific experiments.

@@ -2,13 +2,10 @@
 # Overlaid onto subblock/evaluator/config.yaml by tests/smoke/run_pipeline.sh.
 # Schema-compatible with production eval; deltas tagged "# ROOT:".
 #
-# Evaluates the model sft (stage 3) just trained on the SWE-bench Verified
-# 100-task subset. eval itself does NOT serve a model — it drives a per-job
-# LiteLLM proxy in front of an OpenAI-compatible endpoint. So before this stage
-# run_pipeline.sh deploys the sft checkpoint with vLLM on the SAME remote GPU
-# pod that trained it, wraps it with LiteLLM, and rewrites
-# runtime_info.input.llm_api.api_base_url here to that wrapper's URL.
-# See tests/smoke/serve_checkpoint.sh.
+# Evaluates the checkpoint trainer just produced on the SWE-bench Verified
+# 100-task subset. evaluator serves no model itself, so run_pipeline first
+# stands the checkpoint up with vLLM on the same GPU pod that trained it and
+# rewrites llm_api.api_base_url here — see tests/smoke/serve_checkpoint.sh.
 
 meta_info:
   name: evaluator
@@ -21,7 +18,10 @@ meta_info:
       # ROOT: the model under test is the trainer's persisted checkpoint —
       # run_pipeline.sh serves it (serve_checkpoint.sh) and rewrites
       # llm_api.api_base_url to the resulting vLLM endpoint at launch.
-      llm_api.api_base_url: trainer.output.checkpoint_path
+      # required: false — checkpoint_path stays null until stage 3 runs
+      llm_api.api_base_url:
+        from: trainer.output.checkpoint_path
+        required: false
     to: {}
 
   resources:
@@ -36,7 +36,7 @@ meta_info:
     harbor:
       url: https://github.com/SWE-Lego/harbor.git
       branch: main
-      commit: 4c1f27dcee78bdb134bafd01a81e9c12aaaae3d2
+      commit: 0bdee0a6943afa8839e79038acb19a9016e27fb2
       path: repos/harbor
       readonly: true
 
@@ -87,7 +87,7 @@ runtime_info:
         # errored every trial in run 28371626594 at 32768. Serve the model's full
         # native window (config max_position_embeddings=163840, rope_theta=1e6, no
         # rope_scaling needed) so a 131072 completion + a ~32K trajectory prompt fit.
-        max_model_len: 163840
+        max_model_len: 32768
         gpu_memory_utilization: 0.92
         dtype: bfloat16
       litellm:

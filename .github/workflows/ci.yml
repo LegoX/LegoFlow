@@ -30,7 +30,7 @@ permissions:
 
 # SHARED_RUNTIME is read by the per-block "Link runtime state" steps. It points
 # at a self-contained mirror of the runtime state CI needs — venvs / uv envs /
-# pinned submodule checkouts / agent-runtime / consumption ledger / gh_token —
+# pinned submodule checkouts / agent-runtime / processed-tasks ledger / gh_token —
 # living entirely under /gpufs (NOT under /, NOT under the canonical block
 # tree). Rebuild it from the canonical tree with /gpufs/haoli/cicd/sync_runtime.sh.
 env:
@@ -157,11 +157,15 @@ jobs:
   curator-smoke:
     name: curator tests (smoke)
     needs: [detect-changes, curator-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because curator-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # curator-cases FAILURE; only a SKIP (no diff) is tolerated.
     if: |
-      needs.detect-changes.outputs.curator == 'true' &&
+      always() && needs.curator-cases.result != 'failure' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        (needs.detect-changes.outputs.curator == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 70
@@ -203,7 +207,13 @@ jobs:
           ln -s "$CANON/artifacts/envs"      artifacts/envs
           [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
       - name: Overlay smoke config.yaml from subblock/curator/tests/smoke
-        run: cp subblock/curator/tests/smoke/config.yaml subblock/curator/config.yaml
+        # The template carries no endpoint/key; inject them from the
+        # shared env into the COPY (never back into the template).
+        run: |
+          set -euo pipefail
+          source /gpufs/haoli/cicd/shared/.env
+          cp subblock/curator/tests/smoke/config.yaml subblock/curator/config.yaml
+          python3 scripts/inject_smoke_secrets.py subblock/curator/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh curator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -275,7 +285,7 @@ jobs:
           CANON="${SHARED_RUNTIME}/tracer"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh tracer"; exit 1; }
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
           ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
           ln -s "$CANON/artifacts/env"                      artifacts/env
@@ -285,8 +295,8 @@ jobs:
           # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
           [ -d "$CANON/artifacts/agent-runtime" ] && \
             ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
-          [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
-            ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+          [ -f "$CANON/artifacts/processed_tasks.yaml" ] && \
+            ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml || true
           ls -la repos artifacts
       - name: Run tracer test cases
         working-directory: subblock/tracer
@@ -306,11 +316,15 @@ jobs:
   tracer-smoke:
     name: tracer tests (smoke)
     needs: [detect-changes, tracer-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because tracer-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # tracer-cases FAILURE; only a SKIP (no diff) is tolerated.
     if: |
-      needs.detect-changes.outputs.tracer == 'true' &&
+      always() && needs.tracer-cases.result != 'failure' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        (needs.detect-changes.outputs.tracer == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 55
@@ -347,7 +361,7 @@ jobs:
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/tracer"
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
           ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
           ln -s "$CANON/artifacts/env"                      artifacts/env
@@ -357,10 +371,16 @@ jobs:
           # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
           [ -d "$CANON/artifacts/agent-runtime" ] && \
             ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
-          [ -f "$CANON/artifacts/consumption_ledger.yaml" ] && \
-            ln -s "$CANON/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+          [ -f "$CANON/artifacts/processed_tasks.yaml" ] && \
+            ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml || true
       - name: Overlay smoke config.yaml from subblock/tracer/tests/smoke
-        run: cp subblock/tracer/tests/smoke/config.yaml subblock/tracer/config.yaml
+        # The template carries no endpoint/key; inject them from the
+        # shared env into the COPY (never back into the template).
+        run: |
+          set -euo pipefail
+          source /gpufs/haoli/cicd/shared/.env
+          cp subblock/tracer/tests/smoke/config.yaml subblock/tracer/config.yaml
+          python3 scripts/inject_smoke_secrets.py subblock/tracer/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh tracer
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -462,11 +482,15 @@ jobs:
   evaluator-smoke:
     name: evaluator tests (smoke)
     needs: [detect-changes, evaluator-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because evaluator-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # evaluator-cases FAILURE; only a SKIP (no diff) is tolerated.
     if: |
-      needs.detect-changes.outputs.evaluator == 'true' &&
+      always() && needs.evaluator-cases.result != 'failure' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        (needs.detect-changes.outputs.evaluator == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
     timeout-minutes: 55
@@ -508,7 +532,13 @@ jobs:
           [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
             || printf 'runs: []\n' > artifacts/index.yaml
       - name: Overlay smoke config.yaml from subblock/evaluator/tests/smoke
-        run: cp subblock/evaluator/tests/smoke/config.yaml subblock/evaluator/config.yaml
+        # The template carries no endpoint/key; inject them from the
+        # shared env into the COPY (never back into the template).
+        run: |
+          set -euo pipefail
+          source /gpufs/haoli/cicd/shared/.env
+          cp subblock/evaluator/tests/smoke/config.yaml subblock/evaluator/config.yaml
+          python3 scripts/inject_smoke_secrets.py subblock/evaluator/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh evaluator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -574,7 +604,7 @@ jobs:
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — run bash /gpufs/haoli/cicd/sync_runtime.sh trainer"; exit 1; }
           # actions/checkout creates empty placeholder dirs for declared
           # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
-          # The tracked artifacts/training_config/deepspeed/*.json come from the
+          # The tracked scripts/deepspeed/*.json come from the
           # checkout (case 07), so only repos/ + the uv env are symlinked.
           mkdir -p repos artifacts
           rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env
@@ -598,11 +628,15 @@ jobs:
   trainer-smoke:
     name: trainer tests (smoke)
     needs: [detect-changes, trainer-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because trainer-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # trainer-cases FAILURE; only a SKIP (no diff) is tolerated.
     if: |
-      needs.detect-changes.outputs.trainer == 'true' &&
+      always() && needs.trainer-cases.result != 'failure' &&
       (
         (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
-        (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        (needs.detect-changes.outputs.trainer == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     # The swe-lego-ci runner orchestrates either a configured remote GPU host
     # (private sft-remote.env) or a local GPU. Missing/failed prerequisites are
@@ -723,12 +757,12 @@ jobs:
           # tracer — uv envs + repos + agent runtime + ledger
           C="${SHARED_RUNTIME}/tracer"; cd "$GITHUB_WORKSPACE/subblock/tracer"
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/consumption_ledger.yaml
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$C/repos/harbor" repos/harbor
           ln -s "$C/repos/swe_data_process" repos/swe_data_process
           ln -s "$C/artifacts/env" artifacts/env
           [ -d "$C/artifacts/agent-runtime" ] && ln -s "$C/artifacts/agent-runtime" artifacts/agent-runtime || true
-          [ -f "$C/artifacts/consumption_ledger.yaml" ] && ln -s "$C/artifacts/consumption_ledger.yaml" artifacts/consumption_ledger.yaml || true
+          [ -f "$C/artifacts/processed_tasks.yaml" ] && ln -s "$C/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml || true
           # trainer — uv env + repos + 512 fixture (remote pod hosts the GPUs)
           C="${SHARED_RUNTIME}/trainer"; cd "$GITHUB_WORKSPACE/subblock/trainer"
           mkdir -p repos artifacts artifacts/data

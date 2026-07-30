@@ -32,8 +32,9 @@ Per-test exit codes: `0` pass · `77` skip · anything else fail.
 | 04 | LLM endpoint | `GET ${api_base_url}/models` returns 200 and the configured model is in `data[].id` | ~1 s |
 | 05 | HF dataset | `huggingface.co/api/datasets/<name>` reachable with the configured token (SKIP for `local` provider) | <1 s |
 | 06 | LiteLLM port | port from `litellm_proxy.port` is free, or held by a process the current uid owns | <1 s |
-| 07 | runtime image | `docker image inspect ${agent.runtime_image}` exits 0 (pre-pulled) | <1 s |
-| 08 | consumption ledger | ledger parses, every `done`/`failed`/`skipped` entry is also in `HARBOR_EXCLUDE_TASKS` | <1 s |
+| 07 | runtime image | reports whether `${agent.runtime_image}` is pre-pulled (SKIP when the runner cache is cold) | <1 s |
+| 08 | processed-tasks ledger | ledger parses, every `done`/`failed`/`skipped` entry is also in `HARBOR_EXCLUDE_TASKS` | <1 s |
+| 09 | dashboard regressions | public/no-sample exports omit full trajectories, latest archived run is shown, R2 reads every JSONL shard, smoke config matches production | <1 s |
 | 10 | **10-HF-task demo** *(smoke)* | swap config + `start.sh` against 10 HF tasks; ≥1 trial resolves within 30 min | up to 30 min |
 
 The 10-HF-task demo runs only with `--with-smoke` and is gated to `push`
@@ -74,7 +75,7 @@ cases/                         cheap deterministic checks
   05_hf_dataset.sh
   06_litellm_port.sh
   07_runtime_image.sh
-  08_consumption_ledger.sh
+  09_dashboard_regressions.sh
 smoke/                         expensive end-to-end runs (--with-smoke gates them)
   10_hf_task_demo.sh
 run.sh                         aggregator
@@ -98,7 +99,7 @@ contract depends on is non-empty: `meta_info.name == "tracer"`,
 `runtime_info.input.task_source.{provider, dataset_name}`,
 `runtime_info.input.harbor_job.{jobs_dir, n_concurrent, max_retries, timeout_multiplier}`,
 `runtime_info.input.agent.{name, version, runtime_image, max_turns}`,
-`runtime_info.input.sft_conversion.enabled`. Also enforces
+`runtime_info.input.sft_conversion.{enabled, tokenizer_name}`. Also enforces
 `task_source.provider ∈ {local, huggingface}`.
 </details>
 
@@ -159,16 +160,9 @@ isn't on PATH.
 <summary><code>cases/07_runtime_image.sh</code> — agent runtime pre-pulled</summary>
 
 `docker image inspect ${agent.runtime_image}` exits 0 against the
-configured `DOCKER_HOST`. CI must not pay a multi-GB pull mid-job.
-</details>
-
-<details>
-<summary><code>cases/08_consumption_ledger.sh</code> — ledger ↔ HARBOR_EXCLUDE_TASKS</summary>
-
-Parses `artifacts/consumption_ledger.yaml` and enforces: (1) every entry's
-status is one of `{pending, running, done, failed, skipped}`; (2) every
-entry whose status is `done`/`failed`/`skipped` has its `task_id` listed in
-`runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`. Lists up to 10 offenders.
+configured `DOCKER_HOST`. A present image passes; a cold runner cache skips
+because CI must not pay a multi-GB pull mid-job. Missing Docker access still
+fails as a runner configuration error.
 </details>
 
 <details>

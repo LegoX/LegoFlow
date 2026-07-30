@@ -3,7 +3,9 @@ title: Prepare Tasks
 description: Manifest-filtered task selection and exactly-once consumption
 ---
 
-tracer only ever rolls out tasks that curator has marked verified, and never rolls the same task out twice. Two mechanisms enforce this: the **manifest filter** during task preparation, and the **consumption ledger** plus exclude list during a run.
+Tracer supports a local curator source and a compatible Hugging Face source.
+Task preparation decides what is staged; the processed-task ledger and manual
+exclusion list decide what Harbor skips.
 
 ## Manifest-filtered copy
 
@@ -13,15 +15,20 @@ tracer only ever rolls out tasks that curator has marked verified, and never rol
 bash scripts/prepare_tasks.sh
 ```
 
-- If the source contains `verifiable_tasks.txt`, only the task IDs listed there are copied (a manifest-filtered copy). Unverified tasks are skipped.
-- If the manifest is missing, the script falls back to copying every task directory — so keep a manifest in the source.
+- For a local source with `verifiable_tasks.txt`, only listed task IDs are
+  copied.
+- For a local source without the manifest, the current compatibility behavior
+  copies every structurally valid task directory and reports the fallback.
+- For `provider: huggingface`, the dataset snapshot is downloaded under
+  `artifacts/tasks/.cache/`; archives are extracted if needed and a compatible
+  Harbor task root is staged.
 - The copy is idempotent: it skips when the target already holds valid Harbor task dirs. Pass `--overwrite` to rebuild.
 
 The task source is configured in `config.yaml` under `runtime_info.input.task_source` and is normally wired from curator's output via `meta_info.dependencies`.
 
-## The consumption ledger
+## The processed-tasks ledger
 
-`artifacts/consumption_ledger.yaml` is the source of truth for which task IDs have already been processed. Each entry has a status:
+`artifacts/processed_tasks.yaml` is the source of truth for which task IDs have already been processed. Each entry has a status:
 
 | Status | Meaning |
 | --- | --- |
@@ -31,19 +38,33 @@ The task source is configured in `config.yaml` under `runtime_info.input.task_so
 | `failed` | Errored out (timeout/OOM); excluded from future runs |
 | `skipped` | Intentionally not run; excluded |
 
-After each job, append or update one entry per task (with `submitted_at`, `completed_at`, `trajectory_path`, `reward`, and a note).
+After each job, the `/tracer:run` procedure inspects results and appends or
+updates one entry per task, including timestamps, trajectory path, reward, and
+an operator note.
 
 ## The exclude list
 
-Every task that is `done`, `failed`, or `skipped` must also appear in `HARBOR_EXCLUDE_TASKS` (under `environment.extra` in `config.yaml`). `start.sh` turns that space-separated list into Harbor `--exclude-task-name` flags so those tasks are never rolled out again.
+At launch, `start.sh` reads every terminal ledger entry
+(`done | failed | skipped`) and generates Harbor `--exclude-task-name` flags
+directly. There is no hand-copied ledger mirror in the config.
+
+`runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` is an independent,
+human-maintained list for tasks that should be blocked even when they are not
+represented by terminal ledger state, such as chronic timeout or OOM cases.
+Both sets are combined when the Harbor command is built. Smoke runs can opt out
+of ledger-derived exclusions with `HARBOR_LEDGER_EXCLUDE=0`.
 
 ```text
-curator tasks + verifiable_tasks.txt
-   └─ manifest filter ─▶ artifacts/tasks/<dataset>
-                           └─▶ Harbor job ◀── --exclude-task-name ── HARBOR_EXCLUDE_TASKS
-                                  │                                          ▲
-                                  └─ update entries ─▶ consumption_ledger.yaml
-                                                          (done / failed / skipped)
+local/HF source ─▶ prepare_tasks.sh ─▶ artifacts/tasks/<dataset>
+                                          │
+                                          ▼
+                                Harbor job selection
+                                   ▲             ▲
+                                   │             │
+                terminal ledger entries    HARBOR_EXCLUDE_TASKS
+                  (runtime observation)      (human decision)
 ```
 
-Together, the manifest gates *eligibility* and the ledger + exclude list guarantee *exactly-once* consumption.
+The manifest gates verified local inputs when present. Exactly-once protection
+depends on completing the post-run ledger bookkeeping; `start.sh` then enforces
+the recorded terminal state automatically on the next launch.

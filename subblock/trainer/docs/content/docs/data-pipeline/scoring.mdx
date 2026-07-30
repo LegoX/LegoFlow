@@ -21,7 +21,7 @@ LLM scoring (`llm_score.py`) is an **optional** second pass that uses a model to
 
 ## Eval-leak protection
 
-Scoring decides *quality*; the repo exclusion filter decides *eligibility*. All converters default to filtering out repos listed in `artifacts/data/excluded_repos.txt` — the SWE-bench Verified, Pro, and Multilingual benchmark repos — so evaluation tasks never appear in training data.
+Scoring decides *quality*; the repo exclusion filter decides *eligibility*. All converters default to filtering out repos listed in `scripts/excluded_repos.txt` — the SWE-bench Verified, Pro, and Multilingual benchmark repos — so evaluation tasks never appear in training data.
 
 Regenerate the list with:
 

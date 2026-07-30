@@ -61,7 +61,7 @@ echo ""
 # ── 1. Local file checks ──────────────────────────────────────────────────────
 echo "1. Local files"
 
-for f in CLAUDE.md config.yaml artifacts/index.yaml \
+for f in CLAUDE.md config.yaml \
          .claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md \
          scripts/validate_config.py; do
   if [[ -f "$ROOT_DIR/$f" ]]; then
@@ -70,6 +70,15 @@ for f in CLAUDE.md config.yaml artifacts/index.yaml \
     fail "missing: $f"
   fi
 done
+
+# artifacts/index.yaml is runtime state written by scripts/archive_run.sh (the
+# start.sh EXIT trap), not a precondition — and it is gitignored, so a fresh
+# clone legitimately has none. Absence is INFO, never a failure.
+if [[ -f "$ROOT_DIR/artifacts/index.yaml" ]]; then
+  ok "artifacts/index.yaml"
+else
+  info "artifacts/index.yaml absent (auto-created by archive_run.sh after first run)"
+fi
 
 for d in artifacts scripts subblock; do
   if [[ -d "$ROOT_DIR/$d" ]]; then
@@ -98,20 +107,42 @@ WARN=$((WARN+V_WARN))
 echo ""
 echo "3. Deployment & registry credentials"
 
-# Cloudflare Pages credentials — needed by the dashboard/docs deploy scripts
-# (docs/deploy_cloudflare_pages.sh, subblock/*/dashboard/run_cloudflare_pages_sync.sh).
+# These are the tree-wide, OPTIONAL credentials declared in root config.yaml ->
+# runtime_info.input.{cloudflare,docker}. scripts/shared_credentials.sh resolves
+# them as env > root config.yaml > legacy per-block env file, and every subblock
+# reads them through the same helper, so what is reported here is exactly what
+# the blocks will see. Absence is always a WARN, never a FAIL.
 CF_ENV_FILE="${ENV_FILE:-$HOME/.config/trajgen_progress_cloudflare.env}"
-CF_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
-CF_ACCOUNT="${CLOUDFLARE_ACCOUNT_ID:-}"
-if [[ (-z "$CF_TOKEN" || -z "$CF_ACCOUNT") && -f "$CF_ENV_FILE" ]]; then
-  CF_TOKEN="$(grep -E '^(export )?CLOUDFLARE_API_TOKEN=' "$CF_ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
-  CF_ACCOUNT="$(grep -E '^(export )?CLOUDFLARE_ACCOUNT_ID=' "$CF_ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"' || true)"
-fi
-if [[ -n "$CF_TOKEN" && -n "$CF_ACCOUNT" ]]; then
-  ok "cloudflare: credentials available (env or $CF_ENV_FILE)"
+if [[ -f "$ROOT_DIR/scripts/shared_credentials.sh" ]]; then
+  CF_LEGACY_ENV_FILE="$CF_ENV_FILE"
+  # shellcheck source=/dev/null
+  source "$ROOT_DIR/scripts/shared_credentials.sh"
+  load_shared_credentials "$ROOT_DIR"
 else
-  warn "cloudflare: CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not found (env or $CF_ENV_FILE) — dashboard/docs deploys will fail"
+  fail "scripts/shared_credentials.sh missing — blocks cannot resolve shared cloudflare/docker credentials"
 fi
+
+if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+  ok "cloudflare: account_id + api_token resolved from ${SHARED_CLOUDFLARE_SOURCE}"
+  # Availability, not just presence: verify the token against the Cloudflare API.
+  CF_PROBE="$(shared_cloudflare_probe)" && ok "cloudflare: $CF_PROBE" \
+    || warn "cloudflare: $CF_PROBE — deploys will fail until the token is fixed"
+  [[ -n "${CLOUDFLARE_PAGES_PROJECT_PREFIX:-}" ]] && \
+    info "cloudflare: Pages project prefix '${CLOUDFLARE_PAGES_PROJECT_PREFIX}'"
+elif [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" || -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+  warn "cloudflare: only one of account_id/api_token is set (from ${SHARED_CLOUDFLARE_SOURCE}) — both are required; deploys will fail"
+else
+  warn "cloudflare: not configured (optional) — set runtime_info.input.cloudflare in root config.yaml, or export CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID. Without it docs/deploy_cloudflare_pages.sh and every block's dashboard publish are unavailable; local dashboards still work."
+fi
+
+if [[ -n "${DOCKER_USERNAME:-}" && -n "${DOCKER_PASSWORD:-}" ]]; then
+  ok "docker registry: credentials resolved from ${SHARED_DOCKER_SOURCE} for ${DOCKER_REGISTRY:-docker.io}"
+elif [[ -n "${DOCKER_USERNAME:-}" || -n "${DOCKER_PASSWORD:-}" ]]; then
+  warn "docker registry: only one of username/password is set (from ${SHARED_DOCKER_SOURCE}) — both are required"
+else
+  info "docker registry: no credentials in root config.yaml runtime_info.input.docker (optional) — falling back to any existing docker login below"
+fi
+[[ -n "${DOCKER_MIRROR:-}" ]] && info "docker registry: pull-through mirror configured (${DOCKER_MIRROR})"
 
 # Docker Hub login — anonymous pulls are limited to 100 per 6h per IP;
 # tracer/evaluator pull task + agent-runtime images and can hit the limit
@@ -132,7 +163,7 @@ PY
 then
   ok "docker: Docker Hub login found in $DOCKER_CFG"
 else
-  warn "docker: no Docker Hub login in $DOCKER_CFG — anonymous pulls are capped at 100/6h per IP; run \`docker login\` to avoid mid-job pull failures in tracer/evaluator"
+  warn "docker: no Docker Hub login in $DOCKER_CFG — anonymous pulls are capped at 100/6h per IP; run \`bash scripts/docker_login.sh\` (uses the credentials above) or \`docker login\` to avoid mid-job pull failures in tracer/evaluator"
 fi
 
 # ── 4. SSH reachability ───────────────────────────────────────────────────────

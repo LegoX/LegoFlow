@@ -17,11 +17,13 @@ The upstream model is declared in `config.yaml` under `runtime_info.input.llm_ap
 
 ```yaml
 llm_api:
-  api_key: dummy-key
-  api_base_url: "http://llm10.jierungogogo.com/v1"
-  model: "openai/MiniMax-M2.7"
+  api_key: <your-key>
+  api_base_url: "https://your-openai-compatible-endpoint/v1"
+  model: "openai/Qwen3.6-35B-A3B"
   protocols: [openai_compatible, anthropic_compatible]
   served_via: per_job_litellm_proxy
+  input_cost_per_token: 0.0000021
+  output_cost_per_token: 0.0000084
 ```
 
 The proxy itself is configured under `runtime_info.input.litellm_proxy`:
@@ -29,9 +31,12 @@ The proxy itself is configured under `runtime_info.input.litellm_proxy`:
 ```yaml
 litellm_proxy:
   config_template: scripts/serve_llm/litellm_config.example.yaml
-  port: 4001
+  port: 4003
   master_key: dummy-key-cf
 ```
+
+The master key is the local proxy credential and may be a functional dummy.
+The upstream `llm_api.api_key` is real and must not be committed.
 
 ## Lifecycle
 
@@ -39,8 +44,14 @@ litellm_proxy:
 
 1. Renders a per-job config from the template into `artifacts/litellm/<job>/litellm_config_tracer.yaml`.
 2. Starts the proxy on `litellm_proxy.port`, passing the config to Harbor's LiteLLM serve script via `LITELLM_CONFIG`.
-3. Runs the Harbor job against the proxy.
+3. Starts the dedicated LiteLLM 1.83.14 environment and waits for the port to
+   become reachable.
+4. Runs the Harbor job against the proxy.
+5. Stops the proxy from the EXIT trap and archives the run, including failures
+   and interruptions.
 
 <Callout title="Stop the proxy after the job" type="warn">
-The proxy is a long-running process. When a job's inference is finished but the proxy is still up, stop the process started for this job — and only that one. Leaving it running holds the port and the upstream connection.
+The proxy is a long-running process. If a hard interruption bypasses normal
+cleanup, stop only the process group started for this job and matched to its
+configured port. Never kill unrelated LiteLLM processes on a shared host.
 </Callout>
