@@ -92,16 +92,23 @@ outcome and reward.
 Tracer **only** runs tasks listed in curator's `verifiable_tasks.txt`, and must
 never re-run a task it already processed. After every job:
 
-1. Update `artifacts/processed_tasks.yaml` — one entry per task with
-   `status` (`pending | running | done | failed | skipped`), `submitted_at`,
-   `completed_at`, `trajectory_path`, `reward`, `note`.
-2. Add every task now `done`, `failed` (excluded), or `skipped` to
-   `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` in `config.yaml`, so the next
-   `start.sh` skips it.
-3. Update `config.yaml`'s status block (`phase`, `progress`, `next_steps`,
-   `blockers`, `last_updated`). Remember `config.yaml` is one-shot per run —
-   the authoritative timeline is `artifacts/index.yaml` (written by
-   `archive_run.sh`).
+1. Append to `artifacts/processed_tasks.yaml` — **one flat entry per task**
+   under `runs:`, with `task_id`, `status` (`pending | running | done | failed |
+   skipped`), `submitted_at`, `completed_at`, `trajectory_path`, `reward`,
+   `note`. Keep it flat: `start.sh` derives the exclude list by reading
+   `runs[*].{task_id,status}`, so wrapping the entries in a per-job layer makes
+   it silently derive **nothing**.
+2. Do **not** copy those task ids into
+   `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`. `start.sh` already unions
+   the ledger-derived ids with that field at launch (see its "Tasks to skip come
+   from two independent places" comment). The split is deliberate: the ledger is
+   an *observation* of what this block consumed, `HARBOR_EXCLUDE_TASKS` is a
+   *human decision* to never run a task again (chronic OOM/timeout). Mirroring
+   the ledger by hand is what previously let the two drift apart, and it grows
+   `config.yaml` by one id per task forever.
+3. Do not add a `status:` block to `config.yaml` — that section is retired (see
+   the root `CLAUDE.md`). `config.yaml` is one-shot per run; the authoritative
+   timeline is `artifacts/index.yaml`, written by `archive_run.sh`.
 
 ## Step 7 — Optional dashboard/SFT refresh
 

@@ -561,6 +561,18 @@ echo ""
 echo "--- 7. Model API ---"
 [[ -n "$MODEL_API_BASE_URL" ]] && ok "runtime_info.input.llm_api.api_base_url = $MODEL_API_BASE_URL" || fail "runtime_info.input.llm_api.api_base_url is required"
 [[ -n "$MODEL_API_MODEL" ]] && ok "runtime_info.input.llm_api.model = $MODEL_API_MODEL" || fail "runtime_info.input.llm_api.model is required"
+# The value is copied verbatim into the generated proxy's litellm_params.model.
+# Without a provider prefix LiteLLM cannot route it, so the deployment is never
+# healthy: the proxy serves an empty model list and every agent request dies on
+# "400 no healthy deployments", one turn in, with reward 0. The upstream /models
+# probe below still passes, so nothing else here catches it.
+if [[ -n "$MODEL_API_MODEL" ]]; then
+  if [[ "$MODEL_API_MODEL" == */* ]]; then
+    ok "llm_api.model carries a provider prefix: ${MODEL_API_MODEL%%/*}/"
+  else
+    fail "llm_api.model has no provider prefix ('$MODEL_API_MODEL'); LiteLLM cannot infer the provider and every agent call fails with 'no healthy deployments'. Use e.g. openai/$MODEL_API_MODEL"
+  fi
+fi
 if [[ -n "$MODEL_API_KEY" ]]; then
   ok "runtime_info.input.llm_api.api_key is set"
 else
@@ -760,6 +772,27 @@ if [[ -n "$value" ]]; then
     ok "agent runtime_image is present locally: $value"
   else
     warn "agent runtime_image not pulled locally (will be pulled at first task): $value"
+  fi
+fi
+
+# agent.runtime_host_path — start.sh bind-mounts this path when it is non-empty,
+# and only falls back to mounting the runtime out of runtime_image when it is
+# empty. A non-empty path that does not exist therefore mounts nothing and the
+# agent binary is missing inside the container.
+RUNTIME_HOST_PATH="$(cfg runtime_info.input.agent.runtime_host_path)"
+if [[ -z "$RUNTIME_HOST_PATH" ]]; then
+  ok "agent.runtime_host_path is empty; runtime is mounted from runtime_image"
+else
+  RUNTIME_HOST_ABS="$(abspath "$RUNTIME_HOST_PATH")"
+  RUNTIME_ROOT="$(cfg runtime_info.input.runtime_mount.container_runtime_root)"
+  [[ -z "$RUNTIME_ROOT" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]] &&
+    RUNTIME_ROOT="/opt/custom-agent-runtime/claude-code"
+  if [[ ! -d "$RUNTIME_HOST_ABS" ]]; then
+    fail "agent.runtime_host_path does not exist: $RUNTIME_HOST_PATH — start.sh would bind-mount it empty. Pre-extract it from $value (docker create + docker cp <cid>:$RUNTIME_ROOT), or set the field to \"\" to mount from the image."
+  elif [[ ! -x "$RUNTIME_HOST_ABS/bin/claude" ]]; then
+    fail "agent.runtime_host_path exists but has no executable bin/claude: $RUNTIME_HOST_PATH — re-extract it from $value"
+  else
+    ok "agent runtime_host_path is pre-extracted: $RUNTIME_HOST_PATH"
   fi
 fi
 

@@ -35,6 +35,8 @@ def main():
     print(f"TIMEOUT={params.get('timeout', 3200)}")
     print(f"CC_TIMEOUT={params.get('cc_timeout', 2400)}")
     print(f"N_CONCURRENT={params.get('n_concurrent', 16)}")
+    max_verified = params.get("max_verified_tasks", 10)
+    print(f"MAX_VERIFIED_TASKS={'' if max_verified == 'all' else max_verified}")
 
 
 if __name__ == "__main__":

@@ -85,16 +85,19 @@ runtime_info:
       anthropic_base_url: http://127.0.0.1:4010   # native: provider URL | openai_proxy: local proxy URL
       cc_proxy_port: 4010                     # openai_proxy only
 
+    github_token: ""    # never fill in config.yaml; use GITHUB_TOKENS/GITHUB_TOKEN or gh_token.txt
+
     # Per-language knobs read by scripts/read_params.py + scripts/create_<lang>.sh.
+    # max_verified_tasks: N = stop after N verified tasks; "all" = no cap, consume all collected PRs.
     languages:
-      py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 20 } }
-      js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-      ts:   { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }
-      go:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-      c:    { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-      cpp:  { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-      java: { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-      rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }
+      py:   { enabled: false,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 24, max_verified_tasks: 256 } }
+      js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
+      ts:   { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16, max_verified_tasks: 128 } }
+      go:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
+      c:    { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
+      cpp:  { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
+      java: { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
+      rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16, max_verified_tasks: 128 } }
 
   output:
     swe_tasks_dir:
@@ -103,9 +106,9 @@ runtime_info:
       structure: "artifacts/swe_tasks/{lang}-cc/{task_id}/ with instruction.md, environment/, solution/, tests/"
 
     merged_tasks_dir:
-      path: artifacts/merged_swe_tasks
+      path: artifacts/merged_swe_tasks_copy
       description: Optional flattened directory containing all verified tasks from all languages (populated by scripts/extract_verified_tasks.py)
-      structure: "artifacts/merged_swe_tasks/{task_id}/ with instruction.md, environment/, solution/, tests/"
+      structure: "artifacts/merged_swe_tasks_copy/{task_id}/ with instruction.md, environment/, solution/, tests/"
       extract_command: python scripts/extract_verified_tasks.py
 
     logs:

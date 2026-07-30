@@ -85,6 +85,26 @@ For GitHub collection, `repos/swegen/tools/collect_prs_wo_image.py` reads
 tokens from `repos/swegen/gh_token.txt` by default; set
 `COLLECT_GITHUB_TOKEN_FILE` when using a different token file.
 
+## Step 3b - Start the local LiteLLM CC proxy (openai_proxy mode only)
+
+When `runtime_info.input.llm_api.cc_provider_mode == openai_proxy` and
+`api_key`/`api_base_url`/`pr_model` are filled (not `human`), the Claude Code
+verification path needs the local LiteLLM proxy running — do this now instead
+of leaving it for the user:
+
+1. If `scripts/litellm_cc_proxy.yaml` is missing or still has
+   `<UPSTREAM_OPENAI_BASE_URL>`/`<UPSTREAM_MODEL>`/`<API_KEY>` placeholders,
+   copy it from `scripts/litellm_cc_proxy.example.yaml` and substitute those
+   three placeholders with `llm_api.api_base_url` / `llm_api.pr_model` /
+   `llm_api.api_key` (the CC path maps `claude-*` aliases to `pr_model`, not
+   `task_model`).
+2. Run `bash scripts/start_with_openai_api.sh --proxy-only` — it reuses an
+   already-healthy proxy on `cc_proxy_port` or starts one, waits for
+   `/health`, then exits without touching `create_all_bg`/`start.sh`.
+
+This step is skipped when `cc_provider_mode == native` (no local proxy) or
+when `llm_api` is still unfilled.
+
 ## Step 4 - Create expected local directories
 
 Create directories used by scripts and smoke tests:

@@ -30,7 +30,7 @@ echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 # of truth for already successful tasks; external Feb skip files are no longer needed.
 swegen create \
   --input-ids-file "${PROJECT_ROOT}/artifacts/collected_prs/javascript_pr_ids.txt" \
-  --max-pr "${SWEGEN_MAX_PR:-5000}" \
+  --max-pr "${SWEGEN_MAX_PR:-${MAX_VERIFIED_TASKS:-5000}}" \
   --n-concurrent "${N_CONCURRENT}" \
   --output "${PROJECT_ROOT}/artifacts/swe_tasks/js-cc" \
   --state-dir "$STATE_DIR" \

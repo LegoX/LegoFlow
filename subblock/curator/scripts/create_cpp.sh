@@ -25,7 +25,7 @@ echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 
 swegen create \
   --input-ids-file "${PROJECT_ROOT}/artifacts/collected_prs/cpp_pr_ids.txt" \
-  --max-pr "${SWEGEN_MAX_PR:-5000}" \
+  --max-pr "${SWEGEN_MAX_PR:-${MAX_VERIFIED_TASKS:-5000}}" \
   --n-concurrent "${N_CONCURRENT}" \
   --output "${PROJECT_ROOT}/artifacts/swe_tasks/cpp-cc" \
   --state-dir "$STATE_DIR" \
