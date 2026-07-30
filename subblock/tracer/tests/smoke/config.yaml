@@ -12,7 +12,7 @@ meta_info:
     from:
       # SMOKE: task_source.provider is huggingface, so the curator dep is inactive.
       task_source.dataset_name:
-        from: curator.output.swe_tasks_dir
+        from: curator.output.merged_tasks_dir
         when: {task_source.provider: local}
     to: {}
 
