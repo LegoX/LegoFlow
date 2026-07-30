@@ -12,9 +12,14 @@ DEFAULT_SWE_TASKS_DIR = "artifacts/swe_tasks"
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lang", required=True, help="Language key (py, js, ts, go, c, cpp, java, rust)")
+    parser.add_argument("--lang", help="Language key (py, js, ts, go, c, cpp, java, rust)")
     parser.add_argument("--config-yaml", default="config.yaml", help="Path to config.yaml")
+    parser.add_argument("--list-enabled", action="store_true",
+                        help="Print the language keys whose `enabled` is true, one per line")
     args = parser.parse_args()
+
+    if not args.lang and not args.list_enabled:
+        parser.error("one of --lang or --list-enabled is required")
 
     yaml_path = Path(args.config_yaml)
     if not yaml_path.exists():
@@ -28,6 +33,12 @@ def main():
     runtime_info = config.get("runtime_info", {})
     input_config = runtime_info.get("input", {})
     langs = input_config.get("languages", {})
+
+    if args.list_enabled:
+        for name, entry in langs.items():
+            if (entry or {}).get("enabled", True):
+                print(name)
+        return
 
     if args.lang not in langs:
         print(f"Error: language '{args.lang}' not found in {yaml_path}", file=sys.stderr)

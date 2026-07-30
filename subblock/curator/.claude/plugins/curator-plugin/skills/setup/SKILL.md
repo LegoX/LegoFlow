@@ -180,4 +180,4 @@ llm_api:
 
 ### languages
 
-`languages.<lang>.params` (timeout / cc_timeout / n_concurrent) are read by `scripts/read_params.py` + `scripts/create_<lang>.sh`. `enabled` is used by checks/dashboard only; `create_all_bg.sh` starts all eight scripts — run a specific `create_<lang>.sh` to limit generation.
+`languages.<lang>.params` (timeout / cc_timeout / n_concurrent) are read by `scripts/read_params.py` + `scripts/create_<lang>.sh`. `enabled` selects which languages `create_all_bg.sh` launches (`python scripts/read_params.py --list-enabled` shows the current set) — set it to `false` to drop a language, or run a specific `create_<lang>.sh` to generate just one.
