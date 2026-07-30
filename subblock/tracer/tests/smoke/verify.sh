@@ -11,7 +11,10 @@
 # (10 tasks, 2 concurrent, 30-40 min budget) a capable model legitimately solves
 # 0–2 — gating on RESOLVED makes the smoke flaky purely on LLM luck.
 #
-# Exit 0 = PASS, 77 = SKIP (no result.json produced — earlier SKIP), 1 = FAIL.
+# Exit 0 = PASS, 1 = FAIL. Producing nothing at all is a FAIL, not a SKIP:
+# a run that dies before Harbor (missing ledger, refused launch) looked
+# identical to "nothing to check" and turned the job green. This mirrors
+# evaluator's verify.sh, which has always failed in that situation.
 
 set -uo pipefail
 
@@ -19,8 +22,9 @@ BLOCK_DIR="${BLOCK_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 SMOKE_JOBS_DIR="$BLOCK_DIR/artifacts/jobs/smoke"
 
 if [[ ! -d "$SMOKE_JOBS_DIR" ]]; then
-  echo "SKIP: no $SMOKE_JOBS_DIR — start.sh likely failed before harbor ran"
-  exit 77
+  echo "FAIL: no $SMOKE_JOBS_DIR — start.sh never reached harbor; the reason is"
+  echo "      in artifacts/logs/smoke-launch.log (the poller prints it above)"
+  exit 1
 fi
 
 SCAN="$(SMOKE_JOBS_DIR="$SMOKE_JOBS_DIR" python3 - <<'PY'
@@ -53,8 +57,9 @@ scored=$(sed -n 's/.*SCORED:\([0-9]*\).*/\1/p' <<<"$SCAN")
 total=${total:-0}; scored=${scored:-0}
 
 if [[ "$total" == "0" ]]; then
-  echo "SKIP: no result.json files written under $SMOKE_JOBS_DIR"
-  exit 77
+  echo "FAIL: no result.json written under $SMOKE_JOBS_DIR — harbor started but"
+  echo "      no trial reached a result"
+  exit 1
 fi
 if [[ "$scored" -ge 1 ]]; then
   echo "PASS: tracer pipeline produced >=1 scored trial ($SCAN)"

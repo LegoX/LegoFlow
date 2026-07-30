@@ -80,6 +80,20 @@ runtime_dir="$4"
 shared_root="${runtime_dir%/runtime/sft}"
 export PATH="$shared_root/uv/bin:/root/.local/bin:$PATH"
 
+# Redefined here: the heredoc is quoted, so the caller's definition never
+# crosses the ssh boundary (this failed with exit 127). The env file lives at a
+# different absolute path on the pod than on the runner, so derive it from
+# shared_root rather than hard-coding the runner's.
+prepare_smoke_config() {  # <block_dir> -> echoes the run copy
+  local bd="$1"
+  local run_cfg="$bd/artifacts/.config.smoke-run.yaml"
+  mkdir -p "$bd/artifacts"
+  cp "$bd/tests/smoke/config.yaml" "$run_cfg"
+  if [ -f "$shared_root/.env" ]; then . "$shared_root/.env"; fi
+  python3 "$bd/../../scripts/inject_smoke_secrets.py" "$run_cfg" >&2
+  echo "$run_cfg"
+}
+
 cd "$repo_dir"
 git -c fetch.recurseSubmodules=false fetch origin "$sha"
 git reset --hard "$sha"
