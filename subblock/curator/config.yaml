@@ -65,7 +65,6 @@ runtime_info:
 
     github_token: ""    # supplied via GITHUB_TOKENS/GITHUB_TOKEN or gh_token.txt
 
-    # Per-language knobs read by scripts/read_params.py + scripts/create_<lang>.sh.
     # max_verified_tasks: N = stop after N verified tasks; "all" = no cap, consume all collected PRs.
     languages:
       py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 24, max_verified_tasks: 256 } }
@@ -84,9 +83,9 @@ runtime_info:
       structure: "artifacts/swe_tasks/{lang}-cc/{task_id}/ with instruction.md, environment/, solution/, tests/"
 
     merged_tasks_dir:
-      path: artifacts/merged_swe_tasks_copy
+      path: artifacts/merged_swe_tasks
       description: Optional flattened directory containing all verified tasks from all languages (populated by scripts/extract_verified_tasks.py)
-      structure: "artifacts/merged_swe_tasks_copy/{task_id}/ with instruction.md, environment/, solution/, tests/"
+      structure: "artifacts/merged_swe_tasks/{task_id}/ with instruction.md, environment/, solution/, tests/"
       extract_command: python scripts/extract_verified_tasks.py
 
     logs:
