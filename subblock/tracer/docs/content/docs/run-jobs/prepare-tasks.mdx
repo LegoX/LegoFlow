@@ -44,15 +44,35 @@ an operator note.
 
 ## The exclude list
 
-At launch, `start.sh` reads every terminal ledger entry
-(`done | failed | skipped`) and generates Harbor `--exclude-task-name` flags
-directly. There is no hand-copied ledger mirror in the config.
+`runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` names exclusion *sources*,
+not task ids. In production it is one line naming two files:
 
-`runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` is an independent,
-human-maintained list for tasks that should be blocked even when they are not
-represented by terminal ledger state, such as chronic timeout or OOM cases.
-Both sets are combined when the Harbor command is built. Smoke runs can opt out
-of ledger-derived exclusions with `HARBOR_LEDGER_EXCLUDE=0`.
+```yaml
+env_extra:
+  HARBOR_EXCLUDE_TASKS: excluded_tasks.txt artifacts/processed_tasks.yaml
+```
+
+| Source | Holds | Tracked in git |
+|---|---|---|
+| `excluded_tasks.txt` | tasks a human retired for good (chronic timeout, OOM) | yes — the decision must survive a fresh clone |
+| `artifacts/processed_tasks.yaml` | run history: what this block already consumed | no — `artifacts/` is gitignored runtime state |
+
+At launch `start.sh` hands the field to `scripts/resolve_exclude_tasks.py`,
+which expands each whitespace-separated token:
+
+| Token | Expands to |
+|---|---|
+| a YAML ledger path | every terminal entry (`done \| failed \| skipped`) |
+| a plain-text file path | one task id per line (`#` comments ignored) |
+| anything else | a literal task id |
+
+so an operator can still pin a one-off id inline without touching the ledger.
+Smoke runs opt out of the ledger-derived half with `HARBOR_LEDGER_EXCLUDE=0`;
+literal ids and text lists survive that, because those are decisions rather than
+run history.
+
+**To retire a task permanently**, append its id to `excluded_tasks.txt`
+instead of growing config.yaml.
 
 ```text
 local/HF source ─▶ prepare_tasks.sh ─▶ artifacts/tasks/<dataset>
@@ -61,8 +81,8 @@ local/HF source ─▶ prepare_tasks.sh ─▶ artifacts/tasks/<dataset>
                                 Harbor job selection
                                    ▲             ▲
                                    │             │
-                terminal ledger entries    HARBOR_EXCLUDE_TASKS
-                  (runtime observation)      (human decision)
+                     processed_tasks.yaml   excluded_tasks.txt
+                        (run history)        (human decision)
 ```
 
 The manifest gates verified local inputs when present. Exactly-once protection

@@ -19,8 +19,9 @@ preparation step inline.
 
 `start.sh` runs the dry-run preflight, generates a per-job LiteLLM config,
 starts the proxy on the configured port, and builds the Harbor command. It
-combines human-maintained `HARBOR_EXCLUDE_TASKS` entries with terminal tasks
-derived directly from `artifacts/processed_tasks.yaml`, then writes results
+resolves `HARBOR_EXCLUDE_TASKS` — which names `excluded_tasks.txt` and
+`artifacts/processed_tasks.yaml` rather than listing ids — into
+`--exclude-task-name` flags, then writes results
 under `artifacts/jobs/`. If `sft_conversion.enabled` is `true`, conversion runs
 after Harbor exits. Its EXIT trap stops the proxy and archives the run.
 

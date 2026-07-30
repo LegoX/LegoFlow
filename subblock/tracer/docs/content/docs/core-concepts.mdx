@@ -48,16 +48,16 @@ A **scaffold** is the agent harness that drives the model through a task — for
 ## Processed-tasks ledger
 
 The **processed-tasks ledger** (`artifacts/processed_tasks.yaml`) is the source
-of truth for task states (`pending | running | done | failed | skipped`).
-`start.sh` reads terminal entries (`done | failed | skipped`) directly and
-adds Harbor exclusion flags at launch. They are not copied into
-`HARBOR_EXCLUDE_TASKS`.
+of truth for task states (`pending | running | done | failed | skipped`) and for
+what this block already consumed. It is runtime state: `artifacts/` is
+gitignored, so the ledger does not survive a fresh clone. Tasks a human retired
+for good live in the git-tracked `excluded_tasks.txt` instead.
 
-`HARBOR_EXCLUDE_TASKS` is a separate, human-maintained decision list for tasks
-that should remain blocked independently of the ledger, such as chronic
-timeouts or OOMs. The tracer plugin updates the ledger after inspecting each
-job; without that bookkeeping, a completed task is not protected on a future
-run.
+`runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` names both files rather than
+listing ids, so config.yaml stays one line and cannot drift from them.
+`start.sh` resolves it at launch into `--exclude-task-name` flags. The tracer
+plugin updates the ledger after inspecting each job; without that bookkeeping, a
+completed task is not protected on a future run.
 
 ## SFT data (IM and LF)
 

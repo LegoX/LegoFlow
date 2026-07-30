@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Read per-language params from config.yaml and output shell variables."""
 import argparse
+import shlex
 import sys
 from pathlib import Path
 
 import yaml
+
+DEFAULT_SWE_TASKS_DIR = "artifacts/swe_tasks"
 
 
 def main():
@@ -37,6 +40,16 @@ def main():
     print(f"N_CONCURRENT={params.get('n_concurrent', 16)}")
     max_verified = params.get("max_verified_tasks", 10)
     print(f"MAX_VERIFIED_TASKS={'' if max_verified == 'all' else max_verified}")
+
+    # Emitted resolved so create_<lang>.sh uses the declared output pool
+    # instead of hardcoding artifacts/swe_tasks.
+    output = (config.get("runtime_info") or {}).get("output") or {}
+    swe_tasks_dir = ((output.get("swe_tasks_dir") or {}).get("path")
+                     or DEFAULT_SWE_TASKS_DIR)
+    resolved = Path(swe_tasks_dir)
+    if not resolved.is_absolute():
+        resolved = yaml_path.resolve().parent / resolved
+    print(f"SWE_TASKS_DIR={shlex.quote(str(resolved))}")
 
 
 if __name__ == "__main__":

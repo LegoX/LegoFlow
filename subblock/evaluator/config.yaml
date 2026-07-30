@@ -34,10 +34,11 @@ meta_info:
 runtime_info:
   input:
     # MODE A (remote API) example: /evaluator:setup reference; MODE B (local vLLM checkpoint) active;
+    # How to fill: docs/content/docs/reference/io.mdx -> LLM endpoint
     llm_api:
-      api_key: human                       # must match vLLM --api-key
+      api_key: human
       api_base_url: human
-      model: "openai/Qwen3.5-35B-A3B"          # openai/<vLLM --served-model-name>
+      model: "openai/Qwen3.5-35B-A3B"
       description: Example local checkpoint served via vLLM; see scripts/serve_local_model.sh.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy

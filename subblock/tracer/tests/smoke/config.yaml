@@ -95,8 +95,9 @@ runtime_info:
       exclude_repos_file: ""
 
     env_extra:
-      # SMOKE: same exclusion list as production — task IDs known to fail.
-      HARBOR_EXCLUDE_TASKS: elastic__elasticsearch-py-3329 elastic__elasticsearch-py-3332 cartography-cncf__cartography-1673 agentscope-ai__agentscope-885 agentscope-ai__agentscope-1342 aider-ai__aider-4146 agentscope-ai__agentscope-964 django-guardian__django-guardian-677 567-labs__instructor-1897 cartography-cncf__cartography-1751 cartography-cncf__cartography-2031
+      # SMOKE: same exclusion source as production; the smoke re-runs its own
+      # fixtures, so it neutralises the ledger half with HARBOR_LEDGER_EXCLUDE=0.
+      HARBOR_EXCLUDE_TASKS: excluded_tasks.txt artifacts/processed_tasks.yaml
       # SMOKE: force a single uvicorn worker (skip gunicorn's 30s boot timeout).
       LITELLM_NUM_WORKERS: "1"
 

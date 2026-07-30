@@ -22,6 +22,7 @@ cd "$STATE_DIR"
 mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
 # Read per-language params from config.yaml
 eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang js --config-yaml "${PROJECT_ROOT}/config.yaml")
+: "${SWE_TASKS_DIR:?read_params.py emitted no SWE_TASKS_DIR — check runtime_info.output.swe_tasks_dir.path in config.yaml}"
 echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 
 # JavaScript tasks are often dependency-heavy and test startup can be slow.
@@ -32,7 +33,7 @@ swegen create \
   --input-ids-file "${PROJECT_ROOT}/artifacts/collected_prs/javascript_pr_ids.txt" \
   --max-pr "${SWEGEN_MAX_PR:-${MAX_VERIFIED_TASKS:-5000}}" \
   --n-concurrent "${N_CONCURRENT}" \
-  --output "${PROJECT_ROOT}/artifacts/swe_tasks/js-cc" \
+  --output "${SWE_TASKS_DIR}/js-cc" \
   --state-dir "$STATE_DIR" \
   --timeout "${TIMEOUT}" \
   --cc-timeout "${CC_TIMEOUT}" \

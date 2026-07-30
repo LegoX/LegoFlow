@@ -867,7 +867,10 @@ SFT_DATA_DIR_OUT="$(cfg runtime_info.output.sft_data_dir.path)"
 echo ""
 echo "--- 8c. Processed-tasks ledger ---"
 LEDGER_PATH="$BLOCK_DIR/artifacts/processed_tasks.yaml"
-EXCLUDE_TASKS_RAW="$(cfg runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS)"
+EXCLUDE_SPEC="$(cfg runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS)"
+# Resolve the same way start.sh does, so this reports what a launch would skip.
+EXCLUDE_TASKS_RAW="$(python3 "$BLOCK_DIR/scripts/resolve_exclude_tasks.py" \
+  --block-dir "$BLOCK_DIR" --spec "$EXCLUDE_SPEC" 2>/dev/null | tr '\n' ' ' || true)"
 if [[ ! -f "$LEDGER_PATH" ]]; then
   fail "artifacts/processed_tasks.yaml is missing — initialise with: printf 'description: %s\nruns: []\n' \"Tracer task processed-tasks ledger\" > '$LEDGER_PATH'"
 else

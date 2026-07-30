@@ -22,6 +22,7 @@ cd "$STATE_DIR"
 mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
 # Read per-language params from config.yaml
 eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang py --config-yaml "${PROJECT_ROOT}/config.yaml")
+: "${SWE_TASKS_DIR:?read_params.py emitted no SWE_TASKS_DIR — check runtime_info.output.swe_tasks_dir.path in config.yaml}"
 echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 
 # Align Python with the other languages' thresholds/timeouts to avoid over-filtering
@@ -33,7 +34,7 @@ swegen create \
   --input-ids-file "${PROJECT_ROOT}/artifacts/collected_prs/python_pr_ids.txt" \
   --max-pr "${SWEGEN_MAX_PR:-${MAX_VERIFIED_TASKS:-5000}}" \
   --n-concurrent "${N_CONCURRENT}" \
-  --output "${PROJECT_ROOT}/artifacts/swe_tasks/py-cc" \
+  --output "${SWE_TASKS_DIR}/py-cc" \
   --state-dir "$STATE_DIR" \
   --timeout "${TIMEOUT}" \
   --cc-timeout "${CC_TIMEOUT}" \

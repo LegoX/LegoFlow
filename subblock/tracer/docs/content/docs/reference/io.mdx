@@ -35,7 +35,23 @@ checkouts:
 | `harbor_job` | Jobs directory, task cap, concurrency, retries, and timeout multiplier |
 | `agent` | Rollout agent identity, version, image/runtime mount, turns, and sampling |
 | `sft_conversion` | Optional conversion, scaffold, tokenizer, filters, and output directory |
-| `env_extra.HARBOR_EXCLUDE_TASKS` | Human-maintained task exclusions, separate from processed ledger state |
+| `env_extra.HARBOR_EXCLUDE_TASKS` | Exclusion sources: `excluded_tasks.txt` (human, tracked) + `artifacts/processed_tasks.yaml` (run history); literal ids also accepted |
+
+### Verifying the endpoint
+
+`llm_api.api_base_url` must be the OpenAI-compatible base **including `/v1`**,
+and `llm_api.model` carries the `openai/` prefix LiteLLM expects. Check both
+with a real completion rather than a catalog listing:
+
+```bash
+bash scripts/probe_llm_endpoint.sh          # 0 PASS, 1 FAIL, 77 SKIP
+```
+
+It requires a non-empty text reply — a gateway can answer `GET /models` from
+local config while every completion fails, and a reasoning model can return
+HTTP 200 with empty content. On failure it retries the neighbouring URL/model
+shapes (missing `/v1`, stray provider prefix) and prints the exact edit. CI
+runs it as `tests/cases/04_llm_endpoint.sh`.
 
 The current profile is summarized below. API secrets remain placeholders:
 
