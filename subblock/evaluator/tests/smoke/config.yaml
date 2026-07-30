@@ -58,6 +58,7 @@ runtime_info:
       dataset_name: swebench-verified   # SMOKE: full benchmark; harbor_job.n_tasks caps it to 10
       version: "1.0"
       registry_path: repos/harbor/registry.json
+      no_hack: false                    # SMOKE: keep ordinary registry path
 
     harbor_job:
       jobs_dir: artifacts/jobs/smoke    # SMOKE: was artifacts/jobs
@@ -71,8 +72,8 @@ runtime_info:
 
     agent:
       name: custom-openhands-sdk
-      version: 1.14.0
-      runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.5
+      version: 1.33.0
+      runtime_image: docker.io/jierun/c-oh-sdk-1.33.0:v0.1
       runtime_host_path: artifacts/runtime/openhands-sdk
       max_turns: 50                     # SMOKE: was 200
       temperature: 1.0

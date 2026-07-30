@@ -43,6 +43,7 @@ REQUIRED = [
     "runtime_info.input.task_source.dataset_name",
     "runtime_info.input.task_source.version",
     "runtime_info.input.task_source.registry_path",
+    "runtime_info.input.task_source.no_hack",
     "runtime_info.input.harbor_job.jobs_dir",
     "runtime_info.input.harbor_job.n_concurrent",
     "runtime_info.input.harbor_job.max_retries",
@@ -80,6 +81,11 @@ if get(cfg, "meta_info.name") != "evaluator":
 prov = get(cfg, "runtime_info.input.task_source.provider")
 if prov != "harbor_registry":
     print(f"FAIL: task_source.provider must be 'harbor_registry' (got {prov!r})", file=sys.stderr)
+    sys.exit(1)
+
+no_hack = get(cfg, "runtime_info.input.task_source.no_hack")
+if not isinstance(no_hack, bool):
+    print(f"FAIL: task_source.no_hack must be a bool (got {no_hack!r})", file=sys.stderr)
     sys.exit(1)
 
 # Harbor jobs_dir prefix check (mirrors dryrun.sh section 8). Catches a smoke

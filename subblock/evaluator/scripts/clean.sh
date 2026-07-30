@@ -66,67 +66,81 @@ if [[ "$(basename "$ARTIFACTS_DIR")" != "artifacts" || "$ARTIFACTS_DIR" == "/" \
     exit 2
 fi
 
-if [[ ! -d "$ARTIFACTS_DIR" ]]; then
-    echo "  (no artifacts/ dir at $ARTIFACTS_DIR — nothing to clean)"
-    exit 0
-fi
-
-if command -v flock >/dev/null 2>&1; then
-    exec 8>"$ARTIFACTS_DIR/.smoke.lock"
-    if ! flock -n 8; then
-        echo "ERROR: refusing to clean while an eval smoke is running" >&2
-        exit 2
-    fi
-fi
-
 is_tracked() {
     [[ -n "$(git -C "$BLOCK_DIR" ls-files -- "$1" 2>/dev/null | head -1)" ]]
 }
 
-if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
-    echo "############################################################"
-    echo "  CLEAN ALL — $BLOCK_NAME: wipes $ARTIFACTS_DIR entirely,"
-    echo "  keeping only git-tracked files. This deletes the Harbor uv"
-    echo "  env and LiteLLM venv, every eval job result and trajectory,"
-    echo "  the prepared gold datasets, the extracted agent runtimes,"
-    echo "  and all run archives."
-    echo ""
-    echo "  Make sure no eval job is running."
-    echo "############################################################"
-    if [[ ! -t 0 ]]; then
-        echo "ERROR: --all needs an interactive terminal (or pass --yes)." >&2
-        exit 2
+if [[ ! -d "$ARTIFACTS_DIR" ]]; then
+    echo "  (no artifacts/ dir at $ARTIFACTS_DIR — skipping artifacts cleanup)"
+else
+    if command -v flock >/dev/null 2>&1; then
+        exec 8>"$ARTIFACTS_DIR/.smoke.lock"
+        if ! flock -n 8; then
+            echo "ERROR: refusing to clean while an eval smoke is running" >&2
+            exit 2
+        fi
     fi
-    read -r -p "Type 'yes' to continue: " reply
-    [[ "$reply" == "yes" ]] || { echo "Aborted."; exit 1; }
-    read -r -p "Type 'clean all $BLOCK_NAME' to proceed: " reply2
-    [[ "$reply2" == "clean all $BLOCK_NAME" ]] || { echo "Aborted."; exit 1; }
-fi
 
-shopt -s nullglob dotglob
-for entry in "$ARTIFACTS_DIR"/*; do
-    name="$(basename "$entry")"
-    skip=0
-    for k in "${KEEP_ALWAYS[@]}"; do
-        [[ "$name" == "$k" ]] && { skip=1; break; }
-    done
-    if [[ "$skip" == "0" && "$MODE" == "default" ]]; then
-        for k in "${KEEP_DEFAULT[@]}"; do
+    if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
+        echo "############################################################"
+        echo "  CLEAN ALL — $BLOCK_NAME: wipes $ARTIFACTS_DIR entirely,"
+        echo "  keeping only git-tracked files. This deletes the Harbor uv"
+        echo "  env and LiteLLM venv, every eval job result and trajectory,"
+        echo "  the prepared gold datasets, the extracted agent runtimes,"
+        echo "  and all run archives."
+        echo ""
+        echo "  Make sure no eval job is running."
+        echo "############################################################"
+        if [[ ! -t 0 ]]; then
+            echo "ERROR: --all needs an interactive terminal (or pass --yes)." >&2
+            exit 2
+        fi
+        read -r -p "Type 'yes' to continue: " reply
+        [[ "$reply" == "yes" ]] || { echo "Aborted."; exit 1; }
+        read -r -p "Type 'clean all $BLOCK_NAME' to proceed: " reply2
+        [[ "$reply2" == "clean all $BLOCK_NAME" ]] || { echo "Aborted."; exit 1; }
+    fi
+
+    shopt -s nullglob dotglob
+    for entry in "$ARTIFACTS_DIR"/*; do
+        name="$(basename "$entry")"
+        skip=0
+        for k in "${KEEP_ALWAYS[@]}"; do
             [[ "$name" == "$k" ]] && { skip=1; break; }
         done
-    fi
-    if [[ "$skip" == "0" ]] && is_tracked "$entry"; then
-        echo "  keeping (git-tracked): $name"
-        skip=1
-    fi
-    [[ "$skip" == "1" ]] && continue
+        if [[ "$skip" == "0" && "$MODE" == "default" ]]; then
+            for k in "${KEEP_DEFAULT[@]}"; do
+                [[ "$name" == "$k" ]] && { skip=1; break; }
+            done
+        fi
+        if [[ "$skip" == "0" ]] && is_tracked "$entry"; then
+            echo "  keeping (git-tracked): $name"
+            skip=1
+        fi
+        [[ "$skip" == "1" ]] && continue
+        if [[ "$DRY_RUN" == "1" ]]; then
+            echo "  [dry-run] would remove: $entry"
+        else
+            echo "  removing: $entry"
+            rm -rf "$entry"
+        fi
+    done
+    shopt -u nullglob dotglob
+fi
+
+# Stale nohack limit-registries: smoke runs create one file per --limit value
+# under the (gitignored) hack_control dir. The full registry and the nohack
+# task dataset are kept — only the disposable limitN variants are removed.
+NOHACK_CONTROL_DIR="$BLOCK_DIR/repos/harbor/scripts/git_ignore/hack_control"
+shopt -s nullglob
+for entry in "$NOHACK_CONTROL_DIR"/registry.swebench_verified_nohack.limit*.json; do
     if [[ "$DRY_RUN" == "1" ]]; then
         echo "  [dry-run] would remove: $entry"
     else
         echo "  removing: $entry"
-        rm -rf "$entry"
+        rm -f "$entry"
     fi
 done
-shopt -u nullglob dotglob
+shopt -u nullglob
 
 echo "  clean done for $BLOCK_NAME (mode: $MODE)."

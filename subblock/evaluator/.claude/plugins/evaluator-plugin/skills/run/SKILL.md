@@ -92,10 +92,12 @@ the confirm step.
 ## Conventions to honour
 
 - **Benchmark selection lives in `config.yaml`, not flags.** To change
-  benchmark, edit `runtime_info.input.task_source.{dataset_name,version}`
+  benchmark, edit `runtime_info.input.task_source.{dataset_name,version,no_hack}`
   and re-run `/evaluator:check`. Refuse to override these via free-form args —
   launching a different benchmark than the one `:check` validated is
-  never correct.
+  never correct. `no_hack: true` only applies to `swebench-verified` — the
+  `-100` subset is rejected (cap with `harbor_job.n_tasks` instead); start.sh
+  remaps to the local hardened registry + agent allowlist.
 - **Agent selection lives in `config.yaml`, not flags.** Switch agents by
   editing `agent.{name, version, runtime_image, runtime_host_path}`
   together and re-running `/evaluator:check` (so the runtime-extraction check

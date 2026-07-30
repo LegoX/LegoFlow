@@ -499,7 +499,72 @@ REGISTRY_RAW="$(cfg runtime_info.input.task_source.registry_path)"
 if [[ -z "$REGISTRY_RAW" && -n "$HARBOR_PATH_RAW" ]]; then
   REGISTRY_RAW="$HARBOR_PATH_RAW/registry.json"
 fi
+NO_HACK="$(cfg runtime_info.input.task_source.no_hack)"
+NO_HACK="${NO_HACK:-false}"
+# Strict type check: a quoted "true"/"false" string in YAML would pass a
+# value-based check here but fail the schema test — require a real bool.
+NO_HACK_TYPE="$(python3 - "$CONFIG" <<'PY'
+import sys
+import yaml
+data = yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}
+value = data
+for part in "runtime_info.input.task_source.no_hack".split("."):
+    value = value.get(part) if isinstance(value, dict) else None
+if value is None:
+    print("missing")
+elif isinstance(value, bool):
+    print("bool")
+else:
+    print(f"nonbool:{value!r}")
+PY
+)"
+case "$NO_HACK_TYPE" in
+  bool) ok "task_source.no_hack = $NO_HACK" ;;
+  missing) NO_HACK="false"; warn "task_source.no_hack not set; treating as false" ;;
+  *) NO_HACK="false"; fail "task_source.no_hack must be a YAML bool true/false (got ${NO_HACK_TYPE#nonbool:})" ;;
+esac
 [[ -n "$REGISTRY_RAW" ]] && ok "registry_path = $REGISTRY_RAW" || fail "task_source.registry_path is required (or set repos/harbor.path)"
+
+if [[ "$NO_HACK" == "true" ]]; then
+  if [[ "$DATASET_NAME" == "swebench-verified" ]]; then
+    ok "no_hack source dataset = $DATASET_NAME (will run as swebench-verified-nohack)"
+  else
+    fail "task_source.no_hack requires dataset_name=swebench-verified (got $DATASET_NAME); -100 subsets are not supported — cap a smoke run with harbor_job.n_tasks instead"
+  fi
+  if [[ -n "${HARBOR_DIR:-}" && -e "$HARBOR_DIR/.git" ]]; then
+    NOHACK_GENERATOR="$HARBOR_DIR/scripts/misc/generate_swebench_verified_nohack.py"
+    [[ -f "$NOHACK_GENERATOR" ]] && ok "nohack generator present" || fail "nohack generator missing: $NOHACK_GENERATOR (update Harbor pin)"
+    N_TASKS_CFG="$(cfg runtime_info.input.harbor_job.n_tasks)"
+    # Path derivation is owned by prepare_nohack.sh (--print-path) so the two
+    # scripts cannot drift.
+    PRINT_PATH_ARGS=(--print-path)
+    [[ -n "$N_TASKS_CFG" ]] && PRINT_PATH_ARGS+=(--limit "$N_TASKS_CFG")
+    if ! NOHACK_REG_PATH="$(bash "$BLOCK_DIR/scripts/prepare_nohack.sh" "${PRINT_PATH_ARGS[@]}" 2>/dev/null)"; then
+      NOHACK_REG_PATH=""
+      fail "prepare_nohack.sh --print-path failed (run bash scripts/prepare_nohack.sh --print-path for details)"
+    fi
+    if [[ -n "$NOHACK_REG_PATH" && -f "$NOHACK_REG_PATH" ]]; then
+      ok "nohack registry present at $NOHACK_REG_PATH"
+      REGISTRY_CHECK="$(check_registry_dataset "$NOHACK_REG_PATH" "swebench-verified-nohack" "1.0" 2>/dev/null || true)"
+      case "$REGISTRY_CHECK" in
+        ok:*)
+          IFS=':' read -r _ matched ntasks <<<"$REGISTRY_CHECK"
+          ok "nohack registry entry resolved: $matched ($ntasks tasks)"
+          ;;
+        not_found)
+          fail "swebench-verified-nohack@1.0 not present in $NOHACK_REG_PATH"
+          ;;
+        *)
+          fail "nohack registry inspection failed: $REGISTRY_CHECK"
+          ;;
+      esac
+    elif [[ -n "$NOHACK_REG_PATH" ]]; then
+      warn "nohack registry not yet generated at $NOHACK_REG_PATH (start.sh / prepare_nohack.sh will create it)"
+    fi
+  else
+    warn "skipping nohack generator/registry checks because repos/harbor is missing"
+  fi
+fi
 
 if [[ -n "$REGISTRY_RAW" ]]; then
   REGISTRY_ABS="$(abspath "$REGISTRY_RAW")"
@@ -590,7 +655,7 @@ case "$AGENT_NAME_RAW" in
 esac
 if [[ -n "$RUNTIME_HOST_PATH_RAW" ]]; then
   RUNTIME_HOST_PATH_ABS="$(abspath "$RUNTIME_HOST_PATH_RAW")"
-  EXTRACT_HINT="(extract with: CID=\$(docker create $value) && docker cp \"\$CID:/opt/custom-agent-runtime/${RUNTIME_IMG_SUBPATH:-<subpath>}\" $(dirname "$RUNTIME_HOST_PATH_RAW")/ && docker rm \"\$CID\")"
+  EXTRACT_HINT="(extract with: CID=\$(docker create $value) && docker cp \"\$CID:/opt/custom-agent-runtime/${RUNTIME_IMG_SUBPATH:-<subpath>}\" $(dirname "$RUNTIME_HOST_PATH_RAW")/ && docker rm \"\$CID\" && echo '$value' > $RUNTIME_HOST_PATH_RAW/.source-image)"
   if [[ ! -d "$RUNTIME_HOST_PATH_ABS" ]]; then
     fail "agent.runtime_host_path does not exist: $RUNTIME_HOST_PATH_RAW $EXTRACT_HINT"
   elif [[ -z "$(ls -A "$RUNTIME_HOST_PATH_ABS" 2>/dev/null)" ]]; then
@@ -603,6 +668,19 @@ if [[ -n "$RUNTIME_HOST_PATH_RAW" ]]; then
     warn "agent.runtime_host_path populated but no marker defined for agent.name=$AGENT_NAME_RAW; cannot verify contents"
   else
     ok "agent.runtime_host_path is populated ($RUNTIME_MARKER present, $RUNTIME_EXECUTABLE executable)"
+    # Marker presence alone can't detect a stale extraction after a
+    # runtime_image bump — compare the recorded source image when available.
+    RUNTIME_STAMP_FILE="$RUNTIME_HOST_PATH_ABS/.source-image"
+    if [[ -f "$RUNTIME_STAMP_FILE" ]]; then
+      RUNTIME_STAMP="$(head -n1 "$RUNTIME_STAMP_FILE" | tr -d '[:space:]')"
+      if [[ "$RUNTIME_STAMP" == "$value" ]]; then
+        ok "runtime extraction source matches runtime_image ($value)"
+      else
+        fail "runtime extraction is stale: extracted from '$RUNTIME_STAMP' but config wants '$value' — re-extract $EXTRACT_HINT"
+      fi
+    else
+      warn "runtime extraction source unknown (no .source-image stamp in $RUNTIME_HOST_PATH_RAW); if it was extracted from $value, record it: echo '$value' > $RUNTIME_HOST_PATH_RAW/.source-image — otherwise re-extract $EXTRACT_HINT"
+    fi
   fi
 fi
 
