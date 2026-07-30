@@ -21,14 +21,21 @@ cd "$STATE_DIR"
 mkdir -p "${PROJECT_ROOT}/artifacts/logs/swegen-create"
 # Read per-language params from config.yaml
 eval $(python "${PROJECT_ROOT}/scripts/read_params.py" --lang rust --config-yaml "${PROJECT_ROOT}/config.yaml")
+: "${SWE_TASKS_DIR:?read_params.py emitted no SWE_TASKS_DIR — check runtime_info.output.swe_tasks_dir.path in config.yaml}"
+# `all` = no cap: swegen's --max-pr defaults to every entry, so omit the flag.
+MAX_PR_ARGS=()
+_max_pr="${SWEGEN_MAX_PR:-${MAX_VERIFIED_TASKS:-}}"
+if [[ -n "$_max_pr" && "$_max_pr" != "all" ]]; then
+  MAX_PR_ARGS=(--max-pr "$_max_pr")
+fi
 echo "TIMEOUT=${TIMEOUT} CC_TIMEOUT=${CC_TIMEOUT} N_CONCURRENT=${N_CONCURRENT}"
 
 # Rust projects need longer build times; use higher cc-timeout
 swegen create \
   --input-ids-file "${PROJECT_ROOT}/artifacts/collected_prs/rust_pr_ids.txt" \
-  --max-pr "${SWEGEN_MAX_PR:-5000}" \
+  ${MAX_PR_ARGS[@]+"${MAX_PR_ARGS[@]}"} \
   --n-concurrent "${N_CONCURRENT}" \
-  --output "${PROJECT_ROOT}/artifacts/swe_tasks/rust-cc" \
+  --output "${SWE_TASKS_DIR}/rust-cc" \
   --state-dir "$STATE_DIR" \
   --timeout "${TIMEOUT}" \
   --cc-timeout "${CC_TIMEOUT}" \

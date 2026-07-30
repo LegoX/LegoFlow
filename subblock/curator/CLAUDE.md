@@ -213,9 +213,10 @@ bash scripts/start_with_anthropic_api.sh
 bash scripts/start_with_openai_api.sh
 ```
 
-`create_all_bg.sh` starts all eight language workers with `nohup` and returns
-immediately; it does not consult each language's `enabled` value or wait for
-workers. Consequently, `start.sh` archives launcher completion, not worker
+`create_all_bg.sh` starts one `nohup` worker per language whose `enabled` is
+`true` and returns immediately; it does not wait for workers, and it exits
+non-zero if every language is disabled rather than reporting success having
+started nothing. Consequently, `start.sh` archives launcher completion, not worker
 completion. In `openai_proxy` mode the wrapper also stops its LiteLLM proxy when
 the launcher returns, so the current wrapper does not supervise that proxy for
 the detached workers' full lifetime.
@@ -327,8 +328,8 @@ artifacts/
 | `n_concurrent` | concurrent task workers |
 
 `scripts/create_<lang>.sh` reads these via `scripts/read_params.py` before launching `swegen create`. Edit them in `config.yaml`; no auto-tuning is performed.
-The current all-language launcher ignores `enabled`; invoke only the desired
-`scripts/create_<lang>.sh` files to limit the language set.
+The all-language launcher honors `enabled`; set it to `false` to drop a
+language, or invoke a single `scripts/create_<lang>.sh` directly.
 
 ```bash
 eval $(python scripts/read_params.py --lang py --config-yaml config.yaml)

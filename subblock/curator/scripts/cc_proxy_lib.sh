@@ -125,9 +125,9 @@ cc_proxy_start() {
     >"$log" 2>&1 &
   CC_PROXY_PID=$!
 
-  # Wait up to 90s for /health, bailing early if the proxy process dies.
+  # Wait up to 90s for liveliness, bailing early if the proxy process dies.
   local waited=0
-  until curl -sf "http://127.0.0.1:${port}/health" >/dev/null 2>&1; do
+  until curl -sf --max-time 10 "http://127.0.0.1:${port}/health/liveliness" >/dev/null 2>&1; do
     if ! kill -0 "$CC_PROXY_PID" 2>/dev/null; then
       echo "ERROR: LiteLLM CC proxy exited during startup. Tail of $log:" >&2
       tail -30 "$log" >&2 || true

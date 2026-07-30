@@ -40,14 +40,17 @@ done
 cc_mode="${SWEGEN_CC_PROVIDER_MODE:-}"
 echo "cc_provider_mode: ${cc_mode:-unset}"
 if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
-    if curl -sf "${ANTHROPIC_BASE_URL%/}/health" >/dev/null 2>&1; then
+    # /health probes every configured model (~20s under load); fall back to it
+    # only for native providers, which do not expose the liveliness route.
+    if curl -sf --max-time 10 "${ANTHROPIC_BASE_URL%/}/health/liveliness" >/dev/null 2>&1 \
+       || curl -sf --max-time 30 "${ANTHROPIC_BASE_URL%/}/health" >/dev/null 2>&1; then
         echo "CC endpoint (${ANTHROPIC_BASE_URL}): OK"
     elif [ "$cc_mode" = "openai_proxy" ]; then
         echo "FATAL: CC proxy at ${ANTHROPIC_BASE_URL} is down. Start the LiteLLM proxy first" \
              "(see CLAUDE.md 'LLM provider modes'); otherwise CC verification fails silently" \
              "and verifiable_tasks.txt is never written."
     else
-        echo "WARN: CC endpoint ${ANTHROPIC_BASE_URL} did not answer /health (native providers may not expose it)."
+        echo "WARN: CC endpoint ${ANTHROPIC_BASE_URL} did not answer /health/liveliness or /health (native providers may not expose either)."
     fi
 else
     echo "WARN: ANTHROPIC_BASE_URL not set; CC verification path is unconfigured."

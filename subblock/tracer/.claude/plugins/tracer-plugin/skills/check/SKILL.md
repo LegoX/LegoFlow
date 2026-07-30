@@ -10,7 +10,7 @@ description: >
   confirms LiteLLM proxy port is free or held by current user; verifies
   the agent runtime_image is present on the local Docker daemon; sanity-
   checks `artifacts/processed_tasks.yaml` and cross-checks every
-  done/failed/skipped entry against `HARBOR_EXCLUDE_TASKS`. Read-only.
+  done/failed/skipped entry against the resolved exclusion set. Read-only.
   Reports all failures in one pass. Triggers on phrases like "check
   tracer", "preflight tracer", "is tracer ready", "diagnose tracer",
   "validate tracer config".
@@ -29,8 +29,8 @@ escalating).
    the single source of truth for what "tracer is ready" means — it
    covers schema, repos/commits, all three envs, LLM endpoint live
    probe, HF dataset auth probe, port-4001 ownership, Docker image
-   presence, ledger validity, and the ledger↔`HARBOR_EXCLUDE_TASKS`
-   cross-check.
+   presence, ledger validity, and how many task ids
+   `HARBOR_EXCLUDE_TASKS` resolves to.
 2. Fold every `dryrun.sh` line into the Step 3 report below — never
    re-run a probe or overrule an `OK`.
 
@@ -54,7 +54,7 @@ inapplicable rows.
 | det  | hf dataset auth       | <✓/⚠/✗/·> | <reachable \| 401/403 \| skipped (not a huggingface source)> |
 | det  | litellm port 4001     | <✓/✗>   | <free \| held by pid <P>> |
 | det  | agent runtime_image   | <✓/⚠>   | <present \| not pulled locally> |
-| det  | processed-tasks ledger    | <✓/✗>   | <clean \| leak: <task_id> not in HARBOR_EXCLUDE_TASKS> |
+| det  | processed-tasks ledger    | <✓/✗>   | <parses, <n> entries, <m> resolve to exclusions> |
 | det  | dependency wiring | <✓/✗> | <ok: N edges, both ends \| dep:link-mismatch … \| suppressed: smoke overlay> |
 | det  | cloudflare (optional) | <✓/⚠>   | <ok (source: env\|root-config\|legacy-file) \| missing npx/credentials, see /root:setup> |
 | det  | docker registry (optional) | <✓/⚠> | <ok (source: …) \| no credentials, pulls capped at 100/6h per IP> |
@@ -67,7 +67,7 @@ litellm:     port <port>, proxy config <template>
 harbor_job:  jobs_dir=<jobs_dir> concurrency=<n> retries=<n> timeout_mult=<x>
 agent:       <agent.name>@<agent.version>, image <runtime_image>
 sft:         <sft_conversion.enabled> → out_dir=<out_dir>
-excluded:    <n> task ids in HARBOR_EXCLUDE_TASKS
+excluded:    <n> task ids resolved from HARBOR_EXCLUDE_TASKS
 ```
 
 **Next steps**
@@ -112,10 +112,10 @@ Re-run `/tracer:check`.
   (`docker pull <image>`) so launch latency is predictable and any
   registry-auth surprises surface now.
 
-- **ledger leak**: every entry with `status: done|failed|skipped` MUST
-  also appear in `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS`. If dryrun
-  reports leaks, Harbor will re-run them — fix the exclude list
-  before running.
+- **ledger status**: every entry needs a valid
+  `status: pending|running|done|failed|skipped`. `start.sh` resolves the
+  exclude list *from* the ledger, so an entry with a typo'd status is
+  invisible to it and that task will re-run.
 
 ## Dependency wiring (cross-checked inside dryrun)
 

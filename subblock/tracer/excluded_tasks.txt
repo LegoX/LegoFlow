@@ -1,0 +1,14 @@
+# Tasks retired by a human — chronic timeout / OOM. Tracked in git so the
+# decision survives a fresh clone; artifacts/processed_tasks.yaml carries
+# run history and is not tracked.
+elastic__elasticsearch-py-3329
+elastic__elasticsearch-py-3332
+cartography-cncf__cartography-1673
+agentscope-ai__agentscope-885
+agentscope-ai__agentscope-1342
+aider-ai__aider-4146
+agentscope-ai__agentscope-964
+django-guardian__django-guardian-677
+567-labs__instructor-1897
+cartography-cncf__cartography-1751
+cartography-cncf__cartography-2031

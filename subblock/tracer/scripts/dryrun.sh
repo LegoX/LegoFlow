@@ -561,6 +561,18 @@ echo ""
 echo "--- 7. Model API ---"
 [[ -n "$MODEL_API_BASE_URL" ]] && ok "runtime_info.input.llm_api.api_base_url = $MODEL_API_BASE_URL" || fail "runtime_info.input.llm_api.api_base_url is required"
 [[ -n "$MODEL_API_MODEL" ]] && ok "runtime_info.input.llm_api.model = $MODEL_API_MODEL" || fail "runtime_info.input.llm_api.model is required"
+# The value is copied verbatim into the generated proxy's litellm_params.model.
+# Without a provider prefix LiteLLM cannot route it, so the deployment is never
+# healthy: the proxy serves an empty model list and every agent request dies on
+# "400 no healthy deployments", one turn in, with reward 0. The upstream /models
+# probe below still passes, so nothing else here catches it.
+if [[ -n "$MODEL_API_MODEL" ]]; then
+  if [[ "$MODEL_API_MODEL" == */* ]]; then
+    ok "llm_api.model carries a provider prefix: ${MODEL_API_MODEL%%/*}/"
+  else
+    fail "llm_api.model has no provider prefix ('$MODEL_API_MODEL'); LiteLLM cannot infer the provider and every agent call fails with 'no healthy deployments'. Use e.g. openai/$MODEL_API_MODEL"
+  fi
+fi
 if [[ -n "$MODEL_API_KEY" ]]; then
   ok "runtime_info.input.llm_api.api_key is set"
 else
@@ -763,6 +775,33 @@ if [[ -n "$value" ]]; then
   fi
 fi
 
+# agent.runtime_host_path — start.sh bind-mounts this path when it is non-empty,
+# and only falls back to mounting the runtime out of runtime_image when it is
+# empty. A non-empty path that does not exist therefore mounts nothing and the
+# agent binary is missing inside the container.
+RUNTIME_HOST_PATH="$(cfg runtime_info.input.agent.runtime_host_path)"
+if [[ -z "$RUNTIME_HOST_PATH" ]]; then
+  ok "agent.runtime_host_path is empty; runtime is mounted from runtime_image"
+else
+  RUNTIME_HOST_ABS="$(abspath "$RUNTIME_HOST_PATH")"
+  # Each scaffold extracts a different executable; mirrors evaluator's dryrun.
+  case "$(cfg runtime_info.input.agent.name)" in
+    custom-openhands-sdk) RUNTIME_EXECUTABLE="bin/python" ;;
+    custom-opencode)      RUNTIME_EXECUTABLE="bin/opencode" ;;
+    *)                    RUNTIME_EXECUTABLE="bin/claude" ;;
+  esac
+  RUNTIME_ROOT="$(cfg runtime_info.input.runtime_mount.container_runtime_root)"
+  [[ -z "$RUNTIME_ROOT" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]] &&
+    RUNTIME_ROOT="/opt/custom-agent-runtime/claude-code"
+  if [[ ! -d "$RUNTIME_HOST_ABS" ]]; then
+    fail "agent.runtime_host_path does not exist: $RUNTIME_HOST_PATH — start.sh would bind-mount it empty. Pre-extract it from $value (docker create + docker cp <cid>:$RUNTIME_ROOT), or set the field to \"\" to mount from the image."
+  elif [[ ! -x "$RUNTIME_HOST_ABS/$RUNTIME_EXECUTABLE" ]]; then
+    fail "agent.runtime_host_path exists but has no executable $RUNTIME_EXECUTABLE: $RUNTIME_HOST_PATH — re-extract it from $value"
+  else
+    ok "agent runtime_host_path is pre-extracted: $RUNTIME_HOST_PATH"
+  fi
+fi
+
 # LiteLLM proxy port — must be free, or already held by our own previous run.
 LITELLM_PORT="$(cfg runtime_info.input.litellm_proxy.port)"
 if [[ -n "$LITELLM_PORT" ]]; then
@@ -834,7 +873,10 @@ SFT_DATA_DIR_OUT="$(cfg runtime_info.output.sft_data_dir.path)"
 echo ""
 echo "--- 8c. Processed-tasks ledger ---"
 LEDGER_PATH="$BLOCK_DIR/artifacts/processed_tasks.yaml"
-EXCLUDE_TASKS_RAW="$(cfg runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS)"
+EXCLUDE_SPEC="$(cfg runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS)"
+# Resolve the same way start.sh does, so this reports what a launch would skip.
+EXCLUDE_TASKS_RAW="$(python3 "$BLOCK_DIR/scripts/resolve_exclude_tasks.py" \
+  --block-dir "$BLOCK_DIR" --spec "$EXCLUDE_SPEC" 2>/dev/null | tr '\n' ' ' || true)"
 if [[ ! -f "$LEDGER_PATH" ]]; then
   fail "artifacts/processed_tasks.yaml is missing — initialise with: printf 'description: %s\nruns: []\n' \"Tracer task processed-tasks ledger\" > '$LEDGER_PATH'"
 else

@@ -89,7 +89,9 @@ Parses `config.yaml` with PyYAML and asserts every key the runtime contract
 depends on is present and non-empty: `meta_info.name == "curator"`,
 `meta_info.environment.{venv_path, requirements}`, `meta_info.repos.swegen`,
 `runtime_info.input.llm_api.{api_key, api_base_url, pr_model, task_model}`,
-`runtime_info.output.swe_tasks_dir.path`. Pure-Python check, no I/O.
+`runtime_info.output.swe_tasks_dir.path`. Also asserts
+`runtime_info.input.github_token == ""` — that field must never hold a real
+token in tracked config.yaml. Pure-Python check, no I/O.
 </details>
 
 <details>

@@ -322,6 +322,7 @@ echo "INFO: polling for $TERMINAL_GLOB (budget ${BUDGET}s, policy=$WAIT_POLICY)"
 START=$(date +%s)
 DEADLINE=$((START + BUDGET))
 LAST_COUNT=0
+POLL_END_REASON="budget exhausted"
 
 # When trainer is running remotely, the terminal artifact lives on the GPU host.
 # Poll the remote and scp the result.json + trainer_state.json back as soon
@@ -350,10 +351,34 @@ while (( $(date +%s) < DEADLINE )); do
       elapsed=$(($(date +%s) - START))
       echo "INFO: remote terminal artifact retrieved after ${elapsed}s"
       LAST_COUNT=1
+      POLL_END_REASON="artifact retrieved"
       break
     fi
     sleep 30
     continue
+  fi
+
+  # The launcher dying is terminal: nothing else writes the artifact, so the
+  # remaining budget can only be spent waiting for something that will never
+  # appear. start.sh refuses to launch AFTER its dryrun (well past the 5s
+  # fail-fast probe above), and that refusal used to cost the full budget and
+  # then surface as verify.sh's "no result.json" — which hides the real reason.
+  # LAUNCH_PID=0 means remote, where there is no local pid to watch.
+  if (( LAUNCH_PID != 0 )) && ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
+    elapsed=$(($(date +%s) - START))
+    if compgen -G "$TERMINAL_GLOB" > /dev/null; then
+      # shellcheck disable=SC2086  # glob expansion is intentional
+      LAST_COUNT=$(ls $TERMINAL_GLOB 2>/dev/null | wc -l)
+    fi
+    if (( LAST_COUNT > 0 )); then
+      echo "INFO: launcher exited after ${elapsed}s with ${LAST_COUNT} artifact(s); stopping the poll"
+      POLL_END_REASON="launcher exited"
+    else
+      echo "ERROR: launcher (pid=$LAUNCH_PID) exited after ${elapsed}s without producing $TERMINAL_GLOB"
+      echo "       the failure is in the launch log below, not in verify.sh"
+      POLL_END_REASON="launcher exited without artifacts"
+    fi
+    break
   fi
 
   # Local: glob the workspace.
@@ -366,6 +391,7 @@ while (( $(date +%s) < DEADLINE )); do
       LAST_COUNT=$count
     fi
     if [[ "$WAIT_POLICY" == "first" ]]; then
+      POLL_END_REASON="first artifact present"
       break
     fi
   fi
@@ -373,7 +399,7 @@ while (( $(date +%s) < DEADLINE )); do
 done
 
 elapsed=$(($(date +%s) - START))
-echo "INFO: budget exhausted (${elapsed}s); verify.sh will scan artifacts (count=$LAST_COUNT)"
+echo "INFO: poll ended — ${POLL_END_REASON} (${elapsed}s); verify.sh will scan artifacts (count=$LAST_COUNT)"
 if (( LAST_COUNT == 0 )); then
   echo "INFO: 0 artifacts — full launch log:"
   cat "$LAUNCH_LOG" 2>/dev/null || true

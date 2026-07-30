@@ -51,7 +51,7 @@ Everything is declared in [`config.yaml`](config.yaml); see
 
 | | Key items |
 |---|---|
-| **Inputs** | `llm_api` (api_key, api_base_url, model); `litellm_proxy`; `task_source` (wired from curator); `harbor_job`; `agent`; `sft_conversion`; `HARBOR_EXCLUDE_TASKS` |
+| **Inputs** | `llm_api` (api_key, api_base_url, model); `litellm_proxy`; `task_source` (wired from curator); `harbor_job`; `agent`; `sft_conversion`; `HARBOR_EXCLUDE_TASKS` (names `artifacts/processed_tasks.yaml`) |
 | **Outputs** | `raw_trajectories_dir` → `artifacts/jobs/` (consumed by `trainer`); `sft_data_dir` → `artifacts/sft_data/` (LF format, consumed by `trainer`) |
 
 The only external value you normally fill is `runtime_info.input.llm_api`; the

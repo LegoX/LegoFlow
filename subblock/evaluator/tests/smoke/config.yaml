@@ -38,10 +38,13 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      # Replace these example values in a private CI overlay.
-      api_key: dummy-key
-      api_base_url: "http://127.0.0.1:8000/v1"
-      model: "openai/Qwen3.5-35B-A3B"
+      # Blank on purpose: scripts/inject_smoke_secrets.py fills a field only
+      # when it is "", from SMOKE_EVALUATOR_LLM_* falling back to SMOKE_LLM_*.
+      # A non-empty placeholder here is never replaced, which is how this smoke
+      # ended up pointing at a vLLM nobody starts.
+      api_key: ""
+      api_base_url: ""
+      model: ""
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy

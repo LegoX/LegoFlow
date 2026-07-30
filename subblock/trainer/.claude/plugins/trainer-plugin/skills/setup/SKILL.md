@@ -29,6 +29,20 @@ Read `config.yaml` and `CLAUDE.md`.
 Resolve the env path once: `SFT_UV = meta_info.environment.sft_uv`
 (default `artifacts/env/lf`), `PY = $SFT_UV/bin/python`.
 
+## Step 0b — GPU precondition
+
+Read `meta_info.resources.ip` first. `null`/`local` means training runs on
+this host — check GPU here. A real IP means the target is that remote host —
+SSH there before checking, not on this one (per `BLOCK_DEFINITION.md`'s
+execution-location rule).
+
+On the target host, compare `nvidia-smi --list-gpus` against
+`infrastructure.n_gpus_per_node` (same check `dryrun.sh` §11 runs later).
+If `nvidia-smi` is missing, or reports fewer GPUs than configured, stop:
+tell the user trainer cannot be set up successfully on this host — it needs
+a GPU node — and do not proceed to Step 1's env build. This gate exists so a
+missing GPU is caught before the multi-GB `install_env.sh` build, not after.
+
 ## Step 1 — Tooling preflight
 
 The build scripts and the inline config readers depend on these:
@@ -70,7 +84,7 @@ root `.gitmodules`); a fresh clone leaves them empty. For each entry under
    (`https://github.com/SWE-Lego/LLaMA-Factory.git`) and needs no token.
 3. Verify each checkout matches the pin:
    `git -C repos/<path> rev-parse HEAD` must equal `meta_info.repositories.
-   <name>.commit` (`3e32f8ca…` for LLaMA-Factory, `67aadd1e…` for
+   <name>.commit` (`3e32f8ca…` for LLaMA-Factory, `538d3838…` for
    swe_data_process). If a present worktree has drifted or has local
    edits, **report it and ask** — per `BLOCK_DEFINITION.md`, `repos/` is
    pinned, read-only code; `:setup` configures and pins, it does not patch.
@@ -96,9 +110,9 @@ Decision:
   ```bash
   bash scripts/install_env.sh
   ```
-  Relay the final import block. On a GPU-less host `cuda available` is
-  `False` — that's expected and does not mean setup failed; it only means
-  training itself must run on the 8-GPU node.
+  Relay the final import block. Step 0b already confirmed a GPU is present
+  on this host, so `cuda available: False` here is a real problem, not
+  expected — surface it rather than waving it off.
 - **Env present** → verify before rebuilding (the rebuild is destructive and
   pulls several GB):
   ```bash

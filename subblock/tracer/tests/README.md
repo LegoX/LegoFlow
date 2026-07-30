@@ -29,11 +29,11 @@ Per-test exit codes: `0` pass · `77` skip · anything else fail.
 | 01 | config schema | every required key in `config.yaml` is set and `task_source.provider ∈ {local, huggingface}` | <1 s |
 | 02 | repo pins | `repos/harbor` and `repos/swe_data_process` at their pinned commits, origins match, worktrees clean | <2 s |
 | 03 | uv envs | three envs exist; `harbor` editable from `repos/harbor`, `litellm` importable, `swe_data_process` importable (SKIP when `sft_conversion.enabled=false`) | ~1 min |
-| 04 | LLM endpoint | `GET ${api_base_url}/models` returns 200 and the configured model is in `data[].id` | ~1 s |
+| 04 | LLM endpoint | a real completion returns **non-empty text**; on failure, reports whether a neighbouring URL/model shape (missing `/v1`, stray `provider/` prefix) is the cause | <30 s |
 | 05 | HF dataset | `huggingface.co/api/datasets/<name>` reachable with the configured token (SKIP for `local` provider) | <1 s |
 | 06 | LiteLLM port | port from `litellm_proxy.port` is free, or held by a process the current uid owns | <1 s |
 | 07 | runtime image | reports whether `${agent.runtime_image}` is pre-pulled (SKIP when the runner cache is cold) | <1 s |
-| 08 | processed-tasks ledger | ledger parses, every `done`/`failed`/`skipped` entry is also in `HARBOR_EXCLUDE_TASKS` | <1 s |
+| 08 | processed-tasks ledger | ledger parses and every entry has a valid status; `HARBOR_EXCLUDE_TASKS` resolves through it | <1 s |
 | 09 | dashboard regressions | public/no-sample exports omit full trajectories, latest archived run is shown, R2 reads every JSONL shard, smoke config matches production | <1 s |
 | 10 | **10-HF-task demo** *(smoke)* | swap config + `start.sh` against 10 HF tasks; ≥1 trial resolves within 30 min | up to 30 min |
 
@@ -59,7 +59,7 @@ events on `dev`/`main` and manual `workflow_dispatch` runs
 | 05: HF 404 | typo in `task_source.dataset_name` | fix in `config.yaml` |
 | 06: port held by another uid | someone else is on `litellm_proxy.port` | change the port, or kill the foreign process |
 | 07: image not pulled | runner's daemon lost the image | `docker pull docker.io/jierun/c-cc-2.1.118:v0.1` |
-| 08: ledger task not in `HARBOR_EXCLUDE_TASKS` | done/failed/skipped tasks would re-execute next run | add them to `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` in `config.yaml` |
+| 08: ledger entry has an invalid status | `start.sh` cannot classify it, so the task would re-execute | fix the `status:` to one of pending/running/done/failed/skipped |
 | 10: budget hit, no resolved trial | model regression, network slowness, or 10 unusually hard tasks | inspect `artifacts/jobs/smoke/<job>/*/result.json` for verifier output |
 
 ---

@@ -67,7 +67,7 @@ Resolve the user's natural-language request into one mode:
 | --- | --- | --- |
 | `smoke` | First run, "quick verify", "smoke", "one task", or "10 PRs". | `swegen create` against the submodule sample PR file, with `--max-pr 1`, `--n-concurrent 1`, `--min-source-files 1`, and output under `artifacts/experiments/quick-verify/`. |
 | `single-language` | The user names one language: `py`, `js`, `ts`, `go`, `c`, `cpp`, `java`, or `rust`. | `bash scripts/create_<lang>.sh` after confirming tuned params from `scripts/read_params.py`. |
-| `full` | The user says all languages, pipeline, or gives no narrower scope. | Pick by `llm_api.cc_provider_mode` in `config.yaml`: `bash scripts/start_with_anthropic_api.sh` for `native` (real Claude / Anthropic-format gateway, no proxy), `bash scripts/start_with_openai_api.sh` for `openai_proxy` (starts the local LiteLLM proxy first, then runs `start.sh`). Both delegate to `scripts/start.sh -> scripts/create_all_bg.sh`, which starts all eight language scripts regardless of their `enabled` values. |
+| `full` | The user says all languages, pipeline, or gives no narrower scope. | Pick by `llm_api.cc_provider_mode` in `config.yaml`: `bash scripts/start_with_anthropic_api.sh` for `native` (real Claude / Anthropic-format gateway, no proxy), `bash scripts/start_with_openai_api.sh` for `openai_proxy` (starts the local LiteLLM proxy first, then runs `start.sh`). Both delegate to `scripts/start.sh -> scripts/create_all_bg.sh`, which starts one worker per language whose `enabled` is `true`. |
 
 If the request implies config changes, such as "32 tasks" or "more
 concurrency", show the exact proposed config/env override and wait for
@@ -177,8 +177,8 @@ bash scripts/start_with_openai_api.sh
 
 Both refuse to run if the config's `cc_provider_mode` does not match the
 launcher, then delegate to `scripts/start.sh` (which calls
-`scripts/create_all_bg.sh`). That script starts all eight language workers with
-`nohup` and returns without waiting for them. `start.sh` then archives the
+`scripts/create_all_bg.sh`). That script starts one `nohup` worker per language
+whose `enabled` is `true` and returns without waiting for them. `start.sh` then archives the
 launcher exit, so an archive status of `completed` does not mean the workers
 have finished; use their logs, batch state, and `/curator:dashboard` for live
 progress.

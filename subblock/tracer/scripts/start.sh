@@ -378,47 +378,19 @@ if [[ -z "$RUN_COMMAND" ]]; then
   fi
   # Never retry timed-out tasks — they'll just time out again and waste budget
   EXTRA_ARGS="$EXTRA_ARGS --retry-exclude AgentTimeoutError"
-  # Tasks to skip come from two independent places, and only one of them is
-  # config:
-  #
-  #   HARBOR_EXCLUDE_TASKS — hand-maintained. Tasks a human decided never to run
-  #     again (chronic timeouts, OOMs). Belongs in config.yaml: it is a decision,
-  #     not an observation.
-  #
-  #   artifacts/processed_tasks.yaml — the ledger. Which tasks this block already
-  #     consumed. Pure runtime state, derived here at launch instead of being
-  #     mirrored into config.yaml. Mirroring it by hand is what previously let the
-  #     two drift apart, and what made a smoke run exclude every task it had just
-  #     generated.
-  #
-  # A smoke re-runs the same fixture tasks on purpose, so it opts out of the
-  # ledger-derived half via HARBOR_LEDGER_EXCLUDE=0.
+  # Exclusions resolve from the ledger, which records both what this block
+  # consumed and what a human retired. A smoke re-runs its fixtures on purpose,
+  # so it opts out of the ledger-derived ids via HARBOR_LEDGER_EXCLUDE=0.
   _LEDGER_FILE="$BLOCK_DIR/artifacts/processed_tasks.yaml"
-  _LEDGER_EXCLUDE=""
-  if [[ "${HARBOR_LEDGER_EXCLUDE:-1}" != "0" && -f "$_LEDGER_FILE" ]]; then
-    _LEDGER_EXCLUDE="$(LEDGER="$_LEDGER_FILE" python3 - <<'PY' 2>/dev/null || true
-import os
-try:
-    import yaml
-except ImportError:
-    raise SystemExit(0)
-try:
-    doc = yaml.safe_load(open(os.environ["LEDGER"], encoding="utf-8")) or {}
-except Exception:
-    raise SystemExit(0)
-runs = doc.get("runs")
-if not isinstance(runs, list):
-    raise SystemExit(0)
-terminal = {"done", "failed", "skipped"}
-ids = {e.get("task_id") for e in runs
-       if isinstance(e, dict) and e.get("status") in terminal and e.get("task_id")}
-print(" ".join(sorted(ids)))
-PY
-)"
-    [[ -n "$_LEDGER_EXCLUDE" ]] && \
-      echo "[start] excluding $(wc -w <<<"$_LEDGER_EXCLUDE") already-processed task(s) from artifacts/processed_tasks.yaml"
+  _EXCLUDE_IDS="$(python3 "$BLOCK_DIR/scripts/resolve_exclude_tasks.py" \
+    --block-dir "$BLOCK_DIR" \
+    --spec "${HARBOR_EXCLUDE_TASKS:-}" \
+    --ledger "$_LEDGER_FILE" \
+    --ledger-exclude "${HARBOR_LEDGER_EXCLUDE:-1}" 2>/dev/null || true)"
+  if [[ -n "$_EXCLUDE_IDS" ]]; then
+    echo "[start] excluding $(wc -w <<<"$_EXCLUDE_IDS") task(s) resolved from HARBOR_EXCLUDE_TASKS + artifacts/processed_tasks.yaml"
   fi
-  for _excl_task in $HARBOR_EXCLUDE_TASKS $_LEDGER_EXCLUDE; do
+  for _excl_task in $_EXCLUDE_IDS; do
     EXTRA_ARGS="$EXTRA_ARGS --exclude-task-name $(printf '%q' "$_excl_task")"
   done
   RUN_COMMAND="uv run harbor run --path $(printf '%q' "$HARBOR_DATASET_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$TRAJGEN_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$TRAJGEN_JOB_NAME") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'

@@ -93,8 +93,7 @@ runtime_info:
       reasoning_content_ratio_threshold: 0.2
 
     env_extra:
-      # Prior failures (timeout/OOM) + tasks consumed per artifacts/processed_tasks.yaml
-      HARBOR_EXCLUDE_TASKS: elastic__elasticsearch-py-3329 elastic__elasticsearch-py-3332 cartography-cncf__cartography-1673 agentscope-ai__agentscope-885 agentscope-ai__agentscope-1342 aider-ai__aider-4146 agentscope-ai__agentscope-964 django-guardian__django-guardian-677 567-labs__instructor-1897 cartography-cncf__cartography-1751 cartography-cncf__cartography-2031
+      HARBOR_EXCLUDE_TASKS: excluded_tasks.txt artifacts/processed_tasks.yaml   # exclusion sources; literal ids also accepted
 
   output:
     raw_trajectories_dir:

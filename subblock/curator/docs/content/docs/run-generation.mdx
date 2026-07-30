@@ -107,10 +107,54 @@ llm_api:
 
 Mode `native` is simpler: both PR evaluation and task completion use the same
 provider. Mode `openai_proxy` is for OpenAI-only models: it starts a local
-LiteLLM proxy to translate Anthropic calls to OpenAI format.
+LiteLLM proxy to translate Anthropic calls to OpenAI format. Both shapes have
+been validated end-to-end (NOP=0 / Oracle=1).
 
-**Never commit real API keys to config.yaml.** Use environment variables or
-`.env` files instead.
+Field-by-field:
+
+| Field | Fill with |
+|---|---|
+| `api_key` | Leave as `human` in git; supply the real key via the environment or an ignored `.env`. |
+| `api_base_url` | The **OpenAI-compatible** endpoint, including the `/v1` suffix. |
+| `pr_model` | Model for PR evaluation + instruction generation. Prefer a non-reasoning, JSON-reliable model. |
+| `task_model` | Model for the Claude Code path. In `openai_proxy` mode any `claude-*` alias works — the proxy maps it to `pr_model`. |
+| `cc_provider_mode` | `native` when the provider already speaks the Anthropic Messages API, `openai_proxy` otherwise. |
+| `anthropic_base_url` | `native`: the provider's Anthropic root, **without** `/v1`. `openai_proxy`: the local proxy URL. |
+| `cc_proxy_port` | `openai_proxy` only; ignored in `native` mode. |
+
+**Never commit real API keys or endpoints to config.yaml** — not in the values
+and not in comments. `config.yaml` is git-tracked; the root case
+`tests/cases/09_no_secrets_in_configs.sh` fails the build if either shows up.
+Use environment variables or `.env` files instead.
+
+### Endpoint verification
+
+A reachable endpoint is not a working one. `GET /models` is answered from local
+gateway config, so it can return 200 while every completion fails; and a
+reasoning model can spend its whole budget on reasoning and return **empty
+content**, which looks like success to any check that only asserts HTTP 200.
+
+```bash
+bash scripts/probe_llm_endpoint.sh          # 0 PASS, 1 FAIL, 77 SKIP
+```
+
+It sends a real completion, retries transient failures, and requires a
+**non-empty text reply**. In `native` mode it also probes the Anthropic
+Messages path, because that is the half that writes `verifiable_tasks.txt`.
+
+When the configured shape fails it retries the neighbouring shapes and names the
+edit to make — this catches the three mistakes that account for most setup
+failures:
+
+| Symptom | Cause | What the probe prints |
+|---|---|---|
+| `HTTP 404 no route /chat/completions` | `api_base_url` missing the `/v1` suffix | `api_base_url: https://host → https://host/v1` |
+| `HTTP 200 but no text in the reply` | `provider/` prefix on a model the raw upstream doesn't know | `model: openai/Qwen3.6-35B-A3B → Qwen3.6-35B-A3B` |
+| `no route /v1/chat/completions/chat/completions` | `/chat/completions` pasted into `api_base_url` | the trimmed base URL |
+
+`anthropic_base_url` is the mirror-image trap: in `native` mode it wants the
+provider's Anthropic **root without** `/v1` (the probe appends `/v1/messages`
+itself); in `openai_proxy` mode it wants the local proxy URL.
 
 ### PR collection and per-language parameters
 

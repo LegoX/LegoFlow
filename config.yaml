@@ -33,4 +33,5 @@ runtime_info:
       username: ""
       password: ""
       mirror: ""
+      host: ""                 # "" = daemon default; recommended: unix:///var/run/docker.sock
   output: {}

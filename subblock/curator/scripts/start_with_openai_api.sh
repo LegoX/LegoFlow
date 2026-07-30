@@ -26,6 +26,15 @@ set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$BLOCK_DIR"
 
+# --proxy-only: used by /curator:setup to start (or reuse) the CC proxy
+# without launching create_all_bg; strip it before the final "$@" forward.
+PROXY_ONLY=0
+args=()
+for a in "$@"; do
+  if [ "$a" = "--proxy-only" ]; then PROXY_ONLY=1; else args+=("$a"); fi
+done
+set -- "${args[@]}"
+
 PY_BIN="${PY_BIN:-artifacts/envs/swegen-env/bin/python}"
 [ -x "$PY_BIN" ] || PY_BIN=python3
 read MODE PORT < <("$PY_BIN" -c "
@@ -64,8 +73,8 @@ PROXY_PID_FILE="${PROXY_LOG_DIR}/litellm_cc_proxy.pid"
 LITELLM_BIN="${LITELLM_BIN:-}"
 if [ -z "$LITELLM_BIN" ]; then
   for cand in \
-    "${BLOCK_DIR}/artifacts/envs/swegen-env/bin/litellm" \
     "${BLOCK_DIR}/../tracer/artifacts/env/litellm-venv/bin/litellm" \
+    "${BLOCK_DIR}/artifacts/envs/swegen-env/bin/litellm" \
     "$(command -v litellm 2>/dev/null || true)"; do
     [ -n "$cand" ] && [ -x "$cand" ] && { LITELLM_BIN="$cand"; break; }
   done
@@ -87,7 +96,9 @@ fi
 # started manually, or by a previous invocation of this launcher whose
 # create_all_bg workers are still in flight and still depend on it).
 STARTED_PROXY=0
-if curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+# liveliness, not /health: /health takes ~20s under load, and timing out here
+# would drop into the else-branch and kill a proxy the workers still need.
+if curl -sf --max-time 10 "http://127.0.0.1:${PORT}/health/liveliness" >/dev/null 2>&1; then
   echo "[start_with_openai_api] reusing already-healthy LiteLLM proxy on :${PORT}."
 else
   # Free the port if a stale (unhealthy) holder is squatting on it.
@@ -121,9 +132,9 @@ else
   trap cleanup_proxy_on_startup_failure EXIT INT TERM
 fi
 
-# Wait up to 90s for /health.
+# Wait up to 90s for liveliness.
 waited=0
-until curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; do
+until curl -sf --max-time 10 "http://127.0.0.1:${PORT}/health/liveliness" >/dev/null 2>&1; do
   sleep 2; waited=$((waited+2))
   if [ $waited -ge 90 ]; then
     echo "ERROR: LiteLLM proxy did not become ready within 90s." >&2
@@ -131,7 +142,39 @@ until curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; do
     exit 5
   fi
 done
-echo "[start_with_openai_api] LiteLLM proxy ready on :${PORT}."
+echo "[start_with_openai_api] LiteLLM proxy is up on :${PORT}."
+
+# /health/liveliness only proves the process is up — it checks no dependencies,
+# so a wrong upstream model or key still answers 200. Without a routing check
+# the launcher would hand a dead proxy to every detached worker, and CC
+# verification fails silently for the whole run. Probe the Anthropic path the
+# Claude Code SDK actually uses, and refuse to launch workers if it has no text.
+CC_TASK_MODEL="$("$PY_BIN" -c "
+import yaml
+c=yaml.safe_load(open('config.yaml'))
+print((c.get('runtime_info',{}).get('input',{}).get('llm_api',{}) or {}).get('task_model',''))
+")"
+CC_API_KEY="$("$PY_BIN" -c "
+import yaml
+c=yaml.safe_load(open('config.yaml'))
+print((c.get('runtime_info',{}).get('input',{}).get('llm_api',{}) or {}).get('api_key',''))
+")"
+PROBE="$(cd "$BLOCK_DIR/../.." && pwd)/scripts/probe_llm_endpoint.py"
+if [ -f "$PROBE" ]; then
+  if python3 "$PROBE" --anthropic-only --attempts 3 \
+       --label "CC proxy model routing" \
+       --base-url "http://127.0.0.1:${PORT}" \
+       --anthropic-base-url "http://127.0.0.1:${PORT}" \
+       --anthropic-model "$CC_TASK_MODEL" \
+       --api-key "$CC_API_KEY"; then
+    echo "[start_with_openai_api] CC proxy routes ${CC_TASK_MODEL} to the upstream."
+  else
+    echo "ERROR: the proxy is up but cannot complete a request for '${CC_TASK_MODEL}'." >&2
+    echo "  Workers would burn their whole run on failing agent calls; not launching." >&2
+    tail -30 "$PROXY_LOG" >&2 || true
+    exit 6
+  fi
+fi
 
 # Startup succeeded (or we reused an existing proxy) -- disarm the
 # startup-failure trap so a healthy proxy is never killed just because this
@@ -140,6 +183,10 @@ if [ "$STARTED_PROXY" -eq 1 ]; then
   trap - EXIT INT TERM
   echo "[start_with_openai_api] proxy left running independently of this launcher (PID=${LITELLM_PID})."
   echo "  Stop it manually once every language job finishes: kill \$(cat ${PROXY_PID_FILE})"
+fi
+
+if [ "$PROXY_ONLY" -eq 1 ]; then
+  exit 0
 fi
 
 # Delegate to the shared start.sh (which runs archive + create_all_bg).
