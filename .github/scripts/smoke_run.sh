@@ -141,6 +141,20 @@ case "$BLOCK" in
 esac
 
 # ---------- LAUNCH ----------
+# LAUNCH_IS_REMOTE distinguishes "runs elsewhere, no local pid" from
+# "pgrep found nothing" — the old code spelled both as LAUNCH_PID=0, so a
+# launcher that died before pgrep ran was mistaken for a remote run and the
+# poller waited out the whole budget.
+LAUNCH_IS_REMOTE=0
+LAUNCH_PAT=""
+
+# `kill -0 0` signals the caller's own process group and always succeeds, so a
+# pid of 0 must be treated as "not found" explicitly rather than probed.
+launcher_alive() {
+  (( LAUNCH_IS_REMOTE == 1 )) && return 0
+  [[ -n "${LAUNCH_PID:-}" && "$LAUNCH_PID" != "0" ]] || return 1
+  kill -0 "$LAUNCH_PID" 2>/dev/null
+}
 echo "INFO: launching $BLOCK smoke (budget ${BUDGET}s)"
 LAUNCH_LOG="$BLOCK_DIR/artifacts/logs/smoke-launch.log"
 : > "$LAUNCH_LOG"
@@ -242,7 +256,8 @@ PY
       || { echo "FAIL: CC LiteLLM proxy did not start (openai_proxy mode)"; exit 1; }
     claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
                   "swegen create --input-ids-file" "curator"
-    LAUNCH_PID=$(pgrep -f 'swegen create --input-ids-file' | head -1)
+    LAUNCH_PAT='swegen create --input-ids-file'
+    LAUNCH_PID=$(pgrep -f "$LAUNCH_PAT" | head -1)
     LAUNCH_PID=${LAUNCH_PID:-0}
     ;;
   tracer|evaluator)
@@ -252,7 +267,8 @@ PY
     SMOKE_CMD="nohup bash scripts/start.sh >> artifacts/logs/smoke-launch.log 2>&1 &"
     claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
                   "bash scripts/start.sh" "$BLOCK"
-    LAUNCH_PID=$(pgrep -f 'bash scripts/start.sh' | head -1)
+    LAUNCH_PAT='bash scripts/start.sh'
+    LAUNCH_PID=$(pgrep -f "$LAUNCH_PAT" | head -1)
     LAUNCH_PID=${LAUNCH_PID:-0}
     ;;
   trainer)
@@ -298,12 +314,14 @@ EOS
       SMOKE_CMD="bash $RUN_SH 2>&1 | tee -a artifacts/logs/smoke-launch.log"
       claude_launch "$SETUP_CMD" "$PREFLIGHT_CMD" "$SMOKE_CMD" \
                     "REMOTE_LAUNCH_PID=" "trainer (remote $REMOTE_IP)"
-      LAUNCH_PID=0   # remote — nothing local to kill -0
+      LAUNCH_IS_REMOTE=1   # runs on the GPU host; no local pid to watch
+      LAUNCH_PID=0
     else
       SMOKE_CMD="nohup bash scripts/start.sh >> artifacts/logs/smoke-launch.log 2>&1 &"
       claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
                     "bash scripts/start.sh" "trainer (local)"
-      LAUNCH_PID=$(pgrep -f 'bash scripts/start.sh' | head -1)
+      LAUNCH_PAT='bash scripts/start.sh'
+      LAUNCH_PID=$(pgrep -f "$LAUNCH_PAT" | head -1)
       LAUNCH_PID=${LAUNCH_PID:-0}
     fi
     ;;
@@ -312,8 +330,8 @@ esac
 echo "STARTED $BLOCK smoke (launch_pid=$LAUNCH_PID, log=$LAUNCH_LOG)"
 # Give it a beat to fail-fast if start.sh dies in its first second of execution.
 sleep 5
-if ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
-  echo "WARNING: launch_pid=$LAUNCH_PID exited within 5s. Tail of launch log:"
+if ! launcher_alive; then
+  echo "WARNING: launcher not running 5s after launch (pid=$LAUNCH_PID). Tail of launch log:"
   tail -30 "$LAUNCH_LOG" 2>/dev/null || true
 fi
 
@@ -363,8 +381,25 @@ while (( $(date +%s) < DEADLINE )); do
   # appear. start.sh refuses to launch AFTER its dryrun (well past the 5s
   # fail-fast probe above), and that refusal used to cost the full budget and
   # then surface as verify.sh's "no result.json" — which hides the real reason.
-  # LAUNCH_PID=0 means remote, where there is no local pid to watch.
-  if (( LAUNCH_PID != 0 )) && ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
+  # A local launcher we can no longer see is terminal. Re-pgrep first: the
+  # initial probe can miss a launcher that took a moment to exec, and adopting
+  # its pid late is cheaper than waiting out the budget on a false negative.
+  if ! launcher_alive && [[ -n "$LAUNCH_PAT" ]]; then
+    # The first probe can miss a launcher that took a moment to exec. Re-check,
+    # but never adopt this script, its parent, or the CI wrapper: their command
+    # lines contain the pattern as literal text, and adopting one would keep the
+    # poll alive for the full budget on a launcher that is already gone.
+    _repid=$(pgrep -f "$LAUNCH_PAT" 2>/dev/null \
+             | grep -vx -e "$$" -e "$PPID" \
+             | while read -r _p; do
+                 tr '\0' ' ' < "/proc/$_p/cmdline" 2>/dev/null | grep -q 'smoke_run\.sh' || echo "$_p"
+               done | head -1)
+    if [[ -n "$_repid" ]]; then
+      LAUNCH_PID="$_repid"
+      echo "INFO: adopted launcher pid=$LAUNCH_PID (started after the first probe)"
+    fi
+  fi
+  if ! launcher_alive; then
     elapsed=$(($(date +%s) - START))
     if compgen -G "$TERMINAL_GLOB" > /dev/null; then
       # shellcheck disable=SC2086  # glob expansion is intentional

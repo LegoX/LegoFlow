@@ -301,8 +301,15 @@ jobs:
           # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
           [ -d "$CANON/artifacts/agent-runtime" ] && \
             ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
-          [ -f "$CANON/artifacts/processed_tasks.yaml" ] && \
-            ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml || true
+          # dryrun.sh FAILs outright without the ledger, and it is gitignored
+          # runtime state, so a runner whose canonical copy lacks it could never
+          # get past preflight. Link it when present, otherwise start an empty one.
+          if [ -f "$CANON/artifacts/processed_tasks.yaml" ]; then
+            ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml
+          else
+            printf 'description: %s\nruns: []\n' 'Tracer task processed-tasks ledger' \
+              > artifacts/processed_tasks.yaml
+          fi
           ls -la repos artifacts
       - name: Run tracer test cases
         working-directory: subblock/tracer
@@ -379,8 +386,15 @@ jobs:
           # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
           [ -d "$CANON/artifacts/agent-runtime" ] && \
             ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
-          [ -f "$CANON/artifacts/processed_tasks.yaml" ] && \
-            ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml || true
+          # dryrun.sh FAILs outright without the ledger, and it is gitignored
+          # runtime state, so a runner whose canonical copy lacks it could never
+          # get past preflight. Link it when present, otherwise start an empty one.
+          if [ -f "$CANON/artifacts/processed_tasks.yaml" ]; then
+            ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml
+          else
+            printf 'description: %s\nruns: []\n' 'Tracer task processed-tasks ledger' \
+              > artifacts/processed_tasks.yaml
+          fi
       - name: Overlay smoke config.yaml from subblock/tracer/tests/smoke
         # The template carries no endpoint/key; inject them from the
         # shared env into the COPY (never back into the template).
@@ -780,7 +794,12 @@ jobs:
           ln -s "$C/repos/swe_data_process" repos/swe_data_process
           ln -s "$C/artifacts/env" artifacts/env
           [ -d "$C/artifacts/agent-runtime" ] && ln -s "$C/artifacts/agent-runtime" artifacts/agent-runtime || true
-          [ -f "$C/artifacts/processed_tasks.yaml" ] && ln -s "$C/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml || true
+          if [ -f "$C/artifacts/processed_tasks.yaml" ]; then
+            ln -s "$C/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml
+          else
+            printf 'description: %s\nruns: []\n' 'Tracer task processed-tasks ledger' \
+              > artifacts/processed_tasks.yaml
+          fi
           # trainer — uv env + repos + 512 fixture (remote pod hosts the GPUs)
           C="${SHARED_RUNTIME}/trainer"; cd "$GITHUB_WORKSPACE/subblock/trainer"
           mkdir -p repos artifacts artifacts/data
