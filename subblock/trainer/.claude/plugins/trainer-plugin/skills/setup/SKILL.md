@@ -84,7 +84,7 @@ root `.gitmodules`); a fresh clone leaves them empty. For each entry under
    (`https://github.com/SWE-Lego/LLaMA-Factory.git`) and needs no token.
 3. Verify each checkout matches the pin:
    `git -C repos/<path> rev-parse HEAD` must equal `meta_info.repositories.
-   <name>.commit` (`3e32f8ca…` for LLaMA-Factory, `67aadd1e…` for
+   <name>.commit` (`3e32f8ca…` for LLaMA-Factory, `538d3838…` for
    swe_data_process). If a present worktree has drifted or has local
    edits, **report it and ask** — per `BLOCK_DEFINITION.md`, `repos/` is
    pinned, read-only code; `:setup` configures and pins, it does not patch.

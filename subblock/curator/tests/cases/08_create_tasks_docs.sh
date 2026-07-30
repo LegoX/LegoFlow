@@ -24,7 +24,11 @@ files = [
 ]
 curator_docs_pages = sorted((block / "docs/content/docs").glob("*.mdx"))
 root_docs_pages = sorted((root / "docs/content/docs").glob("*.mdx"))
-files.extend(curator_docs_pages)
+# Curator's own docs site is exempt from the /curator:run ban: it documents the
+# full plugin surface, adapter included, and describes /curator:run as a
+# compatibility entry point rather than recommending it. The ban still holds
+# everywhere the command would read as the way to operate Curator — the root
+# README and docs, CLAUDE.md, the plugin README/skills, memory, and smoke.
 files.extend(root_docs_pages)
 
 stale = []

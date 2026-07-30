@@ -42,7 +42,7 @@ meta_info:
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
       branch: swe-lego-live
-      commit: 67aadd1e029c6e9a4b3c4b18bfc68557edb6d3c5
+      commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
       path: repos/swe_data_process
       readonly: true
 
