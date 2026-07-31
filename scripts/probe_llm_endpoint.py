@@ -55,6 +55,15 @@ def post(url: str, payload: dict, headers: dict, timeout: int):
         return None, None, "", "", f"{type(e).__name__}: {e}"
 
 
+def finish_reason(body) -> str:
+    if not isinstance(body, dict):
+        return ""
+    choices = body.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        return choices[0].get("finish_reason") or ""
+    return ""
+
+
 def openai_text(body) -> str:
     if not isinstance(body, dict):
         return ""
@@ -129,7 +138,7 @@ def try_openai(base: str, model: str, key: str, timeout: int, max_tokens: int):
     )
     text = openai_text(body)
     return {"status": status, "text": text, "raw": raw[:400], "server": server,
-            "err": err, "base": base, "model": model}
+            "err": err, "base": base, "model": model, "finish": finish_reason(body)}
 
 
 def try_anthropic(base: str, model: str, key: str, timeout: int, max_tokens: int):
@@ -145,7 +154,8 @@ def try_anthropic(base: str, model: str, key: str, timeout: int, max_tokens: int
     )
     text = anthropic_text(body)
     return {"status": status, "text": text, "raw": raw[:400], "server": server,
-            "err": err, "base": root + path, "model": model}
+            "err": err, "base": root + path, "model": model,
+            "finish": (body or {}).get("stop_reason", "") if isinstance(body, dict) else ""}
 
 
 def transient(result) -> bool:
@@ -160,6 +170,10 @@ def describe(result) -> str:
     if result["text"]:
         return f"HTTP {result['status']}, text OK"
     if result["status"] == 200:
+        if result.get("finish") in ("length", "max_tokens"):
+            return ("HTTP 200 but the reply was cut off before any content "
+                    "(finish_reason=length) — a reasoning model can spend the whole "
+                    "budget thinking; retry with a larger --max-tokens")
         return f"HTTP 200 but no text in the reply ({result['err'] or 'empty content'})"
     return f"HTTP {result['status']}"
 
@@ -231,7 +245,7 @@ def main() -> int:
     ap.add_argument("--anthropic-model", default=os.environ.get("PROBE_ANTHROPIC_MODEL", ""))
     ap.add_argument("--attempts", type=int, default=3)
     ap.add_argument("--timeout", type=int, default=30)
-    ap.add_argument("--max-tokens", type=int, default=32)
+    ap.add_argument("--max-tokens", type=int, default=256)
     ap.add_argument("--label", default="LLM endpoint")
     ap.add_argument("--anthropic-only", action="store_true",
                     help="Skip the OpenAI path; probe only /v1/messages")
