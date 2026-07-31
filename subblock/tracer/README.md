@@ -88,7 +88,7 @@ generic lifecycle (`/root:check`, `/root:run`); these are tracer-specific:
 ## Where things live
 
 - **Run it**: `scripts/` (or the skills above). `scripts/start.sh` runs the job; `scripts/dryrun.sh` validates without side effects.
-- **Read status and quality**: `config.yaml` → `status` and `artifacts/index.yaml` (newest entry). For a visual view, the dashboard at <https://swe-tracer-databoard-eir.pages.dev/> includes instance/trajectory analysis by programming language/domain/category/difficulty/source/model/scaffold/job, status, artifact tables, bounded previews, and optional R2 full trajectory loading.
+- **Read status and quality**: `config.yaml` → `status` and `artifacts/index.yaml` (newest entry). For a visual view, the dashboard at <https://swe-tracer-databoard.pages.dev/> includes instance/trajectory analysis by programming language/domain/category/difficulty/source/model/scaffold/job, status, artifact tables, bounded previews, and optional R2 full trajectory loading.
 - **Outputs**: trajectories under `artifacts/jobs/`, SFT data under `artifacts/sft_data/`.
 - **History**: per-run snapshots under `artifacts/archives/run_NNN/`.
 
