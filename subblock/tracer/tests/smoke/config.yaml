@@ -83,7 +83,7 @@ runtime_info:
       version: 2.1.118
       runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
       runtime_host_path: artifacts/agent-runtime/claude-code
-      max_turns: 80   # match production; 30 cut 8/10 smoke trials off at the cap
+      max_turns: 30                    # SMOKE: was 80 — keep trials inside the 2400s budget
       temperature: 0.7
 
     sft_conversion:
