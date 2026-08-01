@@ -80,7 +80,7 @@ else
   info "artifacts/index.yaml absent (auto-created by archive_run.sh after first run)"
 fi
 
-for d in artifacts scripts block; do
+for d in artifacts scripts blocks; do
   if [[ -d "$ROOT_DIR/$d" ]]; then
     ok "dir: $d/"
   else
