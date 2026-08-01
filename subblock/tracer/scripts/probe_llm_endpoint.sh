@@ -15,9 +15,12 @@ print(str(node.get(sys.argv[2]) or "").strip())
 PY
 }
 
+# llm_api.model is the LiteLLM spec (provider/model) the per-job proxy consumes;
+# this probe talks to the RAW upstream, which only knows the bare served name and
+# 404s on the prefixed form — so strip the prefix before probing.
 exec python3 "$ROOT_DIR/scripts/probe_llm_endpoint.py" \
   --label "tracer LLM endpoint" \
   --base-url "$(cfg api_base_url)" \
-  --model "$(cfg model)" \
+  --model "$(cfg model | sed 's|^[^/]*/||')" \
   --api-key "$(cfg api_key)" \
   "$@"
