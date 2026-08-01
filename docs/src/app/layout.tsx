@@ -3,7 +3,7 @@ import { Metadata } from "next";
 import "./global.css";
 
 export const metadata: Metadata = {
-  title: "SWE-Lego-Live",
+  title: "LegoFlow",
   description:
     "A self-evolving LLM development pipeline composed of pluggable blocks: curator → tracer → trainer → evaluator.",
 };

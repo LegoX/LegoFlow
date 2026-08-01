@@ -92,8 +92,8 @@ def live_overlay(config_path: Path):
     values this check would otherwise reject. Both smoke flavours leave a backup
     next to (or beside) the config, named with the owning process's pid:
 
-        subblock/<b>/config.yaml.root-smoke-bak.<pid>      root chain
-        subblock/<b>/tests/smoke/.config.yaml.backup.<pid> block smoke
+        blocks/<b>/config.yaml.root-smoke-bak.<pid>      root chain
+        blocks/<b>/tests/smoke/.config.yaml.backup.<pid> block smoke
 
     The pid is what makes this safe: a backup whose process is gone is debris
     from a crashed run, and must NOT suppress the check — otherwise one crashed

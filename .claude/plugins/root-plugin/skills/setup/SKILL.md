@@ -3,7 +3,7 @@ name: setup
 description: >
   One-shot bootstrap for the root block tree — verify shared tooling, ensure the
   root config.yaml exists and matches the contract, and (optionally, on user
-  confirmation) recurse into each subblock listed under `meta_info.subblocks`
+  confirmation) recurse into each block listed under `meta_info.blocks`
   and invoke its own `:setup` skill in order. Idempotent: safe to re-run; only
   touches fields the user has not already filled in. Triggers on phrases like
   "set up the project", "bootstrap the pipeline", "fill in the root config",
@@ -20,7 +20,7 @@ block needs before `:check` can pass. At the root level this covers:
    docker prerequisites the pipeline assumes; abort with actionable next steps
    if missing.
 2. **Root config** — ensure `./config.yaml` exists and matches the contract
-   (orchestration identity: `meta_info.subblocks` roster with role one-liners,
+   (orchestration identity: `meta_info.blocks` roster with role one-liners,
    explicit `dependencies: {from: {}, to: {}}`, empty `runtime_info.output`).
    If missing, scaffold it from `resources/config.template.yaml`.
    **The root owns no shared *pipeline* inputs**: the blocks intentionally use
@@ -33,9 +33,9 @@ block needs before `:check` can pass. At the root level this covers:
    infrastructure credentials that every block reads through
    `scripts/shared_credentials.sh`. Both default to all-empty (feature off) and
    are filled in step 4/5 below, never automatically.
-3. **Recurse (optional)** — for each `name` in `meta_info.subblocks`, ask the
+3. **Recurse (optional)** — for each `name` in `meta_info.blocks`, ask the
    user "set up `<name>` now?" and on yes hand off to `/<name>:setup`. Each
-   subblock's setup fills its own `runtime_info.input`, replacing `human`
+   block's setup fills its own `runtime_info.input`, replacing `human`
    markers with real values (never writing secrets into config — env/file
    channels only, as each field's inline comment directs).
 

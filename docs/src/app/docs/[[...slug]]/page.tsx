@@ -11,7 +11,7 @@ import type { Metadata } from 'next';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
 import type { ComponentProps } from 'react';
 
-const blockDocsPrefix = '/docs/sub-block/';
+const blockDocsPrefix = '/docs/blocks/';
 
 function rewriteBlockDocsHref(currentUrl: string, href?: string) {
   if (!href?.startsWith('/docs/') || href.startsWith(blockDocsPrefix)) {

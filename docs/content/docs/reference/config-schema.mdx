@@ -3,7 +3,7 @@ title: config.yaml schema
 description: The fixed schema every block's config.yaml follows
 ---
 
-Every block in the tree — root or subblock — has a `config.yaml` with the same top-level shape. Live state is **not** stored here; that lives in `artifacts/index.yaml`. The schema is machine-enforced by `scripts/validate_config.py` (run by every block's `dryrun.sh`, the CI schema tests, and the `:check` skills).
+Every block in the tree — root or child — has a `config.yaml` with the same top-level shape. Live state is **not** stored here; that lives in `artifacts/index.yaml`. The schema is machine-enforced by `scripts/validate_config.py` (run by every block's `dryrun.sh`, the CI schema tests, and the `:check` skills).
 
 ## Top-level structure
 
@@ -13,7 +13,7 @@ meta_info:
   label:                # human-friendly title
   description:          # one-sentence purpose
   parent:               # parent block's `name`, or null for the root
-  subblocks:            # parent blocks only: children with a role one-liner — NO wiring
+  blocks:            # parent blocks only: children with a role one-liner — NO wiring
     <child_name>: {role: "<one phrase>"}
   dependencies:         # this block's own upstream AND downstream edges — see "Wiring rule"
     from:
@@ -36,7 +36,7 @@ These are the **only** two top-level sections. Legacy `status:` and `evolving:` 
 
 This is the rule the whole pipeline depends on:
 
-> `meta_info.dependencies` is a mapping with exactly two keys, `from` and `to` — a block declares both directions it participates in, from its own file. A block with neither declares an explicit `dependencies: {from: {}, to: {}}`. The root's `subblocks` entries carry roles only — never wiring.
+> `meta_info.dependencies` is a mapping with exactly two keys, `from` and `to` — a block declares both directions it participates in, from its own file. A block with neither declares an explicit `dependencies: {from: {}, to: {}}`. The root's `blocks` entries carry roles only — never wiring.
 
 **`from`** — this block's own upstream hand-offs. Key is a dot-path into this block's own `runtime_info.input`; value names the producer's output. Two value forms:
 
@@ -97,8 +97,8 @@ Do **not** "restore" an old remote IP from git history. The local default is int
 
 ```bash
 python3 scripts/validate_config.py --root .                  # whole tree + cross-block deps
-python3 scripts/validate_config.py --block subblock/tracer   # one block
-python3 scripts/validate_config.py --block subblock/tracer --config tests/smoke/config.yaml
+python3 scripts/validate_config.py --block blocks/tracer   # one block
+python3 scripts/validate_config.py --block blocks/tracer --config tests/smoke/config.yaml
 ```
 
 Findings are printed as `[OK]`/`[WARN]`/`[FAIL]` lines with stable labels (`schema:*`, `dep:*` — including `dep:bad-shape` for a malformed `from`/`to` mapping and `dep:link-mismatch` (warning) when the two sides of an edge disagree — `input:*`, `output:shape`, `tree:*`); the exit code is non-zero iff any `[FAIL]` was reported.

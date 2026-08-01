@@ -1,7 +1,7 @@
 ---
 name: create
 description: >
-  Scaffolds a new block directory in a block-structured project. A `block` is the basic collaboration unit in a block-structured project, which contains all necessary information about its role, repos, scripts and artifacts. Use this skill whenever the user wants to create a new block, add a subblock, set up a new project unit, or initialize a block directory. Triggers on phrases like "create a block", "add a subblock", "scaffold a new block", "initialize a block for X", "make a block called Y", or any request to set up a new unit in a block-structured repo. Don't wait for the user to say "block" explicitly — if they describe wanting to create a new project unit, module, or agent workspace with inputs/outputs/scripts, use this skill.
+  Scaffolds a new block directory in a block-structured project. A `block` is the basic collaboration unit in a block-structured project, which contains all necessary information about its role, repos, scripts and artifacts. Use this skill whenever the user wants to create a new block, add a block, set up a new project unit, or initialize a block directory. Triggers on phrases like "create a block", "add a block", "scaffold a new block", "initialize a block for X", "make a block called Y", or any request to set up a new unit in a block-structured repo. Don't wait for the user to say "block" explicitly — if they describe wanting to create a new project unit, module, or agent workspace with inputs/outputs/scripts, use this skill.
 ---
 
 # /root:create
@@ -25,7 +25,7 @@ Scaffolds a complete block directory — the standard collaboration unit in a bl
 │   └── clean.sh
 ├── artifacts/
 │   └── index.yaml          ← archives/ created at first run
-└── subblock/
+└── blocks/
 ```
 
 A complete example is in `resources/example_block/` bundled in this plugin — an `sft_training` leaf block with inputs, outputs, a remote resource, and a git submodule repo. Read it when you need a concrete reference.
@@ -75,7 +75,7 @@ meta_info:
   label: <human-readable label, title-case of name>
   description: <role sentence>
   parent: <parent or null>
-  subblocks: {}
+  blocks: {}
     # parent blocks: one entry per child with a role one-liner ONLY — no wiring here
     # <child1>: {role: "<one phrase>"}
 
@@ -206,7 +206,7 @@ Only create if repos were declared. For each repo:
 
 Do not create an empty `repos/` folder.
 
-### `subblock/`
+### `blocks/`
 
 Create the directory. For each declared child, do not create it directly, but instead ask the users to create them separately.
 

@@ -33,7 +33,7 @@ case "$BLOCK" in
 esac
 
 REPO_ROOT="${GITHUB_WORKSPACE:-$(pwd)}"
-BLOCK_DIR="$REPO_ROOT/subblock/$BLOCK"
+BLOCK_DIR="$REPO_ROOT/blocks/$BLOCK"
 [[ -d "$BLOCK_DIR" ]] || { echo "FAIL: $BLOCK_DIR missing" >&2; exit 1; }
 
 cd "$BLOCK_DIR"
@@ -176,7 +176,7 @@ LAUNCH_LOG="$BLOCK_DIR/artifacts/logs/smoke-launch.log"
 claude_launch() {
   local setup_check="$1" preflight="$2" run_cmd="$3" pgrep_pat="$4" label="$5"
   HOME=/home/haoli timeout 900 claude -p \
-"CI smoke for ${label}. The smoke config has been overlaid at subblock/${BLOCK}/config.yaml. cwd is already subblock/${BLOCK}.
+"CI smoke for ${label}. The smoke config has been overlaid at blocks/${BLOCK}/config.yaml. cwd is already blocks/${BLOCK}.
 
 Run 3 gated phases via the Bash tool. STOP and reply FAILED <phase-number> with the last 20 lines of output if any phase exits non-zero. Do NOT proceed past a failure.
 
@@ -280,7 +280,7 @@ PY
       # which is intentional: dryrun.sh in phase 2 must read the smoke
       # config, not whatever was on the remote before).
       BRANCH="${GITHUB_REF_NAME:-haoli/ci-cd}"
-      REMOTE_LOG="$REMOTE_DIR/subblock/trainer/artifacts/logs/smoke-launch.log"
+      REMOTE_LOG="$REMOTE_DIR/blocks/trainer/artifacts/logs/smoke-launch.log"
       SETUP_SH="artifacts/logs/.smoke-remote-setup.sh"
       CHECK_SH="artifacts/logs/.smoke-remote-check.sh"
       RUN_SH="artifacts/logs/.smoke-remote-run.sh"
@@ -296,15 +296,15 @@ EOS
       }
       # Phase 1: fast-forward + overlay + env sanity. Exits 0 if the env
       # dir exists and the smoke config is in place.
-      _ssh_wrap "set -e; cd '$REMOTE_DIR'; /usr/bin/git.real fetch origin '$BRANCH' --quiet; /usr/bin/git.real reset --hard 'origin/$BRANCH' --quiet; cp subblock/trainer/tests/smoke/config.yaml subblock/trainer/config.yaml; mkdir -p subblock/trainer/artifacts/logs; rm -rf subblock/trainer/artifacts/model/_smoke_train_ci; test -d subblock/trainer/artifacts/env && echo 'remote setup OK'" \
+      _ssh_wrap "set -e; cd '$REMOTE_DIR'; /usr/bin/git.real fetch origin '$BRANCH' --quiet; /usr/bin/git.real reset --hard 'origin/$BRANCH' --quiet; cp blocks/trainer/tests/smoke/config.yaml blocks/trainer/config.yaml; mkdir -p blocks/trainer/artifacts/logs; rm -rf blocks/trainer/artifacts/model/_smoke_train_ci; test -d blocks/trainer/artifacts/env && echo 'remote setup OK'" \
         > "$BLOCK_DIR/$SETUP_SH"
 
       # Phase 2: dryrun.sh on the remote trainer dir.
-      _ssh_wrap "set -e; cd '$REMOTE_DIR/subblock/trainer'; PATH=/root/.local/bin:\\\$PATH bash scripts/dryrun.sh" \
+      _ssh_wrap "set -e; cd '$REMOTE_DIR/blocks/trainer'; PATH=/root/.local/bin:\\\$PATH bash scripts/dryrun.sh" \
         > "$BLOCK_DIR/$CHECK_SH"
 
       # Phase 3: backgrounded start.sh, SSH returns once disown completes.
-      _ssh_wrap "set -e; cd '$REMOTE_DIR/subblock/trainer'; PATH=/root/.local/bin:\\\$PATH nohup bash scripts/start.sh > '$REMOTE_LOG' 2>&1 & disown; echo \\\"REMOTE_LAUNCH_PID=\\\$!\\\"" \
+      _ssh_wrap "set -e; cd '$REMOTE_DIR/blocks/trainer'; PATH=/root/.local/bin:\\\$PATH nohup bash scripts/start.sh > '$REMOTE_LOG' 2>&1 & disown; echo \\\"REMOTE_LAUNCH_PID=\\\$!\\\"" \
         > "$BLOCK_DIR/$RUN_SH"
 
       chmod +x "$BLOCK_DIR/$SETUP_SH" "$BLOCK_DIR/$CHECK_SH" "$BLOCK_DIR/$RUN_SH"
@@ -348,16 +348,16 @@ POLL_END_REASON="budget exhausted"
 # the same files at the same paths it would for a local run.
 fetch_sft_remote_if_ready() {
   [[ -n "$REMOTE_IP" ]] || return 1
-  remote "test -f '$REMOTE_DIR/subblock/trainer/artifacts/model/_smoke_train_ci/train_results.json'" 2>/dev/null || return 1
+  remote "test -f '$REMOTE_DIR/blocks/trainer/artifacts/model/_smoke_train_ci/train_results.json'" 2>/dev/null || return 1
   echo "INFO: remote train_results.json appeared — fetching"
   mkdir -p "$BLOCK_DIR/artifacts/model/_smoke_train_ci"
   scp -i "$REMOTE_KEY" -P "$REMOTE_PORT" \
       -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/subblock/trainer/artifacts/model/_smoke_train_ci/train_results.json" \
+      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/blocks/trainer/artifacts/model/_smoke_train_ci/train_results.json" \
       "$BLOCK_DIR/artifacts/model/_smoke_train_ci/train_results.json" 2>&1 | tail -3
   scp -i "$REMOTE_KEY" -P "$REMOTE_PORT" \
       -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/subblock/trainer/artifacts/model/_smoke_train_ci/trainer_state.json" \
+      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/blocks/trainer/artifacts/model/_smoke_train_ci/trainer_state.json" \
       "$BLOCK_DIR/artifacts/model/_smoke_train_ci/trainer_state.json" 2>&1 | tail -3 || true
   return 0
 }
@@ -472,7 +472,7 @@ fi
 if [[ "$BLOCK" == "trainer" && -n "$REMOTE_IP" ]]; then
   echo "INFO: cleanup — remote run dir + dataset_info entry"
   remote "
-    cd '$REMOTE_DIR/subblock/trainer' || exit 0
+    cd '$REMOTE_DIR/blocks/trainer' || exit 0
     rm -rf artifacts/model/_smoke_train_ci
     python3 - <<'PY' 2>/dev/null || true
 import fcntl, json, os

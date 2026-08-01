@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Validate the root swe_lego_live block without side effects.
+# Validate the root legoflow block without side effects.
 # Config/schema/dependency validation is delegated to scripts/validate_config.py
-# (the shared block-contract validator). Pass --full to also run each subblock's
+# (the shared block-contract validator). Pass --full to also run each block's
 # own dryrun.sh (locally, or on the remote node when resources.ip is remote).
 set -euo pipefail
 
@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
     --full) FULL=1; shift ;;
     -h|--help)
       echo "Usage: bash scripts/dryrun.sh [--full]"
-      echo "  --full   also run each subblock's dryrun.sh"
+      echo "  --full   also run each block's dryrun.sh"
       exit 0
       ;;
     *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
@@ -55,7 +55,7 @@ PY
 
 ROOT_CFG="$ROOT_DIR/config.yaml"
 
-echo "=== Block Dryrun: swe_lego_live ==="
+echo "=== Block Dryrun: legoflow ==="
 echo ""
 
 # ── 1. Local file checks ──────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ else
   info "artifacts/index.yaml absent (auto-created by archive_run.sh after first run)"
 fi
 
-for d in artifacts scripts subblock; do
+for d in artifacts scripts block; do
   if [[ -d "$ROOT_DIR/$d" ]]; then
     ok "dir: $d/"
   else
@@ -88,7 +88,7 @@ for d in artifacts scripts subblock; do
   fi
 done
 
-# ── 2. Config validation (root + every subblock + cross-block deps) ──────────
+# ── 2. Config validation (root + every block + cross-block deps) ──────────
 echo ""
 echo "2. Config validation (scripts/validate_config.py --root)"
 
@@ -109,7 +109,7 @@ echo "3. Deployment & registry credentials"
 
 # These are the tree-wide, OPTIONAL credentials declared in root config.yaml ->
 # runtime_info.input.{cloudflare,docker}. scripts/shared_credentials.sh resolves
-# them as env > root config.yaml > legacy per-block env file, and every subblock
+# them as env > root config.yaml > legacy per-block env file, and every block
 # reads them through the same helper, so what is reported here is exactly what
 # the blocks will see. Absence is always a WARN, never a FAIL.
 CF_ENV_FILE="${ENV_FILE:-$HOME/.config/trajgen_progress_cloudflare.env}"
@@ -199,41 +199,41 @@ else
   fi
 fi
 
-# ── 5. Full subblock dryruns (optional) ───────────────────────────────────────
+# ── 5. Full block dryruns (optional) ───────────────────────────────────────
 if [[ $FULL -eq 1 ]]; then
   echo ""
-  echo "5. Subblock dryruns (--full)"
+  echo "5. Block dryruns (--full)"
 
-  SUBBLOCKS="$(python3 - "$ROOT_CFG" <<'PY'
+  BLOCKS="$(python3 - "$ROOT_CFG" <<'PY'
 import sys, yaml
 with open(sys.argv[1], encoding="utf-8") as fh:
     cfg = yaml.safe_load(fh) or {}
-print(" ".join((cfg.get("meta_info") or {}).get("subblocks") or {}))
+print(" ".join((cfg.get("meta_info") or {}).get("blocks") or {}))
 PY
 )"
 
-  for subblock in $SUBBLOCKS; do
-    if [[ ! -f "$ROOT_DIR/subblock/${subblock}/scripts/dryrun.sh" ]]; then
-      warn "subblock/${subblock} has no scripts/dryrun.sh"
+  for block in $BLOCKS; do
+    if [[ ! -f "$ROOT_DIR/blocks/${block}/scripts/dryrun.sh" ]]; then
+      warn "blocks/${block} has no scripts/dryrun.sh"
       continue
     fi
     if [[ $SSH_OK -eq 1 ]]; then
       REMOTE_REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
-      info "running subblock/${subblock}/scripts/dryrun.sh on remote ..."
+      info "running blocks/${block}/scripts/dryrun.sh on remote ..."
       if ssh -o BatchMode=yes "${REMOTE_USER}@${REMOTE_IP}" \
-           "cd '${REMOTE_REPO_DIR}/subblock/${subblock}' && bash scripts/dryrun.sh" 2>&1 \
-           | sed "s/^/    [${subblock}] /"; then
-        ok "subblock/${subblock} dryrun passed"
+           "cd '${REMOTE_REPO_DIR}/blocks/${block}' && bash scripts/dryrun.sh" 2>&1 \
+           | sed "s/^/    [${block}] /"; then
+        ok "blocks/${block} dryrun passed"
       else
-        fail "subblock/${subblock} dryrun failed"
+        fail "blocks/${block} dryrun failed"
       fi
     else
-      info "running subblock/${subblock}/scripts/dryrun.sh locally ..."
-      if (cd "$ROOT_DIR/subblock/${subblock}" && bash scripts/dryrun.sh) 2>&1 \
-           | sed "s/^/    [${subblock}] /"; then
-        ok "subblock/${subblock} dryrun passed"
+      info "running blocks/${block}/scripts/dryrun.sh locally ..."
+      if (cd "$ROOT_DIR/blocks/${block}" && bash scripts/dryrun.sh) 2>&1 \
+           | sed "s/^/    [${block}] /"; then
+        ok "blocks/${block} dryrun passed"
       else
-        fail "subblock/${subblock} dryrun failed"
+        fail "blocks/${block} dryrun failed"
       fi
     fi
   done

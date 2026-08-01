@@ -1,4 +1,4 @@
-# CI/CD for SWE-Lego-Live
+# CI/CD for LegoFlow
 
 Friendly tour of what runs when you push a commit, open a PR, or click
 **Run workflow** in the GitHub UI. Read this if you want to understand the
@@ -7,7 +7,7 @@ shape of CI before diving into `ci.yml` (which is mechanical detail).
 ## TL;DR
 
 - **One workflow**: `.github/workflows/ci.yml`. It runs two tiers of tests
-  for the **root block** and each **subblock** (`curator`, `tracer`, `evaluator`,
+  for the **root block** and each **block** (`curator`, `tracer`, `evaluator`,
   `trainer`).
 - **Cases** — fast unit-shaped tests under each block's `tests/`. Run on
   *every* push and PR. Goal: catch regressions in minutes, not hours.
@@ -33,8 +33,8 @@ your push / PR / manual dispatch
 │  ci.yml                                                                 │
 │                                                                         │
 │  ┌──────────────────┐       ┌──────────────────────────────────────┐   │
-│  │ Root block       │       │ Detect changed subblocks             │   │
-│  │ sanity (cloud)   │       │ (paths-filter on subblock/<b>/**)    │   │
+│  │ Root block       │       │ Detect changed blocks             │   │
+│  │ sanity (cloud)   │       │ (paths-filter on blocks/<b>/**)    │   │
 │  └──────────────────┘       └─────────────┬────────────────────────┘   │
 │                                            │                            │
 │         ┌──────────────────────────────────┴──────────────────┐         │
@@ -59,10 +59,10 @@ your push / PR / manual dispatch
 | `.github/workflows/ci-from-scratch.yml` | Optional "rebuild everything from cold state" workflow used to validate runner provisioning end-to-end. Not part of normal CI. |
 | `.github/scripts/smoke_run.sh` | The smoke launcher. Same script for all 4 blocks; takes `<block> <budget_seconds>`. Drives the claude SDK 3-phase chain. |
 | `.github/scripts/register-gpu-runner.sh` | One-shot runner enrollment for the GPU box (`swe-lego-gpu` label). Operator script — not invoked by CI. See [Self-hosted runner setup](#self-hosted-runner-setup-operator-only) below. |
-| `subblock/<block>/tests/run.sh` | Each subblock's case runner. Iterates `tests/cases/*.sh`. |
-| `subblock/<block>/tests/cases/` | The per-block case scripts (unit-shaped, no real LLM calls except `04_llm_endpoint.sh`). |
-| `subblock/<block>/tests/smoke/config.yaml` | Smoke-mode config overlay (schema-compatible with the production `subblock/<block>/config.yaml`). Copied over the production file at the top of each smoke job. |
-| `subblock/<block>/tests/smoke/verify.sh` | Smoke verifier — reads on-disk artifacts and exits 0=PASS, 77=SKIP→warning, !=0=FAIL. |
+| `blocks/<block>/tests/run.sh` | Each block's case runner. Iterates `tests/cases/*.sh`. |
+| `blocks/<block>/tests/cases/` | The per-block case scripts (unit-shaped, no real LLM calls except `04_llm_endpoint.sh`). |
+| `blocks/<block>/tests/smoke/config.yaml` | Smoke-mode config overlay (schema-compatible with the production `blocks/<block>/config.yaml`). Copied over the production file at the top of each smoke job. |
+| `blocks/<block>/tests/smoke/verify.sh` | Smoke verifier — reads on-disk artifacts and exits 0=PASS, 77=SKIP→warning, !=0=FAIL. |
 | `tests/test_root_block.py` | Root sanity tests (block tree shape, config schemas). Runs on `ubuntu-latest`. |
 
 ## The jobs, one by one
@@ -70,12 +70,12 @@ your push / PR / manual dispatch
 ### Root block sanity (cloud)
 
 Cheap pytest on `ubuntu-latest`. Validates the block tree's structural
-invariants (subblock list matches `meta_info.subblocks`, configs parse, etc.).
+invariants (block list matches `meta_info.blocks`, configs parse, etc.).
 Always runs.
 
-### Detect changed subblocks
+### Detect changed blocks
 
-`dorny/paths-filter` against `subblock/<b>/**` (plus the workflow file
+`dorny/paths-filter` against `blocks/<b>/**` (plus the workflow file
 itself). Emits per-block boolean outputs (`curator`, `tracer`, `evaluator`,
 `trainer`). Each downstream cases/smoke job has
 `if: needs.detect-changes.outputs.<b> == 'true'`, so a curator-only PR
@@ -113,7 +113,7 @@ Same lifecycle as cases, plus:
 - Gated by `needs.<block>-cases` (smoke only runs if cases passed) **and**
   one of: `workflow_dispatch run_smoke=true`, or push to `dev`/`main`.
 - Adds an **Overlay smoke config** step before launch — copies
-  `subblock/<b>/tests/smoke/config.yaml` over the production file so the
+  `blocks/<b>/tests/smoke/config.yaml` over the production file so the
   block's scripts read smoke-tuned parameters (smaller PR list, shorter
   timeouts, throwaway dataset keys, etc.).
 - **Run smoke** invokes `bash .github/scripts/smoke_run.sh <block> <budget>`.
@@ -201,7 +201,7 @@ Cases jobs are designed to be runnable outside CI — they're just
 env/runtime layout though, so use a self-hosted-runner-like setup:
 
 ```bash
-cd subblock/curator
+cd blocks/curator
 bash tests/run.sh
 ```
 
@@ -227,7 +227,7 @@ once the runners are up.
 
 `trainer-smoke` is the **one training job in CI**. It launches full-parameter
 Qwen3-8B training at `cutoff_len=131072` across 8 GPUs (see
-`subblock/trainer/tests/smoke/10_train_demo.sh`). Every other CI job is CPU/Docker
+`blocks/trainer/tests/smoke/10_train_demo.sh`). Every other CI job is CPU/Docker
 work that any `swe-lego-ci` runner can take. The training smoke must land on
 the host that actually has the 8 GPUs, so its `runs-on` in `ci.yml` is pinned
 to `[self-hosted, swe-lego-gpu]` — a label that **only the GPU machine's
@@ -282,4 +282,4 @@ since the host is what actually runs).
 ## See also
 
 - [`.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`](../../.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md) — the block-system contract these jobs operate against.
-- [`CLAUDE.md`](../../CLAUDE.md) — root block agent contract; lists subblocks and the input/output wiring this CI exercises.
+- [`CLAUDE.md`](../../CLAUDE.md) — root block agent contract; lists blocks and the input/output wiring this CI exercises.

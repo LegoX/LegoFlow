@@ -4,7 +4,7 @@
 
 **Goal:** Make `/curator:create-tasks` the canonical task-generation command, retain a thin `/curator:run` uniform-interface compatibility adapter, and publish the updated Curator docs at `swe-swegen-docs.pages.dev`.
 
-**Architecture:** The existing full run skill moves unchanged in behavior to a new `create-tasks` skill. A minimal `run` skill remains only to preserve the repository's uniform `/<block>:run` plugin layout; it delegates all arguments and decisions to the canonical skill. Root targeting is independent and directly executes the selected block's `scripts/start.sh`. Maintained Fumadocs source stays under `subblock/curator/docs`, whose deploy target changes to the existing `swe-swegen-docs` Pages project.
+**Architecture:** The existing full run skill moves unchanged in behavior to a new `create-tasks` skill. A minimal `run` skill remains only to preserve the repository's uniform `/<block>:run` plugin layout; it delegates all arguments and decisions to the canonical skill. Root targeting is independent and directly executes the selected block's `scripts/start.sh`. Maintained Fumadocs source stays under `blocks/curator/docs`, whose deploy target changes to the existing `swe-swegen-docs` Pages project.
 
 **Tech Stack:** Claude Code plugin skills (Markdown frontmatter), Bash contract tests, Fumadocs/Next.js, Cloudflare Pages/Wrangler, GitHub CLI.
 
@@ -28,10 +28,10 @@ dispatch is superseded by this decision record.
 
 ## Global Constraints
 
-- The current namespace is `/curator:*`; do not restore `subblock/swegen` or `/swegen:*`.
+- The current namespace is `/curator:*`; do not restore `blocks/swegen` or `/swegen:*`.
 - `/curator:create-tasks` is the only user-facing task-generation command.
 - `/curator:run` remains only as a uniform-interface compatibility adapter.
-- `/root:run <subblock>` directly executes the selected block's `scripts/start.sh`.
+- `/root:run <block>` directly executes the selected block's `scripts/start.sh`.
 - Do not change task-generation scripts, PR collection behavior, or artifact formats.
 - Keep all documentation in English and make only command/documentation/deployment changes required by the design.
 - The prior PR #60 is merged; delivery uses the same `swegen` branch in a new follow-up PR to `dev`.
@@ -42,12 +42,12 @@ dispatch is superseded by this decision record.
 ### Task 1: Add the canonical command and compatibility adapter
 
 **Files:**
-- Create: `subblock/curator/tests/cases/07_create_tasks_skill.sh`
-- Move: `subblock/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md` → `subblock/curator/.claude/plugins/curator-plugin/skills/create-tasks/SKILL.md`
-- Create: `subblock/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md`
-- Modify: `subblock/curator/.claude/plugins/curator-plugin/.claude-plugin/plugin.json`
-- Modify: `subblock/curator/.claude/plugins/.claude-plugin/marketplace.json`
-- Modify: `subblock/curator/.claude/plugins/curator-plugin/README.md`
+- Create: `blocks/curator/tests/cases/07_create_tasks_skill.sh`
+- Move: `blocks/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md` → `blocks/curator/.claude/plugins/curator-plugin/skills/create-tasks/SKILL.md`
+- Create: `blocks/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md`
+- Modify: `blocks/curator/.claude/plugins/curator-plugin/.claude-plugin/plugin.json`
+- Modify: `blocks/curator/.claude/plugins/.claude-plugin/marketplace.json`
+- Modify: `blocks/curator/.claude/plugins/curator-plugin/README.md`
 
 **Interfaces:**
 - Consumes: the repository's uniform `/<block>:run` command shape, independently
@@ -56,7 +56,7 @@ dispatch is superseded by this decision record.
 
 - [ ] **Step 1: Write the failing command-surface test**
 
-Create `subblock/curator/tests/cases/07_create_tasks_skill.sh`:
+Create `blocks/curator/tests/cases/07_create_tasks_skill.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -105,7 +105,7 @@ PY
 Run:
 
 ```bash
-bash subblock/curator/tests/cases/07_create_tasks_skill.sh
+bash blocks/curator/tests/cases/07_create_tasks_skill.sh
 ```
 
 Expected: exit `1` with `FAIL: missing .../skills/create-tasks/SKILL.md`.
@@ -115,8 +115,8 @@ Expected: exit `1` with `FAIL: missing .../skills/create-tasks/SKILL.md`.
 Move the directory:
 
 ```bash
-mv subblock/curator/.claude/plugins/curator-plugin/skills/run \
-   subblock/curator/.claude/plugins/curator-plugin/skills/create-tasks
+mv blocks/curator/.claude/plugins/curator-plugin/skills/run \
+   blocks/curator/.claude/plugins/curator-plugin/skills/create-tasks
 ```
 
 In the moved `SKILL.md`, make these exact interface changes while preserving the
@@ -141,7 +141,7 @@ or any shell command. Use task-specific triggers such as:
 
 - [ ] **Step 4: Add the complete compatibility skill**
 
-Create `subblock/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md`:
+Create `blocks/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md`:
 
 ```markdown
 ---
@@ -192,7 +192,7 @@ presenting it as a direct user command.
 Run:
 
 ```bash
-bash subblock/curator/tests/cases/07_create_tasks_skill.sh
+bash blocks/curator/tests/cases/07_create_tasks_skill.sh
 bash tests/cases/02_uniform_scripts.sh
 ```
 
@@ -200,29 +200,29 @@ Expected:
 
 ```text
 PASS: curator create-tasks command surface
-PASS: uniform script contract satisfied (root + 5 subblocks)
+PASS: uniform script contract satisfied (root + 5 blocks)
 ```
 
 - [ ] **Step 7: Commit the command surface**
 
 ```bash
-git add subblock/curator/.claude/plugins subblock/curator/tests/cases/07_create_tasks_skill.sh
+git add blocks/curator/.claude/plugins blocks/curator/tests/cases/07_create_tasks_skill.sh
 git commit -m "feat(curator): add explicit create-tasks command"
 ```
 
 ### Task 2: Migrate operational and web documentation
 
 **Files:**
-- Create: `subblock/curator/tests/cases/08_create_tasks_docs.sh`
-- Modify: `subblock/curator/CLAUDE.md`
-- Modify: `subblock/curator/.claude/plugins/curator-plugin/skills/{check,collect-prs,dashboard,setup}/SKILL.md`
-- Modify: `subblock/curator/memory/quick-verify.md`
-- Modify: `subblock/curator/tests/README.md`
-- Modify: `subblock/curator/tests/smoke/verify.sh`
-- Modify: `subblock/curator/docs/content/docs/getting-started.mdx`
-- Modify: `subblock/curator/docs/content/docs/run-generation.mdx`
-- Modify: `subblock/curator/docs/README.md`
-- Modify: `subblock/curator/docs/deploy_cloudflare_pages.sh`
+- Create: `blocks/curator/tests/cases/08_create_tasks_docs.sh`
+- Modify: `blocks/curator/CLAUDE.md`
+- Modify: `blocks/curator/.claude/plugins/curator-plugin/skills/{check,collect-prs,dashboard,setup}/SKILL.md`
+- Modify: `blocks/curator/memory/quick-verify.md`
+- Modify: `blocks/curator/tests/README.md`
+- Modify: `blocks/curator/tests/smoke/verify.sh`
+- Modify: `blocks/curator/docs/content/docs/getting-started.mdx`
+- Modify: `blocks/curator/docs/content/docs/run-generation.mdx`
+- Modify: `blocks/curator/docs/README.md`
+- Modify: `blocks/curator/docs/deploy_cloudflare_pages.sh`
 - Modify: `docs/content/docs/example-usages.mdx`
 
 **Interfaces:**
@@ -232,7 +232,7 @@ git commit -m "feat(curator): add explicit create-tasks command"
 
 - [ ] **Step 1: Write the failing documentation contract test**
 
-Create `subblock/curator/tests/cases/08_create_tasks_docs.sh`:
+Create `blocks/curator/tests/cases/08_create_tasks_docs.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -283,7 +283,7 @@ PY
 Run:
 
 ```bash
-bash subblock/curator/tests/cases/08_create_tasks_docs.sh
+bash blocks/curator/tests/cases/08_create_tasks_docs.sh
 ```
 
 Expected: exit `1`, listing current files that still contain `/curator:run`.
@@ -306,7 +306,7 @@ while direct users should choose `/curator:create-tasks` for mode selection.
 
 - [ ] **Step 4: Point the maintained web source at the existing Pages project**
 
-In `subblock/curator/docs/deploy_cloudflare_pages.sh`, change:
+In `blocks/curator/docs/deploy_cloudflare_pages.sh`, change:
 
 ```diff
 -# (swe-databoard); this one defaults to swe-curator-docs.
@@ -316,13 +316,13 @@ In `subblock/curator/docs/deploy_cloudflare_pages.sh`, change:
 +PROJECT_NAME="${PROJECT_NAME:-swe-swegen-docs}"
 ```
 
-In `subblock/curator/docs/README.md`, change the project name, live URL, and
+In `blocks/curator/docs/README.md`, change the project name, live URL, and
 `PROJECT_NAME` default to `swe-swegen-docs` /
 `https://swe-swegen-docs.pages.dev`.
 
 - [ ] **Step 5: Update test documentation**
 
-Add cases 07 and 08 to `subblock/curator/tests/README.md`, describing them as
+Add cases 07 and 08 to `blocks/curator/tests/README.md`, describing them as
 static command-surface and public-documentation checks. Do not change runtime
 or smoke expectations.
 
@@ -331,8 +331,8 @@ or smoke expectations.
 Run:
 
 ```bash
-bash subblock/curator/tests/cases/07_create_tasks_skill.sh
-bash subblock/curator/tests/cases/08_create_tasks_docs.sh
+bash blocks/curator/tests/cases/07_create_tasks_skill.sh
+bash blocks/curator/tests/cases/08_create_tasks_docs.sh
 ```
 
 Expected:
@@ -348,7 +348,7 @@ Run:
 
 ```bash
 (cd docs && npm ci && npm run build)
-(cd subblock/curator/docs && npm ci && npm run build)
+(cd blocks/curator/docs && npm ci && npm run build)
 ```
 
 Expected: both Next.js builds exit `0`, and Curator generates the
@@ -357,7 +357,7 @@ Expected: both Next.js builds exit `0`, and Curator generates the
 - [ ] **Step 8: Commit the documentation migration**
 
 ```bash
-git add CLAUDE.md README.md docs subblock/curator tests
+git add CLAUDE.md README.md docs blocks/curator tests
 git commit -m "docs(curator): make create-tasks the public workflow"
 ```
 
@@ -383,10 +383,10 @@ Expected: matches only in:
 ```text
 docs/superpowers/specs/2026-07-20-curator-create-tasks-design.md
 docs/superpowers/plans/2026-07-21-curator-create-tasks.md
-subblock/curator/.claude/plugins/curator-plugin/.claude-plugin/plugin.json
-subblock/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md
-subblock/curator/tests/cases/07_create_tasks_skill.sh
-subblock/curator/tests/cases/08_create_tasks_docs.sh
+blocks/curator/.claude/plugins/curator-plugin/.claude-plugin/plugin.json
+blocks/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md
+blocks/curator/tests/cases/07_create_tasks_skill.sh
+blocks/curator/tests/cases/08_create_tasks_docs.sh
 ```
 
 Inspect each match to confirm it is internal compatibility/history/test material
@@ -398,15 +398,15 @@ Run:
 
 ```bash
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 bash tests/run.sh
-bash subblock/curator/tests/cases/01_config_schema.sh
-bash -n subblock/curator/docs/deploy_cloudflare_pages.sh
+bash blocks/curator/tests/cases/01_config_schema.sh
+bash -n blocks/curator/docs/deploy_cloudflare_pages.sh
 git diff --check
 python - <<'PY'
 import json
 from pathlib import Path
 for path in [
-    Path("subblock/curator/.claude/plugins/curator-plugin/.claude-plugin/plugin.json"),
-    Path("subblock/curator/.claude/plugins/.claude-plugin/marketplace.json"),
+    Path("blocks/curator/.claude/plugins/curator-plugin/.claude-plugin/plugin.json"),
+    Path("blocks/curator/.claude/plugins/.claude-plugin/marketplace.json"),
 ]:
     json.loads(path.read_text())
 print("plugin metadata: valid")
@@ -421,7 +421,7 @@ checks and `git diff --check` exit `0`.
 Run:
 
 ```bash
-bash subblock/curator/tests/run.sh
+bash blocks/curator/tests/run.sh
 ```
 
 Expected: cases 07 and 08 pass. If repo/venv/token/LLM checks fail for missing
@@ -552,7 +552,7 @@ Expected: PR state is `MERGED`, and the implementation commit is an ancestor of
 Run after merge:
 
 ```bash
-bash subblock/curator/docs/deploy_cloudflare_pages.sh
+bash blocks/curator/docs/deploy_cloudflare_pages.sh
 ```
 
 Expected: build succeeds and Wrangler reports a successful deployment to

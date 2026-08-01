@@ -13,7 +13,7 @@ The root block can operate the whole block tree with the same plugin-skill lifec
 /root:check
 ```
 
-Run this first. It validates the root and all subblocks: config schema, human-provided inputs, inter-block dependencies, repo pins, environments, remote resources, and live LLM endpoints. Fix every reported issue before launching a long run.
+Run this first. It validates the root and all blocks: config schema, human-provided inputs, inter-block dependencies, repo pins, environments, remote resources, and live LLM endpoints. Fix every reported issue before launching a long run.
 
 Root orchestration does not collect Curator PRs. Before the first production
 run, execute `/curator:collect-prs` and wait for its background process to
@@ -35,7 +35,7 @@ The handoffs are resolved through block outputs, not copied paths. For example, 
 
 ## Run One Block from Root
 
-You can also ask the root block to operate a specific subblock:
+You can also ask the root block to operate a specific block:
 
 ```text
 /root:check curator

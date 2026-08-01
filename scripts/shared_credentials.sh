@@ -24,12 +24,12 @@
 #   SHARED_ROOT_CONFIG                              (path actually used, or "")
 
 # Walk up from a starting directory to the tree root (the dir holding both
-# config.yaml and subblock/). Falls back to git toplevel.
+# config.yaml and blocks/). Falls back to git toplevel.
 _shared_find_root() {
   local dir="${1:-$PWD}"
   dir="$(cd "$dir" 2>/dev/null && pwd)" || return 1
   while [[ "$dir" != "/" ]]; do
-    if [[ -f "$dir/config.yaml" && -d "$dir/subblock" ]]; then
+    if [[ -f "$dir/config.yaml" && -d "$dir/blocks" ]]; then
       printf '%s\n' "$dir"
       return 0
     fi

@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       block:
-        description: "Which subblock to rebuild + test"
+        description: "Which block to rebuild + test"
         type: choice
         options: [curator, tracer, evaluator, trainer, all]
         default: all
@@ -91,9 +91,9 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Init curator submodule
-        run: git submodule update --init --depth 1 subblock/curator/repos/swegen
+        run: git submodule update --init --depth 1 blocks/curator/repos/swegen
       - name: Build curator venv from scratch
-        working-directory: subblock/curator
+        working-directory: blocks/curator
         run: |
           set -euo pipefail
           rm -rf artifacts/envs/swegen-env
@@ -101,15 +101,15 @@ jobs:
           artifacts/envs/swegen-env/bin/pip install --upgrade pip
           artifacts/envs/swegen-env/bin/pip install -e repos/swegen/
       - name: Stage gh_token.txt
-        run: cp "$CICD_SHARED/gh_token.txt" subblock/curator/gh_token.txt
+        run: cp "$CICD_SHARED/gh_token.txt" blocks/curator/gh_token.txt
       - name: Run curator test cases
-        working-directory: subblock/curator
+        working-directory: blocks/curator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
       - name: Run curator smoke (if requested)
         if: ${{ inputs.run_smoke == true }}
-        working-directory: subblock/curator
+        working-directory: blocks/curator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh --with-smoke
@@ -119,9 +119,9 @@ jobs:
         with:
           name: curator-from-scratch-logs-${{ github.run_id }}
           path: |
-            subblock/curator/artifacts/swe_tasks/.swegen-smoke-py.log
-            subblock/curator/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
-            subblock/curator/artifacts/logs/
+            blocks/curator/artifacts/swe_tasks/.swegen-smoke-py.log
+            blocks/curator/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
+            blocks/curator/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -164,7 +164,7 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Clone harbor + swe_data_process via config-managed URLs
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         run: |
           set -euo pipefail
           # Use scripts/update_repos.sh for BOTH repos so the saved `origin` URL
@@ -176,17 +176,17 @@ jobs:
           bash scripts/update_repos.sh --repo harbor
           bash scripts/update_repos.sh --repo swe_data_process
       - name: Build harbor uv env from scratch
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         run: |
           rm -rf artifacts/env/harbor-uv
           bash scripts/setup_harbor_env.sh
       - name: Build swe_data_process uv env from scratch
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         run: |
           rm -rf artifacts/env/swe-data-process-uv
           bash scripts/setup_swe_data_process_env.sh
       - name: Build litellm venv from scratch
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         run: |
           set -euo pipefail
           rm -rf artifacts/env/litellm-venv
@@ -195,7 +195,7 @@ jobs:
       - name: Pull agent runtime image + materialize runtime_host_path
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         run: |
           set -euo pipefail
           docker pull "$RUNTIME_IMAGE"
@@ -212,7 +212,7 @@ jobs:
             docker cp "$CID:/opt/custom-agent-runtime/claude-code" artifacts/agent-runtime/claude-code
           fi
       - name: Initialize processed-tasks ledger if missing
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         run: |
           mkdir -p artifacts
           if [ ! -f artifacts/processed_tasks.yaml ]; then
@@ -220,13 +220,13 @@ jobs:
               > artifacts/processed_tasks.yaml
           fi
       - name: Run tracer test cases
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
       - name: Run tracer smoke (if requested)
         if: ${{ inputs.run_smoke == true }}
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh --with-smoke
@@ -236,8 +236,8 @@ jobs:
         with:
           name: tracer-from-scratch-logs-${{ github.run_id }}
           path: |
-            subblock/tracer/artifacts/logs/
-            subblock/tracer/artifacts/jobs/smoke/
+            blocks/tracer/artifacts/logs/
+            blocks/tracer/artifacts/jobs/smoke/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -279,15 +279,15 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Init harbor submodule
-        run: git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 subblock/evaluator/repos/harbor
+        run: git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 blocks/evaluator/repos/harbor
       - name: Build harbor uv env from scratch
-        working-directory: subblock/evaluator
+        working-directory: blocks/evaluator
         run: |
           set -euo pipefail
           rm -rf artifacts/env/harbor-uv
           ( cd repos/harbor && UV_PROJECT_ENVIRONMENT="$PWD/../../artifacts/env/harbor-uv" uv sync --all-extras )
       - name: Build litellm venv from scratch
-        working-directory: subblock/evaluator
+        working-directory: blocks/evaluator
         run: |
           set -euo pipefail
           rm -rf artifacts/env/litellm-venv
@@ -298,7 +298,7 @@ jobs:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: docker pull "$RUNTIME_IMAGE"
       - name: Extract agent runtime into runtime_host_path
-        working-directory: subblock/evaluator
+        working-directory: blocks/evaluator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: |
@@ -308,18 +308,18 @@ jobs:
           docker cp "$CID:/opt/custom-agent-runtime/$RUNTIME_SUBPATH" "$RUNTIME_HOST_DIR"
           docker rm "$CID"
       - name: Initialize artifacts/index.yaml if missing
-        working-directory: subblock/evaluator
+        working-directory: blocks/evaluator
         run: |
           mkdir -p artifacts
           [ -f artifacts/index.yaml ] || printf 'runs: []\n' > artifacts/index.yaml
       - name: Run evaluator test cases
-        working-directory: subblock/evaluator
+        working-directory: blocks/evaluator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
       - name: Run evaluator smoke (if requested)
         if: ${{ inputs.run_smoke == true }}
-        working-directory: subblock/evaluator
+        working-directory: blocks/evaluator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh --with-smoke
@@ -329,8 +329,8 @@ jobs:
         with:
           name: evaluator-from-scratch-logs-${{ github.run_id }}
           path: |
-            subblock/evaluator/artifacts/logs/
-            subblock/evaluator/artifacts/jobs/smoke/
+            blocks/evaluator/artifacts/logs/
+            blocks/evaluator/artifacts/jobs/smoke/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -376,18 +376,18 @@ jobs:
       - name: Init submodules (LLaMA-Factory public + swe_data_process private)
         # The PAT url-rewrite above turns swe_data_process's git@github.com SSH
         # remote into an https+token URL so the private clone succeeds.
-        run: git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 subblock/trainer/repos/LLaMA-Factory subblock/trainer/repos/swe_data_process
+        run: git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 blocks/trainer/repos/LLaMA-Factory blocks/trainer/repos/swe_data_process
       - name: Build trainer uv env from scratch
-        working-directory: subblock/trainer
+        working-directory: blocks/trainer
         env:
           UV_LINK_MODE: copy
         run: bash scripts/install_env.sh
       - name: Run trainer test cases
-        working-directory: subblock/trainer
+        working-directory: blocks/trainer
         run: bash tests/run.sh
       - name: Stage + run trainer smoke (if requested)
         if: ${{ inputs.run_smoke == true }}
-        working-directory: subblock/trainer
+        working-directory: blocks/trainer
         # Snapshot the 512-sample dataset into the block (local_lf source), then
         # run the GPU training smoke. The smoke SKIPs gracefully if this
         # from-scratch runner lacks the base model or idle GPUs.
@@ -400,6 +400,6 @@ jobs:
         with:
           name: trainer-from-scratch-logs-${{ github.run_id }}
           path: |
-            subblock/trainer/artifacts/logs/
+            blocks/trainer/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 14

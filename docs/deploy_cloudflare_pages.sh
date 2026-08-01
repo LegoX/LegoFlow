@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build the SWE-Lego-Live root docs (fumadocs/Next.js static export) and deploy
-# to a dedicated Cloudflare Pages project. Independent of the per-subblock docs
+# Build the LegoFlow root docs (fumadocs/Next.js static export) and deploy
+# to a dedicated Cloudflare Pages project. Independent of the per-block docs
 # projects (e.g. swe-tracer-docs); this one defaults to swe-lego-live-docs.
 #
 # Reuses the same Cloudflare credentials pattern as the tracer dashboard sync:

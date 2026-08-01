@@ -1,0 +1,104 @@
+# SMOKE CI CONFIG — copied over blocks/curator/config.yaml by ci.yml.
+# Schema-compatible with production: shared keys keep their name and meaning,
+# unused production fields are pruned, smoke-only fields live under
+# `runtime_info.input.smoke.*`.
+
+meta_info:
+  name: curator
+  label: "Curator"
+  description: Converts GitHub PRs into verified SWE-Bench tasks. Smoke mode runs against a committed PR list.
+  parent: legoflow
+  blocks: {}
+  dependencies:
+    from: {}
+    to: {}
+
+  repos:
+    swegen:
+      name: swegen
+      commit_id: null
+
+  environment:
+    venv_name: swegen-env
+    venv_path: artifacts/envs/swegen-env
+
+  resources:
+    ip: local
+    user: root
+    pwd: null
+    directory: /gpufs/haoli/code/
+
+runtime_info:
+  input:
+    # OpenAI-only endpoint via a local LiteLLM CC proxy (started by
+    # .github/scripts/smoke_run.sh on cc_proxy_port). native-anthropic mode was
+    # abandoned: it was flaky, needed a committed real key, and several models
+    # returned empty for swegen's verdict-shaped prompt.
+    llm_api:
+      api_key: ""
+      api_base_url: ""
+      pr_model: ""
+      task_model: ""
+      cc_provider_mode: openai_proxy
+      anthropic_base_url: http://127.0.0.1:4010
+      cc_proxy_port: 4010
+
+    # py only; other languages and production's adaptive `global`/`status`
+    # blocks are dropped — `swegen create` does not read them.
+    languages:
+      py:
+        enabled: true
+        params:
+          # SMOKE: shorter than production (was 3200 / 2400 / 20). Same
+          # field names — read by .github/scripts/smoke_run.sh.
+          timeout: 2400
+          cc_timeout: 1800
+          # 5 PRs in parallel, stop at the first verified (max_pr=1). Width
+          # hedges against a decayed fixture PR; 5 rather than 10 keeps the LLM
+          # endpoint and docker pool under the point where CF 524s appear.
+          n_concurrent: 5
+
+    # Smoke-only knobs that production config doesn't express (these live
+    # hardcoded inside scripts/create_<lang>.sh in production). The smoke
+    # surfaces them so the smoke shape stays declarative.
+    smoke:
+      max_pr: 1                       # stop after N verified tasks
+      min_source_files: 1             # relax production's --min-source-files 3
+      max_source_files: 10
+      docker_prune_batch: 0
+      # Output subdir, appended to runtime_info.output.swe_tasks_dir.path.
+      # Result: artifacts/swe_tasks/py-cc-smoke (full path used by verify.sh).
+      output_subdir: py-cc-smoke
+      state_subdir: .swegen-smoke-py
+      # PR list the smoke iterates. swegen stops after `max_pr` successfully
+      # verified tasks (1 by default). Keep multiple PRs as fallbacks if an
+      # upstream Dockerfile drifts and one fails to build.
+      #
+      # Order: known-good first; PRs observed to upstream-flake recently
+      # (Docker image build, verifier reward.txt missing, etc.) move to the
+      # END so the parallel slots don't waste time on them. The last two
+      # both failed verifier in run 27820262416 (2026-06-19):
+      #   - tox-dev/tox:pr-3813               — was the 6-times historical
+      #     "always passed" PR but failed today (Harbor `docker inspect
+      #     returned 1`).
+      #   - AnswerDotAI/RAGatouille:pr-157    — failed verifier (no reward
+      #     file).
+      # If they recover, they're still in the pool; if they stay broken,
+      # the 8 untested PRs above them get the first 5 parallel slots and
+      # have first crack at PASS.
+      input_prs:
+        - tox-dev/tox:pr-3814
+        - tox-dev/tox:pr-3810
+        - electricitymaps/electricitymaps-contrib:pr-8113
+        - tox-dev/tox:pr-3803
+        - morpheus65535/bazarr:pr-2691
+        - tox-dev/tox:pr-3804
+        - tox-dev/tox:pr-3800
+        - electricitymaps/electricitymaps-contrib:pr-8119
+        - tox-dev/tox:pr-3813                 # demoted 2026-06-19 (run 27820262416)
+        - AnswerDotAI/RAGatouille:pr-157      # demoted 2026-06-19 (run 27820262416)
+
+  # Reused from production: smoke output paths are derived from this base.
+  output:
+    swe_tasks_dir:
+      path: artifacts/swe_tasks

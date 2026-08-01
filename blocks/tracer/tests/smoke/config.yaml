@@ -1,0 +1,113 @@
+# SMOKE CI CONFIG — copied over blocks/tracer/config.yaml by
+# .github/workflows/ci.yml before invoking `claude -p "/tracer:run"`.
+# Production config lives at blocks/tracer/config.yaml on dev.
+# Delta from production is documented in comments tagged "# SMOKE:".
+meta_info:
+  name: tracer
+  label: "Tracer"
+  description: Generates raw agent trajectories with Harbor for downstream SFT data conversion. Harbor is managed as a local-only repository under repos/harbor and is updated on demand through the block scripts.
+  parent: legoflow
+  blocks: {}
+  dependencies:
+    from:
+      # SMOKE: task_source.provider is huggingface, so the curator dep is inactive.
+      task_source.dataset_name:
+        from: curator.output.merged_tasks_dir
+        when: {task_source.provider: local}
+    to: {}
+
+  resources:
+    ip: local
+    user: null
+    pwd: null
+    directory: /gpufs/haoli/code/
+    description: cpu node server for k8s cluster. By default you should work at ${directory}
+    public_storage: null
+
+  repositories:
+    harbor:
+      url: https://github.com/SWE-Lego/harbor.git
+      branch: main
+      commit: ff0434968e5b6975af10d72ca1d7ed20e7fa2465
+      path: repos/harbor
+      readonly: true
+    swe_data_process:
+      url: https://github.com/SWE-Lego/swe_data_process.git
+      branch: main
+      commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
+      path: repos/swe_data_process
+      readonly: true
+
+  environment:
+    harbor_uv: artifacts/env/harbor-uv
+    litellm_uv: artifacts/env/litellm-venv
+    swe_data_process_uv: artifacts/env/swe-data-process-uv
+    swe_data_process_extras: [llm]
+    litellm:
+      python_version: "3.13"
+      litellm_version: "1.83.14"
+
+runtime_info:
+  input:
+    llm_api:
+      api_key: ""
+      api_base_url: ""
+      model: ""
+      description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
+      protocols: [openai_compatible, anthropic_compatible]
+      served_via: per_job_litellm_proxy
+      input_cost_per_token: 0.0000021
+      output_cost_per_token: 0.0000084
+
+    litellm_proxy:
+      config_template: scripts/serve_llm/litellm_config.example.yaml
+      port: 4003
+      master_key: dummy-key-cf
+
+    # SMOKE: small HuggingFace slice — no curator handoff in this smoke.
+    task_source:
+      provider: huggingface
+      dataset_name: SWE-Lego/swerebenchv2-200-260429
+      split: train
+
+    harbor_job:
+      # SMOKE: jobs land under artifacts/jobs/smoke so they don't mix with prod.
+      jobs_dir: artifacts/jobs/smoke
+      n_concurrent: 2                  # SMOKE: was 8
+      n_tasks: 10                      # SMOKE: was 40
+      max_retries: 0                   # SMOKE: was 2
+      timeout_multiplier: 5
+
+    agent:
+      name: custom-claude-code
+      version: 2.1.118
+      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
+      runtime_host_path: artifacts/agent-runtime/claude-code
+      max_turns: 80   # match production; 30 cut 8/10 smoke trials off at the cap
+      temperature: 0.7
+
+    sft_conversion:
+      enabled: false                   # SMOKE: skip conversion step
+      scaffold: auto
+      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base
+      out_dir: artifacts/sft_data
+      max_instances: null
+      exclude_repos_file: ""
+
+    env_extra:
+      # SMOKE: same exclusion source as production; the smoke re-runs its own
+      # fixtures, so it neutralises the ledger half with HARBOR_LEDGER_EXCLUDE=0.
+      HARBOR_EXCLUDE_TASKS: excluded_tasks.txt artifacts/processed_tasks.yaml
+      # SMOKE: force a single uvicorn worker (skip gunicorn's 30s boot timeout).
+      LITELLM_NUM_WORKERS: "1"
+
+  output:
+    raw_trajectories_dir:
+      description: Harbor job directories with LiteLLM trajectory logs
+      path: artifacts/jobs
+      trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
+    sft_data_dir:
+      description: LF-format JSON arrays converted from Harbor trajectories, ready for LLaMA-Factory SFT.
+      path: artifacts/sft_data
+      format: llamafactory_lf_v0.1
+      trajectory_format: "artifacts/sft_data/<job>/lf.json"

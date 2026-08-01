@@ -5,24 +5,24 @@ description: An end-to-end agentic workflow for intelligence
 
 Training a strong coding agent is not a single training job. A realistic SWE pipeline has to mine useful GitHub changes, turn them into verifiable tasks, roll agents out in isolated environments, filter and convert trajectories, train models, and measure them with an evaluator. Each stage tends to grow its own scripts, storage layout, runtime assumptions, GPU requirements, and failure modes. The hard part is not only running the stages; it is keeping their handoffs reproducible as the data, repos, models, and infrastructure keep changing.
 
-**SWE-Lego-Live** turns that loop into one agentic workflow. Instead of treating data construction, rollout, training, and evaluator measurement as disconnected jobs, it keeps them in a live pipeline where each stage can be checked, rerun, inspected, and extended by agents.
+**LegoFlow** turns that loop into one agentic workflow. Instead of treating data construction, rollout, training, and evaluator measurement as disconnected jobs, it keeps them in a live pipeline where each stage can be checked, rerun, inspected, and extended by agents.
 
 
 ## Highlights
 
-- **Live, growing dataset**: download the SWE-Lego-Live dataset from <a href="https://huggingface.co/datasets/SWE-Lego/SWE-Lego-Live" className="docs-hf-link"><img src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" alt="" aria-hidden="true" className="docs-hf-logo" />Hugging Face</a>, with **bi-weekly** updates that keep tasks and trajectories aligned with real repository activity.
+- **Live, growing dataset**: download the LegoFlow dataset from <a href="https://huggingface.co/datasets/SWE-Lego/SWE-Lego-Live" className="docs-hf-link"><img src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" alt="" aria-hidden="true" className="docs-hf-logo" />Hugging Face</a>, with **bi-weekly** updates that keep tasks and trajectories aligned with real repository activity.
 - **Fully agentic data pipeline**: curate high-quality SWE and coding tasks across **8+** programming languages and **20+** task tags, then roll out trajectories with **4+** coding agents, including Claude Code, OpenCode, OpenHands, and Terminus.
 - **Unified, block-wise design**: use agent plugin skills to interact with, customize, and extend each stage through a consistent block interface.
 
 
 ## Project Design
 
-![SWE-Lego-Live pipeline introduction](/figures/my-version-coding-repos-expandable.png)
+![LegoFlow pipeline introduction](/figures/my-version-coding-repos-expandable.png)
 
 
 The project is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. Users can operate the workflow through the same plugin-skill lifecycle across blocks: `:setup`, `:check`, and `:run`.
 
-The **root** block orchestrates four subblocks: **curator** builds verified SWE tasks, **tracer** rolls out agent trajectories, **trainer** turns trajectories into model checkpoints, and **evaluator** measures those checkpoints with shared rubrics.
+The **root** block orchestrates four blocks: **curator** builds verified SWE tasks, **tracer** rolls out agent trajectories, **trainer** turns trajectories into model checkpoints, and **evaluator** measures those checkpoints with shared rubrics.
 
 - **curator**: curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums such as Stack Overflow. Carefully designed filtering requirements preserve high-quality instances across **8+** programming languages and **20+** task tags.
 - **tracer**: collects high-quality trajectories with verified rewards, supporting rollouts across multiple coding scaffolds such as Claude Code, OpenCode, OpenHands, and Terminus.
@@ -40,5 +40,5 @@ Blocks make the pipeline easier to use and easier to change. Because every stage
 
 - [Getting Started](/docs/getting-started) — the three skills (`:setup`, `:check`, `:run`) used to drive every block
 - [Block Design](/docs/block-design) — the abstraction the whole pipeline is built on
-- Block docs: [curator](/docs/sub-block/curator) · [tracer](/docs/sub-block/tracer) · [trainer](/docs/sub-block/trainer) · [evaluator](/docs/sub-block/evaluator)
+- Block docs: [curator](/docs/blocks/curator) · [tracer](/docs/blocks/tracer) · [trainer](/docs/blocks/trainer) · [evaluator](/docs/blocks/evaluator)
 - [Reference](/docs/reference) — `config.yaml` schema and the archive format

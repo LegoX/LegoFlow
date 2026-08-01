@@ -11,9 +11,9 @@ on:
         type: choice
         options:
           - none        # cheap cases only
-          - subblocks   # each subblock's ISOLATED smoke (~30 min each)
+          - blocks   # each block's ISOLATED smoke (~30 min each)
           - root        # the ROOT chained end-to-end smoke (all 4 blocks, hours)
-          - all         # subblocks + root
+          - all         # blocks + root
         default: none
       root_budget:
         description: "Per-stage budget (sec) for the ROOT chain; blank = config defaults (curator 4h). Set e.g. 1800 for a quick pass."
@@ -54,12 +54,12 @@ jobs:
       - name: Run root block cheap cases (pytest + shell cases)
         # tests/run.sh (no --smoke) runs pytest tests/test_root_block.py AND the
         # tests/cases/*.sh shell cases — all cheap, no network/Docker/GPU. They
-        # read the subblock + tests/smoke config.yaml files present on checkout.
+        # read the block + tests/smoke config.yaml files present on checkout.
         run: bash tests/run.sh
 
-  # --- Decide which subblocks need their CI run -------------------------------
+  # --- Decide which blocks need their CI run -------------------------------
   detect-changes:
-    name: Detect changed subblocks
+    name: Detect changed blocks
     runs-on: ubuntu-latest
     outputs:
       curator: ${{ steps.filter.outputs.curator }}
@@ -73,16 +73,16 @@ jobs:
         with:
           filters: |
             curator:
-              - 'subblock/curator/**'
+              - 'blocks/curator/**'
               - '.github/workflows/ci.yml'
             tracer:
-              - 'subblock/tracer/**'
+              - 'blocks/tracer/**'
               - '.github/workflows/ci.yml'
             evaluator:
-              - 'subblock/evaluator/**'
+              - 'blocks/evaluator/**'
               - '.github/workflows/ci.yml'
             trainer:
-              - 'subblock/trainer/**'
+              - 'blocks/trainer/**'
               - '.github/workflows/ci.yml'
 
   # --- curator: cheap test cases (self-hosted, fixed-paths CI runner) ---------
@@ -98,7 +98,7 @@ jobs:
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/blocks/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/blocks/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/evaluator/artifacts/runtime /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
@@ -123,7 +123,7 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/curator
+        working-directory: blocks/curator
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/curator"
@@ -140,7 +140,7 @@ jobs:
             ln -s "$CANON/artifacts/swe_tasks/py-cc" artifacts/swe_tasks/py-cc || true
           ls -la repos artifacts artifacts/swe_tasks
       - name: Run curator test cases
-        working-directory: subblock/curator
+        working-directory: blocks/curator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
@@ -150,8 +150,8 @@ jobs:
         with:
           name: curator-cases-logs-${{ github.run_id }}
           path: |
-            subblock/curator/artifacts/swe_tasks/.swegen-smoke-py.log
-            subblock/curator/artifacts/logs/
+            blocks/curator/artifacts/swe_tasks/.swegen-smoke-py.log
+            blocks/curator/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -166,7 +166,7 @@ jobs:
     if: |
       always() && needs.curator-cases.result != 'failure' &&
       (
-        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'blocks' || inputs.smoke_scope == 'all')) ||
         (needs.detect-changes.outputs.curator == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
@@ -177,7 +177,7 @@ jobs:
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/blocks/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/blocks/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/evaluator/artifacts/runtime /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
@@ -201,7 +201,7 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/curator
+        working-directory: blocks/curator
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/curator"
@@ -210,14 +210,14 @@ jobs:
           ln -s "$CANON/repos/swegen"        repos/swegen
           ln -s "$CANON/artifacts/envs"      artifacts/envs
           [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
-      - name: Overlay smoke config.yaml from subblock/curator/tests/smoke
+      - name: Overlay smoke config.yaml from blocks/curator/tests/smoke
         # The template carries no endpoint/key; inject them from the
         # shared env into the COPY (never back into the template).
         run: |
           set -euo pipefail
           source /gpufs/haoli/cicd/shared/.env
-          cp subblock/curator/tests/smoke/config.yaml subblock/curator/config.yaml
-          python3 scripts/inject_smoke_secrets.py subblock/curator/config.yaml
+          cp blocks/curator/tests/smoke/config.yaml blocks/curator/config.yaml
+          python3 scripts/inject_smoke_secrets.py blocks/curator/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh curator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -226,7 +226,7 @@ jobs:
         if: always()
         shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
         run: |
-          bash subblock/curator/tests/smoke/verify.sh
+          bash blocks/curator/tests/smoke/verify.sh
           rc=$?
           if [[ $rc -eq 77 ]]; then echo "::warning::curator smoke SKIPped"; exit 0; fi
           exit $rc
@@ -236,9 +236,9 @@ jobs:
         with:
           name: curator-smoke-logs-${{ github.run_id }}
           path: |
-            subblock/curator/artifacts/swe_tasks/.swegen-smoke-py.log
-            subblock/curator/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
-            subblock/curator/artifacts/logs/
+            blocks/curator/artifacts/swe_tasks/.swegen-smoke-py.log
+            blocks/curator/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
+            blocks/curator/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -261,7 +261,7 @@ jobs:
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/blocks/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/blocks/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/evaluator/artifacts/runtime /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
@@ -285,7 +285,7 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/tracer"
@@ -312,7 +312,7 @@ jobs:
           fi
           ls -la repos artifacts
       - name: Run tracer test cases
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
@@ -321,7 +321,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tracer-cases-logs-${{ github.run_id }}
-          path: subblock/tracer/artifacts/logs/
+          path: blocks/tracer/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -336,7 +336,7 @@ jobs:
     if: |
       always() && needs.tracer-cases.result != 'failure' &&
       (
-        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'blocks' || inputs.smoke_scope == 'all')) ||
         (needs.detect-changes.outputs.tracer == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
@@ -347,7 +347,7 @@ jobs:
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/blocks/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/blocks/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/evaluator/artifacts/runtime /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
@@ -371,7 +371,7 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/tracer
+        working-directory: blocks/tracer
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/tracer"
@@ -395,14 +395,14 @@ jobs:
             printf 'description: %s\nruns: []\n' 'Tracer task processed-tasks ledger' \
               > artifacts/processed_tasks.yaml
           fi
-      - name: Overlay smoke config.yaml from subblock/tracer/tests/smoke
+      - name: Overlay smoke config.yaml from blocks/tracer/tests/smoke
         # The template carries no endpoint/key; inject them from the
         # shared env into the COPY (never back into the template).
         run: |
           set -euo pipefail
           source /gpufs/haoli/cicd/shared/.env
-          cp subblock/tracer/tests/smoke/config.yaml subblock/tracer/config.yaml
-          python3 scripts/inject_smoke_secrets.py subblock/tracer/config.yaml
+          cp blocks/tracer/tests/smoke/config.yaml blocks/tracer/config.yaml
+          python3 scripts/inject_smoke_secrets.py blocks/tracer/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh tracer
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -412,7 +412,7 @@ jobs:
         if: always()
         shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
         run: |
-          bash subblock/tracer/tests/smoke/verify.sh
+          bash blocks/tracer/tests/smoke/verify.sh
           rc=$?
           if [[ $rc -eq 77 ]]; then echo "::warning::tracer smoke SKIPped"; exit 0; fi
           exit $rc
@@ -423,8 +423,8 @@ jobs:
         with:
           name: tracer-smoke-logs-${{ github.run_id }}
           path: |
-            subblock/tracer/artifacts/logs/
-            subblock/tracer/artifacts/jobs/smoke/
+            blocks/tracer/artifacts/logs/
+            blocks/tracer/artifacts/jobs/smoke/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -447,7 +447,7 @@ jobs:
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/blocks/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/blocks/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/evaluator/artifacts/runtime /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + envs come from $SHARED_RUNTIME.
@@ -469,7 +469,7 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/evaluator
+        working-directory: blocks/evaluator
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/evaluator"
@@ -489,7 +489,7 @@ jobs:
             || printf 'runs: []\n' > artifacts/index.yaml
           ls -la repos artifacts
       - name: Run evaluator test cases
-        working-directory: subblock/evaluator
+        working-directory: blocks/evaluator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
         run: bash tests/run.sh
@@ -498,7 +498,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: evaluator-cases-logs-${{ github.run_id }}
-          path: subblock/evaluator/artifacts/logs/
+          path: blocks/evaluator/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -513,7 +513,7 @@ jobs:
     if: |
       always() && needs.evaluator-cases.result != 'failure' &&
       (
-        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'blocks' || inputs.smoke_scope == 'all')) ||
         (needs.detect-changes.outputs.evaluator == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     runs-on: [self-hosted, swe-lego-ci]
@@ -524,7 +524,7 @@ jobs:
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/blocks/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/blocks/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/evaluator/artifacts/runtime /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
@@ -545,7 +545,7 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/evaluator
+        working-directory: blocks/evaluator
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/evaluator"
@@ -557,14 +557,14 @@ jobs:
           ln -s "$CANON/artifacts/runtime"   artifacts/runtime
           [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
             || printf 'runs: []\n' > artifacts/index.yaml
-      - name: Overlay smoke config.yaml from subblock/evaluator/tests/smoke
+      - name: Overlay smoke config.yaml from blocks/evaluator/tests/smoke
         # The template carries no endpoint/key; inject them from the
         # shared env into the COPY (never back into the template).
         run: |
           set -euo pipefail
           source /gpufs/haoli/cicd/shared/.env
-          cp subblock/evaluator/tests/smoke/config.yaml subblock/evaluator/config.yaml
-          python3 scripts/inject_smoke_secrets.py subblock/evaluator/config.yaml
+          cp blocks/evaluator/tests/smoke/config.yaml blocks/evaluator/config.yaml
+          python3 scripts/inject_smoke_secrets.py blocks/evaluator/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh evaluator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -572,7 +572,7 @@ jobs:
         run: bash .github/scripts/smoke_run.sh evaluator 2400
       - name: Verify smoke
         if: always()
-        run: bash subblock/evaluator/tests/smoke/verify.sh
+        run: bash blocks/evaluator/tests/smoke/verify.sh
       - name: Upload logs
         if: always()
         continue-on-error: true   # harbor's root-owned agent/sessions can survive cleanup → upload EACCES, don't fail the job
@@ -580,9 +580,9 @@ jobs:
         with:
           name: evaluator-smoke-logs-${{ github.run_id }}
           path: |
-            subblock/evaluator/artifacts/logs/
-            subblock/evaluator/artifacts/jobs/smoke/
-            subblock/evaluator/artifacts/litellm/
+            blocks/evaluator/artifacts/logs/
+            blocks/evaluator/artifacts/jobs/smoke/
+            blocks/evaluator/artifacts/litellm/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -603,7 +603,7 @@ jobs:
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/blocks/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/blocks/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/evaluator/artifacts/runtime /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
@@ -625,7 +625,7 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/trainer
+        working-directory: blocks/trainer
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/trainer"
@@ -641,14 +641,14 @@ jobs:
           ln -s "$CANON/artifacts/env"           artifacts/env
           ls -la repos artifacts
       - name: Run trainer test cases
-        working-directory: subblock/trainer
+        working-directory: blocks/trainer
         run: bash tests/run.sh
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: trainer-cases-logs-${{ github.run_id }}
-          path: subblock/trainer/artifacts/logs/
+          path: blocks/trainer/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -663,7 +663,7 @@ jobs:
     if: |
       always() && needs.trainer-cases.result != 'failure' &&
       (
-        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'subblocks' || inputs.smoke_scope == 'all')) ||
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'blocks' || inputs.smoke_scope == 'all')) ||
         (needs.detect-changes.outputs.trainer == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
       )
     # The swe-lego-ci runner orchestrates either a configured remote GPU host
@@ -680,7 +680,7 @@ jobs:
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/blocks/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/blocks/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/evaluator/artifacts/runtime /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
@@ -702,7 +702,7 @@ jobs:
             echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:/home/haoli/.local/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Link runtime state from /gpufs/.../shared/runtime
-        working-directory: subblock/trainer
+        working-directory: blocks/trainer
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/trainer"
@@ -719,7 +719,7 @@ jobs:
           if [ -s "$CANON/artifacts/data/examples/lf_512.json" ]; then
             ln -s "$CANON/artifacts/data/examples" artifacts/data/examples
           else
-            echo "WARNING: staged smoke dataset missing at $CANON/artifacts/data/examples/lf_512.json — the smoke will SKIP. Seed it with: bash subblock/trainer/tests/smoke/prepare_smoke_data.sh"
+            echo "WARNING: staged smoke dataset missing at $CANON/artifacts/data/examples/lf_512.json — the smoke will SKIP. Seed it with: bash blocks/trainer/tests/smoke/prepare_smoke_data.sh"
           fi
           ls -la repos artifacts artifacts/data
       - name: Run guarded SFT training smoke
@@ -729,7 +729,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: trainer-smoke-logs-${{ github.run_id }}
-          path: subblock/trainer/artifacts/logs/
+          path: blocks/trainer/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -755,7 +755,7 @@ jobs:
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
             docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
-              sh -c "rm -rf /x/SWE-Lego-Live/subblock/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/subblock/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/subblock/evaluator/artifacts/runtime /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/subblock/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/subblock/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/subblock/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/subblock/*/repos' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/env' -o -path '/x/SWE-Lego-Live/subblock/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+              sh -c "rm -rf /x/SWE-Lego-Live/blocks/tracer/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/tracer/artifacts/agent-runtime /x/SWE-Lego-Live/blocks/evaluator/artifacts/jobs/smoke /x/SWE-Lego-Live/blocks/evaluator/artifacts/runtime /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/SWE-Lego-Live/blocks/curator/artifacts/swe_tasks/.swegen-smoke-py /x/SWE-Lego-Live/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/SWE-Lego-Live/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/SWE-Lego-Live/blocks/*/repos' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/env' -o -path '/x/SWE-Lego-Live/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
@@ -780,14 +780,14 @@ jobs:
         run: |
           set -euo pipefail
           # curator — venv + repo + gh_token
-          C="${SHARED_RUNTIME}/curator"; cd "$GITHUB_WORKSPACE/subblock/curator"
+          C="${SHARED_RUNTIME}/curator"; cd "$GITHUB_WORKSPACE/blocks/curator"
           mkdir -p repos artifacts
           rm -rf repos/swegen artifacts/envs gh_token.txt
           ln -s "$C/repos/swegen" repos/swegen
           ln -s "$C/artifacts/envs" artifacts/envs
           [ -f "$C/gh_token.txt" ] && ln -s "$C/gh_token.txt" gh_token.txt || true
           # tracer — uv envs + repos + agent runtime + ledger
-          C="${SHARED_RUNTIME}/tracer"; cd "$GITHUB_WORKSPACE/subblock/tracer"
+          C="${SHARED_RUNTIME}/tracer"; cd "$GITHUB_WORKSPACE/blocks/tracer"
           mkdir -p repos artifacts
           rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$C/repos/harbor" repos/harbor
@@ -801,7 +801,7 @@ jobs:
               > artifacts/processed_tasks.yaml
           fi
           # trainer — uv env + repos + 512 fixture (remote pod hosts the GPUs)
-          C="${SHARED_RUNTIME}/trainer"; cd "$GITHUB_WORKSPACE/subblock/trainer"
+          C="${SHARED_RUNTIME}/trainer"; cd "$GITHUB_WORKSPACE/blocks/trainer"
           mkdir -p repos artifacts artifacts/data
           rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env artifacts/data/examples
           ln -s "$C/repos/LLaMA-Factory" repos/LLaMA-Factory
@@ -809,7 +809,7 @@ jobs:
           ln -s "$C/artifacts/env" artifacts/env
           [ -s "$C/artifacts/data/examples/lf_512.json" ] && ln -s "$C/artifacts/data/examples" artifacts/data/examples || true
           # evaluator — uv env + repo + agent runtime
-          C="${SHARED_RUNTIME}/evaluator"; cd "$GITHUB_WORKSPACE/subblock/evaluator"
+          C="${SHARED_RUNTIME}/evaluator"; cd "$GITHUB_WORKSPACE/blocks/evaluator"
           mkdir -p repos artifacts
           rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
           ln -s "$C/repos/harbor" repos/harbor
@@ -844,6 +844,6 @@ jobs:
           name: root-smoke-logs-${{ github.run_id }}
           path: |
             .root-smoke-run.log
-            subblock/*/artifacts/logs/
+            blocks/*/artifacts/logs/
           if-no-files-found: ignore
           retention-days: 14
