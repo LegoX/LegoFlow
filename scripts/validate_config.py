@@ -3,7 +3,7 @@
 
 Usage:
   python3 scripts/validate_config.py --root <repo_root>
-      Validate the root config plus every subblock, including cross-block
+      Validate the root config plus every block, including cross-block
       dependency resolution.
   python3 scripts/validate_config.py --block <block_dir> [--config <alt.yaml>]
       Validate one block and its outgoing dependencies (sibling configs are
@@ -35,7 +35,7 @@ Contract summary (full text: .claude/plugins/root-plugin/resources/BLOCK_DEFINIT
     Each edge is declared independently by both ends (consumer's `from`, producer's
     `to`); the validator cross-checks the two declarations for drift
     (`dep:link-mismatch`).
-  - The root config's subblocks entries carry roles only, never dependencies.
+  - The root config's blocks entries carry roles only, never dependencies.
   - runtime_info.input fill markers: `human` = must fill (FAIL until replaced);
     "" = auto-derived or supplied via env/file; anything else is a real value.
   - runtime_info.output entries are mappings with `path` (static) and/or
@@ -189,7 +189,7 @@ def any_live_overlay(block_dir, is_root):
     and no cross-block conclusion is trustworthy — so scope the suppression to
     the whole tree, and name the block that caused it.
     """
-    base = os.path.join(block_dir, "subblock") if is_root else os.path.dirname(os.path.abspath(block_dir))
+    base = os.path.join(block_dir, "blocks") if is_root else os.path.dirname(os.path.abspath(block_dir))
     try:
         siblings = sorted(os.listdir(base))
     except OSError:
@@ -208,7 +208,7 @@ def load_sibling(block_dir, other_name, is_root, sibling_cache):
     if OVERLAY_DIR:
         cfg_path = os.path.join(OVERLAY_DIR, other_name, "config.yaml")
     elif is_root:
-        cfg_path = os.path.join(block_dir, "subblock", other_name, "config.yaml")
+        cfg_path = os.path.join(block_dir, "blocks", other_name, "config.yaml")
     else:
         cfg_path = sibling_config_path(block_dir, other_name)
     if sibling_cache is not None and cfg_path in sibling_cache:
@@ -276,7 +276,7 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
     rt_input = runtime.get("input") or {}
     rt_output = runtime.get("output") or {}
 
-    # --- name matches directory (subblocks only; root dir name is free) ---
+    # --- name matches directory (blocks only; root dir name is free) ---
     if not is_root:
         declared = meta.get("name")
         if declared != name:
@@ -284,17 +284,17 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
         else:
             ok("schema:name", f"{label_prefix} meta_info.name matches directory")
 
-    # --- root: subblocks carry roles only, and children exist ---
+    # --- root: blocks carry roles only, and children exist ---
     if is_root:
-        subblocks = meta.get("subblocks") or {}
-        for child, spec in subblocks.items():
+        blocks = meta.get("blocks") or {}
+        for child, spec in blocks.items():
             if isinstance(spec, dict) and "dependencies" in spec:
-                fail("schema:root-wiring", f"root: subblocks.{child} declares `dependencies` — wiring lives in the leaf block's own meta_info.dependencies")
-            child_cfg = os.path.join(block_dir, "subblock", child, "config.yaml")
+                fail("schema:root-wiring", f"root: blocks.{child} declares `dependencies` — wiring lives in the leaf block's own meta_info.dependencies")
+            child_cfg = os.path.join(block_dir, "blocks", child, "config.yaml")
             if not os.path.isfile(child_cfg):
-                fail("tree:missing-child", f"root: declared subblock `{child}` has no config at subblock/{child}/config.yaml")
-        if subblocks:
-            ok("tree:subblocks", f"root: {len(subblocks)} subblocks declared")
+                fail("tree:missing-child", f"root: declared block `{child}` has no config at blocks/{child}/config.yaml")
+        if blocks:
+            ok("tree:blocks", f"root: {len(blocks)} blocks declared")
 
     # --- dependencies declaration: {from: {...}, to: {...}}, both keys required ---
     deps_raw = meta.get("dependencies", None)
@@ -510,8 +510,8 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     target = parser.add_mutually_exclusive_group(required=True)
-    target.add_argument("--root", metavar="DIR", help="repo root containing config.yaml and subblock/")
-    target.add_argument("--block", metavar="DIR", help="one block directory (e.g. subblock/tracer)")
+    target.add_argument("--root", metavar="DIR", help="repo root containing config.yaml and blocks/")
+    target.add_argument("--block", metavar="DIR", help="one block directory (e.g. blocks/tracer)")
     parser.add_argument("--config", metavar="FILE", help="overlay config file to validate instead of <block>/config.yaml")
     parser.add_argument("--schema-only", action="store_true", help="downgrade `human` fill markers to warnings (CI schema tests on fresh-clone configs)")
     parser.add_argument("--overlay-dir", metavar="DIR",
@@ -529,11 +529,11 @@ def main():
     if args.root:
         root_dir = os.path.abspath(args.root)
         root_cfg = check_block(root_dir, is_root=True, sibling_cache=sibling_cache, schema_only=args.schema_only)
-        children = ((root_cfg or {}).get("meta_info") or {}).get("subblocks") or {}
-        subblock_dir = os.path.join(root_dir, "subblock")
+        children = ((root_cfg or {}).get("meta_info") or {}).get("blocks") or {}
+        block_dir = os.path.join(root_dir, "blocks")
         names = list(children) or sorted(
-            d for d in (os.listdir(subblock_dir) if os.path.isdir(subblock_dir) else [])
-            if os.path.isfile(os.path.join(subblock_dir, d, "config.yaml"))
+            d for d in (os.listdir(block_dir) if os.path.isdir(block_dir) else [])
+            if os.path.isfile(os.path.join(block_dir, d, "config.yaml"))
         )
         if args.overlay_dir:
             # Point every lookup — the block's own config and each sibling it
@@ -547,12 +547,12 @@ def main():
             if not names:
                 fail("overlay:empty", f"root: no <block>/config.yaml found under {OVERLAY_DIR}")
             for child in names:
-                check_block(os.path.join(subblock_dir, child),
+                check_block(os.path.join(block_dir, child),
                             config_path=os.path.join(OVERLAY_DIR, child, "config.yaml"),
                             sibling_cache=sibling_cache, schema_only=args.schema_only)
             names = []
         for child in names:
-            child_dir = os.path.join(subblock_dir, child)
+            child_dir = os.path.join(block_dir, child)
             if os.path.isdir(child_dir):
                 check_block(child_dir, sibling_cache=sibling_cache, schema_only=args.schema_only)
     else:

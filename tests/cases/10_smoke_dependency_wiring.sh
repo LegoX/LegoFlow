@@ -3,7 +3,7 @@
 #
 # Case 03 cross-checks the production configs; nothing cross-checked the smoke
 # ones. That matters because tests/smoke/<block>/config.yaml is overlaid onto
-# subblock/<block>/config.yaml before the root chain launches, so a broken
+# blocks/<block>/config.yaml before the root chain launches, so a broken
 # hand-off there does not surface at overlay time — it surfaces hours later when
 # a stage finds nothing to consume and the chain quietly degrades into four
 # disconnected runs. Two edges were in fact declared by only one end when this

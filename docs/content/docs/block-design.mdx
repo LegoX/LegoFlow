@@ -3,13 +3,13 @@ title: Block Design
 description: The abstraction the whole pipeline is built on
 ---
 
-A **block** is the unit of work in SWE-Lego-Live. Every stage of the pipeline — data curation, trajectory generation, training, and evaluator measurement — is a block, with the same shape and the same three skills (`:setup`, `:check`, `:run`). This page is the long-form design: the vocabulary, the schema, the dependency rules, and the archive format.
+A **block** is the unit of work in LegoFlow. Every stage of the pipeline — data curation, trajectory generation, training, and evaluator measurement — is a block, with the same shape and the same three skills (`:setup`, `:check`, `:run`). This page is the long-form design: the vocabulary, the schema, the dependency rules, and the archive format.
 
-![Anatomy of a SWE-Lego-Live block](/figures/block-definition-editable.png)
+![Anatomy of a LegoFlow block](/figures/block-definition-editable.png)
 
 The diagram shows the block boundary. A block is not just a script directory: it is a package around one unit of work. `config.yaml` is the declaration layer; it names the block, pins code repositories, declares child blocks and dependencies, and separates runtime inputs from runtime outputs. The rest of the block is defined by that declaration.
 
-Inside the block, `repos/` holds pinned code dependencies, **plugin skills** expose the block's setup/check/run operations, and `memory/` keeps the context and traces an agent needs while operating the block. `scripts/` contains the concrete dry run, smoke test, and run entrypoints; `dashboard/` turns logs, metrics, and state into an inspectable surface; `subblocks/` lets the same shape nest, so a block can be a leaf task or a parent pipeline.
+Inside the block, `repos/` holds pinned code dependencies, **plugin skills** expose the block's setup/check/run operations, and `memory/` keeps the context and traces an agent needs while operating the block. `scripts/` contains the concrete dry run, smoke test, and run entrypoints; `dashboard/` turns logs, metrics, and state into an inspectable surface; `blocks/` lets the same shape nest, so a block can be a leaf task or a parent pipeline.
 
 The side panels are part of the contract too. Code repos are pinned outside the block logic but referenced by config; the config schema declares what the block is allowed to depend on and publish. A run then produces `artifacts/`: logs, archives, cache, output, and environment snapshots. That gives the root block something stable to inspect before execution and something durable to review after the run finishes.
 
@@ -17,9 +17,9 @@ The side panels are part of the contract too. Code repos are pinned outside the 
 
 A self-contained directory that owns one stage of the pipeline. Every block has the same shape: a `config.yaml` for inputs and outputs, a `scripts/` set for execution, an `artifacts/` tree for results, an optional `repos/` for vendored dependencies, and a `CLAUDE.md` that documents the agent contract.
 
-## Root block / subblock
+## Root block / block
 
-The repo is a **tree of blocks**. The repo root is the **root block**; every directory under `subblock/` is a child block. A parent block lists its children under `meta_info.subblocks` (with a role one-liner each); each child declares its own upstream AND downstream hand-offs in its `meta_info.dependencies` (`from`/`to`). Children can have children — the abstraction nests.
+The repo is a **tree of blocks**. The repo root is the **root block**; every directory under `blocks/` is a child block. A parent block lists its children under `meta_info.blocks` (with a role one-liner each); each child declares its own upstream AND downstream hand-offs in its `meta_info.dependencies` (`from`/`to`). Children can have children — the abstraction nests.
 
 ## `config.yaml`
 

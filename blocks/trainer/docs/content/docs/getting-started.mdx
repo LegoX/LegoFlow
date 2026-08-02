@@ -1,0 +1,132 @@
+---
+title: Getting Started
+description: Set up the block and run your first training job
+---
+
+trainer wraps a pinned [SWE-Lego LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory)
+checkout and the `swe_data_process` converter package in the LegoFlow block
+layout. The pinned repositories are recorded as gitlinks under
+`blocks/trainer/repos/`.
+
+## Recommended: operate via the Claude plugin
+
+The block ships a Claude Code plugin (`trainer-plugin`) that drives the whole
+lifecycle through slash commands. This is the recommended way to run trainer —
+each command performs the preflight, confirmation, and bookkeeping steps for
+you. Launch Claude from inside `blocks/trainer/` so the block-local plugin
+loads, then:
+
+```text
+/trainer:setup       # init submodules, build uv env, fill runtime_info.input
+/trainer:check       # preflight: config, repos, env, source data, GPUs
+/trainer:run         # dryrun + full pipeline (data → register → train) + archive
+/trainer:dashboard   # launch / summarize the training dashboard
+```
+
+`/trainer:setup` brings a fresh clone to a state where `/trainer:check` can
+pass. It does not convert data or start training — that is `/trainer:run`.
+`/trainer:run` runs `/trainer:check` first and rejects on any failure.
+
+The knobs these commands read live in `config.yaml` — dataset source under
+`runtime_info.input.source`, conversion under `runtime_info.input.conversion`,
+model/training under `runtime_info.input.model` / `runtime_info.input.training`,
+and GPU count under `runtime_info.input.infrastructure`. Edit `config.yaml`,
+not the scripts.
+
+The rest of this page documents the underlying commands the plugin runs, for
+manual operation or debugging.
+
+## Prerequisites
+
+- **8× A100/H100 GPUs** — full fine-tuning with DeepSpeed ZeRO-3 targets a single 8-GPU node.
+- **[uv](https://docs.astral.sh/uv/)** — used to build and run the training environment.
+- **CUDA 12.8** toolchain available on the node (the installer pulls CUDA 12.8 PyTorch wheels).
+- **Training data** — a Harbor `job_dir`, a ready-made Hugging Face LF dataset/file, or a local LF JSON.
+- **A base model** — a Hub model ID or local model directory (the active profile uses `Qwen/Qwen3.5-35B-A3B-Base`).
+
+<Callout title="Where to run" type="info">
+trainer trains on the node declared in `config.yaml` (`meta_info.resources.ip`). Run its scripts inside a `tmux` session on that host so a long training job survives shell disconnects.
+</Callout>
+
+## 1. Enter the block
+
+Run commands from the block root:
+
+```bash
+cd blocks/trainer
+```
+
+Confirm the pinned repos are checked out:
+
+```bash
+git rev-parse HEAD:repos/LLaMA-Factory
+git rev-parse HEAD:repos/swe_data_process
+```
+
+These print the gitlink commits recorded for the submodules. `/trainer:setup`
+initializes them if the `repos/` working trees are empty.
+
+## 2. Build the environment
+
+Create the `uv` training environment at `meta_info.environment.sft_uv` (default `artifacts/env/lf`):
+
+```bash
+bash scripts/install_env.sh
+```
+
+This installs CUDA 12.8 PyTorch 2.10.0, editable `repos/swe_data_process[llm]` and the patched LLaMA-Factory plus metrics/DeepSpeed/Liger requirements, source-built `flash-attn`, Qwen3.5's `flash-linear-attention` and `tilelang` dependencies, and `wandb`. See [Inputs & Outputs](/docs/reference/io) for the env layout.
+
+## 3. Point the config at your inputs
+
+Edit `config.yaml` → `runtime_info.input`:
+
+- `source.type` — the dataset source: `harbor_job` (convert Harbor trajectories, the default), `hf_lf` (a ready-made LF dataset on the HuggingFace Hub), or `local_lf` (a local LF json). See [Input sources](/docs/data-pipeline#input-sources).
+- For `harbor_job`: set `source.scaffold` + `source.job_dir`. For `hf_lf`: set `source.hf_hub_url`; optionally set `source.hf_file_name` to select exactly one repository file, otherwise use `hf_subset`/`hf_split`. For `local_lf`: set `source.lf_path`.
+- `conversion.data_name` — the dataset name (the LF file and registered dataset key derive from it).
+- `model.model_name_or_path` — a Hub model ID or local base-model directory.
+- `training.*` — hyperparameters (template, cutoff length, batch size, learning rate, epochs, …).
+- `infrastructure.n_gpus_per_node` — the GPU count on this node.
+
+See [Configuration](/docs/training/configuration) for what each field controls.
+
+## 4. Validate the config
+
+Run the dry-run preflight. It checks the pinned repos, the `uv` environment, source-specific data settings, converter modules when applicable, the model, output directory, and GPU count — without side effects:
+
+```bash
+bash scripts/dryrun.sh
+```
+
+Fix anything it reports before launching a run. Prefer `/trainer:check` when
+operating through the plugin — it wraps this preflight plus additional gates.
+
+## 5. (Optional) Prepare data only
+
+To convert and inspect the dataset before committing to a training run, run the data-only pipeline:
+
+```bash
+bash scripts/dataprep.sh
+```
+
+For `harbor_job`, this runs conversion and writes the LF dataset under `artifacts/data/lf_data/` without registering it or training. Ready-made `hf_lf`/`local_lf` sources have nothing to convert, so the command exits early. See [Data Pipeline](/docs/data-pipeline).
+
+## 6. Launch a run
+
+`scripts/start.sh` runs the dry run, then the full pipeline (obtain/convert LF data → dataset registration → training), and archives the run on exit:
+
+```bash
+bash scripts/start.sh
+```
+
+To run the pipeline directly without the archive wrapper, use `bash scripts/train.sh`. Prefer `/trainer:run` when operating through the plugin — it runs check first, then this pipeline with post-run bookkeeping. See [Training](/docs/training) for what each step does.
+
+## 7. Inspect results
+
+Training writes to:
+
+```text
+artifacts/model/<run>/      # checkpoints, trainer_log.jsonl, trainer_state.json, *_results.json
+artifacts/logs/<run>_<ts>.log   # console log
+```
+
+After a successful run, `config.yaml` → `runtime_info.output` is updated with the checkpoint path, metrics, and artifact paths. For a live view, open the [dashboard](/docs/dashboard) or run `/trainer:dashboard`.

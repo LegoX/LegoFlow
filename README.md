@@ -1,4 +1,4 @@
-# SWE-Lego-Live
+# LegoFlow
 
 A self-evolving LLM development pipeline. It generates coding-agent training data from real GitHub PRs, runs agent trajectories, and feeds the results into SFT training and benchmark evaluation — all coordinated by an AI agent that monitors progress and tunes parameters automatically.
 
@@ -10,9 +10,9 @@ This entire project is built on a **block** abstraction. The pipeline consists o
 
 | Block | Role | Primary output |
 |-------|------|----------------|
-| `subblock/curator/` | Converts GitHub PRs → verified SWE tasks | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` |
-| `subblock/tracer/` | Runs an agent on SWE tasks → raw trajectories | `artifacts/jobs/<job>/` (Harbor job dirs) |
-| `subblock/trainer/` | Converts trajectories → sharegpt data, trains with LLaMA-Factory | `artifacts/model/<run>/` (checkpoints) |
+| `blocks/curator/` | Converts GitHub PRs → verified SWE tasks | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` |
+| `blocks/tracer/` | Runs an agent on SWE tasks → raw trajectories | `artifacts/jobs/<job>/` (Harbor job dirs) |
+| `blocks/trainer/` | Converts trajectories → sharegpt data, trains with LLaMA-Factory | `artifacts/model/<run>/` (checkpoints) |
 
 
 ### What is a Block?
@@ -22,7 +22,7 @@ Each unit of work — `curator`, `tracer`, `trainer`, `evaluator` — is a self-
 - `config.yaml` declares the block's inputs, outputs, children, dependencies between children, and (optionally) a remote node it must run on. It is **one-shot per run** — every key is configuration; no live state is stored here.
 - `scripts/start.sh`, `dryrun.sh`, `clean.sh`, `archive_run.sh` are how it actually executes. `start.sh` installs an EXIT trap that fires `archive_run.sh` on completion (success, failure, or signal), producing a `artifacts/archives/run_NNN/` snapshot and appending one entry to `artifacts/index.yaml`.
 - `artifacts/index.yaml` is the live state: the newest entry's `status` field (`completed | failed | interrupted`) tells you what the block last did.
-- Blocks can nest — a parent lists its children under `meta_info.subblocks` (roles only), and each child's own `meta_info.dependencies` shows both directions: `from` (the outputs it consumes, wired into its own inputs) and `to` (which of its own outputs feed which sibling, the mirror declared by the producer). The full specification is in [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md).
+- Blocks can nest — a parent lists its children under `meta_info.blocks` (roles only), and each child's own `meta_info.dependencies` shows both directions: `from` (the outputs it consumes, wired into its own inputs) and `to` (which of its own outputs feed which sibling, the mirror declared by the producer). The full specification is in [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md).
 
 
 
@@ -41,7 +41,7 @@ GitHub PRs
 ## Project Layout
 
 ```
-SWE-Lego-Live/
+LegoFlow/
 ├── CLAUDE.md                  # root block agent contract
 ├── BLOCK_DEFINITION.md        # block system specification
 ├── scripts/
@@ -54,7 +54,7 @@ SWE-Lego-Live/
 ├── artifacts/
 │   ├── index.yaml             # append-only run index (newest entry = live state)
 │   └── archives/run_NNN/      # per-run snapshots (metadata.yaml + config.yaml + scripts/)
-└── subblock/
+└── blocks/
     ├── curator/                # SWE task generation block (same scripts/ + artifacts/ layout)
     ├── tracer/               # trajectory generation block
     ├── trainer/                   # SFT training block
@@ -70,7 +70,7 @@ Run the pipeline block by block in order: **curator → tracer → trainer**, th
 - **All blocks**: Claude Code with this repo's block plugin loaded (`/reload-plugins` shows `1 plugin · 3 skills`); `git submodule update --init --recursive` after clone
 - **curator**: GitHub token(s) with `repo` read scope; OpenAI-compatible LLM API; Docker on the run host
 - **tracer**: OpenAI-compatible LLM API; Docker; verified tasks from swegen (wired via `meta_info.dependencies`)
-- **trainer**: Multi-GPU node (typically 8× GPU); conda env and model paths per `subblock/trainer/CLAUDE.md`; trajectory source (from tracer or an existing job dir)
+- **trainer**: Multi-GPU node (typically 8× GPU); conda env and model paths per `blocks/trainer/CLAUDE.md`; trajectory source (from tracer or an existing job dir)
 
 Root `scripts/start.sh` only automates the **data** stage (curator + tracer on the configured remote node). **trainer** and **evaluator** are started from their own directories via `/root:run` or `scripts/start.sh`.
 
@@ -86,7 +86,7 @@ Both `/root:check` and `/root:run` take a free-form natural-language argument. T
 
 ```text
 /root:run                                       # root orchestrator
-/root:run curator                                # subblock/curator
+/root:run curator                                # blocks/curator
 /root:run curator only 32 verified tasks         # curator + propose config/flag change, confirm, run
 /root:run run curator with 32 verified tasks     # same — block name embedded in sentence
 /root:run run the trajectory generator          # tracer — resolved by paraphrase
@@ -100,8 +100,8 @@ For `/root:run`, if the instruction implies a config edit or flag injection, the
 ### 1. Clone
 
 ```bash
-git clone --recurse-submodules <repo-url> SWE-Lego-Live
-cd SWE-Lego-Live
+git clone --recurse-submodules <repo-url> LegoFlow
+cd LegoFlow
 ```
 
 If you already cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.
@@ -111,13 +111,13 @@ If you already cloned without `--recurse-submodules`, run `git submodule update 
 Open Claude Code in the repo root, then ask:
 
 ```text
-/root:check              # check root + every subblock
-/root:check curator       # only check the curator subblock
+/root:check              # check root + every block
+/root:check curator       # only check the curator block
 ```
 
 On a fresh clone, the report tells you exactly which `runtime_info.input` keys are unfilled, which submodules are missing, whether the remote node is reachable, and whether the configured LLM endpoint exposes the requested model. `/root:check` uses `GET /models`; the separate `/curator:check` adds a small real completion request before generation. You don't need to read each `config.yaml` cold; let the skill point at the gaps.
 
-Pass a subblock name (e.g. `/root:check tracer`) when you're iterating on one block and don't want noise from the others.
+Pass a block name (e.g. `/root:check tracer`) when you're iterating on one block and don't want noise from the others.
 
 ### 3. Fill the gaps
 
@@ -133,14 +133,14 @@ Re-run `/root:check` until it prints `All blocks healthy — safe to /root:run.`
 
 ### 4. Run the pipeline
 
-Invoke `/root:run <block_name>` from the repo root, or `cd` into the subblock and invoke `/root:run` with no args. Both forms directly execute the selected block's `scripts/start.sh`. Preflight matches `/root:check`; execution runs locally or over SSH + tmux when `meta_info.resources.ip` is set. Each run archives under `artifacts/archives/run_NNN/` automatically — `start.sh`'s EXIT trap fires `scripts/archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM).
+Invoke `/root:run <block_name>` from the repo root, or `cd` into the block and invoke `/root:run` with no args. Both forms directly execute the selected block's `scripts/start.sh`. Preflight matches `/root:check`; execution runs locally or over SSH + tmux when `meta_info.resources.ip` is set. Each run archives under `artifacts/archives/run_NNN/` automatically — `start.sh`'s EXIT trap fires `scripts/archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM).
 
 **1. curator** — generate and validate SWE tasks:
 
 ```text
 /root:run curator                         # all-language scripts/start.sh
 # for Curator smoke, single-language, or full mode selection:
-cd subblock/curator && /curator:create-tasks
+cd blocks/curator && /curator:create-tasks
 ```
 
 **2. tracer** — run the agent on verified tasks (after curator has entries in `verifiable_tasks.txt`):
@@ -214,7 +214,7 @@ The `status` vocabulary is identical in both files and is derived from `start.sh
 
 ## Adding a New Block
 
-Use `/root:create` to scaffold a new block — it produces the full directory tree (`config.yaml`, `CLAUDE.md`, `dashboard/`, `scripts/{start,dryrun,clean,archive_run}.sh`, `artifacts/index.yaml`, `memory/notes.md`, `subblock/`) wired up to the [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md) contract. `archive_run.sh` is copied unmodified from the plugin's canonical template, and the scaffolded `start.sh` includes the EXIT-trap snippet that invokes it — so a newly created block archives every run automatically without any extra wiring.
+Use `/root:create` to scaffold a new block — it produces the full directory tree (`config.yaml`, `CLAUDE.md`, `dashboard/`, `scripts/{start,dryrun,clean,archive_run}.sh`, `artifacts/index.yaml`, `memory/notes.md`, `blocks/`) wired up to the [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md) contract. `archive_run.sh` is copied unmodified from the plugin's canonical template, and the scaffolded `start.sh` includes the EXIT-trap snippet that invokes it — so a newly created block archives every run automatically without any extra wiring.
 
 Two ways to drive it:
 

@@ -19,7 +19,7 @@ export const docs = defineDocs({
 });
 
 export const curatorDocs = defineDocs({
-  dir: path.join(repoRoot, 'subblock/curator/docs/content/docs'),
+  dir: path.join(repoRoot, 'blocks/curator/docs/content/docs'),
   docs: {
     schema: frontmatterSchema,
   },
@@ -29,7 +29,7 @@ export const curatorDocs = defineDocs({
 });
 
 export const tracerDocs = defineDocs({
-  dir: path.join(repoRoot, 'subblock/tracer/docs/content/docs'),
+  dir: path.join(repoRoot, 'blocks/tracer/docs/content/docs'),
   docs: {
     schema: frontmatterSchema,
   },
@@ -39,7 +39,7 @@ export const tracerDocs = defineDocs({
 });
 
 export const trainerDocs = defineDocs({
-  dir: path.join(repoRoot, 'subblock/trainer/docs/content/docs'),
+  dir: path.join(repoRoot, 'blocks/trainer/docs/content/docs'),
   docs: {
     schema: frontmatterSchema,
   },
@@ -49,7 +49,7 @@ export const trainerDocs = defineDocs({
 });
 
 export const evaluatorDocs = defineDocs({
-  dir: path.join(repoRoot, 'subblock/evaluator/docs/content/docs'),
+  dir: path.join(repoRoot, 'blocks/evaluator/docs/content/docs'),
   docs: {
     schema: frontmatterSchema,
   },

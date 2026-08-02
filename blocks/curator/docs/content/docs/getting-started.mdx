@@ -1,0 +1,45 @@
+---
+title: Getting Started
+description: What Curator needs and the fastest way to run it
+---
+
+Curator wraps the pinned `repos/swegen` checkout in the LegoFlow block
+layout (recorded as a gitlink under `blocks/curator/repos/swegen`). You drive
+it through the `curator-plugin` Claude Code plugin: each slash command runs its
+own preflight, confirmation, and bookkeeping, so you operate the block through
+commands rather than raw scripts.
+
+## Prerequisites
+
+- **Docker** — task validation and execution run in containerized Harbor tasks.
+- **Python** — the `swegen` package installs from `repos/swegen`.
+- **GitHub tokens** — for PR collection and PR metadata lookup.
+- **OpenAI-compatible LLM endpoint** — PR evaluation and instruction generation.
+- **Claude-compatible task model** — the task-completion and verification stage.
+
+## Fastest start: one prompt
+
+Launch Claude from inside `blocks/curator/` (so the block-local plugin loads),
+then describe the run in plain language. The agent fills the environment, runs
+preflight, and chains the plugins for you — you don't even need to edit
+`config.yaml`. Grab the copy-paste prompt from
+[Run Generation → The simplest way](/docs/run-generation#the-simplest-way-one-prompt).
+
+## The stages
+
+Whether you prompt for them or run them yourself, the pipeline is five commands:
+
+- `/curator:setup` — one-time: init the submodule, build the venv, install `swegen`.
+- `/curator:check` — read-only preflight (config, tokens, a live LLM call, Docker).
+- `/curator:collect-prs` — collect GitHub PR IDs as a background job.
+- `/curator:create-tasks` — generate tasks from collected PRs and verify each.
+- `/curator:dashboard` — dataset analytics (difficulty + tags), not run progress.
+
+A sixth command, `/curator:run`, is a compatibility adapter that forwards to
+`/curator:create-tasks` so every block exposes the same `/<block>:run` verb.
+
+## Next
+
+- [Run Generation](/docs/run-generation) — the full flow, per-command reference, `config.yaml` schema, and manual commands.
+- [Core Concepts](/docs/core-concepts) — PR pools, task skeletons, validation, and manifests.
+- [Outputs](/docs/outputs) — task directories, manifests, logs, and resuming after moving nodes.

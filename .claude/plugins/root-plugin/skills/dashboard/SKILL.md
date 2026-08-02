@@ -2,7 +2,7 @@
 name: dashboard
 description: >
   Open (or bring up) the unified project dashboard for the root block tree.
-  Aggregates the live state of every subblock — last run id, status,
+  Aggregates the live state of every block — last run id, status,
   duration, key metrics — into one webui served on a local port. The skill
   starts the dashboard server if it isn't already running, prints the URL,
   and (if a browser is available on the host) opens it. Read-only; never
@@ -25,10 +25,10 @@ project-wide aggregate.
 1. Check whether a dashboard server is already up (well-known port + a
    `/health` probe).
 2. If not, launch one (background, log to `./logs/dashboard.log`), passing
-   it the locations of every subblock's `artifacts/index.yaml`.
+   it the locations of every block's `artifacts/index.yaml`.
 3. Print the URL. If `xdg-open` / `open` is available, open the browser.
 4. Surface the same data textually as a fallback (a compact table of
-   `subblock | last_run | status | started_at | notes`) so the skill is
+   `block | last_run | status | started_at | notes`) so the skill is
    still useful in a headless session.
 
 ## TODO

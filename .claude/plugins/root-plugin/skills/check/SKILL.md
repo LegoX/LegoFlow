@@ -21,14 +21,14 @@ The args string is free-form natural language (may be empty). The agent reads th
 
 ### Target resolution
 
-Same rule as `/root:run`. List `./subblock/` for valid names, then read args and decide:
+Same rule as `/root:run`. List `./blocks/` for valid names, then read args and decide:
 
-- **Single block clearly identified** (literal name or unambiguous paraphrase) → `TARGET_DIR=./subblock/<name>/`. Check that block only — no recursion into its children, no walking of siblings.
+- **Single block clearly identified** (literal name or unambiguous paraphrase) → `TARGET_DIR=./blocks/<name>/`. Check that block only — no recursion into its children, no walking of siblings.
 - **Multiple blocks mentioned or ambiguous** → ask. Do not guess.
-- **No block mentioned** → `TARGET_DIR=CWD` (full subblock tree walk).
-- **Block inferred but `./subblock/<name>/` doesn't exist** → abort with the actual listing and ask the user to pick.
+- **No block mentioned** → `TARGET_DIR=CWD` (full block tree walk).
+- **Block inferred but `./blocks/<name>/` doesn't exist** → abort with the actual listing and ask the user to pick.
 
-When `TARGET_DIR` is a subblock, cross-block dependency checks (the validator's `dep:*` checks) still read sibling configs to validate producer outputs — but don't recursively check those siblings' health.
+When `TARGET_DIR` is a block, cross-block dependency checks (the validator's `dep:*` checks) still read sibling configs to validate producer outputs — but don't recursively check those siblings' health.
 
 ### Report focusing
 
@@ -58,12 +58,12 @@ Read `resources/BLOCK_DEFINITION.md` bundled in this plugin (sibling of the `ski
 
 Starting at `TARGET_DIR` (resolved in the Arguments section), decide where to begin:
 
-1. **If `block_name` was passed** (`TARGET_DIR=./subblock/<block_name>/`): treat that directory as the single block under check. Its `config.yaml` must exist — if not, abort: `"subblock/<block_name>/config.yaml not found."`. Do **not** recurse into its `meta_info.subblocks` (leaf scope by user choice). Skip cases 2 and 3 below.
-2. **No `block_name`, and `./config.yaml` exists**: this directory is the root of the check (the standard SWE-Lego-Live case — the root block has its own `config.yaml` listing children under `meta_info.subblocks` with roles only). Read it and recurse into every child named under `meta_info.subblocks` by descending into `./subblock/<name>/`.
-3. **No `block_name`, no `./config.yaml`, but `./subblock/` exists** with child block directories (each with its own `config.yaml`): treat CWD as a pseudo-root (fallback for trees without a root config). Check each child as an independent block; do **not** synthesize a config for the parent.
-4. **None of the above**: abort: `"This directory is not a block (no config.yaml) and has no subblock/ children. Run /root:check from inside a block's directory or from a directory whose subblock/ contains blocks."`.
+1. **If `block_name` was passed** (`TARGET_DIR=./blocks/<block_name>/`): treat that directory as the single block under check. Its `config.yaml` must exist — if not, abort: `"blocks/<block_name>/config.yaml not found."`. Do **not** recurse into its `meta_info.blocks` (leaf scope by user choice). Skip cases 2 and 3 below.
+2. **No `block_name`, and `./config.yaml` exists**: this directory is the root of the check (the standard LegoFlow case — the root block has its own `config.yaml` listing children under `meta_info.blocks` with roles only). Read it and recurse into every child named under `meta_info.blocks` by descending into `./blocks/<name>/`.
+3. **No `block_name`, no `./config.yaml`, but `./blocks/` exists** with child block directories (each with its own `config.yaml`): treat CWD as a pseudo-root (fallback for trees without a root config). Check each child as an independent block; do **not** synthesize a config for the parent.
+4. **None of the above**: abort: `"This directory is not a block (no config.yaml) and has no blocks/ children. Run /root:check from inside a block's directory or from a directory whose blocks/ contains blocks."`.
 
-Build a flat list `[(block_path, parsed_config_yaml)]` of every reachable block — exactly one entry when `block_name` is set, more when walking the full tree. Record any declared subblock whose directory is missing as a `tree:missing-child` failure on its parent (only applicable when walking the tree).
+Build a flat list `[(block_path, parsed_config_yaml)]` of every reachable block — exactly one entry when `block_name` is set, more when walking the full tree. Record any declared block whose directory is missing as a `tree:missing-child` failure on its parent (only applicable when walking the tree).
 
 ## Step 2 — Per-block static checks
 
@@ -150,10 +150,10 @@ on glyphs or wording — this is a rollup, not a second opinion.
 
 Block tree:
   <path>            (no config.yaml — pseudo-root, or root config.yaml)
-  └─ subblock/curator
-  └─ subblock/tracer
-  └─ subblock/trainer
-  └─ subblock/evaluator
+  └─ blocks/curator
+  └─ blocks/tracer
+  └─ blocks/trainer
+  └─ blocks/evaluator
 
 | Block | Layer | Check | Status | Detail |
 |-------|-------|-------|:------:|--------|
@@ -165,7 +165,7 @@ Block tree:
 
 **Run configuration** (one block per fenced block, only for blocks with a dryrun Run Configuration Summary)
 ```
-subblock/trainer:
+blocks/trainer:
   Model:        /mnt/public/models/Qwen3-30B-A3B-Instruct-2507
   Backend:      Docker (tcp://192.168.35.240:2375)
   Parallelism:  16 workers
@@ -195,7 +195,7 @@ subblock/trainer:
 Additional rules:
 
 - For `api:*` failures, include the URL and the HTTP status / error string verbatim so the user can paste it into their endpoint dashboard.
-- For `dep:*` findings, name both the consumer (`subblock/<block>` + the `runtime_info.input` dot-path) and the producer (`subblock/<src>.output.<key>`) — the validator's message already contains both.
+- For `dep:*` findings, name both the consumer (`blocks/<block>` + the `runtime_info.input` dot-path) and the producer (`blocks/<src>.output.<key>`) — the validator's message already contains both.
 - For `dryrun:*` failures/warnings, include the exact line from dryrun.sh output.
 - If a block's `dryrun.sh` printed a Run Configuration Summary, include it verbatim in the report so the user can review the full configuration before confirming.
 - **Never proceed to `/root:run` without explicit user confirmation**, even when the verdict is `✅ YES`.

@@ -21,7 +21,7 @@
 #
 # Stages: curator tracer trainer evaluator. --from/--to bound which run (default all).
 # Each stage overlays tests/smoke/<block>/config.yaml onto
-# subblock/<block>/config.yaml; the originals are restored on exit.
+# blocks/<block>/config.yaml; the originals are restored on exit.
 #
 # Env:
 #   CLAUDE_SDK=0   launch stages with a direct nohup instead of `claude -p`
@@ -82,10 +82,10 @@ PY
 declare -a _BACKUPS=()
 overlay() {  # overlay <block>
   local b="$1"
-  local prod="$ROOT_DIR/subblock/$b/config.yaml"
+  local prod="$ROOT_DIR/blocks/$b/config.yaml"
   local smoke="$ROOT_DIR/tests/smoke/$b/config.yaml"
   [[ -f "$smoke" ]] || { echo "FAIL: missing $smoke"; exit 1; }
-  [[ "$DRY_RUN" == 1 ]] && { log "[DRY-RUN] would overlay tests/smoke/$b/config.yaml -> subblock/$b/config.yaml"; return 0; }
+  [[ "$DRY_RUN" == 1 ]] && { log "[DRY-RUN] would overlay tests/smoke/$b/config.yaml -> blocks/$b/config.yaml"; return 0; }
   cp "$prod" "$prod.root-smoke-bak.$$"
   _BACKUPS+=("$prod")
   cp "$smoke" "$prod"
@@ -106,7 +106,7 @@ overlay() {  # overlay <block>
     sleep 1
   done
   [[ "$_ok" == 1 ]] || { echo "FAIL: overlaid $prod not consistent after copy (efc lag)"; exit 1; }
-  log "overlaid tests/smoke/$b/config.yaml -> subblock/$b/config.yaml"
+  log "overlaid tests/smoke/$b/config.yaml -> blocks/$b/config.yaml"
 }
 restore_all() {
   for prod in "${_BACKUPS[@]}"; do
@@ -128,7 +128,7 @@ claude_launch() {  # claude_launch <block> <setup_cmd> <preflight_cmd> <run_cmd>
   fi
   if [[ "$CLAUDE_SDK" == 1 ]] && command -v claude >/dev/null 2>&1; then
     HOME="${HOME:-/home/haoli}" timeout 900 claude -p \
-"Root-smoke stage for ${label}. The smoke config is overlaid at subblock/${block}/config.yaml. cwd is subblock/${block}.
+"Root-smoke stage for ${label}. The smoke config is overlaid at blocks/${block}/config.yaml. cwd is blocks/${block}.
 
 Run 3 gated phases via the Bash tool. STOP and reply FAILED <phase> with the last 20 lines if any phase exits non-zero. Do NOT proceed past a failure.
 
@@ -249,7 +249,7 @@ hr; log "ROOT SMOKE CHAIN  from=$FROM to=$TO  claude_sdk=$CLAUDE_SDK  dry_run=$D
 if want curator; then
   hr; log "STAGE 1/4 — curator (collect ~200 PRs -> verified tasks)"; hr
   overlay curator
-  SB="$ROOT_DIR/subblock/curator"; CFG="$SB/config.yaml"
+  SB="$ROOT_DIR/blocks/curator"; CFG="$SB/config.yaml"
   BASE="$(cfg "$CFG" runtime_info.output.swe_tasks_dir.path)"
   SUB="$(cfg "$CFG" runtime_info.input.smoke.output_subdir)"
   STATE="$(cfg "$CFG" runtime_info.input.smoke.state_subdir)"
@@ -406,7 +406,7 @@ fi
 if want tracer && [[ "$CHAIN_RC" == 0 ]]; then
   hr; log "STAGE 2/4 — tracer (verified tasks -> reward==1 -> LF SFT data)"; hr
   overlay tracer
-  TB="$ROOT_DIR/subblock/tracer"; CFG="$TB/config.yaml"
+  TB="$ROOT_DIR/blocks/tracer"; CFG="$TB/config.yaml"
   # WIRE: harbor has no "run a task N times" knob, so to give tracer multiple
   # independent solve attempts (raising the reward==1 gate's odds without
   # re-running curator) we stage `smoke_attempts` replicas of each curator verified
@@ -414,12 +414,12 @@ if want tracer && [[ "$CHAIN_RC" == 0 ]]; then
   # has no id), then point task_source.dataset_name at that staging dir.
   # Read curator's smoke output location from the STATIC smoke config (it carries
   # the smoke-only output_subdir field) — the production curator config lacks it,
-  # and with --from tracer curator is never overlaid, so reading the subblock
+  # and with --from tracer curator is never overlaid, so reading the block
   # config would yield an empty subdir and stage 0 tasks.
   SWE_SMOKE_CFG="$ROOT_DIR/tests/smoke/curator/config.yaml"
   SWE_SUB="$(cfg "$SWE_SMOKE_CFG" runtime_info.input.smoke.output_subdir)"
   SWE_BASE="$(cfg "$SWE_SMOKE_CFG" runtime_info.output.swe_tasks_dir.path)"
-  SWE_ABS="$ROOT_DIR/subblock/curator/$SWE_BASE/$SWE_SUB"
+  SWE_ABS="$ROOT_DIR/blocks/curator/$SWE_BASE/$SWE_SUB"
   ATTEMPTS="$(cfg "$CFG" runtime_info.input.smoke_attempts)"; ATTEMPTS="${ATTEMPTS:-1}"
   STAGE_DIR="$TB/artifacts/root-smoke-src-tasks"
   if [[ "$DRY_RUN" != 1 ]]; then
@@ -527,12 +527,12 @@ fi
 if want trainer && [[ "$CHAIN_RC" == 0 ]]; then
   hr; log "STAGE 3/4 — trainer (512 fixture + tracer reward==1 -> trained checkpoint)"; hr
   overlay trainer
-  FB="$ROOT_DIR/subblock/trainer"; CFG="$FB/config.yaml"
+  FB="$ROOT_DIR/blocks/trainer"; CFG="$FB/config.yaml"
   FIXTURE="$(cfg "$CFG" runtime_info.input.source.fixture_lf)"
   UPDIR="$(cfg "$CFG" runtime_info.input.source.upstream_lf_dir)"
   R_IP="$(cfg "$CFG" meta_info.resources.ip)"
-  # The tracer reward==1 LF lives on the CI host under subblock/tracer/<out_dir>.
-  TRAJ_SFT="$ROOT_DIR/subblock/tracer/$(cfg "$ROOT_DIR/subblock/tracer/config.yaml" runtime_info.input.sft_conversion.out_dir)"
+  # The tracer reward==1 LF lives on the CI host under blocks/tracer/<out_dir>.
+  TRAJ_SFT="$ROOT_DIR/blocks/tracer/$(cfg "$ROOT_DIR/blocks/tracer/config.yaml" runtime_info.input.sft_conversion.out_dir)"
 
   # WIRE: merge fixture + every tracer lf.json into one combined LF, then lower
   # source.type to the trainer block's native local_lf. For a remote pod this merge
@@ -547,7 +547,7 @@ if want trainer && [[ "$CHAIN_RC" == 0 ]]; then
     MERGED_ABS="$FB/$MERGED_REL"; mkdir -p "$(dirname "$MERGED_ABS")"
     # Stage the 512 fixture if it isn't present yet.
     if [[ ! -s "$FB/$FIXTURE" ]]; then
-      log "fixture $FIXTURE absent — staging via subblock/trainer/tests/smoke/prepare_smoke_data.sh"
+      log "fixture $FIXTURE absent — staging via blocks/trainer/tests/smoke/prepare_smoke_data.sh"
       # The dataset repo is private, so staging needs HF_TOKEN from the shared
       # env — without it the download fails with "Invalid username or password"
       # and the merge silently proceeds with tracer output alone.
@@ -608,7 +608,7 @@ fi
 if want evaluator && [[ "$CHAIN_RC" == 0 ]]; then
   hr; log "STAGE 4/4 — evaluator (serve checkpoint -> swebench-verified 100-subset)"; hr
   overlay evaluator
-  EB="$ROOT_DIR/subblock/evaluator"; CFG="$EB/config.yaml"
+  EB="$ROOT_DIR/blocks/evaluator"; CFG="$EB/config.yaml"
 
   # WIRE: stand up vLLM+LiteLLM on the trainer pod, point evaluator at the wrapper.
   if [[ "$DRY_RUN" == 1 ]]; then

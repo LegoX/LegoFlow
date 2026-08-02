@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Root case 05: the four smoke configs form a consistent, wired pipeline.
 # This is the check that distinguishes the ROOT smoke (a real chain) from the
-# isolated per-subblock smokes. It asserts that each stage is configured to
+# isolated per-block smokes. It asserts that each stage is configured to
 # consume the previous stage's real output:
 #
 #   curator  -> collects ~200 PRs, writes verified tasks under a smoke subdir
@@ -30,7 +30,7 @@ def load(b):
     return yaml.safe_load(open(os.path.join(root, "tests", "smoke", b, "config.yaml"), encoding="utf-8")) or {}
 def load_prod(b):
     """The block's real config — used where the smoke must not drift from it."""
-    return yaml.safe_load(open(os.path.join(root, "subblock", b, "config.yaml"), encoding="utf-8")) or {}
+    return yaml.safe_load(open(os.path.join(root, "blocks", b, "config.yaml"), encoding="utf-8")) or {}
 def get(d, dotted, default=None):
     cur = d
     for p in dotted.split("."):

@@ -26,9 +26,9 @@ build/
 venv/
 env/
 
-# Extra untracked checkouts under subblock repos/ (submodules are tracked via .gitmodules)
-subblock/*/repos/*
-!subblock/*/repos/.gitkeep
+# Extra untracked checkouts under block repos/ (submodules are tracked via .gitmodules)
+blocks/*/repos/*
+!blocks/*/repos/.gitkeep
 
 # Node
 node_modules/
@@ -55,19 +55,19 @@ artifacts/files/
 # git does not track empty directories.
 artifacts/*
 !artifacts/.gitkeep
-subblock/*/artifacts/index.yaml
+blocks/*/artifacts/index.yaml
 
-# SWE-gen subblock — generated data and virtual env
-subblock/curator/artifacts/*
-subblock/curator/scripts/jobs/*
-subblock/curator/scripts/.swegen-*/
+# SWE-gen block — generated data and virtual env
+blocks/curator/artifacts/*
+blocks/curator/scripts/jobs/*
+blocks/curator/scripts/.swegen-*/
 
-# Tracer subblock — runtime mount + per-run artifacts (kept manifest yamls tracked)
-subblock/tracer/artifacts/*
+# Tracer block — runtime mount + per-run artifacts (kept manifest yamls tracked)
+blocks/tracer/artifacts/*
 
 # Dashboard transient runtime output
-subblock/curator/dashboard/memory/.progress_monitor_all_state.jsonl.*
-subblock/curator/dashboard/dashboard_sync.log
+blocks/curator/dashboard/memory/.progress_monitor_all_state.jsonl.*
+blocks/curator/dashboard/dashboard_sync.log
 
 # Local harbor venv + root-level run outputs (machine-specific, never committed)
 .venv-harbor/

@@ -1,0 +1,34 @@
+---
+title: Motivation
+description: Why we built evaluator
+---
+
+evaluator runs registered evaluation benchmarks through Harbor against any configurable upstream LLM, and stores per-task results and trajectories.
+
+It is the evaluation stage of the [LegoFlow](https://github.com/SWE-Lego/SWE-Lego-Live) pipeline — a leaf block with no downstream consumer. Where `tracer` generates training data and `trainer` produces checkpoints, evaluator measures how good any model is on a chosen benchmark. It mirrors tracer's runtime shell (a pinned [Harbor](https://github.com/SWE-Lego/harbor) checkout fronted by a per-job LiteLLM proxy), but loads its task set from Harbor's `registry.json` instead of a locally-staged swegen export.
+
+```text
+curator ─▶ tracer ─▶ trainer
+                              │
+                              ▼
+                            evaluator   ← benchmarks any model (remote API or local checkpoint)
+```
+
+evaluator provides:
+
+- **Registry-driven benchmark selection** — switch between SWE-bench Verified, Multilingual, Pro, Terminal-Bench, and a dozen other benchmarks by editing two config fields; no local task staging
+- **A per-job LiteLLM proxy** fronting your model API with OpenAI- and Anthropic-compatible endpoints and trajectory logging
+- **Containerized rollouts at scale** via Harbor, with configurable concurrency, retries, and timeouts
+- **Pluggable agent scaffolds** — Claude Code, OpenHands SDK, and OpenCode validated end-to-end
+- **Remote API *or* local checkpoint** evaluation — point at a shared endpoint or serve an SFT/RL output with vLLM, with no code change
+- **Automatic post-eval job analysis** — attribution, scoring, and failure breakdowns the dashboard reads, at zero token cost by default
+- **A self-contained dashboard** for browsing jobs, analysis reports, and agent trajectories
+
+## Where to go next
+
+- [Getting Started](/docs/getting-started) — install the dependencies and run your first benchmark
+- [Core Concepts](/docs/core-concepts) — benchmarks, the registry, jobs, agents, and analysis
+- [Run Jobs](/docs/run-jobs) — select a benchmark, start the proxy, and run the eval
+- [Job Analysis](/docs/job-analysis) — post-eval attribution and scoring
+- [Local Model](/docs/local-model) — benchmark a local checkpoint with vLLM
+- [Dashboard](/docs/dashboard) — browse jobs, reports, and trajectories
