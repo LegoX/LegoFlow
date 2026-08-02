@@ -1,5 +1,5 @@
 # ROOT SMOKE — stage 1/4: curator.
-# Overlaid onto subblock/curator/config.yaml by tests/smoke/run_pipeline.sh.
+# Overlaid onto blocks/curator/config.yaml by tests/smoke/run_pipeline.sh.
 # Schema-compatible with production; smoke-only knobs live under
 # runtime_info.input.smoke.*.
 #
@@ -12,8 +12,8 @@ meta_info:
   name: curator
   label: "Curator"
   description: Converts GitHub PRs into verified SWE-Bench tasks. Root smoke collects ~200 PRs from scratch.
-  parent: swe_lego_live
-  subblocks: {}
+  parent: legoflow
+  blocks: {}
   dependencies:
     from: {}
     # stage 1 -> 2; mirrors tracer's own `from`
@@ -98,7 +98,7 @@ runtime_info:
         target_prs: 200
         time_budget_s: 7200       # generous backstop for a real ~200-PR pull
         min_ids: 8                # emergency-only fallback floor
-        # Known-good PRs (shared with the subblock swegen smoke) — the safety net
+        # Known-good PRs (shared with the block swegen smoke) — the safety net
         # so the chain never stalls on collection flakiness. Real PRs, real
         # create/verify downstream.
         fallback_prs:

@@ -1,139 +1,110 @@
 ---
-title: config.yaml Schema
-description: The fixed schema every block configuration follows
+title: config.yaml schema
+description: The fixed schema every block's config.yaml follows
 ---
 
-Every block in the tree, including the root, has a `config.yaml` with the same
-top-level shape. Live state is not stored here; it belongs in
-`artifacts/index.yaml`. The schema is enforced by
-`scripts/validate_config.py`, every block's dry run, CI schema tests, and the
-check skills.
+Every block in the tree — root or child — has a `config.yaml` with the same top-level shape. Live state is **not** stored here; that lives in `artifacts/index.yaml`. The schema is machine-enforced by `scripts/validate_config.py` (run by every block's `dryrun.sh`, the CI schema tests, and the `:check` skills).
 
 ## Top-level structure
 
 ```yaml
 meta_info:
-  name:                 # short identifier; matches the directory for subblocks
+  name:                 # short identifier; must equal the block's directory name
   label:                # human-friendly title
   description:          # one-sentence purpose
-  parent:               # parent block name, or null for the root
-  subblocks:            # parent only: children with role one-liners; no wiring
+  parent:               # parent block's `name`, or null for the root
+  blocks:            # parent blocks only: children with a role one-liner — NO wiring
     <child_name>: {role: "<one phrase>"}
-  dependencies:         # this block's upstream and downstream edges
+  dependencies:         # this block's own upstream AND downstream edges — see "Wiring rule"
     from:
       <input.dot.path>: <source_block>.output.<key>
     to:
       <output_key>: <consumer_block>.input.<their.dot.path>
-  repos: {}             # name to {commit_id, role}; pinned dependencies under repos/
+  repos: {}             # name → {commit_id, role}; pinned vendored deps under repos/
   resources:
-    ip:                 # local or null = current host; real host = SSH and tmux
-    directory:          # working directory on a remote host
+    ip:                 # 'local' (default) or null = current host; remote IP = SSH+tmux
+    directory:          # working directory on the remote node (when ip is remote)
 
 runtime_info:
-  input: {}             # values originating outside the block tree
+  input: {}             # ONLY values originating outside the block tree
   output: {}            # values produced for downstream blocks
 ```
 
-These are the only two top-level sections. Legacy `status` and `evolving`
-sections and a top-level `environment` fail validation. Per-run environment
-variables belong in `runtime_info.input.env_extra`, and live state belongs in
-`artifacts/index.yaml`.
+These are the **only** two top-level sections. Legacy `status:` and `evolving:` sections and a top-level `environment:` are validation failures (`schema:legacy-status`, `schema:legacy-evolving`, `schema:unknown-toplevel`); per-run env vars live in `runtime_info.input.env_extra`.
 
 ## Wiring rule
 
-`meta_info.dependencies` contains exactly two keys, `from` and `to`. A block
-with no edges still declares `dependencies: {from: {}, to: {}}`. Root
-`subblocks` entries contain roles only and never contain dependency wiring.
+This is the rule the whole pipeline depends on:
 
-The consumer declares `from`. Its key is a dot-path into its own
-`runtime_info.input`; its value names the producer's output. Use the string
-form for a required dependency:
+> `meta_info.dependencies` is a mapping with exactly two keys, `from` and `to` — a block declares both directions it participates in, from its own file. A block with neither declares an explicit `dependencies: {from: {}, to: {}}`. The root's `blocks` entries carry roles only — never wiring.
+
+**`from`** — this block's own upstream hand-offs. Key is a dot-path into this block's own `runtime_info.input`; value names the producer's output. Two value forms:
 
 ```yaml
+# string form — required dependency
 from:
   task_source.dataset_name: curator.output.swe_tasks_dir
-```
 
-Use the mapping form for a conditional or optional dependency:
-
-```yaml
+# mapping form — conditional and/or optional
 from:
   source.job_dir:
     from: tracer.output.raw_trajectories_dir
-    when: {source.type: harbor_job}
-    required: false
+    when: {source.type: harbor_job}   # enforced only while these inputs hold these values
+    required: false                   # null producer output → warning, not failure
 ```
 
-The producer declares the matching `to`. Its key is one of its own
-`runtime_info.output` keys, and its value names the exact consumer input:
+**`to`** — the mirror image, declared by the *producer*. Key is one of this block's own `runtime_info.output` keys; value names the exact consumer input field:
 
 ```yaml
+# string form
 to:
   swe_tasks_dir: tracer.input.task_source.dataset_name
-```
 
-A conditional producer edge uses fully qualified keys in `when`, because the
-condition lives on the consumer:
-
-```yaml
+# mapping form — when-keys are fully-qualified <consumer>.input.<path>, since the
+# condition lives on the consumer's own state, not this (producer) block's
 to:
   swe_tasks_dir:
     to: tracer.input.task_source.dataset_name
     when: {tracer.input.task_source.provider: local}
 ```
 
-The same edge is declared once by the consumer and once by the producer. The
-validator cross-checks them and reports `dep:link-mismatch` when the two sides
-drift apart.
+The same edge is declared twice — once in the consumer's `from`, once in the producer's `to` — each block only ever editing its own file. The validator cross-checks the two declarations and warns (`dep:link-mismatch`) if they've drifted apart.
 
-Resolution reads the producer's `runtime_info.output.<key>` and prefers a
-non-null `value` over `path`. A dangling block or field reference always fails,
-even when the dependency is inactive or optional. The validator also reports
-`dep:path-mismatch` when a configured consumer path does not lie under the
-producer's declared output path.
+Resolution reads the producer's `runtime_info.output.<key>`: a non-null `value` first, else `path`. A dangling reference (missing producer/consumer block or field) always fails validation, even when the dependency is inactive or optional. The validator also warns (`dep:path-mismatch`) when a consumer's configured path does not lie under the producer's declared output path — catching stale paths after renames.
 
-## Fill markers
+## Fill markers in `runtime_info.input`
 
-| Marker | Meaning | Validator behavior |
+| Marker | Meaning | Validator |
 | --- | --- | --- |
-| `human` | User must replace the value before a run | Fails with `input:unfilled` |
-| `""` | Auto-derived or supplied through an environment or file channel | Accepted; do not edit merely to run |
-| `null` | Semantic unset, default, or all | Accepted |
-| Anything else | Real working default | Accepted |
-| `<...>`, `REPLACE_ME`, `YOUR_API_KEY`, `changeme` | Retired placeholder formats | Fails with `input:placeholder` |
+| `human` | User must replace before a run | `input:unfilled` (fail) |
+| `""` | Auto-derived or env/file-supplied; never edit to run | — |
+| `null` | Semantic unset / default / all | — |
+| anything else | Real working default | — |
+| `<...>`, `REPLACE_ME`, `YOUR_API_KEY`, `changeme` | Retired legacy placeholders | `input:placeholder` (fail) |
 
-## Output shape
+## `runtime_info.output` shape
 
-Each output key is a mapping with `path`, `value`, or both:
+Each output key is a mapping with `path:` (a static location fixed at authoring time, block-relative) and/or `value:` (run-produced — `null` until the block's run script writes it back, as trainer's `train.sh` does after training). Consumers resolve `value` first, then `path`.
 
-- `path` is a static, block-relative location fixed when the config is written.
-- `value` is produced by a run and remains `null` until the block writes it
-  back.
+## `resources.ip`
 
-Consumers resolve `value` first, then fall back to `path`.
+- `local` or `null` → run on the current host (default; no SSH).
+- Real remote IP → the agent must SSH into that node and run inside a tmux session, with `meta_info.resources.directory` as the working directory.
 
-## Resource location
-
-- `local`, `null`, or an absent `resources.ip` runs on the current host.
-- A real hostname or IP runs through SSH and tmux, using
-  `resources.directory` as the remote working directory.
-
-Do not restore an old remote IP from Git history. The local default is
-intentional.
+Do **not** "restore" an old remote IP from git history. The local default is intentional.
 
 ## Validation
 
 ```bash
-python3 scripts/validate_config.py --root .
-python3 scripts/validate_config.py --block subblock/tracer
-python3 scripts/validate_config.py --block subblock/tracer --config tests/smoke/config.yaml
+python3 scripts/validate_config.py --root .                  # whole tree + cross-block deps
+python3 scripts/validate_config.py --block blocks/tracer   # one block
+python3 scripts/validate_config.py --block blocks/tracer --config tests/smoke/config.yaml
 ```
 
-The validator prints stable `[OK]`, `[WARN]`, and `[FAIL]` findings. Its exit
-code is non-zero when any failure is present.
+Findings are printed as `[OK]`/`[WARN]`/`[FAIL]` lines with stable labels (`schema:*`, `dep:*` — including `dep:bad-shape` for a malformed `from`/`to` mapping and `dep:link-mismatch` (warning) when the two sides of an edge disagree — `input:*`, `output:shape`, `tree:*`); the exit code is non-zero iff any `[FAIL]` was reported.
 
-The canonical machine-facing resources live in the root plugin:
+## Where to read more
 
-- `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`
-- `.claude/plugins/root-plugin/resources/config.template.yaml`
-- `.claude/plugins/root-plugin/resources/example_block/`
+- The canonical contract: `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`.
+- The schema template: `.claude/plugins/root-plugin/resources/config.template.yaml`.
+- A worked example scaffold: `.claude/plugins/root-plugin/resources/example_block/`.

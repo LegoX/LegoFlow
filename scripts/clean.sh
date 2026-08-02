@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Root clean: remove run artifacts at the root and in every subblock.
+# Root clean: remove run artifacts at the root and in every block.
 #
 # Two modes, and only two:
 #
@@ -51,7 +51,7 @@ Usage: $(basename "$0") [--dry-run] [--all [--yes]]
 
   --dry-run   Print what would be removed and exit without deleting.
 
-Applies to the root block and every subblock under subblock/.
+Applies to the root block and every block under blocks/.
 EOF
             exit 0
             ;;
@@ -59,7 +59,7 @@ EOF
     esac
 done
 
-# Root's own keep-list. Subblocks each define their own inside their clean.sh.
+# Root's own keep-list. Blocks each define their own inside their clean.sh.
 KEEP_DEFAULT=(env envs index.yaml archives)
 
 is_tracked() {  # any git-tracked file at or under this path?
@@ -116,7 +116,7 @@ clean_artifacts_dir() {
 if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     echo "############################################################"
     echo "  CLEAN ALL: this wipes artifacts/ in the root block AND in"
-    echo "  every subblock, keeping only git-tracked files."
+    echo "  every block, keeping only git-tracked files."
     echo ""
     echo "  This deletes, among other things:"
     echo "    - uv/venv environments (artifacts/env, artifacts/envs)"
@@ -137,30 +137,30 @@ if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     [[ "$reply" == "yes" ]] || { echo "Aborted."; exit 1; }
     echo ""
     echo "Second confirmation — this cannot be undone."
-    read -r -p "Type 'clean all swe_lego_live' to proceed: " reply2
-    [[ "$reply2" == "clean all swe_lego_live" ]] || { echo "Aborted."; exit 1; }
+    read -r -p "Type 'clean all legoflow' to proceed: " reply2
+    [[ "$reply2" == "clean all legoflow" ]] || { echo "Aborted."; exit 1; }
     echo ""
 fi
 
-subblock_args() {
+block_args() {
     local args=()
     [[ "$DRY_RUN" == "1" ]] && args+=(--dry-run)
-    # The root already confirmed; subblocks must not prompt again.
+    # The root already confirmed; blocks must not prompt again.
     [[ "$MODE" == "all" ]] && args+=(--all --yes)
     printf '%s\n' "${args[@]}"
 }
 
-echo "=== Cleaning root: swe_lego_live (mode: $MODE) ==="
+echo "=== Cleaning root: legoflow (mode: $MODE) ==="
 clean_artifacts_dir "$ARTIFACTS_DIR" "${KEEP_DEFAULT[@]}"
 
 FAILED=()
-for block_dir in "$ROOT_DIR/subblock"/*/; do
+for block_dir in "$ROOT_DIR/blocks"/*/; do
     block_name="$(basename "$block_dir")"
     clean_script="${block_dir}scripts/clean.sh"
     echo ""
-    echo "=== Cleaning subblock: $block_name (mode: $MODE) ==="
+    echo "=== Cleaning block: $block_name (mode: $MODE) ==="
     if [[ -f "$clean_script" ]]; then
-        mapfile -t args < <(subblock_args)
+        mapfile -t args < <(block_args)
         # A block's own clean.sh knows its keep-list; if it fails, report it.
         # Never fall back to the generic clean here — that used to silently
         # delete what the block's script deliberately preserves.

@@ -33,7 +33,7 @@ case "$BLOCK" in
 esac
 
 REPO_ROOT="${GITHUB_WORKSPACE:-$(pwd)}"
-BLOCK_DIR="$REPO_ROOT/subblock/$BLOCK"
+BLOCK_DIR="$REPO_ROOT/blocks/$BLOCK"
 [[ -d "$BLOCK_DIR" ]] || { echo "FAIL: $BLOCK_DIR missing" >&2; exit 1; }
 
 cd "$BLOCK_DIR"
@@ -141,6 +141,20 @@ case "$BLOCK" in
 esac
 
 # ---------- LAUNCH ----------
+# LAUNCH_IS_REMOTE distinguishes "runs elsewhere, no local pid" from
+# "pgrep found nothing" — the old code spelled both as LAUNCH_PID=0, so a
+# launcher that died before pgrep ran was mistaken for a remote run and the
+# poller waited out the whole budget.
+LAUNCH_IS_REMOTE=0
+LAUNCH_PAT=""
+
+# `kill -0 0` signals the caller's own process group and always succeeds, so a
+# pid of 0 must be treated as "not found" explicitly rather than probed.
+launcher_alive() {
+  (( LAUNCH_IS_REMOTE == 1 )) && return 0
+  [[ -n "${LAUNCH_PID:-}" && "$LAUNCH_PID" != "0" ]] || return 1
+  kill -0 "$LAUNCH_PID" 2>/dev/null
+}
 echo "INFO: launching $BLOCK smoke (budget ${BUDGET}s)"
 LAUNCH_LOG="$BLOCK_DIR/artifacts/logs/smoke-launch.log"
 : > "$LAUNCH_LOG"
@@ -162,7 +176,7 @@ LAUNCH_LOG="$BLOCK_DIR/artifacts/logs/smoke-launch.log"
 claude_launch() {
   local setup_check="$1" preflight="$2" run_cmd="$3" pgrep_pat="$4" label="$5"
   HOME=/home/haoli timeout 900 claude -p \
-"CI smoke for ${label}. The smoke config has been overlaid at subblock/${BLOCK}/config.yaml. cwd is already subblock/${BLOCK}.
+"CI smoke for ${label}. The smoke config has been overlaid at blocks/${BLOCK}/config.yaml. cwd is already blocks/${BLOCK}.
 
 Run 3 gated phases via the Bash tool. STOP and reply FAILED <phase-number> with the last 20 lines of output if any phase exits non-zero. Do NOT proceed past a failure.
 
@@ -242,7 +256,8 @@ PY
       || { echo "FAIL: CC LiteLLM proxy did not start (openai_proxy mode)"; exit 1; }
     claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
                   "swegen create --input-ids-file" "curator"
-    LAUNCH_PID=$(pgrep -f 'swegen create --input-ids-file' | head -1)
+    LAUNCH_PAT='swegen create --input-ids-file'
+    LAUNCH_PID=$(pgrep -f "$LAUNCH_PAT" | head -1)
     LAUNCH_PID=${LAUNCH_PID:-0}
     ;;
   tracer|evaluator)
@@ -252,7 +267,8 @@ PY
     SMOKE_CMD="nohup bash scripts/start.sh >> artifacts/logs/smoke-launch.log 2>&1 &"
     claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
                   "bash scripts/start.sh" "$BLOCK"
-    LAUNCH_PID=$(pgrep -f 'bash scripts/start.sh' | head -1)
+    LAUNCH_PAT='bash scripts/start.sh'
+    LAUNCH_PID=$(pgrep -f "$LAUNCH_PAT" | head -1)
     LAUNCH_PID=${LAUNCH_PID:-0}
     ;;
   trainer)
@@ -264,7 +280,7 @@ PY
       # which is intentional: dryrun.sh in phase 2 must read the smoke
       # config, not whatever was on the remote before).
       BRANCH="${GITHUB_REF_NAME:-haoli/ci-cd}"
-      REMOTE_LOG="$REMOTE_DIR/subblock/trainer/artifacts/logs/smoke-launch.log"
+      REMOTE_LOG="$REMOTE_DIR/blocks/trainer/artifacts/logs/smoke-launch.log"
       SETUP_SH="artifacts/logs/.smoke-remote-setup.sh"
       CHECK_SH="artifacts/logs/.smoke-remote-check.sh"
       RUN_SH="artifacts/logs/.smoke-remote-run.sh"
@@ -280,15 +296,15 @@ EOS
       }
       # Phase 1: fast-forward + overlay + env sanity. Exits 0 if the env
       # dir exists and the smoke config is in place.
-      _ssh_wrap "set -e; cd '$REMOTE_DIR'; /usr/bin/git.real fetch origin '$BRANCH' --quiet; /usr/bin/git.real reset --hard 'origin/$BRANCH' --quiet; cp subblock/trainer/tests/smoke/config.yaml subblock/trainer/config.yaml; mkdir -p subblock/trainer/artifacts/logs; rm -rf subblock/trainer/artifacts/model/_smoke_train_ci; test -d subblock/trainer/artifacts/env && echo 'remote setup OK'" \
+      _ssh_wrap "set -e; cd '$REMOTE_DIR'; /usr/bin/git.real fetch origin '$BRANCH' --quiet; /usr/bin/git.real reset --hard 'origin/$BRANCH' --quiet; cp blocks/trainer/tests/smoke/config.yaml blocks/trainer/config.yaml; mkdir -p blocks/trainer/artifacts/logs; rm -rf blocks/trainer/artifacts/model/_smoke_train_ci; test -d blocks/trainer/artifacts/env && echo 'remote setup OK'" \
         > "$BLOCK_DIR/$SETUP_SH"
 
       # Phase 2: dryrun.sh on the remote trainer dir.
-      _ssh_wrap "set -e; cd '$REMOTE_DIR/subblock/trainer'; PATH=/root/.local/bin:\\\$PATH bash scripts/dryrun.sh" \
+      _ssh_wrap "set -e; cd '$REMOTE_DIR/blocks/trainer'; PATH=/root/.local/bin:\\\$PATH bash scripts/dryrun.sh" \
         > "$BLOCK_DIR/$CHECK_SH"
 
       # Phase 3: backgrounded start.sh, SSH returns once disown completes.
-      _ssh_wrap "set -e; cd '$REMOTE_DIR/subblock/trainer'; PATH=/root/.local/bin:\\\$PATH nohup bash scripts/start.sh > '$REMOTE_LOG' 2>&1 & disown; echo \\\"REMOTE_LAUNCH_PID=\\\$!\\\"" \
+      _ssh_wrap "set -e; cd '$REMOTE_DIR/blocks/trainer'; PATH=/root/.local/bin:\\\$PATH nohup bash scripts/start.sh > '$REMOTE_LOG' 2>&1 & disown; echo \\\"REMOTE_LAUNCH_PID=\\\$!\\\"" \
         > "$BLOCK_DIR/$RUN_SH"
 
       chmod +x "$BLOCK_DIR/$SETUP_SH" "$BLOCK_DIR/$CHECK_SH" "$BLOCK_DIR/$RUN_SH"
@@ -298,12 +314,14 @@ EOS
       SMOKE_CMD="bash $RUN_SH 2>&1 | tee -a artifacts/logs/smoke-launch.log"
       claude_launch "$SETUP_CMD" "$PREFLIGHT_CMD" "$SMOKE_CMD" \
                     "REMOTE_LAUNCH_PID=" "trainer (remote $REMOTE_IP)"
-      LAUNCH_PID=0   # remote — nothing local to kill -0
+      LAUNCH_IS_REMOTE=1   # runs on the GPU host; no local pid to watch
+      LAUNCH_PID=0
     else
       SMOKE_CMD="nohup bash scripts/start.sh >> artifacts/logs/smoke-launch.log 2>&1 &"
       claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
                     "bash scripts/start.sh" "trainer (local)"
-      LAUNCH_PID=$(pgrep -f 'bash scripts/start.sh' | head -1)
+      LAUNCH_PAT='bash scripts/start.sh'
+      LAUNCH_PID=$(pgrep -f "$LAUNCH_PAT" | head -1)
       LAUNCH_PID=${LAUNCH_PID:-0}
     fi
     ;;
@@ -312,8 +330,8 @@ esac
 echo "STARTED $BLOCK smoke (launch_pid=$LAUNCH_PID, log=$LAUNCH_LOG)"
 # Give it a beat to fail-fast if start.sh dies in its first second of execution.
 sleep 5
-if ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
-  echo "WARNING: launch_pid=$LAUNCH_PID exited within 5s. Tail of launch log:"
+if ! launcher_alive; then
+  echo "WARNING: launcher not running 5s after launch (pid=$LAUNCH_PID). Tail of launch log:"
   tail -30 "$LAUNCH_LOG" 2>/dev/null || true
 fi
 
@@ -330,16 +348,16 @@ POLL_END_REASON="budget exhausted"
 # the same files at the same paths it would for a local run.
 fetch_sft_remote_if_ready() {
   [[ -n "$REMOTE_IP" ]] || return 1
-  remote "test -f '$REMOTE_DIR/subblock/trainer/artifacts/model/_smoke_train_ci/train_results.json'" 2>/dev/null || return 1
+  remote "test -f '$REMOTE_DIR/blocks/trainer/artifacts/model/_smoke_train_ci/train_results.json'" 2>/dev/null || return 1
   echo "INFO: remote train_results.json appeared — fetching"
   mkdir -p "$BLOCK_DIR/artifacts/model/_smoke_train_ci"
   scp -i "$REMOTE_KEY" -P "$REMOTE_PORT" \
       -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/subblock/trainer/artifacts/model/_smoke_train_ci/train_results.json" \
+      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/blocks/trainer/artifacts/model/_smoke_train_ci/train_results.json" \
       "$BLOCK_DIR/artifacts/model/_smoke_train_ci/train_results.json" 2>&1 | tail -3
   scp -i "$REMOTE_KEY" -P "$REMOTE_PORT" \
       -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/subblock/trainer/artifacts/model/_smoke_train_ci/trainer_state.json" \
+      "$REMOTE_USER@$REMOTE_IP:$REMOTE_DIR/blocks/trainer/artifacts/model/_smoke_train_ci/trainer_state.json" \
       "$BLOCK_DIR/artifacts/model/_smoke_train_ci/trainer_state.json" 2>&1 | tail -3 || true
   return 0
 }
@@ -363,8 +381,25 @@ while (( $(date +%s) < DEADLINE )); do
   # appear. start.sh refuses to launch AFTER its dryrun (well past the 5s
   # fail-fast probe above), and that refusal used to cost the full budget and
   # then surface as verify.sh's "no result.json" — which hides the real reason.
-  # LAUNCH_PID=0 means remote, where there is no local pid to watch.
-  if (( LAUNCH_PID != 0 )) && ! kill -0 "$LAUNCH_PID" 2>/dev/null; then
+  # A local launcher we can no longer see is terminal. Re-pgrep first: the
+  # initial probe can miss a launcher that took a moment to exec, and adopting
+  # its pid late is cheaper than waiting out the budget on a false negative.
+  if ! launcher_alive && [[ -n "$LAUNCH_PAT" ]]; then
+    # The first probe can miss a launcher that took a moment to exec. Re-check,
+    # but never adopt this script, its parent, or the CI wrapper: their command
+    # lines contain the pattern as literal text, and adopting one would keep the
+    # poll alive for the full budget on a launcher that is already gone.
+    _repid=$(pgrep -f "$LAUNCH_PAT" 2>/dev/null \
+             | grep -vx -e "$$" -e "$PPID" \
+             | while read -r _p; do
+                 tr '\0' ' ' < "/proc/$_p/cmdline" 2>/dev/null | grep -q 'smoke_run\.sh' || echo "$_p"
+               done | head -1)
+    if [[ -n "$_repid" ]]; then
+      LAUNCH_PID="$_repid"
+      echo "INFO: adopted launcher pid=$LAUNCH_PID (started after the first probe)"
+    fi
+  fi
+  if ! launcher_alive; then
     elapsed=$(($(date +%s) - START))
     if compgen -G "$TERMINAL_GLOB" > /dev/null; then
       # shellcheck disable=SC2086  # glob expansion is intentional
@@ -437,7 +472,7 @@ fi
 if [[ "$BLOCK" == "trainer" && -n "$REMOTE_IP" ]]; then
   echo "INFO: cleanup — remote run dir + dataset_info entry"
   remote "
-    cd '$REMOTE_DIR/subblock/trainer' || exit 0
+    cd '$REMOTE_DIR/blocks/trainer' || exit 0
     rm -rf artifacts/model/_smoke_train_ci
     python3 - <<'PY' 2>/dev/null || true
 import fcntl, json, os

@@ -1,5 +1,5 @@
 # ROOT SMOKE — stage 2/4: tracer.
-# Overlaid onto subblock/tracer/config.yaml by tests/smoke/run_pipeline.sh.
+# Overlaid onto blocks/tracer/config.yaml by tests/smoke/run_pipeline.sh.
 # Schema-compatible with production tracer; deltas from production tagged
 # "# ROOT:".
 #
@@ -12,8 +12,8 @@ meta_info:
   name: tracer
   label: "Trajectory Generation"
   description: Generates agent trajectories with Harbor from curator's verified tasks; converts reward==1 trajectories to SFT data.
-  parent: swe_lego_live
-  subblocks: {}
+  parent: legoflow
+  blocks: {}
   dependencies:
     from:
       task_source.dataset_name:
@@ -92,7 +92,7 @@ runtime_info:
     smoke_attempts: 1
 
     harbor_job:
-      jobs_dir: artifacts/jobs/root-smoke   # ROOT: isolate from prod + the subblock smoke
+      jobs_dir: artifacts/jobs/root-smoke   # ROOT: isolate from prod + the block smoke
       # ROOT: 1 = one agent at a time. The shared upstream endpoint was
       # overloaded (429/500/timeout/overloaded) under concurrent agent load and
       # contended by another job; one-at-a-time spares it.
@@ -106,7 +106,7 @@ runtime_info:
       version: 2.1.118
       runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
       runtime_host_path: artifacts/agent-runtime/claude-code
-      max_turns: 60                          # ROOT: between prod (80) and subblock smoke (30)
+      max_turns: 60                          # ROOT: between prod (80) and block smoke (30)
       temperature: 0.7
 
     # ROOT: conversion ON. convert_trajectories.sh inherently keeps only the

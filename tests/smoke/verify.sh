@@ -11,7 +11,7 @@
 # Stage gates (each is about the HANDOFF the next stage needs, not benchmark
 # quality):
 #   curator  : >=1 verified task in the smoke subdir's verifiable_tasks.txt
-#   tracer : >=1 SCORED trial (pipeline health, like the subblock smoke);
+#   tracer : >=1 SCORED trial (pipeline health, like the block smoke);
 #             reward==1 (resolved) + converted lf.json are reported, NOT gated
 #   trainer     : train_results.json (finite loss) AND a persisted checkpoint
 #             (config.json + weights) in the run dir
@@ -42,7 +42,7 @@ PY
 case "$STAGE" in
   # ---------------------------------------------------------------- curator ----
   curator)
-    B="$ROOT_DIR/subblock/curator"
+    B="$ROOT_DIR/blocks/curator"
     BASE="$(cfg "$B/config.yaml" runtime_info.output.swe_tasks_dir.path)"; BASE="${BASE:-artifacts/swe_tasks}"
     SUB="$(cfg "$B/config.yaml" runtime_info.input.smoke.output_subdir)"; SUB="${SUB:-py-cc-root-smoke}"
     MANIFEST="$B/$BASE/$SUB/verifiable_tasks.txt"
@@ -62,7 +62,7 @@ case "$STAGE" in
 
   # --------------------------------------------------------------- tracer ----
   tracer)
-    B="$ROOT_DIR/subblock/tracer"
+    B="$ROOT_DIR/blocks/tracer"
     JOBS="$(cfg "$B/config.yaml" runtime_info.input.harbor_job.jobs_dir)"; JOBS="${JOBS:-artifacts/jobs/root-smoke}"
     SFT_DATA="$(cfg "$B/config.yaml" runtime_info.input.sft_conversion.out_dir)"; SFT_DATA="${SFT_DATA:-artifacts/sft_data}"
     JOBS_DIR="$B/$JOBS"
@@ -70,7 +70,7 @@ case "$STAGE" in
       echo "SKIP: tracer jobs dir $JOBS absent — harbor never ran"
       exit 77
     fi
-    # reward determination mirrors the subblock tracer smoke (verify.sh):
+    # reward determination mirrors the block tracer smoke (verify.sh):
     #   scored   = the verifier ran to a terminal reward (rewards is a non-empty
     #              dict) — agent ran, container built, harbor scored.
     #   resolved = any reward > 0 (the model actually solved it).
@@ -104,7 +104,7 @@ PY
       echo "SKIP: no result.json under $JOBS — harbor produced no trials"
       exit 77
     fi
-    # PASS gate = PIPELINE HEALTH (>=1 SCORED), exactly like the subblock tracer
+    # PASS gate = PIPELINE HEALTH (>=1 SCORED), exactly like the block tracer
     # smoke. reward==1 (RESOLVED) is REPORTED, not gated: at smoke scale a model
     # legitimately resolves 0–few, so gating on it would make the smoke flaky on
     # LLM luck / endpoint load. The converter feeds whatever reward==1
@@ -119,7 +119,7 @@ PY
 
   # ------------------------------------------------------------------- trainer ----
   trainer)
-    B="$ROOT_DIR/subblock/trainer"
+    B="$ROOT_DIR/blocks/trainer"
     OUT="$(cfg "$B/config.yaml" runtime_info.input.training.output_dir)"; OUT="${OUT:-root_smoke_model}"
     RUN_DIR="$B/artifacts/model/$OUT"
     if [[ ! -d "$RUN_DIR" ]]; then
@@ -153,7 +153,7 @@ PY
 
   # ------------------------------------------------------------------ evaluator ----
   evaluator)
-    B="$ROOT_DIR/subblock/evaluator"
+    B="$ROOT_DIR/blocks/evaluator"
     JOBS="$(cfg "$B/config.yaml" runtime_info.input.harbor_job.jobs_dir)"; JOBS="${JOBS:-artifacts/jobs/root-smoke}"
     JOBS_DIR="$B/$JOBS"
     if [[ ! -d "$JOBS_DIR" ]]; then

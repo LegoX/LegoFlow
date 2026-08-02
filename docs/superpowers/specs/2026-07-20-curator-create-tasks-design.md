@@ -2,7 +2,7 @@
 
 ## Context
 
-The current block is named `curator`; the legacy `subblock/swegen` path and
+The current block is named `curator`; the legacy `blocks/swegen` path and
 `/swegen:*` namespace were renamed before the latest `dev`. Before this design
 was implemented, the task-generation skill was exposed publicly as
 `/curator:run`, although its only domain operation was creating and verifying
@@ -14,7 +14,7 @@ resolution is separate: `/root:run curator` directly executes Curator's
 all-language `scripts/start.sh` and does not invoke the adapter. The public
 documentation site at <https://swe-swegen-docs.pages.dev/> still serves legacy
 SWEgen content, while the maintained site source now lives under
-`subblock/curator/docs`.
+`blocks/curator/docs`.
 
 ## Final-Review Architecture Decision (2026-07-21)
 
@@ -36,7 +36,7 @@ plugin interface; current root targeting does not use it.
 
 ## Non-goals
 
-- Do not restore `subblock/swegen` or the `/swegen:*` plugin namespace.
+- Do not restore `blocks/swegen` or the `/swegen:*` plugin namespace.
 - Do not change task-generation scripts, PR collection behavior, or artifacts.
 - Do not rename `:run` for other blocks or change the generic root block protocol.
 
@@ -67,8 +67,8 @@ Update all directly relevant references in:
 - root documentation and examples that currently present `/curator:run` as a
   user command.
 
-The web source remains `subblock/curator/docs`; no files are restored under
-`subblock/swegen/docs`. The deployment script and docs README target:
+The web source remains `blocks/curator/docs`; no files are restored under
+`blocks/swegen/docs`. The deployment script and docs README target:
 
 ```text
 project: swe-swegen-docs

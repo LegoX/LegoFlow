@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Root case 06: root execution surfaces keep their static contracts.
-# The smoke harness scripts must exist, and explicit `/root:run <subblock>`
+# The smoke harness scripts must exist, and explicit `/root:run <block>`
 # targeting must execute the selected block's `scripts/start.sh` directly.
 
 set -euo pipefail
@@ -36,16 +36,16 @@ from pathlib import Path
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
 
 targeting = text.split("### Target resolution", 1)[1].split("## Step 0", 1)[0]
-if "`TARGET_DIR=./subblock/<name>/`" not in targeting:
-    raise SystemExit("FAIL: /root:run does not map a selected subblock to TARGET_DIR")
+if "`TARGET_DIR=./blocks/<name>/`" not in targeting:
+    raise SystemExit("FAIL: /root:run does not map a selected block to TARGET_DIR")
 if "Every step below operates on `TARGET_DIR`" not in targeting:
-    raise SystemExit("FAIL: selected subblock does not use the generic direct-run path")
-if "Delegate an explicitly selected subblock" in text:
-    raise SystemExit("FAIL: selected subblock still uses non-operational skill delegation")
+    raise SystemExit("FAIL: selected block does not use the generic direct-run path")
+if "Delegate an explicitly selected block" in text:
+    raise SystemExit("FAIL: selected block still uses non-operational skill delegation")
 
 leaf = text.split("### Step 4b — Leaf block: run `scripts/start.sh`", 1)[1]
 if "`cd <TARGET_DIR>` then run `bash ./scripts/start.sh`" not in leaf:
     raise SystemExit("FAIL: selected leaf does not execute TARGET_DIR/scripts/start.sh")
 
-print("PASS: root selected-subblock direct execution")
+print("PASS: root selected-block direct execution")
 PY

@@ -1,9 +1,9 @@
 meta_info:
-  name: swe_lego_live
-  label: "SWE Lego Live"
-  description: Root orchestration block for the SWE-Lego-Live data pipeline.
+  name: legoflow
+  label: "LegoFlow"
+  description: Root orchestration block for the LegoFlow data pipeline.
   parent: null
-  subblocks:
+  blocks:
     curator:
       role: "Collect GitHub PRs, and turn them into verified SWE tasks"
     tracer:

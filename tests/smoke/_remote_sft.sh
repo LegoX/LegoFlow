@@ -29,7 +29,7 @@ PY
 R_IP="$(cfg meta_info.resources.ip)"; R_USER="$(cfg meta_info.resources.user)"
 R_KEY="$(cfg meta_info.resources.key)"; R_PORT="$(cfg meta_info.resources.port)"
 R_DIR="$(cfg meta_info.resources.directory)"; OUT="$(cfg runtime_info.input.training.output_dir)"
-REMOTE_SFT="$R_DIR/subblock/trainer"
+REMOTE_SFT="$R_DIR/blocks/trainer"
 # #3 fix: the pod SSH login is root, but the shared FS is owned by uid 1000 (the
 # SAME uid as the runner's user, just named differently per host). If training
 # runs as root it writes config.yaml runtime_info.output back as root:root 0600,

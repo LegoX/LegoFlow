@@ -2,7 +2,7 @@
 
 A `block` is the basic collaboration unit in a block-structured project. It defines what a unit is responsible for, what it depends on, what it produces, and how it runs. Every block follows the same layout so humans and agents can navigate any block without prior knowledge.
 
-The repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is also a block.
+The repo is organized as a tree of blocks. The root directory is the root block; every directory under `blocks/` is also a block.
 
 This document is organized as four sections, in the order an agent typically needs them:
 
@@ -121,7 +121,7 @@ Every block declares its dependencies in `meta_info.dependencies`, a mapping wit
 - **Value** — either the string `<src>.output.<key>` (a required reference to a sibling block's `runtime_info.output` key), or a mapping for conditional/optional hand-offs:
 
 ```yaml
-# subblock/tracer/config.yaml — consumer declares its own upstream
+# blocks/tracer/config.yaml — consumer declares its own upstream
 meta_info:
   dependencies:
     from:
@@ -146,7 +146,7 @@ meta_info:
 - **Value** — either the string `<consumer>.input.<path>` (naming the exact input field on the consumer that receives this output), or a mapping with an optional `when` gate whose keys are **fully-qualified** `<consumer>.input.<path>` (the condition lives on the consumer's own state, since the producer doesn't own an input to gate on):
 
 ```yaml
-# subblock/curator/config.yaml — producer declares its own downstream
+# blocks/curator/config.yaml — producer declares its own downstream
 meta_info:
   dependencies:
     from: {}
@@ -160,13 +160,13 @@ The same logical edge is declared twice — once by the consumer's `from`, once 
 
 Resolution reads the producer's `runtime_info.output.<key>`: a non-null `value` first, else `path`. A dangling reference (producer/consumer block or field missing) is always a validation failure, even when the dependency is inactive or optional. `scripts/validate_config.py` enforces all of this.
 
-The **root block's** `config.yaml` lists its children under `meta_info.subblocks` with a `role:` one-liner each — no wiring there; a `dependencies` key under a `subblocks` entry is a validation failure. Root's own `dependencies` is `{from: {}, to: {}}` (it has no `runtime_info.input`/`output` of its own to hang edges off).
+The **root block's** `config.yaml` lists its children under `meta_info.blocks` with a `role:` one-liner each — no wiring there; a `dependencies` key under a `blocks` entry is a validation failure. Root's own `dependencies` is `{from: {}, to: {}}` (it has no `runtime_info.input`/`output` of its own to hang edges off).
 
 `runtime_info.input` is reserved for values that originate outside the block tree entirely; human-supplied values live there directly (marked `human` until filled) — the literal `human` is **not** part of the dependency grammar.
 
 ### 3.2 Parent dispatches to children — never to `start.sh`
 
-When a parent block has subblocks declared, the parent's skills (`:run`, `:check`, `:setup`) MUST delegate to each child's corresponding `/<child>:<skill>` rather than reaching into the child's `scripts/start.sh` or shelling into the child's directory. Bypassing the child's skill bypasses its preflight, confirmation, archiving, and remote-execution decision — and silently shifts those responsibilities up to the parent.
+When a parent block has child blocks declared, the parent's skills (`:run`, `:check`, `:setup`) MUST delegate to each child's corresponding `/<child>:<skill>` rather than reaching into the child's `scripts/start.sh` or shelling into the child's directory. Bypassing the child's skill bypasses its preflight, confirmation, archiving, and remote-execution decision — and silently shifts those responsibilities up to the parent.
 
 A parent block has no `scripts/start.sh` to run; its `:run` is purely an orchestrator.
 
@@ -190,7 +190,7 @@ Every block plugin exposes the same skill surface (uniform interface across the 
 | `/<block>:check`     | Read-only preflight: schema, env vars, repo pins, environment integrity, dependency reachability (LLM endpoints, k8s, docker), and `scripts/dryrun.sh`. Reports all failures in one consolidated message with a run-configuration summary. **Mandatory before `:run`.** | yes |
 | `/<block>:dashboard` | Surface block state — textual table by default (last run, status, key metrics) plus an optional webui launcher. Read-only. | yes |
 | `/<block>:run`       | Preflight → confirm → execute the block. At a leaf block, runs `scripts/start.sh`. At a parent block, dispatches to each child's `/<child>:run` in dependency order (see §3.2) — **never** reaches into a child's `scripts/start.sh` directly. May document block-specific substeps inside the block's `:run`; `:run` remains the orchestrator. | no (mutates state) |
-| `/root:create` *(root only)* | Scaffold a new block under `subblock/<name>/` from the canonical [`example_block/`](./example_block/) layout, fill in its `config.yaml` from an intake form or chat-driven Q&A, and wire it into the parent's `meta_info.subblocks`. **Only the root plugin exposes this skill** — subblocks do not create further blocks (the tree is flat under each subblock). | no (mutates state) |
+| `/root:create` *(root only)* | Scaffold a new block under `blocks/<name>/` from the canonical [`example_block/`](./example_block/) layout, fill in its `config.yaml` from an intake form or chat-driven Q&A, and wire it into the parent's `meta_info.blocks`. **Only the root plugin exposes this skill** — child blocks do not create further blocks (the tree is flat under each block). | no (mutates state) |
 
 Termination is intentionally not a skill — see §2.1. Each block ships a `scripts/stop.sh` that does the SIGTERM → grace → SIGKILL work directly.
 
@@ -222,7 +222,7 @@ Naming rules:
 
 ### 4.3 Inter-plugin references
 
-Each block's plugin lives **only** in that block's own `.claude/plugins/` — no symlinks, no copies. When a block's skill delegates to a subblock (per §3.2), it does so by **calling the subblock's skill**, not by importing its code. The recursion happens through the plugin command surface, not the filesystem.
+Each block's plugin lives **only** in that block's own `.claude/plugins/` — no symlinks, no copies. When a block's skill delegates to a child block (per §3.2), it does so by **calling the child's skill**, not by importing its code. The recursion happens through the plugin command surface, not the filesystem.
 
 When a skill needs reference material (the canonical `BLOCK_DEFINITION.md`, intake templates, `archive_run.sh`), it reads from `<repo_root>/.claude/plugins/root-plugin/resources/`. The root plugin is the only place that ships the canonical copy.
 

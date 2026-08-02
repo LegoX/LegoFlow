@@ -3,7 +3,7 @@ title: Getting Started
 description: Operate the block tree through plugins or the underlying scripts
 ---
 
-SWE-Lego-Live is a tree of blocks. Each block owns its configuration, runtime,
+LegoFlow is a tree of blocks. Each block owns its configuration, runtime,
 artifacts, and operating plugin; the root plugin coordinates the tree.
 
 ## Recommended: operate via the Claude plugin
@@ -20,7 +20,7 @@ lifecycle is:
 /root:dashboard         # open the tree-wide status dashboard
 ```
 
-Each subblock also exposes its own operating commands. For example:
+Each block also exposes its own operating commands. For example:
 
 ```text
 /curator:collect-prs
@@ -60,8 +60,8 @@ and image-pull reliability but do not define pipeline inputs.
 ## 1. Clone the block tree
 
 ```bash
-git clone --recurse-submodules <repo-url> SWE-Lego-Live
-cd SWE-Lego-Live
+git clone --recurse-submodules <repo-url> LegoFlow
+cd LegoFlow
 ```
 
 If the repository was cloned without submodules:
@@ -116,7 +116,7 @@ producer's matching `dependencies.to`. The validator checks both ends.
 The current curator-to-tracer handoff is:
 
 ```yaml
-# subblock/tracer/config.yaml
+# blocks/tracer/config.yaml
 meta_info:
   dependencies:
     from:
@@ -126,7 +126,7 @@ meta_info:
 ```
 
 ```yaml
-# subblock/curator/config.yaml
+# blocks/curator/config.yaml
 meta_info:
   dependencies:
     to:
@@ -139,7 +139,7 @@ Tracer's raw trajectories feed the trainer when the trainer selects a Harbor
 job source:
 
 ```yaml
-# subblock/tracer/config.yaml
+# blocks/tracer/config.yaml
 meta_info:
   dependencies:
     to:
@@ -157,7 +157,7 @@ Run the shared schema and dependency validator:
 
 ```bash
 python3 scripts/validate_config.py --root .
-python3 scripts/validate_config.py --block subblock/tracer
+python3 scripts/validate_config.py --block blocks/tracer
 ```
 
 Then use `/root:check` or the block's `:<block>:check` command. Block checks add
@@ -184,7 +184,7 @@ artifacts/archives/run_NNN/
 
 and appends an entry to `artifacts/index.yaml`. Job-specific results remain
 under the block's declared output directories, such as
-`subblock/tracer/artifacts/jobs/`.
+`blocks/tracer/artifacts/jobs/`.
 
 Use `/root:dashboard` for a tree-wide view or the block dashboard for detailed
 metrics:
@@ -193,5 +193,5 @@ metrics:
 /tracer:dashboard
 ```
 
-See the corresponding page under [Blocks](/docs/sub-block/curator) for each
+See the corresponding page under [Blocks](/docs/blocks/curator) for each
 block's exact setup, run modes, outputs, and recovery procedures.

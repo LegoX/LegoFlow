@@ -9,25 +9,25 @@
     "curator-block": {
       "source": {
         "source": "directory",
-        "path": "subblock/curator/.claude/plugins"
+        "path": "blocks/curator/.claude/plugins"
       }
     },
     "tracer": {
       "source": {
         "source": "directory",
-        "path": "subblock/tracer/.claude/plugins"
+        "path": "blocks/tracer/.claude/plugins"
       }
     },
     "trainer-block": {
       "source": {
         "source": "directory",
-        "path": "subblock/trainer/.claude/plugins"
+        "path": "blocks/trainer/.claude/plugins"
       }
     },
     "evaluator-block": {
       "source": {
         "source": "directory",
-        "path": "subblock/evaluator/.claude/plugins"
+        "path": "blocks/evaluator/.claude/plugins"
       }
     }
   },

@@ -1,0 +1,43 @@
+---
+title: Motivation
+description: Why we built tracer
+---
+
+Tracer turns SWE tasks into agent trajectories and, optionally, ready-to-train
+SFT data.
+
+It is the trajectory-generation stage of the
+[LegoFlow](https://github.com/SWE-Lego/SWE-Lego-Live) pipeline, sitting
+between task curation (`curator`) and model training (`trainer`). It rolls a
+coding agent out in reproducible containers, captures each rollout, and can
+convert successful trajectories into SFT data. One `config.yaml` pins the
+[Harbor](https://github.com/SWE-Lego/harbor) and `swe_data_process` runtimes
+and declares every external input and downstream output.
+
+```text
+curator ─▶ tracer ─▶ trainer
+```
+
+tracer provides:
+
+- **Curator and Hugging Face task sources** — local curator output is filtered
+  by `verifiable_tasks.txt` when present, while compatible Hugging Face task
+  packages can be staged directly
+- **Processed-task protection** — a ledger records terminal tasks and
+  `start.sh` converts that state into Harbor exclusions on the next launch
+- **A per-job LiteLLM proxy** fronting your model API with OpenAI- and Anthropic-compatible endpoints
+- **Containerized rollouts at scale** via Harbor, with configurable concurrency, retries, and timeouts
+- **Configurable rollout agents** — a pinned custom Claude Code preset by
+  default, with custom OpenCode and OpenHands alternatives when all preset
+  fields are aligned
+- **Multi-scaffold SFT conversion** — Claude Code, OpenCode, OpenHands SDK, and
+  Terminus-2 converters with TQS V2 rule scoring and optional LLM scoring
+- **A live progress dashboard** you can preview locally or publish to Cloudflare Pages
+
+## Where to go next
+
+- [Getting Started](/docs/getting-started) — operate through the plugin or run the underlying commands
+- [Core Concepts](/docs/core-concepts) — tasks, trajectories, jobs, scaffolds, and SFT data
+- [Run Jobs](/docs/run-jobs) — prepare tasks, start the proxy, and roll the agent out
+- [SFT Data](/docs/sft-data) — convert trajectories into training datasets
+- [Dashboard](/docs/dashboard) — monitor progress locally or online

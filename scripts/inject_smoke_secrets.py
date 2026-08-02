@@ -2,7 +2,7 @@
 """Fill a smoke config's blank credential fields from the environment.
 
 The tracked smoke configs under tests/smoke/<block>/ and
-subblock/<block>/tests/smoke/ carry the *structure* of a run — every field the
+blocks/<block>/tests/smoke/ carry the *structure* of a run — every field the
 production config has — but never the values. Endpoints, keys and remote hosts
 live outside the repo, in the shared env file the CI runner and the local host
 both read:

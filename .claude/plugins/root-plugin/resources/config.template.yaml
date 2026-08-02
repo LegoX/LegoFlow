@@ -14,7 +14,7 @@ meta_info:
   description: "<one sentence: what does this block do?>"
   parent: <parent_block_name or null>
 
-  subblocks: {}
+  blocks: {}
     # Parent blocks list children here with a role one-liner ONLY — wiring lives
     # in each child's own meta_info.dependencies, never here.
     # <child_name>:
