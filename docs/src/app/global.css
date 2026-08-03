@@ -52,6 +52,17 @@ figure.shiki {
   vertical-align: -0.14em !important;
 }
 
+article p,
+article li {
+  text-align: start;
+  text-wrap: pretty;
+  overflow-wrap: break-word;
+}
+
+article p {
+  hyphens: auto;
+}
+
 .docs-brand-title {
   font-family: Georgia, Cambria, "Times New Roman", Times, serif;
   font-size: 1.18rem;

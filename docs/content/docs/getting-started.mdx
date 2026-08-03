@@ -1,179 +1,188 @@
 ---
 title: Getting Started
-description: Operate the block tree through plugins or the underlying scripts
 ---
-
-LegoFlow is a tree of blocks. Each block owns its configuration, runtime,
-artifacts, and operating plugin; the root plugin coordinates the tree.
-
-## Recommended: operate via the Claude plugin
-
-Launch Claude Code from the repository root so the root, curator, tracer,
-trainer, and evaluator plugins in `.claude/settings.json` all load. The normal
-lifecycle is:
-
-```text
-/root:setup             # bootstrap shared tooling and optionally set up each block
-/root:check             # preflight the whole tree
-/root:check tracer      # preflight one block
-/root:run tracer        # run one block after check + explicit confirmation
-/root:dashboard         # open the tree-wide status dashboard
-```
-
-Each block also exposes its own operating commands. For example:
-
-```text
-/curator:collect-prs
-/curator:create-tasks
-/tracer:setup
-/tracer:check
-/tracer:run
-/tracer:dashboard
-```
-
-Use `/root:run <block>` as the root-level orchestration entry point, or use the
-block's own `/<block>:run` when you are already operating inside that block.
-Do not invoke both for the same run. Both paths require a successful preflight
-and an explicit confirmation before an expensive job starts.
-
-`/root:create` is separate from the normal lifecycle: it scaffolds a new block
-and is not needed to run the existing pipeline.
-
-The commands read the checked-in `config.yaml` files. Edit configuration, not
-the skill files or launch scripts. The rest of this page documents the
-underlying setup and contracts for manual operation and debugging.
 
 ## Prerequisites
 
-- **Claude Code** for the recommended plugin workflow.
-- **Python 3 with PyYAML** and **uv** for config validation and block
-  environments.
-- **Docker** on the hosts that run curator, tracer, and evaluator.
-- An **OpenAI-compatible LLM endpoint** for curator, tracer, and evaluator.
-- **GitHub token(s)** for curator PR collection.
-- An **8-GPU node** for the trainer's default distributed configuration.
+Before starting, make sure you have the pieces that the pipeline cannot create
+for you:
 
-Cloudflare Pages and authenticated Docker registry credentials are optional.
-They can be configured through `/root:setup`; they improve dashboard publishing
-and image-pull reliability but do not define pipeline inputs.
+- Claude Code, which is the recommended way to operate LegoFlow.
+- LLM endpoints for curator, tracer, and evaluator jobs.
+- GitHub token(s), used by curator when collecting pull requests.
+- A GPU server if you plan to run training or evaluate self-hosted models.
+- Optional Docker credentials, useful when large runs pull many task images.
+- Optional Cloudflare credentials, only needed if you want to publish dashboards.
 
-## 1. Clone the block tree
+## Claude Code Plugin Installation
 
-```bash
-git clone --recurse-submodules <repo-url> LegoFlow
-cd LegoFlow
-```
+The easiest way to use LegoFlow is through plugin skills. Think of these as
+guided commands that know the project layout, check the right files, and ask
+for confirmation before expensive jobs start.
 
-If the repository was cloned without submodules:
+At the repository root, load the root plugin and all block plugins together:
 
 ```bash
-git submodule update --init --recursive
+claude \
+  --plugin-dir .claude/plugins/root-plugin \
+  --plugin-dir blocks/curator/.claude/plugins/curator-plugin \
+  --plugin-dir blocks/tracer/.claude/plugins/tracer-plugin \
+  --plugin-dir blocks/trainer/.claude/plugins/trainer-plugin \
+  --plugin-dir blocks/evaluator/.claude/plugins/evaluator-plugin
 ```
 
-## 2. Fill the block configs
+After installing plugin files, run `/reload-plugins` in Claude Code. Each block inherit similar skills and usages, e.g., `/block:setup`, `/block:check`, and `/block:run`. Users can easily trigger these blogs with these pre-defined skills.
 
-Every block has a `config.yaml` with exactly two top-level sections:
 
-- `meta_info` — identity, pinned repositories, execution resources, and
-  dependency wiring.
-- `runtime_info.input` / `runtime_info.output` — external inputs and declared
-  outputs.
 
-Live run state is not stored in `config.yaml`. Completed, failed, and
-interrupted runs are recorded under `artifacts/index.yaml` and
-`artifacts/archives/`.
+{/*This gives you both tree-level commands and block-specific commands in one
+Claude Code session. The root plugin coordinates the whole block tree:
 
-### Fill rules
-
-| Marker | Meaning |
+| Command | Purpose |
 | --- | --- |
-| `human` | Must be replaced before the block can pass validation. |
-| `""` | Supplied through an environment/file channel, auto-derived, or intentionally disabled; follow the inline comment. |
-| `null` | Semantic unset/default/all; leave it unless selecting a non-default behavior. |
-| anything else | A working value or default. |
+| `/root:setup` | Prepare shared tooling and help each block fill its required inputs. |
+| `/root:check` | Check the whole pipeline before anything expensive runs. |
+| `/root:run` | Run the full pipeline, or a selected block, after preflight and confirmation. |
+| `/root:dashboard` | Open the tree-wide dashboard. |
+| `/root:create` | Scaffold a new block when you are extending the project. |
+*/}
 
-Never commit real API keys or tokens. Prefer the environment or the ignored
-local credential files named by each block.
 
-### Current required inputs
 
-| Block | Must fill | Environment or file inputs | Common adjustments |
-| --- | --- | --- | --- |
-| **curator** | `llm_api.api_key`, `llm_api.api_base_url` | `GITHUB_TOKENS` / `GITHUB_TOKEN` / ignored token file | provider mode, PR/task models, collection scale |
-| **tracer** | `llm_api.api_key`, `llm_api.api_base_url` | HF token only for gated Hugging Face task sources | model, task source, concurrency/task cap, agent preset |
-| **trainer** | none in the checked-in default | `WANDB_API_KEY`; `HF_TOKEN` for private datasets | source type, model, output directory, training parameters |
-| **evaluator** | `llm_api.api_key`, `llm_api.api_base_url` | preset-specific credentials, if any | remote API vs local vLLM, benchmark, agent preset |
+## Project Setup
 
-The root's `runtime_info.input.cloudflare` and `runtime_info.input.docker` are
-optional shared infrastructure settings. Keep secret fields empty in the
-tracked file and provide tokens/passwords through environment variables.
-
-### Dependencies between blocks
-
-Each edge is declared twice: the consumer's `dependencies.from` and the
-producer's matching `dependencies.to`. The validator checks both ends.
-
-The current curator-to-tracer handoff is:
-
-```yaml
-# blocks/tracer/config.yaml
-meta_info:
-  dependencies:
-    from:
-      task_source.dataset_name:
-        from: curator.output.merged_tasks_dir
-        when: {task_source.provider: local}
-```
-
-```yaml
-# blocks/curator/config.yaml
-meta_info:
-  dependencies:
-    to:
-      merged_tasks_dir:
-        to: tracer.input.task_source.dataset_name
-        when: {tracer.input.task_source.provider: local}
-```
-
-Tracer's raw trajectories feed the trainer when the trainer selects a Harbor
-job source:
-
-```yaml
-# blocks/tracer/config.yaml
-meta_info:
-  dependencies:
-    to:
-      raw_trajectories_dir:
-        to: trainer.input.source.job_dir
-        when: {trainer.input.source.type: harbor_job}
-```
-
-Do not edit dependency wiring merely to satisfy a check. It is the pipeline's
-handoff contract.
-
-## 3. Validate before running
-
-Run the shared schema and dependency validator:
-
-```bash
-python3 scripts/validate_config.py --root .
-python3 scripts/validate_config.py --block blocks/tracer
-```
-
-Then use `/root:check` or the block's `:<block>:check` command. Block checks add
-live probes for endpoints, repos, Docker, GPUs, task sources, and environments
-that the static validator cannot verify.
-
-## 4. Run and inspect results
-
-After the relevant check passes and you confirm the reported configuration:
+Once the plugins are loaded, start with setup:
 
 ```text
-/root:run tracer
+/root:setup
 ```
 
-Leaf blocks execute their own `scripts/start.sh`. The script's EXIT trap
-archives the run under:
+This is safe to run more than once. It checks shared tooling, verifies the root
+`config.yaml`, and can walk into each child block's setup flow. It does not
+launch the pipeline; it only gets the workspace ready for a real check.
+
+The setup flow keeps block-specific decisions close to the block that uses
+them:
+
+- curator prepares task-curation dependencies and GitHub/LLM input
+  channels;
+- tracer prepares rollout dependencies, task sources, agent runtimes, and
+  LLM endpoints;
+- trainer prepares data conversion and training dependencies, including
+  GPU-side requirements;
+- evaluator prepares benchmark, model, and analysis dependencies.
+
+For block-specific details, open the corresponding page under
+[Blocks](/docs/blocks/curator). 
+
+
+## Running Individual Blocks (Recommended)
+
+If you are new to LegoFlow, start by running one block at a time. This gives
+you a much clearer sense of what each stage consumes, produces, and checks
+before you ask the root block to run the whole pipeline.
+
+Each block's own Getting Started page explains how to fill its `config.yaml`,
+which credentials it expects, and what outputs it writes. Keep those details in
+the block pages so this root guide can stay focused on the overall workflow.
+
+### Step 1: Task Curation
+
+Curator turns source signals such as GitHub PRs, issues, and online forums into
+verified SWE tasks.
+
+| Skill | Purpose |
+| --- | --- |
+| `/curator:setup` | Prepare curator dependencies, repositories, GitHub tokens, and LLM inputs. |
+| `/curator:check` | Validate curator config, repo pins, tokens, Docker, and LLM endpoint readiness. |
+| `/curator:collect-prs` | Collect candidate PRs for downstream task generation. |
+| `/curator:create-tasks` | Generate and validate SWE tasks from the collected candidates. |
+| `/curator:dashboard` | Inspect curated task statistics, filters, and dataset quality signals. |
+
+Use the curator page for task-source choices, GitHub token setup, filtering
+rules, and output formats: [Curator](/docs/blocks/curator).
+
+### Step 2: Trajectory Rollout
+
+Tracer takes curated tasks and rolls out coding agents in isolated
+environments. This is where task instances become trajectories.
+
+| Skill | Purpose |
+| --- | --- |
+| `/tracer:setup` | Prepare rollout repositories, environments, task sources, agent runtimes, and LLM inputs. |
+| `/tracer:check` | Validate tracer config, task source, proxy port, runtime image, repos, and endpoint readiness. |
+| `/tracer:run` | Launch trajectory rollout jobs for the configured tasks and agent scaffold. |
+| `/tracer:dashboard` | Monitor rollout jobs, trajectory status, archives, and SFT conversion progress. |
+
+Use the tracer page for task-source configuration, agent presets, concurrency,
+job outputs, and trajectory conversion: [Tracer](/docs/blocks/tracer).
+
+### Step 3: Training
+
+Trainer converts trajectories into training-ready data and launches the model
+training workflow.
+
+| Skill | Purpose |
+| --- | --- |
+| `/trainer:setup` | Prepare training repositories, Python environment, data conversion stack, and GPU-side dependencies. |
+| `/trainer:check` | Validate trajectory source, model path, DeepSpeed config, GPU visibility, and training environment. |
+| `/trainer:run` | Convert trajectories and launch the configured training job. |
+| `/trainer:dashboard` | Inspect training status, metrics, artifacts, and run comparisons. |
+
+Use the trainer page for dataset inputs, model paths, GPU settings, and
+training artifacts: [Trainer](/docs/blocks/trainer).
+
+### Step 4: Evaluation
+
+Evaluator runs benchmarks and analysis over configured models or checkpoints.
+
+| Skill | Purpose |
+| --- | --- |
+| `/evaluator:setup` | Prepare benchmark assets, Harbor environment, LiteLLM proxy, model endpoint, and agent runtime. |
+| `/evaluator:check` | Validate benchmark registry, runtime image, agent bind mount, proxy port, and completion readiness. |
+| `/evaluator:run` | Run evaluation jobs for the configured model or checkpoint. |
+| `/evaluator:dashboard` | Inspect evaluation jobs, scores, trajectories, and analysis reports. |
+
+Use the evaluator page for benchmark selection, model endpoints, local vLLM
+usage, result files, and analysis dashboards: [Evaluator](/docs/blocks/evaluator).
+
+## Running Cascaded Blocks
+
+Use the cascaded mode after you have run through the individual blocks at least
+once. The root block is useful when the handoffs are already understood and you
+want LegoFlow to coordinate the full workflow for you.
+
+### Step 1: Check the Tree
+
+Before a cascaded run, ask the root block to check every stage:
+
+```text
+/root:check
+```
+
+This is read-only. It validates configs, dependency handoffs, pinned repos,
+runtime resources, block-specific dry runs, and live LLM endpoint availability.
+Fix every required failure before continuing. Warnings such as optional
+Cloudflare credentials or Docker login do not block execution, but they are
+worth reading before a large run.
+
+### Step 2: Launch the Pipeline
+
+When the check says the tree is safe to run, start the cascaded workflow:
+
+```text
+/root:run start the data pipeline
+```
+
+The root skill repeats preflight, shows the run configuration, and waits for
+your confirmation before starting expensive work. In full-pipeline mode, it
+dispatches blocks in dependency order:
+
+```text
+curator -> tracer -> trainer -> evaluator
+```
+
+Each completed leaf-block run writes an archive:
 
 ```text
 artifacts/archives/run_NNN/
@@ -186,12 +195,7 @@ and appends an entry to `artifacts/index.yaml`. Job-specific results remain
 under the block's declared output directories, such as
 `blocks/tracer/artifacts/jobs/`.
 
-Use `/root:dashboard` for a tree-wide view or the block dashboard for detailed
-metrics:
+## Results Inspection
 
-```text
-/tracer:dashboard
-```
+LegoFlow build dashboards for each concrete blocks. [introduce the benefits of using dashboard and how it can be used] Check [xxx] for more details.
 
-See the corresponding page under [Blocks](/docs/blocks/curator) for each
-block's exact setup, run modes, outputs, and recovery procedures.

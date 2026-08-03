@@ -1,6 +1,5 @@
 ---
 title: LiteLLM Proxy
-description: The per-job model proxy in front of your upstream API
 ---
 
 eval never points the agent directly at your upstream model API. Instead, each job starts its own **LiteLLM proxy**, which normalizes the endpoint, exposes both OpenAI- and Anthropic-compatible protocols, and attaches the trajectory logger.
