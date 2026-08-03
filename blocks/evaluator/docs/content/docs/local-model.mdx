@@ -1,6 +1,5 @@
 ---
 title: Local Model
-description: Benchmark a local checkpoint with vLLM
 ---
 
 The current eval profile benchmarks a **local checkpoint** (an SFT output from the pipeline). Serve it with vLLM and keep `llm_api` pointed at that endpoint — no code change to `start.sh` is needed, because the block only ever talks to an OpenAI/Anthropic-compatible HTTP endpoint.

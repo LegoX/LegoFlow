@@ -1,0 +1,58 @@
+---
+title: Test Cases
+---
+
+Tracer tests cover the rollout block's configuration, pinned repositories,
+runtime environments, task sources, proxy setup, dashboard exports, and an
+optional end-to-end smoke run. Use them when changing tracer internals or CI.
+For day-to-day readiness checks, use `/tracer:check`.
+
+## Run the Suite
+
+```bash
+# Cheap checks only. Safe for local development.
+bash blocks/tracer/tests/run.sh
+
+# Full path with the real-LLM, real-Docker 10-task smoke.
+bash blocks/tracer/tests/run.sh --with-smoke
+```
+
+Each test returns `0` for pass, `77` for skip, and any other code for failure.
+The aggregate `run.sh` fails only when at least one test fails. Skipped tests
+are reported but do not fail the suite.
+
+## Check Cases
+
+| Case | What it checks | Pass condition |
+| --- | --- | --- |
+| `01_config_schema.sh` | Tracer `config.yaml` shape and task-source mode. | Required fields are present and `task_source.provider` is either `local` or `huggingface`. |
+| `02_repo_pins.sh` | `repos/harbor` and `repos/swe_data_process`. | Both repos exist, match configured pins, keep expected origins, and have clean worktrees. |
+| `03_uv_envs_editable.sh` | Harbor, LiteLLM, and `swe_data_process` environments. | Expected envs exist; editable/import checks pass. `swe_data_process` may skip when SFT conversion is disabled. |
+| `04_llm_endpoint.sh` | LLM endpoint and model catalog. | `/models` is reachable and the configured model is present, unless the check is explicitly skipped for external health. |
+| `05_hf_dataset.sh` | Hugging Face task source. | Configured dataset is reachable when the provider is `huggingface`; local providers skip this case. |
+| `06_litellm_port.sh` | LiteLLM proxy port. | The configured port is free or already held by the current user. |
+| `07_runtime_image.sh` | Agent runtime image cache. | Configured image is already present, or a cold cache is skipped. Docker access failures still fail. |
+| `09_dashboard_regressions.sh` | Public dashboard export behavior. | Exports avoid full trajectories, read R2 JSONL shards, show latest archives, and keep smoke config aligned. |
+
+## Smoke Run
+
+The smoke test is `smoke/10_hf_task_demo.sh`. It temporarily swaps in a smoke
+configuration, runs up to 10 Hugging Face tasks, then restores the original
+config on exit.
+
+It passes when at least one trial resolves successfully within the budget. This
+is a pipeline-health gate, not a model-quality benchmark. If it fails, inspect
+`artifacts/jobs/smoke/<job>/*/result.json` and the job logs to see whether the
+failure came from task preparation, Docker/runtime startup, the LLM endpoint,
+or verifier output.
+
+## Files
+
+```text
+blocks/tracer/tests/
+|-- cases/
+|-- smoke/
+`-- run.sh
+```
+
+See `blocks/tracer/tests/README.md` for detailed failure recipes.

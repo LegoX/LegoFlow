@@ -1,6 +1,5 @@
 ---
 title: LiteLLM Proxy
-description: The per-job model proxy in front of your upstream API
 ---
 
 eval never points the agent directly at your upstream model API. Instead, each job starts its own **LiteLLM proxy**, which normalizes the endpoint, exposes both OpenAI- and Anthropic-compatible protocols, and attaches the trajectory logger.
@@ -66,5 +65,8 @@ The model-serving layer for a local checkpoint is **vLLM only**. `start.sh` alre
 </Callout>
 
 <Callout title="set -u workaround" type="info">
-Harbor's `serve_litellm.sh` dereferences `LITELLM_STICKY_ROUTING_ALIASES` without a default under `set -u`. The block defaults it to an empty string via `environment.extra.LITELLM_STICKY_ROUTING_ALIASES` in `config.yaml`, so leave that key in place.
+Harbor's `serve_litellm.sh` dereferences `LITELLM_STICKY_ROUTING_ALIASES`
+without a default under `set -u`. The block defaults it to an empty string via
+`runtime_info.input.env_extra.LITELLM_STICKY_ROUTING_ALIASES` in `config.yaml`,
+so leave that key in place.
 </Callout>

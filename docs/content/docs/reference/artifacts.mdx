@@ -1,6 +1,5 @@
 ---
 title: Artifacts & archives
-description: How every run is recorded — index.yaml + per-run snapshots
 ---
 
 After each run, a block's `scripts/start.sh` fires `archive_run.sh` via an EXIT trap. The trap runs regardless of how the script exited (success, error, SIGINT, SIGTERM), so the archive timeline is always complete. The contract:

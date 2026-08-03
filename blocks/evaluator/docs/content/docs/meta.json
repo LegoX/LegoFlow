@@ -6,6 +6,7 @@
         "run-jobs",
         "job-analysis",
         "local-model",
+        "test-cases",
         "dashboard",
         "reference"
     ]

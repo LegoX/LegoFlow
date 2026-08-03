@@ -6,9 +6,9 @@ export function baseOptions(): BaseLayoutProps {
       title: (
         <div className="flex items-center gap-2 mr-4">
           <p className="docs-brand-title">
-            SWE-Lego-
+            Lego
             <span className="docs-live-word">
-              Live
+              Flow
               <span
                 className="docs-live-pulse-dot"
                 aria-hidden="true"

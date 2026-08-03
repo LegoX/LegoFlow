@@ -1,6 +1,5 @@
 ---
 title: config.yaml schema
-description: The fixed schema every block's config.yaml follows
 ---
 
 Every block in the tree — root or child — has a `config.yaml` with the same top-level shape. Live state is **not** stored here; that lives in `artifacts/index.yaml`. The schema is machine-enforced by `scripts/validate_config.py` (run by every block's `dryrun.sh`, the CI schema tests, and the `:check` skills).
