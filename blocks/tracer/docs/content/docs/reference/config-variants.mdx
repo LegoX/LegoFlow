@@ -30,7 +30,7 @@ The knobs worth tuning between runs all live under `runtime_info.input` in `conf
 | `harbor_job.n_concurrent` | Harbor concurrent rollouts |
 | `harbor_job.n_tasks` | Maximum tasks selected for this job; `null` means all |
 | `harbor_job.timeout_multiplier` | Per-task timeout multiplier |
-| `sft_conversion.tokenizer_name` | Tokenizer used for LF statistics; align it with trainer |
+| `sft_conversion.tokenizer_name` | Tokenizer used for LF statistics; align it with Trainer |
 
 Changing `agent.name` requires an internally consistent preset: import path,
 API protocol, version, runtime image/host path, and an explicit conversion

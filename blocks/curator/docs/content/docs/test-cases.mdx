@@ -3,7 +3,7 @@ title: Test Cases
 ---
 
 Curator tests are split into a cheap drift-detection suite and an optional
-end-to-end smoke run. Use them when you are changing curator code, plugin
+end-to-end smoke run. Use them when you are changing Curator code, plugin
 skills, docs, or CI wiring. For normal environment diagnosis, start with
 `/curator:check`.
 
@@ -32,7 +32,7 @@ are reported but do not fail the suite.
 | `05_docker_daemon.sh` | Docker availability. | `docker` is available and `docker info` succeeds. |
 | `06_harbor_smoke.sh` | Known verified task fixture. | If the fixture exists, `tox-dev__tox-3813` still yields NOP reward 0 and oracle reward 1. Missing fixture is skipped. |
 | `07_create_tasks_skill.sh` | Curator task-generation command surface. | The canonical `/curator:create-tasks` skill, compatibility adapter, and plugin metadata stay wired correctly. |
-| `08_create_tasks_docs.sh` | Public curator documentation contract. | Docs recommend the canonical command and keep the expected Pages target. |
+| `08_create_tasks_docs.sh` | Public Curator documentation contract. | Docs recommend the canonical command and keep the expected Pages target. |
 
 ## Smoke Run
 

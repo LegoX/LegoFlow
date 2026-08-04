@@ -21,7 +21,7 @@ so a run can always be reproduced from its own snapshot.
 
 ## Tunable parameters
 
-The knobs worth tuning between runs all live under `runtime_info.input` in `config.yaml`. For evaluator, the **primary lever is benchmark selection** (`task_source.dataset_name`); the rest mirror tracer:
+The knobs worth tuning between runs all live under `runtime_info.input` in `config.yaml`. For Evaluator, the **primary lever is benchmark selection** (`task_source.dataset_name`); the rest mirror tracer:
 
 | Parameter | Meaning |
 | --- | --- |
@@ -64,7 +64,7 @@ npm run build     # static export to docs/out/
 bash docs/deploy_cloudflare_pages.sh
 ```
 
-It activates Node 22 via nvm, runs the static build, and deploys `docs/out/` with `wrangler pages deploy`. It reuses the same Cloudflare credentials as the tracer docs/dashboard (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or `~/.config/trajgen_progress_cloudflare.env`); override the project with `PROJECT_NAME=...`.
+It activates Node 22 via nvm, runs the static build, and deploys `docs/out/` with `wrangler pages deploy`. It reuses the same Cloudflare credentials as the Tracer docs/dashboard (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or `~/.config/trajgen_progress_cloudflare.env`); override the project with `PROJECT_NAME=...`.
 
 ## Add or edit a page
 

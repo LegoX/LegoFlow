@@ -6,9 +6,9 @@ eval has the following core concepts:
 
 ## Benchmark and registry
 
-A **benchmark** is a named, versioned set of evaluation tasks — for example `swebench-verified@1.0` (500 human-validated SWE-bench tasks). evaluator does not author or stage tasks. It selects a benchmark by name and lets Harbor resolve it against its **registry**, `repos/harbor/registry.json`, which maps each `(dataset_name, version)` pair to the underlying task data and fetches it automatically.
+A **benchmark** is a named, versioned set of evaluation tasks — for example `swebench-verified@1.0` (500 human-validated SWE-bench tasks). Evaluator does not author or stage tasks. It selects a benchmark by name and lets Harbor resolve it against its **registry**, `repos/harbor/registry.json`, which maps each `(dataset_name, version)` pair to the underlying task data and fetches it automatically.
 
-This is the key difference from `tracer`: tracer consumes a locally-staged, manifest-filtered task export from swegen, while evaluator is purely registry-driven and needs no `artifacts/tasks/` staging step.
+This is the key difference from `tracer`: Tracer consumes a locally-staged, manifest-filtered task export from swegen, while Evaluator is purely registry-driven and needs no `artifacts/tasks/` staging step.
 
 Optional **nohack** mode (`task_source.no_hack: true`) swaps in a locally hardened `swebench-verified-nohack` registry that allowlists agent egress to the LiteLLM host only. See [Select Benchmark](/docs/run-jobs/select-benchmark).
 

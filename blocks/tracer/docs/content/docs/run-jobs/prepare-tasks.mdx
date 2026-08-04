@@ -2,7 +2,7 @@
 title: Prepare Tasks
 ---
 
-Tracer supports a local curator source and a compatible Hugging Face source.
+Tracer supports a local Curator source and a compatible Hugging Face source.
 Task preparation decides what is staged; the processed-task ledger and manual
 exclusion list decide what Harbor skips.
 
@@ -23,7 +23,7 @@ bash scripts/prepare_tasks.sh
   Harbor task root is staged.
 - The copy is idempotent: it skips when the target already holds valid Harbor task dirs. Pass `--overwrite` to rebuild.
 
-The task source is configured in `config.yaml` under `runtime_info.input.task_source` and is normally wired from curator's output via `meta_info.dependencies`.
+The task source is configured in `config.yaml` under `runtime_info.input.task_source` and is normally wired from Curator's output via `meta_info.dependencies`.
 
 ## The processed-tasks ledger
 
@@ -46,10 +46,9 @@ an operator note.
 `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` names exclusion *sources*,
 not task ids. In production it is one line naming two files:
 
-```yaml
-env_extra:
-  HARBOR_EXCLUDE_TASKS: excluded_tasks.txt artifacts/processed_tasks.yaml
-```
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"env_extra:\n  HARBOR_EXCLUDE_TASKS: excluded_tasks.txt artifacts/processed_tasks.yaml"}
+</ConfigSnippet>
 
 | Source | Holds | Tracked in git |
 |---|---|---|

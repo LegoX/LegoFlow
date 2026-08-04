@@ -38,11 +38,9 @@ bash scripts/serve_local_model.sh   # runs in foreground; use tmux
 
 The checkpoint path and served name are read from `config.yaml → runtime_info.input.local_model_serving` (`model_path` / `model_name`) — that is the source of truth, not a hardcoded script default. Everything else is env-overridable (`MODEL_PATH`, `MODEL_NAME`, `VLLM_PORT`, `TENSOR_PARALLEL_SIZE`, `API_KEY`, `VLLM_CONDA_ENV`, …); it serves on `:8000` by default. When ready it prints the exact `llm_api` block to paste.
 
-```yaml
-local_model_serving:
-  model_path: artifacts/models/Qwen3.5-35B-A3B
-  model_name: Qwen3.5-35B-A3B
-```
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"local_model_serving:\n  model_path: artifacts/models/Qwen3.5-35B-A3B\n  model_name: Qwen3.5-35B-A3B"}
+</ConfigSnippet>
 
 Use a private profile or the `MODEL_PATH` environment override when the
 checkpoint lives outside the repository; do not commit machine-specific
@@ -52,16 +50,9 @@ absolute paths.
 
 Confirm that the active `config.yaml → runtime_info.input.llm_api` matches the local-vLLM recipe:
 
-```yaml
-llm_api:
-  api_key: dummy-key                       # must match vLLM --api-key
-  api_base_url: "http://<GPU_NODE_IP>:8000/v1"
-  model: "openai/Qwen3.5-35B-A3B"          # openai/<served-model-name>
-  protocols: [openai_compatible, anthropic_compatible]
-  served_via: per_job_litellm_proxy
-  input_cost_per_token: 0.0
-  output_cost_per_token: 0.0
-```
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"llm_api:\n  api_key: dummy-key                       # must match vLLM --api-key\n  api_base_url: \"http://<GPU_NODE_IP>:8000/v1\"\n  model: \"openai/Qwen3.5-35B-A3B\"          # openai/<served-model-name>\n  protocols: [openai_compatible, anthropic_compatible]\n  served_via: per_job_litellm_proxy\n  input_cost_per_token: 0.0\n  output_cost_per_token: 0.0"}
+</ConfigSnippet>
 
 The served name must match the basename of `llm_api.model` (`openai/<model_name>`).
 

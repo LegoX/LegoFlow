@@ -15,38 +15,19 @@ eval never points the agent directly at your upstream model API. Instead, each j
 
 The upstream model is declared in `config.yaml` under `runtime_info.input.llm_api`. The block ships two interchangeable recipes, with only one uncommented at a time:
 
-```yaml
-# MODE A — remote API (commented example)
-llm_api:
-  api_key: "<your-api-key>"
-  api_base_url: "https://api.example.com/v1"
-  model: "openai/<served-model-name>"
-  protocols: [openai_compatible, anthropic_compatible]
-  served_via: per_job_litellm_proxy
-  input_cost_per_token: 0.0
-  output_cost_per_token: 0.0
-```
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"# MODE A — remote API (commented example)\nllm_api:\n  api_key: \"<your-api-key>\"\n  api_base_url: \"https://api.example.com/v1\"\n  model: \"openai/<served-model-name>\"\n  protocols: [openai_compatible, anthropic_compatible]\n  served_via: per_job_litellm_proxy\n  input_cost_per_token: 0.0\n  output_cost_per_token: 0.0"}
+</ConfigSnippet>
 
-```yaml
-# MODE B — local vLLM checkpoint (active)
-llm_api:
-  api_key: dummy-key                       # must match vLLM --api-key
-  api_base_url: "http://<GPU_NODE_IP>:8000/v1"
-  model: "openai/Qwen3.5-35B-A3B"          # openai/<vLLM --served-model-name>
-  protocols: [openai_compatible, anthropic_compatible]
-  served_via: per_job_litellm_proxy
-  input_cost_per_token: 0.0
-  output_cost_per_token: 0.0
-```
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"# MODE B — local vLLM checkpoint (active)\nllm_api:\n  api_key: dummy-key                       # must match vLLM --api-key\n  api_base_url: \"http://<GPU_NODE_IP>:8000/v1\"\n  model: \"openai/Qwen3.5-35B-A3B\"          # openai/<vLLM --served-model-name>\n  protocols: [openai_compatible, anthropic_compatible]\n  served_via: per_job_litellm_proxy\n  input_cost_per_token: 0.0\n  output_cost_per_token: 0.0"}
+</ConfigSnippet>
 
 The proxy itself is configured under `runtime_info.input.litellm_proxy`:
 
-```yaml
-litellm_proxy:
-  config_template: scripts/serve_llm/litellm_config.example.yaml
-  port: 4101
-  master_key: dummy-key-cf
-```
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"litellm_proxy:\n  config_template: scripts/serve_llm/litellm_config.example.yaml\n  port: 4101\n  master_key: dummy-key-cf"}
+</ConfigSnippet>
 
 <Callout title="Keep credentials private" type="info">
 For a remote API, put the real key only in a private run profile or secret-injection step. For a local vLLM checkpoint, an example `dummy-key` is acceptable, but `api_key` must still match vLLM's `--api-key`.

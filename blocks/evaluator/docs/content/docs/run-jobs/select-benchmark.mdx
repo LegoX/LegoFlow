@@ -2,16 +2,11 @@
 title: Select Benchmark
 ---
 
-evaluator is registry-driven: it does not stage tasks locally. Switch benchmark by editing fields in `config.yaml → runtime_info.input.task_source`:
+Evaluator is registry-driven: it does not stage tasks locally. Switch benchmark by editing fields in `config.yaml → runtime_info.input.task_source`:
 
-```yaml
-task_source:
-  provider: harbor_registry
-  dataset_name: swebench-verified
-  version: "1.0"
-  registry_path: repos/harbor/registry.json
-  no_hack: false
-```
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"task_source:\n  provider: harbor_registry\n  dataset_name: swebench-verified\n  version: \"1.0\"\n  registry_path: repos/harbor/registry.json\n  no_hack: false"}
+</ConfigSnippet>
 
 Harbor resolves `(dataset_name, version)` against `repos/harbor/registry.json` and fetches the underlying task data automatically. No `artifacts/tasks/` staging is required.
 
@@ -55,10 +50,9 @@ The `version` field is not always `1.0`: `terminal-bench` is `2.0`, `livecodeben
 
 For a fast run, either pick a `-100` subset from the table, or cap the full benchmark with `harbor_job.n_tasks`:
 
-```yaml
-harbor_job:
-  n_tasks: 16   # null = full benchmark; an int caps the run
-```
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"harbor_job:\n  n_tasks: 16   # null = full benchmark; an int caps the run"}
+</ConfigSnippet>
 
 ## Other registry entries
 

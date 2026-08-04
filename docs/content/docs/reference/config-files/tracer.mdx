@@ -1,0 +1,53 @@
+---
+title: Tracer Config
+---
+
+Tracer config controls rollout jobs: which tasks to run, which agent scaffold
+to use, how many jobs to launch, and whether to convert trajectories for SFT.
+
+## Common edits
+
+| Field | When to edit |
+| --- | --- |
+| `runtime_info.input.llm_api.*` | Point rollouts at the model endpoint under test. |
+| `runtime_info.input.task_source.*` | Choose local Curator output or a Hugging Face dataset. |
+| `runtime_info.input.harbor_job.*` | Tune rollout scale, retries, concurrency, and timeouts. |
+| `runtime_info.input.agent.*` | Switch coding agent scaffold or runtime image. |
+| `runtime_info.input.sft_conversion.*` | Enable and configure post-rollout conversion. |
+
+## Complete file
+
+<ConfigFile file="blocks/tracer/config.yaml" />
+
+## Field guide
+
+| Field | Meaning | User action |
+| --- | --- | --- |
+| `meta_info.name`, `label`, `description`, `parent` | Tracer identity and parent block. | Do not edit for normal runs. |
+| `meta_info.dependencies.from.task_source.dataset_name` | Consumes Curator's merged tasks when using local task source. | Do not edit unless rewiring data handoff. |
+| `meta_info.dependencies.to.raw_trajectories_dir` | Publishes raw trajectories to Trainer when Trainer consumes Harbor jobs. | Do not edit unless changing handoff contract. |
+| `meta_info.resources.*` | Host and working directory for rollout execution. | Edit only when moving Tracer to another machine. |
+| `meta_info.repositories.harbor` | Pinned Harbor runtime. | Update only deliberately. |
+| `meta_info.repositories.swe_data_process` | Pinned conversion/data-processing repo. | Update only deliberately. |
+| `meta_info.environment.*` | Local environments for Harbor, LiteLLM, and conversion. | Usually do not edit. |
+| `runtime_info.input.llm_api.*` | Upstream model endpoint, model id, protocols, and token cost metadata. | Fill endpoint/key/model before rollout. |
+| `runtime_info.input.litellm_proxy.*` | Per-job LiteLLM proxy template, port, and key. | Change port only to avoid conflicts. |
+| `runtime_info.input.task_source.provider` | Task source mode: local Curator output or Hugging Face. | Set before a run. |
+| `runtime_info.input.task_source.dataset_name` | Local path or dataset name for tasks. | Usually wired from Curator in local mode. |
+| `runtime_info.input.task_source.split` | Dataset split. | Edit for Hugging Face sources. |
+| `runtime_info.input.harbor_job.jobs_dir` | Directory for Harbor jobs. | Usually keep default. |
+| `runtime_info.input.harbor_job.n_concurrent` | Parallel rollout count. | Tune for capacity and API limits. |
+| `runtime_info.input.harbor_job.n_tasks` | Number of tasks to run; `null` means all. | Use small values for smoke runs. |
+| `runtime_info.input.harbor_job.max_retries` | Per-task retry cap. | Raise only for unstable environments. |
+| `runtime_info.input.harbor_job.timeout_multiplier` | Scales task timeout. | Raise for slow agents or tasks. |
+| `runtime_info.input.agent.*` | Agent scaffold, version, runtime image/path, turns, and temperature. | Change fields together when switching scaffold. |
+| `runtime_info.input.sft_conversion.enabled` | Whether to convert rollouts after the job. | Enable when producing Trainer input. |
+| `runtime_info.input.sft_conversion.scaffold` | Conversion scaffold mapping. | Keep `auto` unless conversion needs an explicit scaffold. |
+| `runtime_info.input.sft_conversion.tokenizer_name` | Tokenizer used for conversion. | Align with Trainer base model. |
+| `runtime_info.input.sft_conversion.out_dir` | Converted SFT output directory. | Usually keep default. |
+| `runtime_info.input.sft_conversion.max_instances` | Optional conversion cap. | Use for quick checks. |
+| `runtime_info.input.sft_conversion.exclude_repos_file` | Repos excluded from conversion. | Leave empty for default. |
+| `runtime_info.input.sft_conversion.reasoning_*` | Reasoning-content filtering behavior. | Tune only for dataset-format experiments. |
+| `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` | Extra task exclusion sources or ids. | Use to skip known-bad tasks. |
+| `runtime_info.output.raw_trajectories_dir` | Harbor job output consumed by Trainer. | Read downstream; usually do not edit. |
+| `runtime_info.output.sft_data_dir` | Converted SFT data output. | Read when conversion is enabled. |

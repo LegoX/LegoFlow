@@ -2,7 +2,7 @@
 title: Dashboard
 ---
 
-tracer ships a self-contained progress dashboard that scans your current status and artifacts, then renders a single interactive HTML page — open it locally, or publish it to Cloudflare Pages for remote viewing.
+Tracer ships a self-contained progress dashboard that scans your current status and artifacts, then renders a single interactive HTML page — open it locally, or publish it to Cloudflare Pages for remote viewing.
 
 Live board: **[swe-tracer-databoard.pages.dev](https://swe-tracer-databoard.pages.dev/)**
 
@@ -39,7 +39,7 @@ Each generation also writes analysis data under `dashboard/site/data/`:
 | `traj_cards.jsonl` | bounded trajectory-card export used by the public Trajectories page |
 | `error_summary.json` | status counts, exception counts, per-job/per-language aggregates, and score histogram |
 
-When operating through the tracer plugin, `/tracer:dashboard` covers both the visual dashboard and one-off SFT data/stat refreshes via `scripts/convert_trajectories.sh`.
+When operating through the Tracer plugin, `/tracer:dashboard` covers both the visual dashboard and one-off SFT data/stat refreshes via `scripts/convert_trajectories.sh`.
 
 ## Run it locally
 

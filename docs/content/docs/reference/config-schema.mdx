@@ -6,28 +6,9 @@ Every block in the tree — root or child — has a `config.yaml` with the same 
 
 ## Top-level structure
 
-```yaml
-meta_info:
-  name:                 # short identifier; must equal the block's directory name
-  label:                # human-friendly title
-  description:          # one-sentence purpose
-  parent:               # parent block's `name`, or null for the root
-  blocks:            # parent blocks only: children with a role one-liner — NO wiring
-    <child_name>: {role: "<one phrase>"}
-  dependencies:         # this block's own upstream AND downstream edges — see "Wiring rule"
-    from:
-      <input.dot.path>: <source_block>.output.<key>
-    to:
-      <output_key>: <consumer_block>.input.<their.dot.path>
-  repos: {}             # name → {commit_id, role}; pinned vendored deps under repos/
-  resources:
-    ip:                 # 'local' (default) or null = current host; remote IP = SSH+tmux
-    directory:          # working directory on the remote node (when ip is remote)
-
-runtime_info:
-  input: {}             # ONLY values originating outside the block tree
-  output: {}            # values produced for downstream blocks
-```
+<ConfigSnippet title="config.yaml">
+{"meta_info:\n  name:                 # short identifier; must equal the block's directory name\n  label:                # human-friendly title\n  description:          # one-sentence purpose\n  parent:               # parent block's `name`, or null for the root\n  blocks:            # parent blocks only: children with a role one-liner — NO wiring\n    <child_name>: {role: \"<one phrase>\"}\n  dependencies:         # this block's own upstream AND downstream edges — see \"Wiring rule\"\n    from:\n      <input.dot.path>: <source_block>.output.<key>\n    to:\n      <output_key>: <consumer_block>.input.<their.dot.path>\n  repos: {}             # name → {commit_id, role}; pinned vendored deps under repos/\n  resources:\n    ip:                 # 'local' (default) or null = current host; remote IP = SSH+tmux\n    directory:          # working directory on the remote node (when ip is remote)\n\nruntime_info:\n  input: {}             # ONLY values originating outside the block tree\n  output: {}            # values produced for downstream blocks"}
+</ConfigSnippet>
 
 These are the **only** two top-level sections. Legacy `status:` and `evolving:` sections and a top-level `environment:` are validation failures (`schema:legacy-status`, `schema:legacy-evolving`, `schema:unknown-toplevel`); per-run env vars live in `runtime_info.input.env_extra`.
 
@@ -39,33 +20,15 @@ This is the rule the whole pipeline depends on:
 
 **`from`** — this block's own upstream hand-offs. Key is a dot-path into this block's own `runtime_info.input`; value names the producer's output. Two value forms:
 
-```yaml
-# string form — required dependency
-from:
-  task_source.dataset_name: curator.output.swe_tasks_dir
-
-# mapping form — conditional and/or optional
-from:
-  source.job_dir:
-    from: tracer.output.raw_trajectories_dir
-    when: {source.type: harbor_job}   # enforced only while these inputs hold these values
-    required: false                   # null producer output → warning, not failure
-```
+<ConfigSnippet title="config.yaml">
+{"# string form — required dependency\nfrom:\n  task_source.dataset_name: curator.output.swe_tasks_dir\n\n# mapping form — conditional and/or optional\nfrom:\n  source.job_dir:\n    from: tracer.output.raw_trajectories_dir\n    when: {source.type: harbor_job}   # enforced only while these inputs hold these values\n    required: false                   # null producer output → warning, not failure"}
+</ConfigSnippet>
 
 **`to`** — the mirror image, declared by the *producer*. Key is one of this block's own `runtime_info.output` keys; value names the exact consumer input field:
 
-```yaml
-# string form
-to:
-  swe_tasks_dir: tracer.input.task_source.dataset_name
-
-# mapping form — when-keys are fully-qualified <consumer>.input.<path>, since the
-# condition lives on the consumer's own state, not this (producer) block's
-to:
-  swe_tasks_dir:
-    to: tracer.input.task_source.dataset_name
-    when: {tracer.input.task_source.provider: local}
-```
+<ConfigSnippet title="config.yaml">
+{"# string form\nto:\n  swe_tasks_dir: tracer.input.task_source.dataset_name\n\n# mapping form — when-keys are fully-qualified <consumer>.input.<path>, since the\n# condition lives on the consumer's own state, not this (producer) block's\nto:\n  swe_tasks_dir:\n    to: tracer.input.task_source.dataset_name\n    when: {tracer.input.task_source.provider: local}"}
+</ConfigSnippet>
 
 The same edge is declared twice — once in the consumer's `from`, once in the producer's `to` — each block only ever editing its own file. The validator cross-checks the two declarations and warns (`dep:link-mismatch`) if they've drifted apart.
 
@@ -83,7 +46,7 @@ Resolution reads the producer's `runtime_info.output.<key>`: a non-null `value` 
 
 ## `runtime_info.output` shape
 
-Each output key is a mapping with `path:` (a static location fixed at authoring time, block-relative) and/or `value:` (run-produced — `null` until the block's run script writes it back, as trainer's `train.sh` does after training). Consumers resolve `value` first, then `path`.
+Each output key is a mapping with `path:` (a static location fixed at authoring time, block-relative) and/or `value:` (run-produced — `null` until the block's run script writes it back, as Trainer's `train.sh` does after training). Consumers resolve `value` first, then `path`.
 
 ## `resources.ip`
 

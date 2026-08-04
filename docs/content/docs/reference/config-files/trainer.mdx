@@ -1,0 +1,54 @@
+---
+title: Trainer Config
+---
+
+Trainer config controls data selection, conversion, model choice, training
+hyperparameters, infrastructure, and experiment logging.
+
+## Common edits
+
+| Field | When to edit |
+| --- | --- |
+| `runtime_info.input.source.*` | Choose Harbor output, Hugging Face LF data, or a local LF file. |
+| `runtime_info.input.model.*` | Select the base model. |
+| `runtime_info.input.training.*` | Tune training length, batch size, learning rate, output directory, and precision. |
+| `runtime_info.input.infrastructure.n_gpus_per_node` | Match the GPU node. |
+| `runtime_info.input.credentials.*` | Supply private Hub or W&B access through env, not tracked config. |
+
+## Complete file
+
+<ConfigFile file="blocks/trainer/config.yaml" />
+
+## Field guide
+
+| Field | Meaning | User action |
+| --- | --- | --- |
+| `meta_info.name`, `label`, `description`, `parent` | Trainer identity and parent block. | Do not edit for normal runs. |
+| `meta_info.dependencies.from.source.job_dir` | Consumes Tracer Harbor jobs when source type is `harbor_job`. | Do not edit unless rewiring. |
+| `meta_info.resources.*` | Training host information. | Fill when training runs on a remote GPU node. |
+| `meta_info.repositories.*` | Pinned LLaMA-Factory and data-processing repos. | Update only deliberately. |
+| `meta_info.environment.*` | Training environment metadata. | Usually do not edit. |
+| `runtime_info.input.source.type` | Data source mode: Harbor job, Hugging Face LF, or local LF. | Choose before training. |
+| `runtime_info.input.source.scaffold` | Scaffold that produced trajectories. | Required for Harbor conversion. |
+| `runtime_info.input.source.job_dir` | Harbor job directory. | Usually wired from Tracer for `harbor_job`. |
+| `runtime_info.input.source.hf_*` | Hugging Face dataset, file, subset, and split. | Fill for `hf_lf` sources. |
+| `runtime_info.input.source.lf_path` | Local LF JSON path. | Fill for `local_lf` sources. |
+| `runtime_info.input.conversion.*` | Harbor conversion cap, excluded repos, and dataset name. | Tune when converting trajectories. |
+| `runtime_info.input.dataset.name` | LLaMA-Factory dataset name. | Usually auto-derived. |
+| `runtime_info.input.model.model_name_or_path` | Base model path or Hub id. | Change for new training runs. |
+| `runtime_info.input.model.trust_remote_code` | Whether to trust custom model code. | Keep aligned with model requirements. |
+| `runtime_info.input.training.stage` | Training stage. | Keep `sft` for current Trainer. |
+| `runtime_info.input.training.finetuning_type` | Full or parameter-efficient tuning type. | Current profile uses full fine-tuning. |
+| `runtime_info.input.training.deepspeed` | DeepSpeed config path. | Change only with a matching training setup. |
+| `runtime_info.input.training.template` | Chat template. | Match the base model family. |
+| `runtime_info.input.training.cutoff_len` | Maximum sequence length. | Tune for memory and data format. |
+| `runtime_info.input.training.max_samples` | Dataset sample cap. | Lower for smoke or ablation runs. |
+| `runtime_info.input.training.*workers` | Preprocessing and dataloader worker counts. | Tune for CPU capacity. |
+| `runtime_info.input.training.output_dir` | Training output directory/run name base. | Change for each important run. |
+| `runtime_info.input.training.logging/save/*` | Logging and checkpoint cadence. | Tune for monitoring and storage. |
+| `runtime_info.input.training.batch/lr/epoch fields` | Batch size, accumulation, learning rate, weight decay, epochs, scheduler, warmup. | Main hyperparameters to tune. |
+| `runtime_info.input.training.bf16`, `flash_attn`, `enable_liger_kernel`, `use_unsloth_gc` | Performance and precision options. | Keep compatible with hardware/model. |
+| `runtime_info.input.infrastructure.n_gpus_per_node` | GPU count. | Must match the training node. |
+| `runtime_info.input.experiment.*` | W&B run naming and mode. | Optional experiment tracking. |
+| `runtime_info.input.credentials.*` | W&B and Hugging Face tokens. | Prefer environment variables; never commit secrets. |
+| `runtime_info.output.*` | Latest checkpoint, metrics, curves, and artifacts. | Read after a run; scripts may update it. |

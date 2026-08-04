@@ -30,7 +30,7 @@ checkouts:
 | --- | --- |
 | `llm_api` | Upstream key, base URL, model, protocols, and token pricing for the per-job proxy |
 | `litellm_proxy` | Harbor template, local port, and local master key |
-| `task_source` | `local` curator output or a `huggingface` dataset |
+| `task_source` | `local` Curator output or a `huggingface` dataset |
 | `harbor_job` | Jobs directory, task cap, concurrency, retries, and timeout multiplier |
 | `agent` | Rollout agent identity, version, image/runtime mount, turns, and sampling |
 | `sft_conversion` | Optional conversion, scaffold, tokenizer, filters, and output directory |
@@ -54,62 +54,23 @@ runs it as `tests/cases/04_llm_endpoint.sh`.
 
 The current profile is summarized below. API secrets remain placeholders:
 
-```yaml
-llm_api:
-  api_key: human
-  api_base_url: human
-  model: "openai/Qwen3.6-35B-A3B"
-  protocols: [openai_compatible, anthropic_compatible]
-  served_via: per_job_litellm_proxy
-
-litellm_proxy:
-  config_template: scripts/serve_llm/litellm_config.example.yaml
-  port: 4003
-  master_key: dummy-key-cf
-
-task_source:
-  provider: local
-  dataset_name: ../curator/artifacts/merged_swe_tasks
-  split: train
-
-harbor_job:
-  jobs_dir: artifacts/jobs
-  n_concurrent: 8
-  n_tasks: 40
-  max_retries: 2
-  timeout_multiplier: 5
-
-agent:
-  name: custom-claude-code
-  version: 2.1.118
-  runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
-  runtime_host_path: artifacts/agent-runtime/claude-code
-  max_turns: 80
-  temperature: 0.7
-
-sft_conversion:
-  enabled: false
-  scaffold: auto
-  tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base
-  out_dir: artifacts/sft_data
-  max_instances: null
-  reasoning_check_mode: adaptive
-  reasoning_content_ratio_threshold: 0.2
-```
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"llm_api:\n  api_key: human\n  api_base_url: human\n  model: \"openai/Qwen3.6-35B-A3B\"\n  protocols: [openai_compatible, anthropic_compatible]\n  served_via: per_job_litellm_proxy\n\nlitellm_proxy:\n  config_template: scripts/serve_llm/litellm_config.example.yaml\n  port: 4003\n  master_key: dummy-key-cf\n\ntask_source:\n  provider: local\n  dataset_name: ../curator/artifacts/merged_swe_tasks\n  split: train\n\nharbor_job:\n  jobs_dir: artifacts/jobs\n  n_concurrent: 8\n  n_tasks: 40\n  max_retries: 2\n  timeout_multiplier: 5\n\nagent:\n  name: custom-claude-code\n  version: 2.1.118\n  runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1\n  runtime_host_path: artifacts/agent-runtime/claude-code\n  max_turns: 80\n  temperature: 0.7\n\nsft_conversion:\n  enabled: false\n  scaffold: auto\n  tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base\n  out_dir: artifacts/sft_data\n  max_instances: null\n  reasoning_check_mode: adaptive\n  reasoning_content_ratio_threshold: 0.2"}
+</ConfigSnippet>
 
 Always read the checked-in config before a run; these documented defaults are
 an orientation aid, not a replacement for validation.
 
 ## Dependency wiring
 
-With `task_source.provider: local`, tracer consumes:
+With `task_source.provider: local`, Tracer consumes:
 
 ```text
 curator.output.merged_tasks_dir
   → tracer.input.task_source.dataset_name
 ```
 
-With `trainer.input.source.type: harbor_job`, tracer publishes:
+With `trainer.input.source.type: harbor_job`, Tracer publishes:
 
 ```text
 tracer.output.raw_trajectories_dir
@@ -123,7 +84,7 @@ reports missing, mismatched, unresolved, or path-incompatible edges.
 
 | Output | Path | Format and consumer |
 | --- | --- | --- |
-| `raw_trajectories_dir` | `artifacts/jobs/` | Harbor jobs with `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`; wired to trainer |
+| `raw_trajectories_dir` | `artifacts/jobs/` | Harbor jobs with `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`; wired to Trainer |
 | `sft_data_dir` | `artifacts/sft_data/` | Optional `artifacts/sft_data/<job>/lf.json` in LLaMA-Factory format; declared for direct consumption |
 
 Job results, conversion sidecars, and archives are described in

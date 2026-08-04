@@ -2,11 +2,11 @@
 title: Block Design
 ---
 
-A **block** is the unit of work in LegoFlow. Every stage of the pipeline — data curation, trajectory generation, training, and evaluator measurement — is a block with a shared shape and a familiar skill lifecycle: `:setup`, `:check`, and `:run`. This page explains the design behind that shape: what lives inside a block, how blocks pass data to each other, and where runs are recorded.
+A **block** is the unit of work in LegoFlow. Every stage of the pipeline, from data curation, trajectory generation, training, to Evaluator measurement, is a block with a shared shape and a familiar skill lifecycle. This page explains the design behind: what lives inside a block, how blocks pass data to each other, and where runs are recorded. The following figure shows the structure of a block.
 
 ![Anatomy of a LegoFlow block](/figures/block-definition-editable.png)
 
-The diagram shows the block boundary. A block is not just a script directory: it is a package around one unit of work. `config.yaml` is the declaration layer. It names the block, pins code repositories, declares child blocks and dependencies, and separates runtime inputs from runtime outputs. The rest of the block follows that declaration.
+A block is not just a script directory: it is a package around one unit of work. `config.yaml` is the declaration layer. It names the block, pins code repositories, declares child blocks and dependencies, and separates runtime inputs from runtime outputs. The rest of the block follows that declaration.
 
 Inside the block, `repos/` holds pinned code dependencies, plugin skills expose setup/check/run operations, and `memory/` keeps the context an agent needs while operating the block. `scripts/` contains concrete dry-run, smoke-test, and run entrypoints. `dashboard/` turns logs, metrics, and state into an inspectable surface. `blocks/` lets the same shape nest, so a block can be a leaf task or a parent pipeline.
 

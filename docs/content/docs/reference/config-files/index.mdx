@@ -1,0 +1,32 @@
+---
+title: The Config Files
+---
+
+LegoFlow uses one `config.yaml` per block. The file is both a human checklist
+and a machine-readable contract: plugin skills read it before setup, checks,
+runs, dashboards, and cross-block handoffs.
+
+Most users should read config files in this order:
+
+| Step | Read | Why |
+| --- | --- | --- |
+| 1 | `runtime_info.input` | These are the values you usually fill before a run. |
+| 2 | `meta_info.resources` | This tells you where the block is expected to run. |
+| 3 | `runtime_info.output` | This tells you where results will appear. |
+| 4 | `meta_info.dependencies` | This explains how outputs move between blocks. |
+| 5 | `meta_info.repositories` or `repos` | This pins external code dependencies. |
+
+As a rule of thumb, first-time users should edit only `runtime_info.input`.
+Fields under `meta_info` describe the block contract and should stay stable
+unless you are extending LegoFlow itself.
+
+## Files
+
+- [Root config](/docs/reference/config-files/root)
+- [Curator config](/docs/reference/config-files/curator)
+- [Tracer config](/docs/reference/config-files/tracer)
+- [Trainer config](/docs/reference/config-files/trainer)
+- [Evaluator config](/docs/reference/config-files/evaluator)
+
+For the shared schema rules, validation behavior, and dependency syntax, see
+[config.yaml schema](/docs/reference/config-schema).

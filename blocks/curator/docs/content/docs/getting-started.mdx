@@ -37,8 +37,18 @@ Whether you prompt for them or run them yourself, the pipeline is five commands:
 A sixth command, `/curator:run`, is a compatibility adapter that forwards to
 `/curator:create-tasks` so every block exposes the same `/<block>:run` verb.
 
+## Configuration
+
+Curator reads `config.yaml` before setup, checks, PR collection, and task
+generation. For a first run, focus on `runtime_info.input`: `pr_collection`
+sets the repository and PR search scope, `llm_api` points to the models used
+for PR analysis and task generation, and `languages` controls per-language
+timeouts, concurrency, and task caps. Leave `meta_info` and `runtime_info.output`
+alone unless you are changing the block contract itself. For the full file and
+field guide, see the <a href="/docs/reference/config-files/curator">Curator
+Config reference</a>.
+
 ## Next
 
 - [Run Generation](/docs/run-generation) — the full flow, per-command reference, `config.yaml` schema, and manual commands.
-- [Core Concepts](/docs/core-concepts) — PR pools, task skeletons, validation, and manifests.
-- [Outputs](/docs/outputs) — task directories, manifests, logs, and resuming after moving nodes.
+- [Outputs](/docs/outputs) — PR pools, task directories, validation, manifests, logs, and resuming after moving nodes.

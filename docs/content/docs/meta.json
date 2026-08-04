@@ -2,8 +2,8 @@
     "pages": [
         "index",
         "getting-started",
-        "block-design",
         "blocks",
+        "block-design",
         "reference"
     ]
 }

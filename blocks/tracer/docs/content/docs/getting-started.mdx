@@ -29,13 +29,19 @@ From the repository root, the generic orchestration equivalents are:
 
 Choose either `/root:run tracer` or `/tracer:run` for a given job, not both.
 Both flows validate first and require explicit confirmation before launching.
-The root command owns generic dispatch and archiving; the tracer command also
+The root command owns generic dispatch and archiving; the Tracer command also
 documents the block-specific proxy, ledger, and post-run procedure.
 
-The commands read `config.yaml`. LLM settings live under
-`runtime_info.input.llm_api`, task selection under `task_source`, rollout scale
-under `harbor_job`, the runtime preset under `agent`, and conversion settings
-under `sft_conversion`. Edit that file instead of the scripts or skill files.
+## Configuration
+
+Tracer reads `config.yaml` before setup, checks, task preparation, rollout, and
+dashboard refreshes. For a first run, focus on `runtime_info.input`: `llm_api`
+points to the model endpoint, `task_source` selects Curator output or a Hugging
+Face dataset, `harbor_job` controls rollout scale, `agent` selects the scaffold,
+and `sft_conversion` controls optional training-data conversion. Edit
+`config.yaml`, not the scripts or skill files. For the full file and field
+guide, see the <a href="/docs/reference/config-files/tracer">Tracer Config
+reference</a>.
 
 The rest of this page describes the underlying commands for manual operation
 and debugging.
@@ -46,7 +52,7 @@ and debugging.
 - **uv** and **Python 3 with PyYAML**.
 - **Python 3.13** for the pinned LiteLLM environment; `uv` can install it.
 - **An OpenAI-compatible LLM endpoint** and API key.
-- **A task source**: curator's merged Harbor tasks or a compatible Hugging Face
+- **A task source**: Curator's merged Harbor tasks or a compatible Hugging Face
   dataset.
 
 <Callout title="Where to run" type="info">
@@ -65,14 +71,9 @@ cd blocks/tracer
 
 Fill the two checked-in `human` markers:
 
-```yaml
-runtime_info:
-  input:
-    llm_api:
-      api_key: <your-key>
-      api_base_url: https://your-openai-compatible-endpoint/v1
-      model: openai/Qwen3.6-35B-A3B
-```
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <your-key>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      model: openai/Qwen3.6-35B-A3B"}
+</ConfigSnippet>
 
 Do not commit a real key. Before continuing, also review
 `task_source.provider`, `task_source.dataset_name`, `harbor_job.n_tasks`,
@@ -122,7 +123,7 @@ Stage the configured source as Harbor task directories:
 bash scripts/prepare_tasks.sh
 ```
 
-For a local curator source, the script copies only IDs from
+For a local Curator source, the script copies only IDs from
 `verifiable_tasks.txt` when that manifest exists. If the local source has no
 manifest, the current implementation copies all structurally valid task
 directories and prints that behavior. Hugging Face sources are downloaded

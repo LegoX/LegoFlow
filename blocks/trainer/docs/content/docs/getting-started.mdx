@@ -2,7 +2,7 @@
 title: Getting Started
 ---
 
-trainer wraps a pinned [SWE-Lego LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory)
+Trainer wraps a pinned [SWE-Lego LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory)
 checkout and the `swe_data_process` converter package in the LegoFlow block
 layout. The pinned repositories are recorded as gitlinks under
 `blocks/trainer/repos/`.
@@ -10,7 +10,7 @@ layout. The pinned repositories are recorded as gitlinks under
 ## Recommended: operate via the Claude plugin
 
 The block ships a Claude Code plugin (`trainer-plugin`) that drives the whole
-lifecycle through slash commands. This is the recommended way to run trainer —
+lifecycle through slash commands. This is the recommended way to run Trainer —
 each command performs the preflight, confirmation, and bookkeeping steps for
 you. Launch Claude from inside `blocks/trainer/` so the block-local plugin
 loads, then:
@@ -26,11 +26,15 @@ loads, then:
 pass. It does not convert data or start training — that is `/trainer:run`.
 `/trainer:run` runs `/trainer:check` first and rejects on any failure.
 
-The knobs these commands read live in `config.yaml` — dataset source under
-`runtime_info.input.source`, conversion under `runtime_info.input.conversion`,
-model/training under `runtime_info.input.model` / `runtime_info.input.training`,
-and GPU count under `runtime_info.input.infrastructure`. Edit `config.yaml`,
-not the scripts.
+## Configuration
+
+Trainer reads `config.yaml` before setup, checks, data preparation, training,
+and dashboard inspection. For a first run, focus on `runtime_info.input`:
+`source` chooses Harbor output, Hugging Face LF data, or a local LF file;
+`conversion` controls trajectory conversion; `model` and `training` define the
+base model and hyperparameters; and `infrastructure` must match the GPU node.
+Edit `config.yaml`, not the scripts. For the full file and field guide, see the
+<a href="/docs/reference/config-files/trainer">Trainer Config reference</a>.
 
 The rest of this page documents the underlying commands the plugin runs, for
 manual operation or debugging.
@@ -44,7 +48,7 @@ manual operation or debugging.
 - **A base model** — a Hub model ID or local model directory (the active profile uses `Qwen/Qwen3.5-35B-A3B-Base`).
 
 <Callout title="Where to run" type="info">
-trainer trains on the node declared in `config.yaml` (`meta_info.resources.ip`). Run its scripts inside a `tmux` session on that host so a long training job survives shell disconnects.
+Trainer trains on the node declared in `config.yaml` (`meta_info.resources.ip`). Run its scripts inside a `tmux` session on that host so a long training job survives shell disconnects.
 </Callout>
 
 ## 1. Enter the block

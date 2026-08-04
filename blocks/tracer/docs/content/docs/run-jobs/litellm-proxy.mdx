@@ -2,7 +2,7 @@
 title: LiteLLM Proxy
 ---
 
-tracer never points the agent directly at your upstream model API. Instead, each job starts its own **LiteLLM proxy**, which normalizes the endpoint, exposes both OpenAI- and Anthropic-compatible protocols, and attaches the trajectory logger.
+Tracer never points the agent directly at your upstream model API. Instead, each job starts its own **LiteLLM proxy**, which normalizes the endpoint, exposes both OpenAI- and Anthropic-compatible protocols, and attaches the trajectory logger.
 
 ## Why a proxy
 
@@ -14,25 +14,15 @@ tracer never points the agent directly at your upstream model API. Instead, each
 
 The upstream model is declared in `config.yaml` under `runtime_info.input.llm_api`:
 
-```yaml
-llm_api:
-  api_key: <your-key>
-  api_base_url: "https://your-openai-compatible-endpoint/v1"
-  model: "openai/Qwen3.6-35B-A3B"
-  protocols: [openai_compatible, anthropic_compatible]
-  served_via: per_job_litellm_proxy
-  input_cost_per_token: 0.0000021
-  output_cost_per_token: 0.0000084
-```
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"llm_api:\n  api_key: <your-key>\n  api_base_url: \"https://your-openai-compatible-endpoint/v1\"\n  model: \"openai/Qwen3.6-35B-A3B\"\n  protocols: [openai_compatible, anthropic_compatible]\n  served_via: per_job_litellm_proxy\n  input_cost_per_token: 0.0000021\n  output_cost_per_token: 0.0000084"}
+</ConfigSnippet>
 
 The proxy itself is configured under `runtime_info.input.litellm_proxy`:
 
-```yaml
-litellm_proxy:
-  config_template: scripts/serve_llm/litellm_config.example.yaml
-  port: 4003
-  master_key: dummy-key-cf
-```
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"litellm_proxy:\n  config_template: scripts/serve_llm/litellm_config.example.yaml\n  port: 4003\n  master_key: dummy-key-cf"}
+</ConfigSnippet>
 
 The master key is the local proxy credential and may be a functional dummy.
 The upstream `llm_api.api_key` is real and must not be committed.

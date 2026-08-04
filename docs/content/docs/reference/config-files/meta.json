@@ -1,0 +1,11 @@
+{
+    "title": "The Config Files",
+    "pages": [
+        "index",
+        "root",
+        "curator",
+        "tracer",
+        "trainer",
+        "evaluator"
+    ]
+}

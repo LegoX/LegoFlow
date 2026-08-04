@@ -43,18 +43,9 @@ Snapshot of one run. The required files are written automatically:
 
 The `metadata.yaml` schema:
 
-```yaml
-id: run_001
-block: <block_name>
-started_at: "2026-05-04T08:00:00Z"
-completed_at: "2026-05-04T10:11:35Z"
-status: completed              # completed | failed | interrupted
-exit_code: 0
-repos:
-  <name>: <40-char git sha>    # one per dir under repos/; {} if none
-notes: ""
-# Optional, agent-added: stage, results, inputs
-```
+<ConfigSnippet title="artifacts/archives/run_NNN/metadata.yaml">
+{"id: run_001\nblock: <block_name>\nstarted_at: \"2026-05-04T08:00:00Z\"\ncompleted_at: \"2026-05-04T10:11:35Z\"\nstatus: completed              # completed | failed | interrupted\nexit_code: 0\nrepos:\n  <name>: <40-char git sha>    # one per dir under repos/; {} if none\nnotes: \"\"\n# Optional, agent-added: stage, results, inputs"}
+</ConfigSnippet>
 
 `status` uses the same vocabulary as `index.yaml`, derived from the same exit code.
 

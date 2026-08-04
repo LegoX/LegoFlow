@@ -73,6 +73,18 @@ Each command reads its parameters from `config.yaml`:
 
 Edit `config.yaml`, then re-run the command.
 
+### Task validation
+
+`/curator:create-tasks` does not expose every generated task downstream. It
+validates each candidate with two checks:
+
+- **NOP**: the unmodified buggy environment should fail the task test.
+- **Oracle**: applying the ground-truth solution should pass the task test.
+
+Only tasks that pass validation are written to `verifiable_tasks.txt`. Treat
+that manifest as the source of truth for downstream use, even if more task
+directories exist on disk.
+
 ## Configuration Guide
 
 All generation parameters live in `config.yaml` under `runtime_info.input`.
@@ -82,27 +94,14 @@ All generation parameters live in `config.yaml` under `runtime_info.input`.
 Two provider modes are supported:
 
 **Mode 1: Native Anthropic-compatible endpoint** (recommended)
-```yaml
-llm_api:
-  api_key: <YOUR_API_KEY>
-  api_base_url: https://<your-anthropic-gateway>/v1              # OpenAI-compatible endpoint
-  pr_model: claude-opus-4-6
-  task_model: claude-opus-4-6
-  cc_provider_mode: native
-  anthropic_base_url: https://<your-anthropic-gateway>           # Anthropic-compatible endpoint (no /v1)
-```
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"llm_api:\n  api_key: <YOUR_API_KEY>\n  api_base_url: https://<your-anthropic-gateway>/v1              # OpenAI-compatible endpoint\n  pr_model: claude-opus-4-6\n  task_model: claude-opus-4-6\n  cc_provider_mode: native\n  anthropic_base_url: https://<your-anthropic-gateway>           # Anthropic-compatible endpoint (no /v1)"}
+</ConfigSnippet>
 
 **Mode 2: OpenAI-compatible model with local proxy**
-```yaml
-llm_api:
-  api_key: <YOUR_API_KEY>
-  api_base_url: https://your-openai-endpoint/v1
-  pr_model: Qwen3.6-35B-A3B
-  task_model: claude-sonnet-4-6                  # proxy alias
-  cc_provider_mode: openai_proxy
-  anthropic_base_url: http://127.0.0.1:4010      # local LiteLLM proxy
-  cc_proxy_port: 4010
-```
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"llm_api:\n  api_key: <YOUR_API_KEY>\n  api_base_url: https://your-openai-endpoint/v1\n  pr_model: Qwen3.6-35B-A3B\n  task_model: claude-sonnet-4-6                  # proxy alias\n  cc_provider_mode: openai_proxy\n  anthropic_base_url: http://127.0.0.1:4010      # local LiteLLM proxy\n  cc_proxy_port: 4010"}
+</ConfigSnippet>
 
 Mode `native` is simpler: both PR evaluation and task completion use the same
 provider. Mode `openai_proxy` is for OpenAI-only models: it starts a local
@@ -165,30 +164,9 @@ inline there. Edit that file, then re-run the command.
 <details>
 <summary>Example config.yaml blocks (click to expand)</summary>
 
-```yaml
-pr_collection:
-  enabled: true
-  languages: [c, cpp, go, java, javascript, typescript, python, rust]
-  repo_num: 100                    # repos per language
-  max_prs_per_repo: 50
-  output_dir: artifacts/collected_prs
-  token_limit: 32                  # first N combined file + env GitHub tokens (0 = use all)
-  filters:
-    min_stars: 30
-    min_merged_prs: 5
-    min_language_percentage: 0.4
-    max_days_since_push: 1095
-    min_issue_body_length: 10
-    min_files_changed: 1
-    max_files_changed: 25
-    max_lines_changed: 1500
-
-languages:
-  py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 20 } }
-  js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }
-  ts:   { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }
-  # …one row per language
-```
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"pr_collection:\n  enabled: true\n  languages: [c, cpp, go, java, javascript, typescript, python, rust]\n  repo_num: 100                    # repos per language\n  max_prs_per_repo: 50\n  output_dir: artifacts/collected_prs\n  token_limit: 32                  # first N combined file + env GitHub tokens (0 = use all)\n  filters:\n    min_stars: 30\n    min_merged_prs: 5\n    min_language_percentage: 0.4\n    max_days_since_push: 1095\n    min_issue_body_length: 10\n    min_files_changed: 1\n    max_files_changed: 25\n    max_lines_changed: 1500\n\nlanguages:\n  py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 20 } }\n  js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16 } }\n  ts:   { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16 } }\n  # …one row per language"}
+</ConfigSnippet>
 
 - `timeout`: whole PR case timeout (seconds)
 - `cc_timeout`: Claude Code task completion timeout (seconds)

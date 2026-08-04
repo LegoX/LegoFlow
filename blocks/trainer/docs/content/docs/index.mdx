@@ -1,8 +1,8 @@
 ---
-title: Motivation
+title: Overview
 ---
 
-trainer turns agent trajectories into ready-to-train datasets and fine-tunes SWE coding models on them.
+Trainer turns agent trajectories into ready-to-train datasets and fine-tunes SWE coding models on them.
 
 It is the supervised-fine-tuning stage of the [LegoFlow](https://github.com/SWE-Lego/SWE-Lego-Live) pipeline, sitting between trajectory generation (`tracer`) and evaluation (`evaluator`). It can convert good rollouts produced upstream or consume a ready-made Hugging Face/local ShareGPT dataset, then trains a model with the patched [SWE-Lego LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory) + DeepSpeed ZeRO-3 — all driven by a single `config.yaml`.
 
@@ -10,7 +10,7 @@ It is the supervised-fine-tuning stage of the [LegoFlow](https://github.com/SWE-
 curator ─▶ tracer ─▶ trainer ─▶ evaluator
 ```
 
-trainer provides:
+Trainer provides:
 
 - **One-config runs** — source trajectories, conversion settings, dataset, model, hyperparameters, and infrastructure all live in `config.yaml`
 - **Scaffold-aware conversion** — Claude Code, OpenCode, OpenHands SDK, and Terminus-2 trajectories convert through the `swe_data_process` package

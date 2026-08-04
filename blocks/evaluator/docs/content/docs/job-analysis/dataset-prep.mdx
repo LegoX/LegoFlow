@@ -35,14 +35,9 @@ A reasoning model that emits `<think>…` into the content field (e.g. `Qwen3.5-
 
 The default tagging endpoint is `config.yaml → runtime_info.input.job_analysis.tag_llm`:
 
-```yaml
-job_analysis:
-  enabled: true
-  tag_llm:
-    base_url: ""  # empty values fall back to llm_api
-    model: ""
-    api_key: ""
-```
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"job_analysis:\n  enabled: true\n  tag_llm:\n    base_url: \"\"  # empty values fall back to llm_api\n    model: \"\"\n    api_key: \"\""}
+</ConfigSnippet>
 
 This is deliberately separate from the eval `llm_api`: the model under evaluation may be a reasoning model unsuitable for tagging, so the gold-tagging step gets its own JSON-clean endpoint.
 Supply a separate endpoint through `PREP_TAG_BASE_URL`, `PREP_TAG_MODEL`, and

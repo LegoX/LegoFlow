@@ -9,9 +9,9 @@ The run used eight GPUs, but the GPU model is not recorded in the artifacts. Seq
 </Callout>
 
 <Callout title="Trainer succeeded; the wrapper did not" type="warn">
-The LLaMA-Factory trainer completed all 24 steps and wrote the model and
+The LLaMA-Factory Trainer completed all 24 steps and wrote the model and
 metrics shown below, but the enclosing pipeline later exited with code 2 during
-post-training output handling. Treat this as measured trainer provenance, not
+post-training output handling. Treat this as measured Trainer provenance, not
 as evidence that the historical end-to-end wrapper completed successfully.
 </Callout>
 
@@ -34,35 +34,9 @@ as evidence that the historical end-to-end wrapper completed successfully.
 
 The relevant parts of the checked-in `config.yaml` are:
 
-```yaml
-runtime_info:
-  input:
-    source:
-      type: hf_lf
-      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft
-      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
-    conversion:
-      max_instances: 0
-      data_name: glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5
-    model:
-      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base
-    training:
-      finetuning_type: full
-      deepspeed: scripts/deepspeed/ds_z3_config.json
-      template: qwen3_5
-      cutoff_len: 131072
-      rope_scaling: null
-      per_device_train_batch_size: 1
-      gradient_accumulation_steps: 8
-      learning_rate: 5.0e-5
-      num_train_epochs: 3.0
-      lr_scheduler_type: cosine
-      warmup_ratio: 0.1
-      bf16: true
-      flash_attn: fa2
-    infrastructure:
-      n_gpus_per_node: 8
-```
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    source:\n      type: hf_lf\n      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft\n      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json\n    conversion:\n      max_instances: 0\n      data_name: glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5\n    model:\n      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base\n    training:\n      finetuning_type: full\n      deepspeed: scripts/deepspeed/ds_z3_config.json\n      template: qwen3_5\n      cutoff_len: 131072\n      rope_scaling: null\n      per_device_train_batch_size: 1\n      gradient_accumulation_steps: 8\n      learning_rate: 5.0e-5\n      num_train_epochs: 3.0\n      lr_scheduler_type: cosine\n      warmup_ratio: 0.1\n      bf16: true\n      flash_attn: fa2\n    infrastructure:\n      n_gpus_per_node: 8"}
+</ConfigSnippet>
 
 `source.type: hf_lf` downloads the selected ready-made LF file and skips trajectory conversion. The generated LLaMA-Factory config is saved under `artifacts/training_config/` before training starts.
 
