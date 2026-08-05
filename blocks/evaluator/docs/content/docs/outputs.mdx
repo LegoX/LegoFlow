@@ -1,0 +1,110 @@
+---
+title: Output Format
+---
+
+Evaluator archives benchmark jobs, per-task trajectories, verifier outputs, and
+analysis reports under `artifacts/`. It is a terminal block, so its outputs are
+mainly for scoring, auditing, dashboards, and paper-ready analysis.
+
+## Artifact layout
+
+The main Evaluator outputs are organized as follows:
+
+```text
+artifacts/
+├── jobs/                               # benchmark evaluation jobs
+│   └── <job>/
+│       ├── result.json                 # aggregate scores, rewards, and errors
+│       ├── config.yaml                 # active config snapshot at launch
+│       ├── analysis/                   # post-eval reports for the dashboard
+│       └── <task>/
+│           ├── result.json             # trial status, reward, and exception
+│           ├── agent/
+│           │   └── litellm-trajectory.jsonl # replayable agent trajectory
+│           └── verifier/               # per-task verdict, scoring, and test logs
+├── datasets/                           # prepared gold/reference datasets
+├── litellm/                            # per-job LiteLLM proxy configs
+├── runtime/                            # extracted agent runtime files
+├── models/                             # optional local checkpoints to serve
+├── archives/                           # immutable run snapshots
+└── index.yaml                          # append-only run history
+```
+
+Most users should start with `artifacts/jobs/<job>/result.json` for scores,
+then inspect task-level `agent/` and `verifier/` directories when a result needs
+debugging.
+
+## Evaluation job outputs
+
+Each benchmark run writes one job directory:
+
+```text
+artifacts/jobs/<job>/
+├── result.json
+├── config.yaml
+└── <task>/
+    ├── result.json
+    ├── agent/
+    │   └── litellm-trajectory.jsonl
+    └── verifier/
+```
+
+The job-level `result.json` aggregates rewards and failure counts. Each task's
+`litellm-trajectory.jsonl` records what the agent did, and `verifier/` contains
+the grading output that determines the reward.
+
+## Analysis outputs
+
+When job analysis runs, it writes dashboard-ready reports under:
+
+```text
+artifacts/jobs/<job>/analysis/
+├── report_failed.json
+├── report_resolved.json
+├── report_task_analysis.json
+├── traj_analysis/
+│   └── score_comparison.json
+├── instance_analysis/
+│   ├── summary.json
+│   └── correlations.json
+├── instances.jsonl
+└── analysis_config.yaml
+```
+
+These files power the Evaluator dashboard: failure distributions,
+resolved-vs-unresolved comparisons, task difficulty breakdowns, and per-instance
+summaries.
+
+## Dataset, proxy, and runtime outputs
+
+Evaluator may also write supporting runtime assets:
+
+```text
+artifacts/datasets/<gold_base>/          # gold/reference task data for analysis
+artifacts/litellm/<job>/                 # generated LiteLLM proxy config
+artifacts/runtime/<agent>/               # extracted agent runtime
+artifacts/models/<model>/                # optional local checkpoint copy or mount
+```
+
+These are supporting artifacts. The scoring payload remains under
+`artifacts/jobs/<job>/`.
+
+<Callout title="Terminal block output" type="info">
+Evaluator does not hand a dataset to another block by default. Treat
+`artifacts/jobs/<job>/result.json` and `artifacts/jobs/<job>/analysis/` as the
+final evaluation record for reporting and dashboard inspection.
+</Callout>
+
+## Run history
+
+Each completed run can be archived under:
+
+```text
+artifacts/archives/run_NNN/
+├── metadata.yaml
+├── config.yaml
+└── scripts/
+```
+
+`artifacts/index.yaml` records completed, failed, and interrupted runs. Live
+progress remains under the active job directory.

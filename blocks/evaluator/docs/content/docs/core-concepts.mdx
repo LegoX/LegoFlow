@@ -41,4 +41,4 @@ Job analysis needs a **gold dataset** — per-instance reference data (`<id>/tes
 eval supports two interchangeable backends, selected by which `llm_api` block is active in `config.yaml`:
 
 - **Mode A — remote API**: point `llm_api` at a shared endpoint (e.g. a GLM-5 API). No local serving.
-- **Mode B — local checkpoint**: serve an SFT/RL output with vLLM on a GPU node (`scripts/serve_local_model.sh`) and point `llm_api` at it. See [Local Model](/docs/local-model).
+- **Mode B — local checkpoint**: serve a trained checkpoint with vLLM on a GPU node (`scripts/serve_local_model.sh`) and point `llm_api` at it. See [Local Model](/docs/local-model).

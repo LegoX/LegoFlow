@@ -2,53 +2,175 @@
 title: Getting Started
 ---
 
-Curator wraps the pinned `repos/swegen` checkout in the LegoFlow block
-layout (recorded as a gitlink under `blocks/curator/repos/swegen`). You drive
-it through the `curator-plugin` Claude Code plugin: each slash command runs its
-own preflight, confirmation, and bookkeeping, so you operate the block through
-commands rather than raw scripts.
+This page gets Curator from a fresh config to verified SWE tasks. The path is:
+fill `config.yaml`, run setup, check the block, collect PRs, create tasks, then
+open the dashboard.
 
 ## Prerequisites
 
-- **Docker** — task validation and execution run in containerized Harbor tasks.
-- **Python** — the `swegen` package installs from `repos/swegen`.
-- **GitHub tokens** — for PR collection and PR metadata lookup.
-- **OpenAI-compatible LLM endpoint** — PR evaluation and instruction generation.
-- **Claude-compatible task model** — the task-completion and verification stage.
+Before starting, make sure these are available:
 
-## Fastest start: one prompt
+- Claude Code with the Curator plugin loaded.
+- Docker, used by Harbor task validation.
+- Python, used to install and run the pinned `repos/swegen` package.
+- GitHub token(s), used to collect pull requests and read PR metadata.
+- An LLM endpoint for PR filtering, instruction generation, and task creation.
+- Optional Cloudflare credentials, only needed if you want to publish the dashboard.
 
-Launch Claude from inside `blocks/curator/` (so the block-local plugin loads),
-then describe the run in plain language. The agent fills the environment, runs
-preflight, and chains the plugins for you — you don't even need to edit
-`config.yaml`. Grab the copy-paste prompt from
-[Run Generation → The simplest way](/docs/run-generation#the-simplest-way-one-prompt).
+If the Curator slash commands are not visible in Claude Code, see
+[Q&A](/docs/qa#i-am-in-the-repository-root-but-cannot-find-the-plugin-skills).
 
-## The stages
+## Setup
 
-Whether you prompt for them or run them yourself, the pipeline is five commands:
+Most Curator issues come down to config. Once `config.yaml` is right, the block
+skills take over.
 
-- `/curator:setup` — one-time: init the submodule, build the venv, install `swegen`.
-- `/curator:check` — read-only preflight (config, tokens, a live LLM call, Docker).
-- `/curator:collect-prs` — collect GitHub PR IDs as a background job.
-- `/curator:create-tasks` — generate tasks from collected PRs and verify each.
-- `/curator:dashboard` — dataset analytics (difficulty + tags), not run progress.
+For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
+four `runtime_info.input` pieces below. For every field, see the
+<a href="/docs/reference/config-files/curator">Curator Config reference</a>.
 
-A sixth command, `/curator:run`, is a compatibility adapter that forwards to
-`/curator:create-tasks` so every block exposes the same `/<block>:run` verb.
+### LLM API Config
 
-## Configuration
+Curator uses the LLM for PR filtering, instruction writing, and task creation.
+Pick one of these two modes.
 
-Curator reads `config.yaml` before setup, checks, PR collection, and task
-generation. For a first run, focus on `runtime_info.input`: `pr_collection`
-sets the repository and PR search scope, `llm_api` points to the models used
-for PR analysis and task generation, and `languages` controls per-language
-timeouts, concurrency, and task caps. Leave `meta_info` and `runtime_info.output`
-alone unless you are changing the block contract itself. For the full file and
-field guide, see the <a href="/docs/reference/config-files/curator">Curator
-Config reference</a>.
+**Mode 1: Native Anthropic-compatible endpoint**. Use this when your provider
+already supports Anthropic Messages.
 
-## Next
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://<your-anthropic-gateway>/v1          # OpenAI-compatible endpoint\n      pr_model: claude-opus-4-6                                  # model for PR filtering/instruction generation\n      task_model: claude-opus-4-6                                # model used by the task-creation path\n      cc_provider_mode: native                                   # native | openai_proxy\n      anthropic_base_url: https://<your-anthropic-gateway>       # Anthropic-compatible endpoint, no /v1\n      cc_proxy_port: 4010                                        # ignored in native mode"}
+</ConfigSnippet>
 
-- [Run Generation](/docs/run-generation) — the full flow, per-command reference, `config.yaml` schema, and manual commands.
-- [Outputs](/docs/outputs) — PR pools, task directories, validation, manifests, logs, and resuming after moving nodes.
+**Mode 2: OpenAI-compatible model with local proxy**. Use this when your model
+only exposes an OpenAI-compatible API.
+
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-endpoint/v1              # OpenAI-compatible endpoint\n      pr_model: Qwen3.6-35B-A3B                                  # upstream model for PR filtering/instruction generation\n      task_model: claude-sonnet-4-6                               # proxy alias mapped to pr_model\n      cc_provider_mode: openai_proxy                              # start/use local LiteLLM proxy\n      anthropic_base_url: http://127.0.0.1:4010                   # local proxy URL\n      cc_proxy_port: 4010"}
+</ConfigSnippet>
+
+Never commit real API keys or endpoints to `config.yaml`. Use environment
+variables or ignored `.env` files for secrets.
+
+### PR Collection Config
+
+This is what `/curator:collect-prs` reads. Start small: one language, fewer
+repos, and conservative filters.
+
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"runtime_info:\n  input:\n    pr_collection:\n      enabled: true\n      languages: [python]             # keep one language for the first run\n      repo_num: 10                    # repos with qualifying PRs per language\n      max_prs_per_repo: 5             # candidate PR cap per repository\n      output_dir: artifacts/collected_prs\n      token_limit: 4                  # first N file/env GitHub tokens; 0 = use all\n      filters:\n        min_stars: 30                 # avoid inactive or tiny repos\n        min_merged_prs: 5             # require some PR history\n        min_language_percentage: 0.4  # repo should mostly match the target language\n        max_days_since_push: 1095     # skip stale repositories\n        min_issue_body_length: 10     # require enough issue context\n        min_files_changed: 1\n        max_files_changed: 25         # avoid huge PRs for a first run\n        max_lines_changed: 1500"}
+</ConfigSnippet>
+
+### Create Task Config
+
+This is what `/curator:create-tasks` reads. Keep concurrency and task caps low
+until one end-to-end run works.
+
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"runtime_info:\n  input:\n    languages:\n      py:\n        enabled: true\n        params:\n          timeout: 3200               # whole PR case timeout in seconds\n          cc_timeout: 2400            # Claude Code task-creation timeout\n          n_concurrent: 2             # keep small for the first run\n          max_verified_tasks: 5       # stop after N verified tasks; use \"all\" for no cap"}
+</ConfigSnippet>
+
+### GitHub Token Config
+
+Curator needs GitHub tokens for PR collection and metadata lookup. Put one
+token per line in a local text file, for example:
+
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"runtime_info:\n  input:\n    github_token: repos/swegen/gh_token.txt      # one GitHub token per line"}
+</ConfigSnippet>
+
+Now run setup:
+
+```text
+/curator:setup
+```
+
+This prepares `repos/swegen`, builds the Python environment, installs `swegen`,
+and checks that the needed environment variables are available. Re-running it is
+fine.
+
+## Check
+
+Before anything expensive, run:
+
+```text
+/curator:check
+```
+
+This is read-only. It checks config, `repos/swegen`, GitHub tokens, the LLM
+endpoint, and Docker. For exact pass conditions, see [Test Cases](/docs/test-cases).
+A healthy report should look roughly like this:
+
+```text
+Curator check
+✓ config schema
+✓ repos/swegen checkout
+✓ GitHub token(s)
+✓ LLM endpoint
+✓ Docker daemon
+
+Ready for /curator:collect-prs and /curator:create-tasks.
+```
+
+Fix required failures before continuing.
+
+## Collect PR
+
+Collect candidate PRs:
+
+```text
+/curator:collect-prs
+```
+
+This reads `runtime_info.input.pr_collection` and writes PR pools under:
+
+```text
+artifacts/collected_prs/
+```
+
+Each file contains one PR per line, such as:
+
+```text
+owner/repo:pr-123
+```
+
+For the first run, keep `languages` and `repo_num` small. Wait for collection
+to finish before creating tasks.
+
+## Create Task
+
+Turn collected PRs into verified SWE tasks:
+
+```text
+/curator:create-tasks
+```
+
+Curator validates tasks before exposing them downstream. Trust a task only after
+it appears in:
+
+```text
+artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt
+```
+
+The verified task directories live under:
+
+```text
+artifacts/swe_tasks/<lang>-cc/<task_id>/
+```
+
+For the artifact layout and handoff contract, see [Output Format](/docs/outputs).
+
+## Dashboard Visualization
+
+After tasks are generated, open the dataset dashboard:
+
+```text
+/curator:dashboard
+```
+
+The dashboard summarizes difficulty scores and semantic tags. It is not a live
+progress monitor; during generation, watch logs, `verifiable_tasks.txt`, and
+`artifacts/index.yaml`.
+
+For scoring and tagging details, see
+[Quality Rubrics](/docs/advanced-usages/quality-rubrics) and
+[Task Tagging](/docs/advanced-usages/task-tagging).

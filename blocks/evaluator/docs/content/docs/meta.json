@@ -2,10 +2,12 @@
     "pages": [
         "index",
         "getting-started",
+        "mechanism",
         "core-concepts",
         "run-jobs",
         "job-analysis",
         "local-model",
+        "outputs",
         "test-cases",
         "dashboard",
         "reference"

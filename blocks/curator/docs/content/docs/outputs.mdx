@@ -1,5 +1,5 @@
 ---
-title: Outputs
+title: Output Format
 ---
 
 Curator archives all runtime outputs under `artifacts/`. This keeps generated
@@ -44,7 +44,7 @@ owner/repo:pr-123
 
 Generation reads these fixed files through `swegen create --input-ids-file`.
 Because `swegen create` parses the input once at startup, collection and task
-generation are separate stages. See [Run Generation](/docs/run-generation) for
+generation are separate stages. See [Getting Started](/docs/getting-started) for
 the command flow.
 
 ## Step 2: Task Creation Outputs
@@ -155,7 +155,6 @@ and manifests for the actual dataset payload.
 Curator adds static difficulty metadata to `task.toml`, including
 `difficulty_score`, `difficulty_label`, `difficulty`, `category`, and `tags`.
 These fields support dataset analysis, sampling, and dashboard views. The
-scoring and tagging method is documented on the
-[Dashboard](/docs/dashboard#difficulty-and-tag-methodology) page.
-
-
+scoring and tagging methods are documented in
+[Quality Rubrics](/docs/advanced-usages/quality-rubrics) and
+[Task Tagging](/docs/advanced-usages/task-tagging).

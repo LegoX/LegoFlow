@@ -19,13 +19,14 @@ Evaluator provides:
 - **A per-job LiteLLM proxy** fronting your model API with OpenAI- and Anthropic-compatible endpoints and trajectory logging
 - **Containerized rollouts at scale** via Harbor, with configurable concurrency, retries, and timeouts
 - **Pluggable agent scaffolds** — Claude Code, OpenHands SDK, and OpenCode validated end-to-end
-- **Remote API *or* local checkpoint** evaluation — point at a shared endpoint or serve an SFT/RL output with vLLM, with no code change
+- **Remote API *or* local checkpoint** evaluation — point at a shared endpoint or serve a trained checkpoint with vLLM, with no code change
 - **Automatic post-eval job analysis** — attribution, scoring, and failure breakdowns the dashboard reads, at zero token cost by default
 - **A self-contained dashboard** for browsing jobs, analysis reports, and agent trajectories
 
 ## Where to go next
 
 - [Getting Started](/docs/getting-started) — install the dependencies and run your first benchmark
+- [Mechanism](/docs/mechanism) — see how Evaluator resolves benchmarks, starts the proxy, runs Harbor, and analyzes jobs
 - [Core Concepts](/docs/core-concepts) — benchmarks, the registry, jobs, agents, and analysis
 - [Run Jobs](/docs/run-jobs) — select a benchmark, start the proxy, and run the eval
 - [Job Analysis](/docs/job-analysis) — post-eval attribution and scoring

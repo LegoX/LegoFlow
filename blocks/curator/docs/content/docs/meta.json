@@ -2,9 +2,9 @@
   "pages": [
     "index",
     "getting-started",
-    "run-generation",
+    "advanced-usages",
+    "mechanism",
     "outputs",
-    "test-cases",
-    "dashboard"
+    "test-cases"
   ]
 }

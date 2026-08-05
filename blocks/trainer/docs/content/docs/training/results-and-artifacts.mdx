@@ -1,5 +1,5 @@
 ---
-title: Results & Artifacts
+title: Output Format
 ---
 
 A training run writes checkpoints, metrics, and logs under `artifacts/`, and records a summary back into `config.yaml`.
@@ -43,4 +43,4 @@ Each run launched through `scripts/start.sh` is archived on exit by `scripts/arc
 
 ## Handoff
 
-`runtime_info.output.checkpoint_path` is the block's primary handoff to downstream consumers (`rl`, `evaluator`). See [Inputs & Outputs](/docs/reference/io) for the full contract.
+`runtime_info.output.checkpoint_path` is the block's primary handoff to downstream consumers (`evaluator`). See [Output Format](/docs/outputs) for the full contract.

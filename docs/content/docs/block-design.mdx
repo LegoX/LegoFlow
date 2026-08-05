@@ -46,7 +46,7 @@ A vendored, pinned dependency under a block's `repos/` directory (e.g. `tracer/r
 
 ## Archive
 
-Every run is archived to `artifacts/archives/run_NNN/`: a snapshot of the config, the scripts as they were, the repo SHAs, and a `metadata.yaml` with timestamps and exit code. The EXIT trap installed by `scripts/start.sh` fires `archive_run.sh` regardless of how the run ended, so the timeline is always complete. See [Reference / Artifacts](/docs/reference/artifacts).
+Every run is archived to `artifacts/archives/run_NNN/`: a snapshot of the config, the scripts as they were, the repo SHAs, and a `metadata.yaml` with timestamps and exit code. The EXIT trap installed by `scripts/start.sh` fires `archive_run.sh` regardless of how the run ended, so the timeline is always complete. Each block's [Output Format](/docs/blocks/curator/outputs) page explains the artifacts that matter for that stage.
 
 ## Live State
 

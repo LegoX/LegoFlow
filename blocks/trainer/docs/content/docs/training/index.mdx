@@ -44,7 +44,7 @@ Parallelism uses DeepSpeed ZeRO-3 (`scripts/deepspeed/ds_z3_config.json`) — re
 
 ## Generated, not checked in
 
-The executed LLaMA-Factory YAML is **generated at runtime** from `config.yaml`, not stored as a checked-in file. This keeps the block configuration and the executed training config aligned and prevents a stale YAML from drifting away from the recorded inputs. After a successful run, `config.yaml` → `runtime_info.output` is rewritten in place with the results — see [Results & Artifacts](/docs/training/results-and-artifacts).
+The executed LLaMA-Factory YAML is **generated at runtime** from `config.yaml`, not stored as a checked-in file. This keeps the block configuration and the executed training config aligned and prevents a stale YAML from drifting away from the recorded inputs. After a successful run, `config.yaml` → `runtime_info.output` is rewritten in place with the results — see [Output Format](/docs/outputs).
 
 ## Data-only and cleanup
 

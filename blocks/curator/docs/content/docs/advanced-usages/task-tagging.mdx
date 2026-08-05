@@ -1,0 +1,67 @@
+---
+title: Task Tagging
+---
+
+This page explains how Curator assigns semantic tags to verified tasks. Tags are
+useful when you want to inspect dataset coverage, filter tasks by domain, or
+build balanced training/evaluation splits.
+
+## Tag Schema
+
+Each task receives exactly four tags:
+
+```text
+[language, area, topic, bug_class]
+```
+
+| Tag | Meaning |
+| --- | --- |
+| `language` | Primary programming language, such as `python`, `go`, or `typescript`. |
+| `area` | Broad software area: `backend`, `frontend`, `fullstack`, `cli`, `library`, or `framework`. |
+| `topic` | Focused framework, library, or technical topic, such as `fastapi`, `react`, or `async`. |
+| `bug_class` | Domain-independent failure mode, such as `missing-fallback`, `incomplete-validation`, or `wrong-default`. |
+
+The `bug_class` tag should describe the logical defect, not just the affected
+feature. This makes it easier to compare tasks across languages and projects.
+
+## How Tagging Works
+
+Curator uses the Harbor task-analysis tooling to tag verified tasks. The tagger:
+
+- reads the task instruction, patch, tests, and metadata;
+- asks an LLM for the four-tag tuple;
+- disables thinking mode so the model returns strict JSON;
+- validates the tag shape and closed `area` vocabulary;
+- retries on malformed output.
+
+Very large tasks can make a full prompt slow or unstable. The tagger handles
+this with progressive truncation: if a request fails, it retries with a shorter
+patch, instruction, and test excerpt until the request succeeds.
+
+## Where Tags Live
+
+Tags are written to each task's `task.toml`:
+
+```text
+artifacts/swe_tasks/<lang>-cc/<task_id>/task.toml
+```
+
+They are also read by the databoard for filtering and comparison.
+
+## Regenerating Tags
+
+From `blocks/curator/dashboard/`, run:
+
+```bash
+python3 ../repos/swegen/tools/tag_task_metadata.py \
+  --datasets-dir datasets --dataset all --jobs 64 --retries 3
+```
+
+Then rebuild the databoard HTML:
+
+```bash
+python3 progress_monitor_multi.py --output-html site/index.html
+```
+
+To publish the databoard, deploy `blocks/curator/dashboard/site/` to the
+`swe-databoard` Cloudflare Pages project.

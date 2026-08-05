@@ -2,9 +2,11 @@
     "pages": [
         "index",
         "getting-started",
+        "mechanism",
         "core-concepts",
         "run-jobs",
         "sft-data",
+        "outputs",
         "test-cases",
         "dashboard",
         "reference"

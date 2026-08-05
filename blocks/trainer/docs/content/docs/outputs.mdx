@@ -1,0 +1,100 @@
+---
+title: Output Format
+---
+
+Trainer archives data preparation, model checkpoints, metrics, and console logs
+under `artifacts/`. The primary downstream output is the trained checkpoint path
+recorded back into `config.yaml`.
+
+## Artifact layout
+
+The main Trainer outputs are organized as follows:
+
+```text
+artifacts/
+├── data/                               # downloaded or converted training data
+│   ├── hf_data/                        # exact files fetched from Hugging Face
+│   └── lf_data/                        # LLaMA-Factory datasets + dataset_info.json
+├── training_config/                    # generated LLaMA-Factory YAML snapshots
+├── model/                              # model checkpoints and training metrics
+│   └── <run>/
+│       ├── checkpoint-<step>/          # saved model checkpoint
+│       ├── trainer_log.jsonl           # live per-step metrics
+│       ├── trainer_state.json          # complete trainer state and log history
+│       ├── train_results.json          # final loss and runtime summary
+│       ├── all_results.json            # throughput and performance summary
+│       └── training_loss.png           # rendered loss curve
+├── logs/                               # console logs for training runs
+└── index.yaml                          # append-only run history
+```
+
+Most users should inspect `artifacts/model/<run>/` first, then use
+`config.yaml -> runtime_info.output` to find the latest checkpoint and metrics.
+
+## Data preparation outputs
+
+Prepared LF data is written under:
+
+```text
+artifacts/data/lf_data/
+├── <dataset>.json
+└── dataset_info.json
+```
+
+For Hugging Face exact-file inputs, the downloaded source is cached under
+`artifacts/data/hf_data/` before registration. Ready-made `local_lf` inputs are
+registered directly without conversion.
+
+## Generated training config
+
+Before training starts, Trainer renders the effective LLaMA-Factory YAML from
+`config.yaml` and saves it under:
+
+```text
+artifacts/training_config/
+```
+
+This snapshot helps reproduce a run without maintaining a separate hand-written
+training YAML.
+
+## Model and metric outputs
+
+Each training run writes to:
+
+```text
+artifacts/model/<run>/
+├── checkpoint-<step>/
+├── trainer_log.jsonl
+├── trainer_state.json
+├── train_results.json
+├── all_results.json
+└── training_loss.png
+```
+
+The checkpoint directory is the main model artifact. `trainer_log.jsonl` is the
+live dashboard source, while `train_results.json` and `trainer_state.json`
+summarize final loss, runtime, total steps, and training history.
+
+## Recorded config outputs
+
+After a successful run, `scripts/train.sh` updates only
+`config.yaml -> runtime_info.output`:
+
+| Output | Source |
+| --- | --- |
+| `checkpoint_path` | Latest `artifacts/model/<run>/checkpoint-<step>/` |
+| `training_metrics.final_loss` | `train_results.json` |
+| `training_metrics.train_runtime` | `train_results.json` |
+| `training_metrics.total_steps` | `trainer_state.json` |
+| `artifacts.train_results` / `train_loss_plot` / `training_log` | run output paths |
+
+<Callout title="Handing over to Evaluator" type="info">
+Evaluator consumes Trainer through `runtime_info.output.checkpoint_path`. Serve
+that checkpoint with the local model flow, then point Evaluator's
+`local_model_serving.model_path` and `llm_api.model` at the served model.
+</Callout>
+
+## Run history
+
+`artifacts/index.yaml` stores archived run entries. Use it for run history, and
+use `artifacts/model/<run>/` for the actual checkpoint and metrics payload.

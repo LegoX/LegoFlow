@@ -1,0 +1,169 @@
+---
+title: Mechanism
+---
+
+This page explains how Tracer turns verified tasks into trajectories and, when
+enabled, SFT-ready data. It follows the workflow in [Overview](/docs): task
+intake, model proxy, containerized rollout, SFT conversion, and the live board.
+
+![Tracer workflow from verified task intake to trajectories and SFT data](/figures/tracer.png)
+
+## 1. Task Intake
+
+Tracer starts from a verified task source. In `config.yaml`, this is controlled
+by `runtime_info.input.task_source`:
+
+- `local`: read Curator output, usually `../curator/artifacts/merged_swe_tasks`.
+- `huggingface`: download a compatible task dataset snapshot.
+
+The intake logic lives in `scripts/prepare_tasks.sh`. It stages Harbor task
+directories under:
+
+```text
+artifacts/tasks/<dataset>/
+```
+
+For local Curator output, Tracer looks for `verifiable_tasks.txt`. If the
+manifest exists, only listed task IDs are copied. If it is missing, Tracer
+copies every valid Harbor task directory. This is the manifest gate in the
+diagram: verified Curator tasks get through; unfinished or failed task
+candidates stay out.
+
+Tracer also keeps a consumption ledger:
+
+```text
+artifacts/processed_tasks.yaml
+```
+
+Before a new run, `scripts/start.sh` calls `scripts/resolve_exclude_tasks.py` to
+turn this ledger, plus `HARBOR_EXCLUDE_TASKS`, into Harbor
+`--exclude-task-name` flags. That gives Tracer exactly-once behavior for normal
+runs: completed or retired tasks are not rolled out again by accident.
+
+## 2. Model Proxy
+
+Tracer does not point Harbor directly at the upstream model API. Each run gets a
+fresh LiteLLM proxy configured from `runtime_info.input.llm_api` and
+`runtime_info.input.litellm_proxy`.
+
+`scripts/start.sh` renders a job-specific config here:
+
+```text
+artifacts/litellm/<job>/litellm_config_tracer.yaml
+```
+
+It also copies Harbor's `trajectory_logger.py` into the same directory. The
+generated proxy exposes both OpenAI-compatible and Anthropic-compatible paths,
+normalizes model traffic, and attaches the trajectory logger so every turn is
+captured.
+
+The important handoff into the agent container is:
+
+```text
+ANTHROPIC_BASE_URL=http://<host>:<proxy-port>
+ANTHROPIC_API_KEY=<litellm master key>
+ANTHROPIC_MODEL=<configured model>
+```
+
+This is why Tracer can run different agent scaffolds while preserving a common
+trajectory format.
+
+## 3. Containerized Rollout
+
+After the proxy is ready, `scripts/start.sh` builds the Harbor command from
+`runtime_info.input.harbor_job` and `runtime_info.input.agent`.
+
+The generated command is effectively:
+
+```text
+uv run harbor run \
+  --path artifacts/tasks/<dataset> \
+  --jobs-dir artifacts/jobs \
+  --agent-import-path <agent class> \
+  --job-name <dataset-agent-version-model-timestamp> \
+  --model <model> \
+  --n-concurrent <N> \
+  --timeout-multiplier <factor> \
+  --max-retries <N>
+```
+
+The agent runtime is mounted into each task container. For the default
+`custom-claude-code` scaffold, Tracer derives the agent import path and
+Anthropic protocol automatically. For other scaffolds, the config must keep the
+agent name, import path, protocol, version, runtime image, runtime mount, and
+SFT conversion scaffold aligned.
+
+Each task produces a Harbor trial directory:
+
+```text
+artifacts/jobs/<job>/<task>/
+├── result.json
+└── agent/
+    └── litellm-trajectory.jsonl
+```
+
+`result.json` records the verified reward, and `litellm-trajectory.jsonl`
+contains the full turn-by-turn model and agent trace.
+
+## 4. SFT Conversion
+
+SFT conversion is optional. It runs automatically after Harbor only when
+`runtime_info.input.sft_conversion.enabled` is `true`, or manually through:
+
+```text
+bash scripts/convert_trajectories.sh --job <job>
+```
+
+The converter reads trajectories under `artifacts/jobs/<job>/`, selects the
+configured scaffold, and calls the matching `swe_data_process` module:
+
+| Scaffold | Converter module |
+| --- | --- |
+| `claude_code` | `swe_data_process.claudecode_opencode.convert_cc_to_im` |
+| `open_code` | `swe_data_process.claudecode_opencode.convert_oc_to_im` |
+| `openhands_sdk` | `swe_data_process.openhands.convert_openhands_sdk_to_im` |
+| `terminus2` | `swe_data_process.terminus2.convert_terminus2_to_im` |
+
+The output lands under:
+
+```text
+artifacts/sft_data/<job>/
+├── im.jsonl
+├── lf.json
+├── lf.stats.json
+└── .convert_sig.json
+```
+
+`im.jsonl` keeps intermediate records and quality facts. `lf.json` is the
+LLaMA-Factory ShareGPT-style file Trainer can consume directly.
+
+## 5. Live Board
+
+The dashboard reads Tracer artifacts rather than a separate database. Its main
+inputs are:
+
+```text
+artifacts/index.yaml
+artifacts/jobs/<job>/result.json
+artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+artifacts/sft_data/<job>/lf.stats.json
+artifacts/sft_data/<job>/im.jsonl
+```
+
+That is why dashboard refreshes can be cheap: the board scans the files Tracer
+already writes, then renders job status, rewards, errors, trajectories, and SFT
+conversion statistics.
+
+## Command Gates
+
+The mechanism above is exposed through the Tracer plugin skills:
+
+| Command | What it gates |
+| --- | --- |
+| `/tracer:setup` | Initializes pinned repos and builds Harbor, LiteLLM, and `swe_data_process` environments. |
+| `/tracer:check` | Runs dry-run checks for config, repos, task source, endpoint, agent runtime, and Docker. |
+| `/tracer:run` | Prepares exclusions, starts the LiteLLM proxy, launches Harbor, archives the run, and optionally converts SFT data. |
+| `/tracer:dashboard` | Reads rollout and SFT artifacts to render progress and quality views. |
+
+For the shortest runnable path, see [Getting Started](/docs/getting-started).
+For the exact files written by each stage, see [Output Format](/docs/outputs).

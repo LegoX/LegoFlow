@@ -26,7 +26,7 @@ after Harbor exits. Its EXIT trap stops the proxy and archives the run.
 
 - [Prepare Tasks](/docs/run-jobs/prepare-tasks) — manifest-filtered task copy, the processed-tasks ledger, and the exclude list
 - [LiteLLM Proxy](/docs/run-jobs/litellm-proxy) — the per-job proxy in front of your model API
-- [Results & Artifacts](/docs/run-jobs/results-and-artifacts) — where trajectories, results, and archives land
+- [Output Format](/docs/outputs) — where trajectories, results, and archives land
 
 <Callout title="Stop the proxy when done" type="warn">
 If trajectory inference finishes but the LiteLLM proxy is still running, stop the proxy process started for this job. Do not kill unrelated LiteLLM processes on the host.

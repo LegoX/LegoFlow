@@ -11,14 +11,9 @@ separate solved attempts from unsolved ones.
 Curator is the block that turns real GitHub pull requests into verified SWE
 coding tasks. It collects candidate PRs, filters them with LLM-assisted checks,
 generates task instructions, builds [Harbor](https://www.harborframework.com/)
-compatible task directories, and validates each task before Tracer consumes it.
+compatible task directories, and validates each task. The overall design of Curator is as follows.
 
 ![Curator workflow from pull request discovery to verified task publication](/figures/curator.png)
-
-Curator carries each pull request through discovery, task preparation, parallel
-assembly, and NOP/Oracle verification before publishing it in the trusted task
-manifest. The plugin skills on the left guide setup, checks, generation, and
-dashboard inspection throughout the workflow.
 
 With Curator, you can:
 
@@ -27,11 +22,12 @@ With Curator, you can:
 - Produce Harbor-compatible task directories with Docker environments and tests.
 - Run NOP and Oracle validation so downstream blocks receive verifiable tasks.
 - Save trusted manifests, batch state, and resume metadata for long-running data construction.
-- Attach difficulty scores and task metadata for dashboard analysis.
+- Attach difficulty scores and task metadata for further analysis.
 
 ## Where to go next
 
 - [Getting Started](/docs/getting-started) - set up the block and run a smoke generation
-- [Run Generation](/docs/run-generation) - run per-language generation scripts safely
-- [Outputs](/docs/outputs) - understand PR pools, task directories, manifests, logs, and state packages
-- [Dashboard](/docs/dashboard) - compare dataset difficulty and tag composition
+- [Mechanism](/docs/mechanism) - understand how Curator discovers, builds, verifies, and publishes tasks
+- [Output Format](/docs/outputs) - understand PR pools, task directories, manifests, logs, and state packages
+- [Quality Rubrics](/docs/advanced-usages/quality-rubrics) - compare task difficulty and dataset quality
+- [Task Tagging](/docs/advanced-usages/task-tagging) - understand task tags and metadata

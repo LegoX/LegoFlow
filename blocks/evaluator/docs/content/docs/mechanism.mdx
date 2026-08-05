@@ -1,0 +1,147 @@
+---
+title: Mechanism
+---
+
+This page explains how Evaluator turns a benchmark choice and a model endpoint
+into Harbor jobs, per-task trajectories, scores, and dashboard-ready analysis.
+
+## 1. Resolve The Benchmark
+
+Evaluator reads the benchmark from `runtime_info.input.task_source`:
+
+```yaml
+runtime_info:
+  input:
+    task_source:
+      provider: harbor_registry
+      dataset_name: swebench-verified
+      version: "1.0"
+      registry_path: repos/harbor/registry.json
+```
+
+Unlike Tracer, Evaluator does not read tasks staged by Curator. It asks Harbor
+to resolve a registered benchmark from `registry.json`, then launches a job over
+that task set.
+
+When `task_source.no_hack: true`, `scripts/start.sh` first calls
+`scripts/prepare_nohack.sh` and remaps `swebench-verified` to a local hardened
+registry. This keeps the agent's network access focused on the LiteLLM endpoint
+while leaving the verifier side intact.
+
+## 2. Check The Model Endpoint
+
+`/evaluator:run` enters through `scripts/start.sh`. Before Harbor starts, the
+script runs:
+
+```bash
+bash scripts/dryrun.sh
+bash scripts/probe_llm_completion.sh
+```
+
+These checks catch the common launch blockers early: missing Harbor checkout,
+bad config values, unavailable Docker/runtime dependencies, or an LLM endpoint
+that cannot complete a tiny request.
+
+Evaluator can point at either a remote API or a local checkpoint served by
+vLLM. In both cases, the runtime contract is the same: `llm_api` describes the
+model name, base URL, key, protocol, and token-cost metadata.
+
+## 3. Start The Per-Job LiteLLM Proxy
+
+Every evaluation job gets its own LiteLLM proxy config under:
+
+```text
+artifacts/litellm/<job_name>/
+├── litellm_config_evaluator.yaml
+└── trajectory_logger.py
+```
+
+`scripts/start.sh` writes the config from the template in
+`runtime_info.input.litellm_proxy.config_template`, injects the upstream model
+settings, and enables Harbor's trajectory logger callback.
+
+The proxy exposes both OpenAI- and Anthropic-compatible URLs to the agent
+container. That is how Claude Code, OpenHands SDK, and OpenCode can share the
+same evaluation shell while keeping their native API expectations.
+
+## 4. Build The Harbor Command
+
+Evaluator then creates one timestamped job directory:
+
+```text
+artifacts/jobs/<job_name>/
+└── config.yaml
+```
+
+The copied `config.yaml` is a snapshot for that job, so later analysis can
+replay the original settings even if the block config changes.
+
+The generated Harbor command has this shape:
+
+```bash
+uv run harbor run \
+  --dataset <dataset>@<version> \
+  --registry-path <registry.json> \
+  --jobs-dir artifacts/jobs \
+  --agent-import-path <custom agent> \
+  --job-name <job_name> \
+  --model <model_name> \
+  --n-concurrent <N>
+```
+
+Agent-specific flags are added from `runtime_info.input.agent`. For example,
+OpenHands SDK receives `max_iterations`, LiteLLM OpenAI URL, API key, and the
+mounted runtime path; Claude Code receives the Anthropic-compatible LiteLLM URL.
+
+## 5. Run Trials And Log Trajectories
+
+Harbor creates one trial directory per benchmark task:
+
+```text
+artifacts/jobs/<job_name>/<task_id>/
+├── agent/
+│   └── litellm-trajectory.jsonl
+├── verifier/
+│   └── report.json
+└── result.json
+```
+
+The agent trajectory is captured by the LiteLLM callback. The verifier report
+and `result.json` hold the pass/fail outcome and reward signal for that task.
+
+Concurrency, task cap, retries, and timeout multiplier come from
+`runtime_info.input.harbor_job`, which makes smoke runs and full benchmark runs
+use the same command path.
+
+## 6. Analyze The Job
+
+After Harbor finishes, `scripts/start.sh` calls `scripts/analyze_job.sh` unless
+`runtime_info.input.job_analysis.enabled` is `false`.
+
+The analysis script builds:
+
+```text
+artifacts/jobs/<job_name>/analysis/
+├── analysis_config.yaml
+├── report.json
+├── instances.jsonl
+├── traj_analysis/
+└── instance_analysis/
+```
+
+If the gold benchmark dataset is missing, analysis can generate it with
+`scripts/prepare_dataset.sh`. That script runs the Harbor benchmark adapter and
+then tags tasks for dashboard breakdowns. The analysis itself is non-fatal: a
+dashboard analysis failure does not erase or invalidate the raw evaluation job.
+
+## Command Gates
+
+| Command | What it gates |
+| --- | --- |
+| `/evaluator:setup` | Installs Harbor, LiteLLM, and runtime dependencies. |
+| `/evaluator:check` | Validates benchmark selection, LLM endpoint, runtime image/path, and Harbor settings. |
+| `/evaluator:run` | Starts the proxy, launches Harbor, writes trajectories/results, and runs post-eval analysis. |
+| `/evaluator:dashboard` | Opens the dashboard over completed jobs and analysis reports. |
+
+For the shortest runnable path, see [Getting Started](/docs/getting-started).
+For the exact files written by each stage, see [Output Format](/docs/outputs).

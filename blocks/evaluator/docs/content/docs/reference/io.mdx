@@ -39,4 +39,4 @@ eval declares its handoff contract in `config.yaml → runtime_info.output`:
 | --- | --- | --- | --- |
 | `eval_results_dir` | `artifacts/jobs/` | `artifacts/jobs/<job>/<task>/{agent,verifier}/` | none (terminal block) |
 
-The per-task trajectory is `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`, the aggregate summary is `artifacts/jobs/<job>/result.json`, and post-eval analysis lands under `artifacts/jobs/<job>/analysis/`. See [Results & Artifacts](/docs/run-jobs/results-and-artifacts) for the full layout.
+The per-task trajectory is `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`, the aggregate summary is `artifacts/jobs/<job>/result.json`, and post-eval analysis lands under `artifacts/jobs/<job>/analysis/`. See [Output Format](/docs/outputs) for the full layout.
