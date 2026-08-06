@@ -1,7 +1,6 @@
 {
-  "title": "Advanced Receipe",
+  "title": "Advanced Guides",
   "pages": [
-    "index",
     "configuration",
     "quality-rubrics",
     "task-tagging"
