@@ -171,12 +171,19 @@ artifacts/sft_data/<job>/
 For the full conversion flow and supported scaffold keys, see
 [Trajectory Conversion](/docs/blocks/tracer/advanced-usages/trajectory-conversion) and [Supported Scaffolds](/docs/blocks/tracer/advanced-usages/scaffolds).
 
-This is the usual handoff to Trainer:
+## Hand Over to Trainer
 
-```text
-blocks/tracer/artifacts/sft_data/<job>/lf.json
-  -> blocks/trainer/artifacts/... training input
-```
+For most training runs, hand over the converted LF file rather than raw
+trajectories. After `/tracer:run`, choose the finished job directory under
+`artifacts/sft_data/` and point Trainer to its `lf.json`:
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    source:\n      type: local_lf                              # use Tracer's converted LF file\n      lf_path: ../tracer/artifacts/sft_data/<job>/lf.json # replace <job> with the real Tracer job\n\n    conversion:\n      data_name: my_tracer_dataset                # dataset key registered in LLaMA-Factory\n      max_instances: 0                            # 0 = train on all examples in lf.json"}
+</ConfigSnippet>
+
+Use `source.type: local_lf` when Tracer already produced `lf.json`. Use
+`harbor_job` only when you intentionally want Trainer to convert a raw Tracer
+job itself.
 
 ## Dashboard Visualization
 

@@ -160,7 +160,7 @@ The verified task directories live under:
 artifacts/swe_tasks/<lang>-cc/<task_id>/
 ```
 
-## Merge Tasks For Tracer
+## Hand Over to Tracer
 
 After task creation, Curator should publish a single merged task directory for
 Tracer. During `/curator:create-tasks`, the block starts an aggregator that
@@ -176,17 +176,18 @@ artifacts/merged_swe_tasks/
 This is the directory handed to Tracer. In Tracer's default local-source setup,
 `task_source.dataset_name` points to:
 
-```text
-../curator/artifacts/merged_swe_tasks
-```
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    task_source:\n      provider: local                                # read tasks from a local Curator output\n      dataset_name: ../curator/artifacts/merged_swe_tasks # merged verified task directory\n      split: train"}
+</ConfigSnippet>
+
+The important field is `dataset_name`: it should point to Curator's merged
+task directory, not to a per-language `artifacts/swe_tasks/<lang>-cc/` folder.
+Tracer will stage this source into its own `artifacts/tasks/<dataset>/`
+directory before rollout.
 
 If you want to refresh the merge after an interrupted or manual run, ask the
 Curator skill to merge verified tasks again. The merge is safe to repeat: it
 copies only tasks listed in each language's `verifiable_tasks.txt`.
-
-Tracer should consume `artifacts/merged_swe_tasks/`, not each per-language
-`artifacts/swe_tasks/<lang>-cc/` directory. The merged manifest only lists tasks
-that passed validation.
 
 For the artifact layout and handoff contract, see [Output Format](/docs/blocks/curator/outputs).
 

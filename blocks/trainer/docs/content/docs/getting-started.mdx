@@ -179,6 +179,21 @@ The generated LLaMA-Factory YAML is saved under `artifacts/training_config/`;
 you do not need to maintain a separate checked-in training YAML. For the full
 artifact layout and checkpoint handoff, see [Output Format](/docs/blocks/trainer/outputs).
 
+## Hand Over to Evaluator
+
+Trainer writes the model under `artifacts/model/<run>/` and records the latest
+checkpoint in `runtime_info.output.checkpoint_path`. To evaluate that checkpoint,
+serve it with vLLM and point Evaluator at the served model:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    local_model_serving:\n      model_path: ../trainer/artifacts/model/<run> # Trainer checkpoint directory to serve\n      model_name: Qwen3.5-35B-A3B                 # name exposed by the vLLM server\n\n    llm_api:\n      api_key: dummy-key                          # must match the vLLM server key\n      api_base_url: http://<GPU_NODE_IP>:8000/v1  # vLLM OpenAI-compatible endpoint\n      model: openai/Qwen3.5-35B-A3B               # openai/<model_name> exposed by vLLM"}
+</ConfigSnippet>
+
+The handoff has two parts: `model_path` chooses the Trainer checkpoint, and
+`llm_api` tells Evaluator how to call it. Keep `model_name` and
+`llm_api.model` aligned so the LiteLLM proxy routes requests to the right
+served checkpoint.
+
 ## Dashboard Visualization
 
 After a run starts, open the dashboard:

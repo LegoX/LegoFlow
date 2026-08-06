@@ -149,6 +149,18 @@ For benchmark selection and proxy details, see
 [LiteLLM Proxy](/docs/blocks/evaluator/advanced-usages/litellm-proxy). For the
 full artifact layout, see [Output Format](/docs/blocks/evaluator/outputs).
 
+## Hand Over
+
+Evaluator is the terminal block in the current LegoFlow pipeline, so there is
+no next block to configure. Its outputs are the final benchmark artifacts:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  output:\n    eval_results_dir:\n      path: artifacts/jobs                         # benchmark jobs, trajectories, verifier reports, and analysis\n      results_summary_format: artifacts/jobs/<job>/result.json\n      trajectory_format: artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"}
+</ConfigSnippet>
+
+Use these paths for reporting, dashboard review, or any custom analysis you add
+after evaluation.
+
 ## Dashboard Visualization
 
 After an Evaluator run starts or finishes, open the dashboard:
