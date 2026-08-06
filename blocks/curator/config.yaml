@@ -53,17 +53,20 @@ runtime_info:
         max_files_changed: 25
         max_lines_changed: 1500
 
-    # How to fill: docs/content/docs/run-generation.mdx -> LLM API Configuration
+    # Private values are read from environment variables when possible:
+    #   OPENAI_API_KEY / ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN
+    #   OPENAI_API_BASE_URL / ANTHROPIC_BASE_URL
+    # Keep tracked config.yaml free of real keys and private endpoints.
     llm_api:
-      api_key: human
-      api_base_url: human
-      pr_model: Qwen3.6-35B-A3B
-      task_model: claude-sonnet-4-6
+      api_key: ""                             # set via env; never commit a real key
+      api_base_url: ""                        # set via env; keep private gateway URLs out of git
+      pr_model: Qwen3.6-35B-A3B               # model for PR filtering/instruction generation
+      task_model: claude-sonnet-4-6           # Claude Code-visible alias for task creation
       cc_provider_mode: openai_proxy          # native | openai_proxy
       anthropic_base_url: http://127.0.0.1:4010
       cc_proxy_port: 4010
 
-    github_token: ""    # supplied via GITHUB_TOKENS/GITHUB_TOKEN or gh_token.txt
+    github_token: ""    # supplied via GITHUB_TOKENS/GITHUB_TOKEN or gh_token.txt; never commit a token
 
     # max_verified_tasks: N = stop after N verified tasks; "all" = no cap, consume all collected PRs.
     languages:
@@ -91,4 +94,3 @@ runtime_info:
     logs:
       path: artifacts/logs/swegen-create
       description: "Per-language create logs: cc_<lang>_March.txt"
-

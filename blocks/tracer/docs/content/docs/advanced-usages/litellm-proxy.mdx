@@ -1,0 +1,103 @@
+---
+title: LiteLLM Proxy
+---
+
+Tracer does not point agents directly at the upstream model API. Each job starts
+its own LiteLLM proxy, and Harbor agents talk to that local proxy instead.
+
+## Why Tracer Uses A Proxy
+
+| Need | What the proxy does |
+| --- | --- |
+| **Protocol bridging** | Exposes the same upstream model through OpenAI- and Anthropic-compatible endpoints, so different scaffolds can keep their native API expectations. |
+| **Trajectory capture** | Loads Harbor's `trajectory_logger.py` callback so every model request and response is written to `litellm-trajectory.jsonl`. |
+| **Per-job isolation** | Writes one config under `artifacts/litellm/<job>/`, keeping routes, logs, and callbacks tied to a single rollout job. |
+| **Cost metadata** | Carries token-cost fields from `llm_api`, so downstream dashboards can estimate inference cost when available. |
+
+## Config Inputs
+
+The upstream endpoint lives under `runtime_info.input.llm_api`:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      model: openai/Qwen3.6-35B-A3B\n      protocols: [openai_compatible, anthropic_compatible]\n      served_via: per_job_litellm_proxy\n      input_cost_per_token: 0.0000021\n      output_cost_per_token: 0.0000084"}
+</ConfigSnippet>
+
+The local proxy settings live under `runtime_info.input.litellm_proxy`:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    litellm_proxy:\n      config_template: scripts/serve_llm/litellm_config.example.yaml\n      port: 4003\n      master_key: dummy-key-cf"}
+</ConfigSnippet>
+
+The `master_key` is the local proxy credential. The upstream `api_key` is real
+and should never be committed.
+
+## Runtime Lifecycle
+
+During `/tracer:run`, `scripts/start.sh` handles the proxy lifecycle:
+
+1. Read `llm_api` and `litellm_proxy` from `config.yaml`.
+2. Render a job-specific LiteLLM config into
+   `artifacts/litellm/<job>/litellm_config_tracer.yaml`.
+3. Copy Harbor's `trajectory_logger.py` into the same artifact directory.
+4. Start LiteLLM from the dedicated `artifacts/env/litellm-venv` environment.
+5. Wait until the configured port is reachable.
+6. Launch Harbor with agent environment variables pointed at the proxy URL.
+7. Stop the proxy in the EXIT trap, then archive the run.
+
+The generated proxy config normalizes `api_base_url` to LiteLLM's `api_base`,
+derives a served model alias from the model name, enables prompt-caching and
+responses-API pre-call checks, drops unsupported params, and registers the
+trajectory logger callback.
+
+## From Logs To Trajectories
+
+The proxy turns model traffic into trajectory data while the rollout is running.
+Harbor gives each task a target file and sends it to LiteLLM through the
+`x-trajectory-output-path` request header:
+
+```text
+artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+```
+
+`trajectory_logger.py` reads that header inside the LiteLLM callback. Before the
+request reaches the upstream model, the pre-call hook normalizes a few runtime
+details: it applies the default `top_p`, honors the optional
+`x-harbor-temperature` override, routes repeated calls for the same task to a
+stable backend alias when sticky routing is configured, and removes empty text
+blocks that can break some Claude-compatible requests.
+
+After each model call, the callback appends one JSON line to the task's
+`litellm-trajectory.jsonl`. A successful record includes:
+
+| Field | Meaning |
+| --- | --- |
+| `session_id` | The task or instance id used to group calls from one rollout. |
+| `request_time`, `timestamp`, `duration_ms` | When the call happened and how long it took. |
+| `request_body` | The normalized OpenAI Chat Completions request: messages, tools, model, token limits, temperature, and extra params. |
+| `response_body` | The normalized model reply: assistant text, reasoning content, tool calls, finish reason, and usage fields when available. |
+| `usage` | Prompt/completion token counts and optional LiteLLM cost. |
+
+Failed model calls are also written, with `success: false` and a redacted
+`failure` object. This keeps timeout, rate-limit, and provider errors visible
+in the same stream instead of hiding them in a separate log.
+
+The JSONL file is therefore the raw, ordered event stream for one rollout. The
+conversion step reads these LiteLLM records, applies the scaffold-specific
+converter, rebuilds the conversation as user, assistant, and tool messages, and
+then exports the shared IM/LF training formats.
+
+## Debugging Signals
+
+If a rollout cannot start, inspect these surfaces first:
+
+- `/tracer:check` for config, environment, port, Docker, and endpoint gates;
+- `artifacts/logs/tracer_<timestamp>.log` for proxy startup and Harbor launch;
+- `artifacts/litellm/<job>/logs/` for LiteLLM-side failures;
+- `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl` for captured
+  request/response streams after a task begins.
+
+<Callout title="Per-job process" type="warn">
+The proxy is job-scoped. If a hard interruption leaves it running, stop only the
+process for that job and port. Do not kill unrelated LiteLLM processes on a
+shared machine.
+</Callout>

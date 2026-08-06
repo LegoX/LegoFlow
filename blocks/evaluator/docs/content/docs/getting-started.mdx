@@ -2,120 +2,163 @@
 title: Getting Started
 ---
 
-This page shows how to run Evaluator from a benchmark config to completed
-scores, trajectories, and analysis reports. Evaluator wraps a pinned
-[Harbor](https://github.com/SWE-Lego/harbor) checkout, so most steps are about
-getting that runtime in place; there is no task staging step because the
-benchmark is resolved from Harbor's registry.
+This page gets Evaluator from a benchmark config to completed scores,
+trajectories, and analysis reports. The path is: fill `config.yaml`, run setup,
+check the block, launch the benchmark, then open the dashboard.
 
-## Recommended: operate via the Claude plugin
+You can read it as a concrete walkthrough: follow the example config snippets
+and commands in order, and you will see how an Evaluator run is put together.
 
-The block ships a Claude Code plugin (`evaluator-plugin`) that drives the whole
-lifecycle through slash commands. This is the recommended way to run Evaluator —
-each command performs the preflight, confirmation, and bookkeeping steps for
-you. Launch Claude from inside `blocks/evaluator/` so the block-local plugin
-loads, then:
-
-```text
-/evaluator:setup          # update repo, build envs, fill config
-/evaluator:check          # dryrun preflight: config, repo, envs, LLM endpoint, registry
-/evaluator:run            # LiteLLM proxy + Harbor benchmark execution + analysis
-/evaluator:dashboard      # browse jobs, reports, and trajectories
-```
-
-## Configuration
-
-Evaluator reads `config.yaml` before setup, checks, benchmark runs, post-run
-analysis, and dashboard inspection. For a first run, focus on
-`runtime_info.input`: `task_source` selects the benchmark, `llm_api` points to
-the model endpoint, `local_model_serving` describes a local checkpoint when
-used, `harbor_job` controls run scale, `agent` selects the scaffold, and
-`job_analysis` controls optional tagging. Edit `config.yaml`, not the scripts.
-For the full file and field guide, see the <a href="/docs/reference/config-files/evaluator">Evaluator
-Config reference</a>.
-
-The rest of this page documents the underlying commands the plugin runs, for
-manual operation or debugging.
+Evaluator wraps pinned Harbor and LiteLLM environments. It does not stage
+Curator tasks; it resolves benchmark tasks from Harbor's registry.
 
 ## Prerequisites
 
-- **Docker** — Harbor rolls each task out inside a container, so a working Docker daemon is required on the run host (Evaluator is CPU-only, but every task runs in a container).
-- **[uv](https://docs.astral.sh/uv/)** — used to build the Harbor environment and run analysis; also required by `start.sh` (`uv run harbor …`).
-- **Python 3.13** — required by the LiteLLM venv.
-- **PyYAML in system `python3`** — every `scripts/*.sh` uses inline `python3 -` config readers. Run `pip install pyyaml` if you see `ERROR: PyYAML is required`.
-- **An OpenAI- or Anthropic-compatible LLM endpoint** — the model the agent will call, fronted by a per-job LiteLLM proxy. This can be a remote API or a local checkpoint served with vLLM (see [Local Model](/docs/local-model)).
+Before starting, make sure these are available:
 
-<Callout title="Where to run" type="info">
-Evaluator runs on the node declared in `config.yaml` (`meta_info.resources.ip`; the checked-in default is `local`). For a configured remote hostname/IP, connect using SSH keys or `~/.ssh/config`. Run scripts inside a `tmux` session (e.g. `evaluator`) so a job survives shell disconnects, and never commit host credentials.
-</Callout>
+- Claude Code with the Evaluator plugin loaded.
+- Docker, used by Harbor to run benchmark task containers.
+- `uv`, Python, and Python 3.13 for the Harbor and LiteLLM environments.
+- An OpenAI- or Anthropic-compatible model endpoint.
+- A benchmark registered in Harbor's `registry.json`.
+- Optional vLLM serving on a GPU node, only when using a local checkpoint.
 
-<Callout title="Keep private runtime state out of releases" type="warn">
-`artifacts/` and `.claude/settings.local.json` are intentionally ignored because they may contain config snapshots, trajectories, host paths, endpoints, and credentials. A Git checkout excludes them, but a direct copy or archive of an existing worktree does not; remove those paths before packaging the directory.
-</Callout>
+If the Evaluator slash commands are not visible in Claude Code, see
+[Q&A](/docs/qa#i-am-in-the-repository-root-but-cannot-find-the-plugin-skills).
 
-## 1. Update the managed repo
+## Setup
 
-Evaluator depends on one local-only repository, `harbor`, pinned to a specific commit in `config.yaml`. Clone or update it to the pinned ref:
+Most Evaluator issues come from the benchmark name, model endpoint, agent
+runtime, or proxy port. Once `config.yaml` is right, the skills take over.
 
-```bash
-bash scripts/update_repos.sh
-```
+For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
+`runtime_info.input` pieces below. For every field, see the
+<a href="/docs/blocks/evaluator/advanced-usages/configuration">Configuration Guide</a>.
 
-The script clones/fetches, checks out the pinned `commit` detached, initializes submodules, and sets the worktree read-only (`readonly: true`). It refuses to update a worktree with local modifications. The block reads `registry.json` from this checkout.
+### Benchmark Config
 
-## 2. Build the environments
-
-Evaluator has **no `setup_*_env.sh` helper scripts** (unlike Tracer). The two environments are built with explicit `uv` commands — `scripts/dryrun.sh` also prints these when an env is missing. There is no `swe_data_process` env, because Evaluator does not convert trajectories.
-
-```bash
-# Harbor uv env — build from inside the read-only repo, to a path OUTSIDE it
-( cd repos/harbor && UV_PROJECT_ENVIRONMENT="$PWD/../../artifacts/env/harbor-uv" uv sync --all-extras )
-
-# LiteLLM venv — Python 3.13, pinned litellm
-uv venv artifacts/env/litellm-venv --python 3.13
-uv pip install --python artifacts/env/litellm-venv/bin/python 'litellm[proxy]==1.83.14'
-```
-
-The Harbor env path **must be outside `repos/harbor`** while the repo is read-only — `artifacts/env/harbor-uv` already satisfies this.
-
-## 3. Pick a benchmark
-
-Evaluator is registry-driven and stages no tasks locally. Select a benchmark by editing `config.yaml → runtime_info.input.task_source`:
+Evaluator is registry-driven. Pick the benchmark and version first:
 
 <ConfigSnippet title="blocks/evaluator/config.yaml">
-{"task_source:\n  provider: harbor_registry\n  dataset_name: swebench-verified   # or any supported benchmark\n  version: \"1.0\"\n  registry_path: repos/harbor/registry.json\n  no_hack: false                    # true = swebench-verified with agent egress allowlist"}
+{"runtime_info:\n  input:\n    task_source:\n      provider: harbor_registry\n      dataset_name: swebench-verified          # e.g. swebench-verified, swebench_multilingual, swebenchpro\n      version: \"1.0\"\n      registry_path: repos/harbor/registry.json\n      no_hack: true                            # hardened swebench-verified mode"}
 </ConfigSnippet>
 
-See [Select Benchmark](/docs/run-jobs/select-benchmark) for the full table and the `no_hack` option. For a fast first run, pick a `-100` subset (e.g. `swebench-verified-100`) or set `harbor_job.n_tasks` to a small integer.
+For a fast first run, either choose a small benchmark variant when available or
+set `harbor_job.n_tasks` below.
 
-## 4. Validate the config
+### LLM API Config
 
-Run the static dry-run and then the live completion probe. Together they
-validate the config, Harbor repo state, both environments, registry entry, and
-the real upstream completion path:
+Evaluator starts a per-job LiteLLM proxy in front of your model. For a remote
+API, point `llm_api` at the shared endpoint:
 
-```bash
-bash scripts/dryrun.sh
-bash scripts/probe_llm_completion.sh
-```
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      model: openai/Qwen3.5-35B-A3B             # openai/<served-model-name>\n      protocols: [openai_compatible, anthropic_compatible]\n      served_via: per_job_litellm_proxy\n      input_cost_per_token: 0.0\n      output_cost_per_token: 0.0\n\n    litellm_proxy:\n      port: 4101\n      master_key: dummy-key-cf"}
+</ConfigSnippet>
 
-Fix anything it reports before launching a job.
+For a local checkpoint, serve it with vLLM on a GPU node and make `llm_api`
+point at that vLLM endpoint:
 
-## 5. Launch a job
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    local_model_serving:\n      model_path: artifacts/models/Qwen3.5-35B-A3B\n      model_name: Qwen3.5-35B-A3B\n\n    llm_api:\n      api_key: dummy-key                         # must match the vLLM server key\n      api_base_url: http://<GPU_NODE_IP>:8000/v1\n      model: openai/Qwen3.5-35B-A3B"}
+</ConfigSnippet>
 
-Only after both gates pass, launch the Evaluator. `start.sh` repeats them, generates a per-job LiteLLM config, starts the proxy on the configured port, builds the Harbor command (`--dataset <name>@<version> --registry-path repos/harbor/registry.json`, plus any `--exclude-task-name` flags), runs the job, and then runs post-eval job analysis:
+See [Local Model Evaluation](/docs/blocks/evaluator/advanced-usages/local-model-evaluation)
+for the vLLM serving steps.
 
-```bash
-bash scripts/start.sh
-```
+### Harbor Job Config
 
-## 6. Inspect results
+Keep a first run small:
 
-Each rollout writes a trajectory and per-task evaluation artifacts to:
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    harbor_job:\n      jobs_dir: artifacts/jobs\n      n_concurrent: 4                           # keep small for the first run\n      n_tasks: 10                               # null = full benchmark\n      max_retries: 2\n      timeout_multiplier: 1"}
+</ConfigSnippet>
+
+### Agent Config
+
+Choose one scaffold and keep its runtime image or host path aligned:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    agent:\n      name: custom-openhands-sdk                # custom-openhands-sdk | custom-claude-code | custom-opencode\n      version: 1.33.0\n      runtime_image: docker.io/jierun/c-oh-sdk-1.33.0:v0.1\n      runtime_host_path: artifacts/runtime/openhands-sdk\n      max_turns: 200\n      temperature: 1.0"}
+</ConfigSnippet>
+
+### Job Analysis Config
+
+Post-eval analysis creates the artifacts used by the dashboard. Leave it on for
+normal runs:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    job_analysis:\n      enabled: true\n      tag_llm:\n        base_url: \"\"                            # empty = reuse llm_api\n        model: \"\"\n        api_key: \"\""}
+</ConfigSnippet>
+
+Now run setup:
 
 ```text
-artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
-artifacts/jobs/<job>/<task>/verifier/          # per-task verdict, scoring, test logs
+/evaluator:setup
 ```
 
-Post-eval analysis lands under `artifacts/jobs/<job>/analysis/`. For a visual view, open the [dashboard](/docs/dashboard).
+This prepares the pinned Harbor checkout, builds the Harbor and LiteLLM
+environments, and checks the local runtime paths. Re-running it is fine.
+
+## Check
+
+Before launching the benchmark, run:
+
+```text
+/evaluator:check
+```
+
+This is read-only. It checks config, Harbor repo state, environments, benchmark
+registry, LLM endpoint, proxy port, Docker, and agent runtime. For exact pass
+conditions, see [Test Cases](/docs/test-cases).
+
+Fix required failures before continuing. If you are using a local checkpoint,
+also make sure the vLLM endpoint is already serving before the check.
+
+## Run Evaluator
+
+Launch the benchmark:
+
+```text
+/evaluator:run
+```
+
+Evaluator starts the per-job LiteLLM proxy, builds the Harbor command from
+`config.yaml`, runs the selected benchmark, captures trajectories and verifier
+results, then runs post-eval analysis.
+
+Behind the command, the pipeline is:
+
+```text
+STEP 0  Resolve benchmark      Harbor registry -> task set
+STEP 1  Start model proxy      LiteLLM per-job proxy -> trajectory logger
+STEP 2  Run Harbor trials      task containers -> rewards and trajectories
+STEP 3  Analyze job            failure reports -> dashboard artifacts
+```
+
+The main outputs are:
+
+```text
+artifacts/jobs/<job>/result.json
+artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+artifacts/jobs/<job>/<task>/verifier/report.json
+artifacts/jobs/<job>/analysis/
+```
+
+For benchmark selection and proxy details, see
+[Select Benchmark](/docs/blocks/evaluator/advanced-usages/select-benchmark) and
+[LiteLLM Proxy](/docs/blocks/evaluator/advanced-usages/litellm-proxy). For the
+full artifact layout, see [Output Format](/docs/outputs).
+
+## Dashboard Visualization
+
+After an Evaluator run starts or finishes, open the dashboard:
+
+```text
+/evaluator:dashboard
+```
+
+The dashboard helps browse jobs, benchmark scores, trajectories, verifier
+reports, and post-eval analysis. It reads `artifacts/jobs/` directly, so keep
+the job directory and run log around when debugging.
+
+For the internal Evaluator mechanism, see [Design](/docs/mechanism).

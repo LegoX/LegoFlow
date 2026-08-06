@@ -1,6 +1,8 @@
 {
-  "title": "Advanced Usages",
+  "title": "Advanced Receipe",
   "pages": [
+    "index",
+    "configuration",
     "quality-rubrics",
     "task-tagging"
   ]

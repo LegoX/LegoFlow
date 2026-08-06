@@ -30,6 +30,7 @@ artifacts/
 
 Most users should inspect `artifacts/model/<run>/` first, then use
 `config.yaml -> runtime_info.output` to find the latest checkpoint and metrics.
+Run timestamps recorded in `artifacts/index.yaml` use UTC.
 
 ## Data preparation outputs
 
@@ -98,3 +99,5 @@ that checkpoint with the local model flow, then point Evaluator's
 
 `artifacts/index.yaml` stores archived run entries. Use it for run history, and
 use `artifacts/model/<run>/` for the actual checkpoint and metrics payload.
+During an active run, the dashboard reads `artifacts/model/<run>/trainer_log.jsonl`
+directly; there is no separate status file to refresh.

@@ -1,0 +1,10 @@
+{
+  "title": "Advanced Receipe",
+  "pages": [
+    "configuration",
+    "trajectory-conversion",
+    "scaffolds",
+    "scoring",
+    "litellm-proxy"
+  ]
+}

@@ -1,5 +1,5 @@
 ---
-title: Mechanism
+title: Design
 ---
 
 This page explains how Evaluator turns a benchmark choice and a model endpoint
@@ -92,6 +92,19 @@ uv run harbor run \
 Agent-specific flags are added from `runtime_info.input.agent`. For example,
 OpenHands SDK receives `max_iterations`, LiteLLM OpenAI URL, API key, and the
 mounted runtime path; Claude Code receives the Anthropic-compatible LiteLLM URL.
+
+Evaluator validates these coding-agent scaffolds end to end:
+
+| Agent | Protocol | Runtime image |
+| --- | --- | --- |
+| `custom-claude-code` | Anthropic | `docker.io/jierun/c-cc-2.1.118:v0.1` |
+| `custom-openhands-sdk` | OpenAI | `docker.io/jierun/c-oh-sdk-1.14.0:v0.5` |
+| `custom-opencode` | OpenAI-compatible | `docker.io/yjiangcm/c-oc-1.14.22:v0.2` |
+
+When switching scaffolds, change `agent.name`, `version`, `runtime_image`, and
+`runtime_host_path` together. `runtime_host_path` should contain the extracted
+agent runtime tree; bind-mounting that runtime is more reliable than installing
+the agent inside every task container.
 
 ## 5. Run Trials And Log Trajectories
 

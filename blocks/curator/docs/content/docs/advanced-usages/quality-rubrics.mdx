@@ -4,7 +4,7 @@ title: Quality Rubrics
 
 This page explains how Curator scores task quality after tasks are generated.
 Use it when you want to compare datasets, sample by difficulty, or understand
-why one task looks harder than another.
+why one task looks harder than another. 
 
 ## Difficulty Score
 
@@ -57,10 +57,10 @@ or evaluation dataset may intentionally keep more `hard` cases.
 
 ## Regenerating Scores
 
-From `blocks/curator/dashboard/`, regenerate task metadata with:
+From `blocks/curator/`, regenerate task metadata with:
 
 ```bash
-python3 ../repos/swegen/tools/tag_task_metadata.py \
+python3 ./repos/swegen/tools/tag_task_metadata.py \
   --datasets-dir datasets --dataset all --jobs 64 --retries 3
 ```
 

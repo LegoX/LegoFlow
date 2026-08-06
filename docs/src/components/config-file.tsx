@@ -50,21 +50,47 @@ function highlightYaml(line: string) {
   );
 }
 
-function ConfigCodeBlock({ content, title }: { content: string; title: string }) {
+function ConfigCodeBlock({
+  content,
+  title,
+  collapsible = false,
+}: {
+  content: string;
+  title: string;
+  collapsible?: boolean;
+}) {
+  const code = (
+    <pre className="overflow-x-auto p-4 text-sm leading-6">
+      <code>
+        {content.split('\n').map((line, index) => (
+          <span key={index} className="block">
+            {highlightYaml(line)}
+          </span>
+        ))}
+      </code>
+    </pre>
+  );
+
+  if (collapsible) {
+    return (
+      <details
+        open
+        className="not-prose my-5 overflow-hidden rounded-lg border border-fd-border bg-fd-muted"
+      >
+        <summary className="cursor-pointer border-b border-fd-border px-4 py-2 text-sm font-medium text-fd-muted-foreground">
+          {title}
+        </summary>
+        {code}
+      </details>
+    );
+  }
+
   return (
     <figure className="not-prose my-5 overflow-hidden rounded-lg border border-fd-border bg-fd-muted">
       <figcaption className="border-b border-fd-border px-4 py-2 text-sm font-medium text-fd-muted-foreground">
         {title}
       </figcaption>
-      <pre className="overflow-x-auto p-4 text-sm leading-6">
-        <code>
-          {content.split('\n').map((line, index) => (
-            <span key={index} className="block">
-              {highlightYaml(line)}
-            </span>
-          ))}
-        </code>
-      </pre>
+      {code}
     </figure>
   );
 }
@@ -75,7 +101,7 @@ export function ConfigFile({ file }: ConfigFileProps) {
   const relativePath = path.relative(repoRoot, absolutePath);
   const content = fs.readFileSync(absolutePath, 'utf8');
 
-  return <ConfigCodeBlock content={content} title={relativePath} />;
+  return <ConfigCodeBlock content={content} title={relativePath} collapsible />;
 }
 
 export function ConfigSnippet({ children, title = 'config.yaml' }: ConfigSnippetProps) {

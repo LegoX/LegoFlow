@@ -12,7 +12,7 @@ meta_info:
     to: {}   # nothing currently declares a dependency on trainer's outputs
 
   resources:
-    ip: null
+    ip: local
     pwd: null
     directory: null
     public_storage: null
@@ -43,12 +43,12 @@ runtime_info:
     source:
       type: hf_lf                 # harbor_job | hf_lf | local_lf
       scaffold: openhands-sdk     # harbor_job only: openhands-sdk | claude-code | open-code | terminus2
-      job_dir: ""                 # harbor_job only: Harbor job dir (wired from tracer)
+      job_dir: ../tracer/artifacts/jobs/<job>  # harbor_job only: replace <job> with a real Tracer job
       hf_hub_url: "SWE-Lego/samples_for_llama_factory_sft"
       hf_file_name: "jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json"  # empty = full dataset config
       hf_subset: ""               # ignored when hf_file_name is set
       hf_split: "train"
-      lf_path: ""                 # local_lf only: path to an LF json
+      lf_path: ../tracer/artifacts/sft_data/<job>/lf.json  # local_lf only: replace <job> with a converted Tracer job
 
     conversion:                   # harbor_job only; for hf_lf/local_lf just data_name + max_instances apply
       max_instances: 0            # 0 = all samples; >0 = random subsample via num_samples

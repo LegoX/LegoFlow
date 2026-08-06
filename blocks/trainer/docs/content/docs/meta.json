@@ -3,13 +3,9 @@
         "index",
         "getting-started",
         "mechanism",
-        "examples",
-        "core-concepts",
-        "data-pipeline",
-        "training",
+        "advanced-usages",
         "outputs",
         "test-cases",
-        "dashboard",
-        "reference"
+        "dashboard"
     ]
 }

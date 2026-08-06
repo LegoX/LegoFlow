@@ -2,13 +2,10 @@
     "pages": [
         "index",
         "getting-started",
+        "advanced-usages",
         "mechanism",
-        "core-concepts",
-        "run-jobs",
-        "sft-data",
         "outputs",
         "test-cases",
-        "dashboard",
-        "reference"
+        "dashboard"
     ]
 }

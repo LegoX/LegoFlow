@@ -6,6 +6,9 @@ This page gets Curator from a fresh config to verified SWE tasks. The path is:
 fill `config.yaml`, run setup, check the block, collect PRs, create tasks, then
 open the dashboard.
 
+You can read it as a concrete walkthrough: follow the example config snippets
+and commands in order, and you will see how a Curator run is put together.
+
 ## Prerequisites
 
 Before starting, make sure these are available:
@@ -27,7 +30,7 @@ skills take over.
 
 For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
 four `runtime_info.input` pieces below. For every field, see the
-<a href="/docs/reference/config-files/curator">Curator Config reference</a>.
+<a href="/docs/blocks/curator/advanced-usages/configuration">Configuration Guide</a>.
 
 ### LLM API Config
 
@@ -156,6 +159,34 @@ The verified task directories live under:
 ```text
 artifacts/swe_tasks/<lang>-cc/<task_id>/
 ```
+
+## Merge Tasks For Tracer
+
+After task creation, Curator should publish a single merged task directory for
+Tracer. During `/curator:create-tasks`, the block starts an aggregator that
+keeps this directory updated as verified tasks appear:
+
+```text
+artifacts/merged_swe_tasks/
+├── <task_id>/
+├── <task_id>/
+└── verifiable_tasks.txt
+```
+
+This is the directory handed to Tracer. In Tracer's default local-source setup,
+`task_source.dataset_name` points to:
+
+```text
+../curator/artifacts/merged_swe_tasks
+```
+
+If you want to refresh the merge after an interrupted or manual run, ask the
+Curator skill to merge verified tasks again. The merge is safe to repeat: it
+copies only tasks listed in each language's `verifiable_tasks.txt`.
+
+Tracer should consume `artifacts/merged_swe_tasks/`, not each per-language
+`artifacts/swe_tasks/<lang>-cc/` directory. The merged manifest only lists tasks
+that passed validation.
 
 For the artifact layout and handoff contract, see [Output Format](/docs/outputs).
 

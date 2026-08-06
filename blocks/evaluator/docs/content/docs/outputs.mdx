@@ -34,6 +34,10 @@ Most users should start with `artifacts/jobs/<job>/result.json` for scores,
 then inspect task-level `agent/` and `verifier/` directories when a result needs
 debugging.
 
+`config.yaml` is configuration only; do not treat it as live status. During a
+run, watch `artifacts/jobs/<job>/` and the dashboard. After a run exits,
+`artifacts/index.yaml` records completed, failed, and interrupted archives.
+
 ## Evaluation job outputs
 
 Each benchmark run writes one job directory:

@@ -36,6 +36,8 @@ artifacts/
 
 Most users should start with `artifacts/jobs/<job>/`, then inspect
 `artifacts/sft_data/<job>/` only when training-data conversion is enabled.
+The dashboard reads the same artifact tree, so these files are also the easiest
+way to debug a run without learning the internal scripts first.
 
 ## Task preparation outputs
 
@@ -110,3 +112,7 @@ artifacts/archives/run_NNN/
 
 `artifacts/index.yaml` records the run timeline. Use it for history; use the
 active job directory for live rollout details.
+
+The launch script writes an archive entry after success, failure, or
+interruption, so interrupted jobs still leave a run snapshot for later
+inspection.

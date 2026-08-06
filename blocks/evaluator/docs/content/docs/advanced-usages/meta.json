@@ -1,0 +1,10 @@
+{
+  "title": "Advanced Receipe",
+  "pages": [
+    "configuration",
+    "select-benchmark",
+    "litellm-proxy",
+    "local-model-evaluation",
+    "job-analysis"
+  ]
+}

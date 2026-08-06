@@ -11,7 +11,7 @@ pages:
 - `Overview`: what the block does, why it exists, and the high-level workflow
   figure.
 - `Getting Started`: the shortest path to run the block once.
-- `Mechanism`: how the block works internally, following the Overview figure.
+- `Design`: how the block works internally, following the Overview figure.
 - `Output Format`: what lands under `artifacts/`, in directory order.
 - `Test Cases`: what checks exist, smoke runs, and pass conditions.
 - `Dashboard`: what the dashboard reads and how users should interpret it.
@@ -49,6 +49,25 @@ fill config.yaml
 Do not start Getting Started with long implementation details. Keep advanced
 manual commands out unless they are needed for a first run.
 
+For Tracer, Trainer, and Evaluator, mirror the Curator rhythm:
+
+- Start with one sentence about what the page gets the user to produce, plus a
+  compact command path.
+- Treat plugin skills as the main interface. Mention manual scripts only as
+  debugging escape hatches or links to deeper pages.
+- In `Setup`, explain `config.yaml` before running `/<block>:setup`. Show the
+  smallest useful snippets for the first run:
+  - Tracer: LLM endpoint, task source, rollout scale, agent scaffold, optional
+    SFT conversion.
+  - Trainer: data source, model, training output/hyperparameters, GPU count,
+    optional credentials.
+  - Evaluator: benchmark source, LLM endpoint or served local checkpoint,
+    rollout scale, agent runtime, optional analysis.
+- After setup, keep the path simple: `/<block>:check`, then `/<block>:run`, then
+  `/<block>:dashboard`.
+- Link out to `Design`, `Output Format`, `Test Cases`, and deeper workflow
+  pages instead of re-explaining every script inline.
+
 ## Config Guidance
 
 When introducing `config.yaml`, show real YAML snippets instead of a broad
@@ -69,9 +88,9 @@ For Curator:
 Make snippets structurally correct, including the parent path such as
 `runtime_info.input`. Keep comments short and aligned.
 
-## Mechanism Pattern
+## Design Pattern
 
-Mechanism should follow the Overview diagram, not the file tree. It explains
+Design should follow the Overview diagram, not the file tree. It explains
 how the block works internally after the user knows what it does.
 
 For Curator, the mechanism sequence is:
@@ -125,7 +144,7 @@ This shared Q&A page should live above `Reference` in the root docs sidebar.
 - Write like a human guide, not a schema manual.
 - Prefer short paragraphs.
 - Put exact details in YAML snippets, directory trees, and links to Reference.
-- Keep Getting Started concise; move deeper mechanics to Mechanism.
+- Keep Getting Started concise; move deeper mechanics to Design.
 - Use `Output Format`, not `Outputs` or `Results & Artifacts`, for block output
   pages.
 - Remove leftover `@codex`, `[xxx]`, and TODO comments before building.

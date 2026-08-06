@@ -1,0 +1,68 @@
+---
+title: Dashboard
+---
+
+Curator's dashboard is a dataset analytics view for finished task collections.
+Use `/curator:dashboard` after PR collection and task creation to inspect task
+quality before handing the dataset to Tracer.
+
+## What It Monitors
+
+| Monitor | What it tells you |
+| --- | --- |
+| **Dataset size** | How many verified tasks are available in each curated dataset. |
+| **Language coverage** | Whether the dataset is balanced across Python, JavaScript, TypeScript, Go, C, C++, Java, Rust, and other supported languages. |
+| **Difficulty mix** | Easy/medium/hard buckets and numeric difficulty scores. |
+| **Semantic tags** | The four-tag schema `[language, area, topic, bug_class]`, useful for filtering and balancing. |
+| **Dataset comparison** | How Curator-generated tasks compare with other SWE datasets under the same tag and difficulty rubric. |
+| **Task drilldown** | Per-task metadata, repository identity, problem statement, patch/test signals, difficulty, and tags. |
+
+This dashboard is not a live generation monitor. While Curator is still
+creating tasks, watch the logs, `verifiable_tasks.txt`, and `artifacts/index.yaml`.
+
+## Local Mode
+
+Use local mode when you are developing or reviewing private datasets:
+
+```text
+/curator:dashboard
+```
+
+Ask for a local preview when you want to inspect the generated databoard on the
+current machine. The skill regenerates the dashboard from the current dataset
+metadata and points you to the local preview file or page.
+
+Local mode is the default choice for private task data because it keeps problem
+statements, repository names, patches, and tags on your machine.
+
+## Cloudflare Public Mode
+
+Use Cloudflare mode when you want a public databoard URL for sharing:
+
+```text
+/curator:dashboard publish to Cloudflare
+```
+
+Before using public mode, configure Cloudflare credentials outside tracked
+source files:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- the target Pages project, for example `swe-databoard`
+
+The API token needs permission to edit Cloudflare Pages for the account. Do not
+publish private task content unless the dataset is intended to be public.
+
+## When To Use It
+
+Use `/curator:dashboard` when you want to answer questions like:
+
+- Did Curator produce enough verified tasks?
+- Which languages or task areas are underrepresented?
+- Are there too many easy or too many hard tasks?
+- Which bug classes dominate the current dataset?
+- Is the dataset ready for Tracer rollout?
+
+For the scoring rubric and tag schema, see
+[Quality Rubrics](/docs/advanced-usages/quality-rubrics) and
+[Task Tagging](/docs/advanced-usages/task-tagging).

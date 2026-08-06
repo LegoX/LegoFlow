@@ -2,48 +2,77 @@
 title: Dashboard
 ---
 
-eval ships a self-contained web dashboard for browsing Harbor job results, the analysis reports produced after each eval, and step-by-step agent trajectories. It is a stdlib-only Python server with a vanilla-JS frontend — no build step — styled after the LLaMA-Factory webui.
+Evaluator's dashboard is the benchmark result and analysis browser. Use
+`/evaluator:dashboard` to inspect jobs, scores, failure modes, post-eval
+analysis, and step-by-step trajectories.
 
-Live board: **[harbor-dashboard.pages.dev](https://harbor-dashboard.pages.dev/)**
+## What It Monitors
 
-## What it shows
-
-| View | Content |
+| Monitor | What it tells you |
 | --- | --- |
-| **Overview** | aggregate stats across all jobs — scaffolds, datasets, models, resolve rates |
-| **All jobs** | sortable table of jobs with key metrics |
-| **Single job** | analysis reports, primary failure distributions, task breakdowns, trial-level detail |
-| **Compare** | side-by-side comparison of multiple jobs (shift-click jobs to add to the compare set) |
-| **Trajectory viewer** | step-by-step agent execution — message / tool-call / observation inspection |
+| **Benchmark jobs** | Which dataset, model endpoint, agent scaffold, and config profile each job used. |
+| **Resolve rate** | Overall pass/fail reward summaries and per-job success rates. |
+| **Failure patterns** | Error types, verifier failures, unresolved categories, empty patches, and timeouts. |
+| **Task breakdowns** | Performance by language, area, topic, bug class, difficulty, and benchmark slice. |
+| **Agent trajectories** | Messages, tool calls, observations, file edits, and final answers for each task. |
+| **Job comparison** | Side-by-side comparison across models, checkpoints, scaffolds, or benchmark runs. |
+| **Analysis artifacts** | Reports produced after a job finishes, including instance and trajectory analysis. |
 
-It reads the analysis artifacts written under each `artifacts/jobs/<job>/analysis/` (see [Job Analysis](/docs/job-analysis)), so run an eval — and let analysis complete — before expecting populated reports.
+For the richest view, let post-eval job analysis finish first. Raw jobs still
+appear, but failure attribution and task breakdowns will be limited.
 
-## Run it locally
+## Local Mode
 
-```bash
-cd dashboard
-python3 server.py --port 8092
+Use local mode for normal evaluation debugging:
+
+```text
+/evaluator:dashboard
 ```
 
-Open `http://localhost:8092`. The server auto-discovers jobs under the block's jobs directory (customizable with `--jobs-dir`). All dependencies are stdlib + a Chart.js CDN.
+In local mode, the skill summarizes the latest or selected job and can open the
+local web dashboard. This keeps trajectories, verifier logs, model outputs, and
+benchmark run metadata on the machine where the job was produced.
 
-When operating through the eval plugin, `/evaluator:dashboard` covers launching the dashboard and surfacing per-job task counts and accuracy.
+Ask for local mode when you want to:
 
-## Publish to Cloudflare Pages
+- check current benchmark accuracy;
+- inspect unresolved tasks;
+- compare two evaluation jobs;
+- browse a task trajectory step by step;
+- regenerate or inspect post-eval analysis for an old job.
 
-For long-term public access, `dashboard/export_static.py` exports the dynamic dashboard into static JSON/HTML, and `dashboard/run_cloudflare_pages_sync.sh` loops the export and deploys `site/` to Cloudflare Pages. The public site stays interactive (search, sort, filter, compare, charts, trajectory browsing) but updates only after each export/deploy cycle.
+## Cloudflare Public Mode
 
-```bash
-cd dashboard
-bash run_cloudflare_pages_sync.sh
+Use Cloudflare mode when you want to share a public benchmark dashboard:
+
+```text
+/evaluator:dashboard publish to Cloudflare
 ```
 
-The free **chunk mode** (the default) groups trajectories into size-limited chunk files so opening a job downloads nothing until you click a trial — no Cloudflare R2 required. An optional R2 mode serves each trajectory on demand for the fastest per-trial loads. See `dashboard/README.md` for credentials, overrides, and the R2 setup.
+Before using public mode, configure Cloudflare credentials outside tracked
+source files:
 
-<Callout title="Token scope" type="info">
-`wrangler pages deploy` needs the account-level `Cloudflare Pages: Edit` permission. None of the built-in templates map to it exactly, so create a Custom Token with `Account` → `Cloudflare Pages` → `Edit`. The Account ID is separate from the token.
-</Callout>
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- the target Pages project, for example the Harbor/Evaluator dashboard project
 
-## Temporary sharing
+The API token needs permission to edit Cloudflare Pages for the account. If you
+want public trajectory browsing at scale, configure the dashboard's chunked or
+R2-backed trajectory mode before publishing.
 
-For quick debugging of the live dynamic server, `dashboard/share_pinggy.sh` opens an auto-reconnecting Pinggy tunnel to the locally-running dashboard. Free Pinggy URLs are temporary and can change on reconnect — prefer Cloudflare Pages for anything long-lived.
+Cloudflare mode is helpful for reporting and team review, but publish only data
+that is safe to expose: job configs, trajectories, verifier reports, and model
+outputs can contain sensitive details.
+
+## When To Use It
+
+Use `/evaluator:dashboard` when you want to answer questions like:
+
+- What is the model's benchmark resolve rate?
+- Which task categories are failing?
+- Did failures come from verifier errors, agent behavior, endpoint issues, or timeouts?
+- How does this checkpoint compare with another model or scaffold?
+- Which trajectories should be inspected manually?
+
+For Evaluator mechanics, see [Design](/docs/mechanism). For artifact
+contracts, see [Output Format](/docs/outputs).

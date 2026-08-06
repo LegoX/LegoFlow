@@ -61,11 +61,8 @@ docs/
 │   ├── meta.json          #   top-level page order
 │   ├── index.mdx          #   motivation / landing
 │   ├── getting-started.mdx
-│   ├── core-concepts.mdx
-│   ├── run-jobs/          #   prepare tasks, LiteLLM proxy, results & artifacts
-│   ├── sft-data/          #   conversion pipeline, scaffolds, scoring
-│   ├── dashboard.mdx
-│   └── reference/         #   io, status, config-variants
+│   ├── advanced-usages/   #   conversion, scaffolds, scoring, LiteLLM proxy
+│   └── dashboard.mdx
 ├── src/                   # app shell (docs route, layouts, source loader)
 ├── public/_redirects      # Cloudflare Pages root redirect (/ -> /docs)
 ├── next.config.mjs        # createMDX() + output: 'export'
@@ -79,6 +76,6 @@ docs/
    `description` frontmatter.
 2. Add its slug to the folder's `meta.json` `pages` array to place it in the
    sidebar order.
-3. Link to other pages by their route, e.g. `/docs/run-jobs/prepare-tasks`.
+3. Link to other pages by their route, e.g. `/docs/advanced-usages/litellm-proxy`.
 
 Build outputs (`node_modules/`, `.next/`, `.source/`, `out/`) are gitignored.

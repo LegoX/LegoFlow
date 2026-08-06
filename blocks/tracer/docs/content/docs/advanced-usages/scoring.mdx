@@ -1,0 +1,76 @@
+---
+title: Trajectory Scoring
+---
+
+Not every successful rollout makes useful training data. Tracer's conversion
+path can attach quality scores to IM records and carry those scores into LF
+metadata and dashboard statistics.
+
+## TQS V2 Rule Scoring
+
+The deterministic scorer runs during conversion. It uses a fail-soft weighted
+aggregate: when a component lacks enough evidence, that component is omitted
+from both the numerator and denominator instead of forcing a bad score.
+
+```text
+composite_score =
+  sum(weight * transformed_component) / sum(active_weights)
+```
+
+The active components are:
+
+| Component | Weight | Signal |
+| --- | ---: | --- |
+| `SUB` | 0.33 | Submission completeness, including whether the trajectory ends cleanly. |
+| `STP` | 0.27 | Step efficiency from assistant-turn count. |
+| `TVR` | 0.23 | Test-writing, test execution, and late successful verification. |
+| `FEC` | 0.10 | File-edit concentration, aggregated as `FEC^5`. |
+| `DPI` | 0.07 | Dirty-pattern penalty for truncation, no successful write, loops, and repeated errors, aggregated as `DPI^3`. |
+
+The scorer also emits diagnostic-only components with zero aggregate weight,
+such as observation entropy collapse, path stability, tool-transition entropy,
+and successful-change position. These diagnostics are useful for analysis even
+when they do not change the composite score.
+
+## Main-Agent And Subagent Records
+
+Main-agent records receive `_score`; subagent records are retained with
+`_score: null`. Keep them bundled when filtering an instance. Dropping subagent
+records independently can break the conversation context that made the main
+trajectory meaningful.
+
+## Optional LLM Scoring
+
+Two optional LLM-as-judge paths can add semantic scoring when the extra endpoint
+cost is justified:
+
+| Scorer | Output | Use when |
+| --- | --- | --- |
+| Fixed checklist | `llm_composite_score` plus category scores for problem understanding, solution quality, reasoning, verification, and efficiency. | You want stable semantic ratings across many examples. |
+| Dynamic checklist | `llm_checklist_isr`, `llm_checklist_csr`, category CSR values, and generated checklist evidence. | You want task-specific checks derived from the request, tools, and repo policies. |
+
+The optional scores are independent of TQS V2. Use them for deeper curation,
+not as a required part of the first rollout.
+
+## Where Scores Appear
+
+Scores are attached to:
+
+```text
+artifacts/sft_data/<job>/im.jsonl
+artifacts/sft_data/<job>/lf.json
+artifacts/sft_data/<job>/lf.stats.json
+```
+
+The dashboard reads these files to show score distributions, low-score
+examples, tool-error patterns, and segment-level comparisons.
+
+## Practical Use
+
+Use scoring to:
+
+- filter extremely low-quality successful rollouts before training;
+- build curricula from easier to harder trajectories;
+- compare agent scaffolds beyond pass/fail reward;
+- spot repeated tool or reasoning failures that pass tests but make poor SFT
+  examples.

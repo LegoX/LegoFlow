@@ -75,7 +75,7 @@ Every block has a `config.yaml`. Think of it as the checklist LegoFlow reads bef
 </ConfigSnippet>
 
 
-The Cloudflare here are used primarily for dashboard publishing, and Docker account used for authenticated image pulls in tracer (pull SWE tasks) and evaluator (pull images of test cases). The detailed instructions to infill `config.yaml` can be found in [The Config Files](/docs/reference/config-files/).
+The Cloudflare here are used primarily for dashboard publishing, and Docker account used for authenticated image pulls in tracer (pull SWE tasks) and evaluator (pull images of test cases). Each block explains its own `config.yaml` in its Configuration Guide.
 
 In the following, we recommend walking through one independent run for each block before launching the cascaded root pipeline.
 
@@ -93,6 +93,23 @@ Each block's own Getting Started page explains how to fill its `config.yaml`,
 which credentials it expects, and what outputs it writes. Keep those details in
 the block pages so this root guide can stay focused on the overall workflow.
 
+## Handoff Map
+
+LegoFlow connects blocks through artifacts. Treat this as the high-level map;
+use each block's Getting Started and Configuration Guide for the exact
+`config.yaml` fields.
+
+```text
+Curator artifacts/merged_swe_tasks/
+  -> Tracer task_source.dataset_name
+
+Tracer artifacts/sft_data/<job>/lf.json
+  -> Trainer source.lf_path with source.type: local_lf
+
+Trainer runtime_info.output.checkpoint_path
+  -> Evaluator local_model_serving.model_path, then serve with vLLM
+```
+
 ### Step 1: Task Curation
 
 Curator turns source signals such as GitHub PRs, issues, and online forums into
@@ -107,15 +124,8 @@ when you are ready to configure and run this block.
 | 4 | `/curator:create-tasks` | Generate and validate SWE tasks from the collected candidates. |
 | * | `/curator:dashboard` | Inspect curated task statistics, filters, and dataset quality signals. |
 
-**Connect Curator to Tracer.**
-
-<ConfigSnippet title="blocks/curator/config.yaml">
-{"meta_info:\n  dependencies:\n    to:\n      merged_tasks_dir:                         # Curator publishes one merged task directory\n        to: tracer.input.task_source.dataset_name # Tracer reads it as its local task source\n        when: {tracer.input.task_source.provider: local} # Only used when Tracer is in local mode\n\nruntime_info:\n  output:\n    merged_tasks_dir:\n      path: artifacts/merged_swe_tasks          # {task_id}/instruction.md, environment/, solution/, tests/"}
-</ConfigSnippet>
-
-<ConfigSnippet title="blocks/tracer/config.yaml">
-{"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:                 # Fill Tracer's task_source.dataset_name\n        from: curator.output.merged_tasks_dir   # with Curator's merged task output\n        when: {task_source.provider: local}     # so Tracer rolls out Curator-generated tasks\n\nruntime_info:\n  input:\n    task_source:\n      provider: local                           # Read tasks from the local filesystem\n      dataset_name: ../curator/artifacts/merged_swe_tasks # Resolved Curator task directory"}
-</ConfigSnippet>
+Config and handoff details live in [Curator Getting Started](/docs/blocks/curator/getting-started)
+and [Curator Configuration Guide](/docs/blocks/curator/advanced-usages/configuration).
 
 ### Step 2: Trajectory Rollout
 
@@ -131,15 +141,9 @@ to configure and run rollouts.
 | 3 | `/tracer:run` | Launch trajectory rollout jobs for the configured tasks and agent scaffold. |
 | * | `/tracer:dashboard` | Monitor rollout jobs, trajectory status, archives, and SFT conversion progress. |
 
-**Connect Tracer to Trainer.**
-
-<ConfigSnippet title="blocks/tracer/config.yaml">
-{"meta_info:\n  dependencies:\n    to:\n      sft_data_dir:                             # Tracer publishes converted training data\n        to: trainer.input.source.lf_path        # Trainer reads it as a local LF file\n        when: {trainer.input.source.type: local_lf} # Only used after swe_data_process conversion\n\nruntime_info:\n  input:\n    sft_conversion:\n      enabled: true                             # Run swe_data_process after rollout\n      out_dir: artifacts/sft_data               # Store converted LF JSON files here\n  output:\n    sft_data_dir:\n      path: artifacts/sft_data                  # <job>/lf.json after swe_data_process"}
-</ConfigSnippet>
-
-<ConfigSnippet title="blocks/trainer/config.yaml">
-{"meta_info:\n  dependencies:\n    from:\n      source.lf_path:                           # Fill Trainer's LF input path\n        from: tracer.output.sft_data_dir        # with Tracer's converted SFT/LF output\n        when: {source.type: local_lf}           # so Trainer skips raw-trajectory conversion\n\nruntime_info:\n  input:\n    source:\n      type: local_lf                            # Consume converted LF data directly\n      lf_path: ../tracer/artifacts/sft_data/<job>/lf.json # Concrete LF file for training"}
-</ConfigSnippet>
+Config and handoff details live in [Tracer Getting Started](/docs/blocks/tracer/getting-started),
+[Tracer Configuration Guide](/docs/blocks/tracer/advanced-usages/configuration),
+and [Tracer Output Format](/docs/blocks/tracer/outputs).
 
 ### Step 3: Training
 
@@ -154,15 +158,9 @@ when you are ready to choose data, models, GPUs, and training settings.
 | 3 | `/trainer:run` | Convert trajectories and launch the configured training job. |
 | * | `/trainer:dashboard` | Inspect training status, metrics, artifacts, and run comparisons. |
 
-**Connect Trainer to Evaluator.**
-
-<ConfigSnippet title="blocks/trainer/config.yaml">
-{"meta_info:\n  dependencies:\n    to:\n      checkpoint_path:                          # Trainer publishes the trained checkpoint\n        to: evaluator.input.local_model_serving.model_path # Evaluator serves/evaluates this model\n\nruntime_info:\n  output:\n    checkpoint_path:\n      value: artifacts/model/<run>/checkpoint-<step> # Written after training finishes"}
-</ConfigSnippet>
-
-<ConfigSnippet title="blocks/evaluator/config.yaml">
-{"meta_info:\n  dependencies:\n    from:\n      local_model_serving.model_path:           # Fill Evaluator's local model path\n        from: trainer.output.checkpoint_path    # with Trainer's latest checkpoint output\n\nruntime_info:\n  input:\n    local_model_serving:\n      model_path: artifacts/models/<served-checkpoint> # Copy or mount Trainer checkpoint here\n      model_name: <served-model-name>           # Name exposed by the local serving endpoint\n\n    llm_api:\n      api_base_url: http://<vllm-host>:<port>/v1 # OpenAI-compatible endpoint for evaluation\n      model: \"openai/<served-model-name>\"       # Must match the served model name above"}
-</ConfigSnippet>
+Config and handoff details live in [Trainer Getting Started](/docs/blocks/trainer/getting-started),
+[Trainer Configuration Guide](/docs/blocks/trainer/advanced-usages/configuration),
+and [Trainer Output Format](/docs/blocks/trainer/outputs).
 
 ### Step 4: Evaluation
 
@@ -176,6 +174,11 @@ when you are ready to select benchmarks and model endpoints.
 | 2 | `/evaluator:check` | Validate benchmark registry, runtime image, agent bind mount, proxy port, and completion readiness. |
 | 3 | `/evaluator:run` | Run evaluation jobs for the configured model or checkpoint. |
 | * | `/evaluator:dashboard` | Inspect evaluation jobs, scores, trajectories, and analysis reports. |
+
+Config and local-checkpoint serving details live in
+[Evaluator Getting Started](/docs/blocks/evaluator/getting-started),
+[Evaluator Configuration Guide](/docs/blocks/evaluator/advanced-usages/configuration),
+and [Local Model Evaluation](/docs/blocks/evaluator/advanced-usages/local-model-evaluation).
 
 
 ---
@@ -247,5 +250,5 @@ data, and whether the result is ready for the next stage. Open a block dashboard
 
 For example, `/curator:dashboard` helps inspect task quality and filtering
 signals, while `/tracer:dashboard` helps monitor rollout jobs, trajectory
-status, and conversion progress. See [Block Design](/docs/block-design) for how
+status, and conversion progress. See [What is a Block](/docs/block-design) for how
 dashboards fit into the block contract.

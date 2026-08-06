@@ -1,5 +1,5 @@
 ---
-title: Block Design
+title: What is a Block
 ---
 
 A **block** is the unit of work in LegoFlow. Every stage of the pipeline, from data curation, trajectory generation, training, to Evaluator measurement, is a block with a shared shape and a familiar skill lifecycle. This page explains the design behind: what lives inside a block, how blocks pass data to each other, and where runs are recorded. The following figure shows the structure of a block.
@@ -22,7 +22,7 @@ The repo is a **tree of blocks**. The repo root is the **root block**; every dir
 
 ## Config File
 
-Every block's `config.yaml` is **one-shot per run**: every key is configuration. Live state — running, completed, failed — does not live here. It lives in `artifacts/index.yaml`. See [Reference / config.yaml](/docs/reference/config-schema) for the full schema.
+Every block's `config.yaml` is **one-shot per run**: every key is configuration. Live state — running, completed, failed — does not live here. It lives in `artifacts/index.yaml`. `/root:check` and each block's `:check` skill validate this contract before expensive work starts.
 
 ## Runtime Inputs
 

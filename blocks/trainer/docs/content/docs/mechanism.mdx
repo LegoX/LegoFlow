@@ -1,5 +1,5 @@
 ---
-title: Mechanism
+title: Design
 ---
 
 This page explains what Trainer does behind the run command: it obtains a
@@ -19,34 +19,33 @@ The first decision comes from `runtime_info.input.source.type`:
 | `hf_lf` | A ShareGPT-style LF dataset from the Hugging Face Hub. |
 | `local_lf` | A local ShareGPT-style JSON file. |
 
-For the full LegoFlow handoff, `harbor_job` is the common path. The root config
-wires `source.job_dir` from Tracer's trajectory output, so Trainer knows exactly
-which rollout job to convert.
+For the full LegoFlow handoff, the simplest path is usually `local_lf`: point
+Trainer at the `lf.json` produced by Tracer and start training from there. Use
+`harbor_job` when you only have raw rollout logs and want Trainer to perform the
+fallback conversion.
 
-## 2. Convert Trajectories
+## 2. Prepare LF Data
 
-When `source.type: harbor_job`, Trainer converts rollout logs with the pinned
-`repos/swe_data_process` package. The converter module is selected from
-`runtime_info.input.source.scaffold`:
+Trainer's job is to make sure LLaMA-Factory receives one registered LF dataset.
+The path depends on `source.type`:
 
-| Scaffold | Converter |
+| Source type | Preparation |
 | --- | --- |
-| `openhands-sdk` | `swe_data_process.openhands.convert_openhands_sdk_to_im` |
-| `claude-code` | `swe_data_process.claudecode_opencode.convert_cc_to_im` |
-| `open-code` | `swe_data_process.claudecode_opencode.convert_oc_to_im` |
-| `terminus2` | `swe_data_process.terminus2.convert_terminus2_to_im` |
+| `local_lf` | Register the LF JSON file directly. |
+| `hf_lf` | Download one exact Hub file, or let LLaMA-Factory load the Hub dataset at train time. |
+| `harbor_job` | Convert raw Tracer trajectories into LF data, then register the result. |
 
-The conversion writes two paired files:
+When the raw Harbor path is used, Trainer writes:
 
 ```text
 artifacts/data/im_data/<data_name>.jsonl
 artifacts/data/lf_data/<data_name>.json
 ```
 
-The IM file is the intermediate conversation format. The LF JSON is the
-ShareGPT-style dataset that LLaMA-Factory consumes. Trainer refuses to continue
-when only one of the two files exists, because a partial conversion usually
-means the previous data-prep run was interrupted.
+The LF JSON is the file LLaMA-Factory consumes. The IM file is mainly useful
+for debugging conversion quality. For scaffold-specific conversion, IM/LF
+formats, and scoring details, see Tracer's
+[Trajectory Conversion](/docs/blocks/tracer/advanced-usages/trajectory-conversion).
 
 ## 3. Register The Dataset
 
@@ -62,8 +61,8 @@ without an exact `hf_file_name`, the entry points to `hf_hub_url`, with optional
 subset and split fields.
 
 Trainer also applies `conversion.max_instances` when you want a smoke-sized
-run, and uses `conversion.exclude_repos_file` to keep evaluation benchmark repos
-out of the training set by default.
+run. For raw Harbor jobs, it uses `conversion.exclude_repos_file` to keep
+evaluation benchmark repos out of the training set by default.
 
 ## 4. Generate Training Config
 
