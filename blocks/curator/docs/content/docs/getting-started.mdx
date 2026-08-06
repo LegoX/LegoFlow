@@ -100,7 +100,7 @@ Before anything expensive, run:
 ```
 
 This is read-only. It checks config, `repos/swegen`, GitHub tokens, the LLM
-endpoint, and Docker. For exact pass conditions, see [Test Cases](/docs/test-cases).
+endpoint, and Docker. For exact pass conditions, see [Test Cases](/docs/blocks/curator/test-cases).
 A healthy report should look roughly like this:
 
 ```text
@@ -188,7 +188,7 @@ Tracer should consume `artifacts/merged_swe_tasks/`, not each per-language
 `artifacts/swe_tasks/<lang>-cc/` directory. The merged manifest only lists tasks
 that passed validation.
 
-For the artifact layout and handoff contract, see [Output Format](/docs/outputs).
+For the artifact layout and handoff contract, see [Output Format](/docs/blocks/curator/outputs).
 
 ## Dashboard Visualization
 
@@ -203,5 +203,5 @@ progress monitor; during generation, watch logs, `verifiable_tasks.txt`, and
 `artifacts/index.yaml`.
 
 For scoring and tagging details, see
-[Quality Rubrics](/docs/advanced-usages/quality-rubrics) and
-[Task Tagging](/docs/advanced-usages/task-tagging).
+[Quality Rubrics](/docs/blocks/curator/advanced-usages/quality-rubrics) and
+[Task Tagging](/docs/blocks/curator/advanced-usages/task-tagging).

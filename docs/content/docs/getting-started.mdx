@@ -40,34 +40,24 @@ to memorize the underlying scripts.
 
 
 
-{/*This gives you both tree-level commands and block-specific commands in one
-Claude Code session. The root plugin coordinates the whole block tree:
-
-| Command | Purpose |
-| --- | --- |
-| `/root:setup` | Prepare shared tooling and help each block fill its required inputs. |
-| `/root:check` | Check the whole pipeline before anything expensive runs. |
-| `/root:run` | Run the full pipeline, or a selected block, after preflight and confirmation. |
-| `/root:dashboard` | Open the tree-wide dashboard. |
-| `/root:create` | Scaffold a new block when you are extending the project. |
-*/}
-
-
-
 ## Project Setup
 
 
-The setup of this project can be generally decomposed into two halves. 
+The setup flow has two parts.
 
 ### 1) Block Setup Skill 
 
-Once the plugins are loaded, use the `setup` skill of the corresponding block, i.e., `/root:setup`. It checks shared tooling, verifies the root `config.yaml`, and can walk into each child block's setup flow. It does not
-launch the pipeline; it only gets the workspace ready for a real check.
+Once the plugins are loaded, use the setup skill for the block you want to run.
+For the full tree, start with `/root:setup`. It checks shared tooling, verifies
+the root `config.yaml`, and can walk into each child block's setup flow. It does
+not launch the pipeline; it only gets the workspace ready for a real check.
 
 
 ### 2) Configure the Run
 
-Every block has a `config.yaml`. Think of it as the checklist LegoFlow reads before that block runs. The root `config.yaml` is mostly orchestration metadata, i.e., 
+Every block has a `config.yaml`. Think of it as the checklist LegoFlow reads
+before that block runs. The root `config.yaml` mostly holds orchestration
+metadata:
 
 
 <ConfigSnippet title="config.yaml">
@@ -75,15 +65,19 @@ Every block has a `config.yaml`. Think of it as the checklist LegoFlow reads bef
 </ConfigSnippet>
 
 
-The Cloudflare here are used primarily for dashboard publishing, and Docker account used for authenticated image pulls in tracer (pull SWE tasks) and evaluator (pull images of test cases). Each block explains its own `config.yaml` in its Configuration Guide.
+Cloudflare settings are mainly used for dashboard publishing. Docker
+credentials are only needed for authenticated image pulls, especially in Tracer
+when pulling SWE task images and in Evaluator when pulling test-case images.
+Each block explains its own `config.yaml` in its Configuration Guide.
 
-In the following, we recommend walking through one independent run for each block before launching the cascaded root pipeline.
+Below, we recommend walking through one independent run for each block before
+launching the cascaded root pipeline.
 
 
 ## Running Block by Block (Recommended)
 
 <Callout title="Warning" type="warning">
-If you are new to LegoFlow, we suggest you to start by running a single block at a time. This gives
+If you are new to LegoFlow, start by running a single block at a time. This gives
 you a much clearer sense of what each stage consumes, produces, and checks
 before you ask the root block to run the whole pipeline.
 </Callout>
@@ -213,12 +207,14 @@ When the check says the tree is safe to run, start the cascaded workflow:
 /root:run start the data pipeline
 ```
 
-Note that natural language instructions can be appended behind the skill. The root skill repeats preflight, shows the run configuration, and waits for
+You can append natural language instructions after the skill. The root skill repeats preflight, shows the run configuration, and waits for
 your confirmation before starting expensive work. 
 
 
 <Callout title="Info" type="info">
-Depending on the instructions, the pipeline can be manipulated in a flexible way, e.g., one can adopt the full pipeline as `curator -> tracer -> trainer -> evaluator`, or the subset of this pipeline such as `curator -> tracer` for trajectory production only.
+You can run the full pipeline as `curator -> tracer -> trainer -> evaluator`,
+or a smaller slice such as `curator -> tracer` when you only need trajectory
+production.
 </Callout>
 
 
@@ -228,7 +224,10 @@ Depending on the instructions, the pipeline can be manipulated in a flexible way
 
 ### Results Archive
 
-LegoFlow appends everything associated to the runtime to `artifacts/` of the block directory, including the enviroment, running logs, output files, intermediate cache, etc. To ensure reproduction, each run also copy the exact running configurations and scripts at `blocks/tracer/artifacts/jobs/`.
+LegoFlow writes each block's runtime materials to its `artifacts/` directory:
+environment snapshots, run logs, output files, intermediate caches, and
+archives. For reproducibility, each run also copies the exact configuration and
+scripts used for execution into `artifacts/archives/run_NNN/`.
 
 ```text
 artifacts/archives/run_NNN/
@@ -242,7 +241,8 @@ artifacts/archives/run_NNN/
 LegoFlow provides dashboards for the root pipeline and for each concrete block.
 Use them as the first place to inspect a run: they summarize whether outputs
 were produced, where a failure happened, which filters or rubrics shaped the
-data, and whether the result is ready for the next stage. Open a block dashboard when you want to inspect one stage in detail:
+data, and whether the result is ready for the next stage. Open a block
+dashboard when you want to inspect one stage in detail:
 
 ```text
 /<block>:dashboard

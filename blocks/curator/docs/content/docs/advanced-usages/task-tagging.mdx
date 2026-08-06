@@ -46,7 +46,7 @@ Tags are written to each task's `task.toml`:
 artifacts/swe_tasks/<lang>-cc/<task_id>/task.toml
 ```
 
-They are also read by the databoard for filtering and comparison.
+They are also read by the dashboard for filtering and comparison.
 
 ## Regenerating Tags
 
@@ -57,11 +57,11 @@ python3 ../repos/swegen/tools/tag_task_metadata.py \
   --datasets-dir datasets --dataset all --jobs 64 --retries 3
 ```
 
-Then rebuild the databoard HTML:
+Then rebuild the dashboard HTML:
 
 ```bash
 python3 progress_monitor_multi.py --output-html site/index.html
 ```
 
-To publish the databoard, deploy `blocks/curator/dashboard/site/` to the
+To publish the dashboard, deploy `blocks/curator/dashboard/site/` to the
 `swe-databoard` Cloudflare Pages project.

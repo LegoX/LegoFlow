@@ -109,7 +109,7 @@ Before launching the benchmark, run:
 
 This is read-only. It checks config, Harbor repo state, environments, benchmark
 registry, LLM endpoint, proxy port, Docker, and agent runtime. For exact pass
-conditions, see [Test Cases](/docs/test-cases).
+conditions, see [Test Cases](/docs/blocks/evaluator/test-cases).
 
 Fix required failures before continuing. If you are using a local checkpoint,
 also make sure the vLLM endpoint is already serving before the check.
@@ -147,7 +147,7 @@ artifacts/jobs/<job>/analysis/
 For benchmark selection and proxy details, see
 [Select Benchmark](/docs/blocks/evaluator/advanced-usages/select-benchmark) and
 [LiteLLM Proxy](/docs/blocks/evaluator/advanced-usages/litellm-proxy). For the
-full artifact layout, see [Output Format](/docs/outputs).
+full artifact layout, see [Output Format](/docs/blocks/evaluator/outputs).
 
 ## Dashboard Visualization
 
@@ -161,4 +161,4 @@ The dashboard helps browse jobs, benchmark scores, trajectories, verifier
 reports, and post-eval analysis. It reads `artifacts/jobs/` directly, so keep
 the job directory and run log around when debugging.
 
-For the internal Evaluator mechanism, see [Design](/docs/mechanism).
+For the internal Evaluator mechanism, see [Design](/docs/blocks/evaluator/mechanism).

@@ -109,7 +109,7 @@ Before launching containers or spending model tokens, run:
 
 This is read-only. It checks config, repo pins, environments, task source,
 model endpoint, proxy port, Docker, agent runtime, and conversion settings. For
-exact pass conditions, see [Test Cases](/docs/test-cases). A healthy report
+exact pass conditions, see [Test Cases](/docs/blocks/tracer/test-cases). A healthy report
 should leave you ready for task preparation and rollout.
 
 Fix required failures before continuing.
@@ -142,7 +142,7 @@ artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
 artifacts/sft_data/<job>/lf.json      # only when sft_conversion.enabled: true
 ```
 
-For the artifact layout and handoff contract, see [Output Format](/docs/outputs).
+For the artifact layout and handoff contract, see [Output Format](/docs/blocks/tracer/outputs).
 
 ## Trajectory Conversion
 
@@ -169,7 +169,7 @@ artifacts/sft_data/<job>/
 ```
 
 For the full conversion flow and supported scaffold keys, see
-[Trajectory Conversion](/docs/advanced-usages/trajectory-conversion) and [Supported Scaffolds](/docs/advanced-usages/scaffolds).
+[Trajectory Conversion](/docs/blocks/tracer/advanced-usages/trajectory-conversion) and [Supported Scaffolds](/docs/blocks/tracer/advanced-usages/scaffolds).
 
 This is the usual handoff to Trainer:
 
@@ -190,4 +190,4 @@ The dashboard helps inspect job progress, per-task trajectories, rewards,
 failure patterns, and converted SFT data. It reads `artifacts/` directly; if a
 run is still active, keep watching the job log and `artifacts/jobs/<job>/` too.
 
-For the internal rollout mechanism, see [Design](/docs/mechanism).
+For the internal rollout mechanism, see [Design](/docs/blocks/tracer/mechanism).

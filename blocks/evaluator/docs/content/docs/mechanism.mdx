@@ -5,7 +5,7 @@ title: Design
 This page explains how Evaluator turns a benchmark choice and a model endpoint
 into Harbor jobs, per-task trajectories, scores, and dashboard-ready analysis.
 
-## 1. Resolve The Benchmark
+## 1. Resolve the Benchmark
 
 Evaluator reads the benchmark from `runtime_info.input.task_source`:
 
@@ -28,7 +28,7 @@ When `task_source.no_hack: true`, `scripts/start.sh` first calls
 registry. This keeps the agent's network access focused on the LiteLLM endpoint
 while leaving the verifier side intact.
 
-## 2. Check The Model Endpoint
+## 2. Check the Model Endpoint
 
 `/evaluator:run` enters through `scripts/start.sh`. Before Harbor starts, the
 script runs:
@@ -46,7 +46,7 @@ Evaluator can point at either a remote API or a local checkpoint served by
 vLLM. In both cases, the runtime contract is the same: `llm_api` describes the
 model name, base URL, key, protocol, and token-cost metadata.
 
-## 3. Start The Per-Job LiteLLM Proxy
+## 3. Start the Per-Job LiteLLM Proxy
 
 Every evaluation job gets its own LiteLLM proxy config under:
 
@@ -64,7 +64,7 @@ The proxy exposes both OpenAI- and Anthropic-compatible URLs to the agent
 container. That is how Claude Code, OpenHands SDK, and OpenCode can share the
 same evaluation shell while keeping their native API expectations.
 
-## 4. Build The Harbor Command
+## 4. Build the Harbor Command
 
 Evaluator then creates one timestamped job directory:
 
@@ -156,5 +156,5 @@ dashboard analysis failure does not erase or invalidate the raw evaluation job.
 | `/evaluator:run` | Starts the proxy, launches Harbor, writes trajectories/results, and runs post-eval analysis. |
 | `/evaluator:dashboard` | Opens the dashboard over completed jobs and analysis reports. |
 
-For the shortest runnable path, see [Getting Started](/docs/getting-started).
-For the exact files written by each stage, see [Output Format](/docs/outputs).
+For the shortest runnable path, see [Getting Started](/docs/blocks/evaluator/getting-started).
+For the exact files written by each stage, see [Output Format](/docs/blocks/evaluator/outputs).

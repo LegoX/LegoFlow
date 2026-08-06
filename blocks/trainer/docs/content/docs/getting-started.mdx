@@ -131,7 +131,7 @@ Before using GPUs, run:
 This is read-only. It checks config, repo pins, the training environment, source
 data, converter availability, model path, output directory safety, GPU
 visibility, and wandb/HF settings. For exact pass conditions, see
-[Test Cases](/docs/test-cases).
+[Test Cases](/docs/blocks/trainer/test-cases).
 
 Fix required failures before launching training.
 
@@ -177,7 +177,7 @@ throughput can change the runtime.
 
 The generated LLaMA-Factory YAML is saved under `artifacts/training_config/`;
 you do not need to maintain a separate checked-in training YAML. For the full
-artifact layout and checkpoint handoff, see [Output Format](/docs/outputs).
+artifact layout and checkpoint handoff, see [Output Format](/docs/blocks/trainer/outputs).
 
 ## Dashboard Visualization
 
@@ -191,7 +191,7 @@ The dashboard reads training logs and model artifacts directly. Use it to watch
 loss curves, compare runs, and inspect final metrics. During long training,
 also keep the terminal or tmux log open so failures are easy to diagnose.
 
-For the internal training mechanism, see [Design](/docs/mechanism).
+For the internal training mechanism, see [Design](/docs/blocks/trainer/mechanism).
 
 ## Cleanup
 
