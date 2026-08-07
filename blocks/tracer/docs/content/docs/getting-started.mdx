@@ -61,13 +61,6 @@ During `/tracer:run`, Tracer copies this source into its own
 `artifacts/tasks/<dataset>/` area before Harbor starts. If
 `verifiable_tasks.txt` exists, only those verified task IDs are staged.
 
-In the full LegoFlow pipeline, this is the handoff from Curator:
-
-```text
-blocks/curator/artifacts/merged_swe_tasks
-  -> blocks/tracer/artifacts/tasks/<dataset>
-```
-
 ### Rollout Config
 
 Start with a small task cap and modest concurrency:
