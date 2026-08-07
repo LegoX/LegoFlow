@@ -1,6 +1,7 @@
 {
   "title": "Advanced Guides",
   "pages": [
-    "configuration"
+    "configuration",
+    "validation-checks"
   ]
 }

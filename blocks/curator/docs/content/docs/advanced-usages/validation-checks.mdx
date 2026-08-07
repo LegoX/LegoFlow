@@ -1,11 +1,16 @@
 ---
-title: Test Cases
+title: Validation Checks
 ---
 
-Curator tests are split into a cheap drift-detection suite and an optional
-end-to-end smoke run. Use them when you are changing Curator code, plugin
-skills, docs, or CI wiring. For normal environment diagnosis, start with
-`/curator:check`.
+Use this page when `/curator:check` reports a problem and you want to understand
+what Curator is validating. The slash command is the user-facing preflight: it
+checks your config, repo checkout, GitHub tokens, LLM endpoint, and Docker before
+you spend time creating tasks.
+
+The shell tests below are the lower-level version of that contract. Most users
+do not need to run them directly; they are useful when you are changing Curator
+code, plugin skills, docs, or CI wiring and want to know exactly what "ready to
+run" means.
 
 ## Run the Suite
 

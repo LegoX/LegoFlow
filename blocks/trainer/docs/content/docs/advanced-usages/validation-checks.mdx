@@ -1,11 +1,16 @@
 ---
-title: Test Cases
+title: Validation Checks
 ---
 
-Trainer tests check that the training block still has the right config shape,
-pinned repositories, conversion stack, model inputs, DeepSpeed config, and GPU
-visibility. The optional smoke run launches a short real training job. For
-interactive environment diagnosis, use `/trainer:check`.
+Use this page when `/trainer:check` reports a problem and you want to understand
+what Trainer is validating. The slash command is the user-facing preflight: it
+checks the config shape, pinned repositories, conversion stack, source data,
+model path, DeepSpeed config, output directory safety, GPU visibility, and
+wandb/HF settings before a training job uses GPUs.
+
+The shell tests below are the lower-level version of that contract. Most users
+do not need to run them directly; they are useful when changing Trainer code,
+training launch scripts, plugin skills, or CI.
 
 ## Run the Suite
 

@@ -2,6 +2,7 @@
   "title": "Advanced Guides",
   "pages": [
     "configuration",
+    "validation-checks",
     "quality-rubrics",
     "task-tagging"
   ]

@@ -1,11 +1,16 @@
 ---
-title: Test Cases
+title: Validation Checks
 ---
 
-Tracer tests cover the rollout block's configuration, pinned repositories,
-runtime environments, task sources, proxy setup, dashboard exports, and an
-optional end-to-end smoke run. Use them when changing Tracer internals or CI.
-For day-to-day readiness checks, use `/tracer:check`.
+Use this page when `/tracer:check` reports a problem and you want to understand
+what Tracer is validating. The slash command is the user-facing preflight: it
+checks task sources, repo pins, runtime environments, model endpoint, LiteLLM
+proxy port, Docker, agent runtime, and conversion settings before rollouts
+start.
+
+The shell tests below are the lower-level version of that contract. Most users
+do not need to run them directly; they are useful when changing Tracer internals,
+plugin skills, dashboard behavior, or CI.
 
 ## Run the Suite
 

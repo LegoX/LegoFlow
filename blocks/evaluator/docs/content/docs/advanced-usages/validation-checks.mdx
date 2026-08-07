@@ -1,11 +1,16 @@
 ---
-title: Test Cases
+title: Validation Checks
 ---
 
-Evaluator tests check the registry-driven evaluation block: config shape,
-Harbor checkout, Python environments, LiteLLM setup, runtime images, registry
-datasets, agent runtimes, launch gates, script utilities, and smoke scoring.
-For interactive readiness checks, use `/evaluator:check`.
+Use this page when `/evaluator:check` reports a problem and you want to
+understand what Evaluator is validating. The slash command is the user-facing
+preflight: it checks the benchmark registry, Harbor checkout, Python
+environments, LiteLLM setup, runtime images, agent runtime, model endpoint, and
+launch gates before an evaluation spends model tokens.
+
+The shell tests below are the lower-level version of that contract. Most users
+do not need to run them directly; they are useful when changing Evaluator code,
+benchmark launch logic, plugin skills, or CI.
 
 ## Run the Suite
 
