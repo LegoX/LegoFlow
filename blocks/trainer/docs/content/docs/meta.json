@@ -2,7 +2,7 @@
     "pages": [
         "index",
         "getting-started",
-        "mechanism",
+        "design",
         "advanced-usages",
         "outputs",
         "dashboard"
