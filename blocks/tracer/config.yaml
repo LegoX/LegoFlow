@@ -48,8 +48,8 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      api_key: ""                             # fill in a private local copy before running; never commit a real key
-      api_base_url: ""                        # fill in a private local copy before running; keep gateway URLs out of git
+      api_key: human                          # fill in a private local copy before running; never commit a real key
+      api_base_url: human                     # fill in a private local copy before running; keep gateway URLs out of git
       model: "openai/Qwen3.6-35B-A3B"
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
