@@ -33,27 +33,33 @@ For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
 `runtime_info.input` pieces below. For every field, see the
 <a href="/docs/blocks/trainer/advanced-usages/configuration">Configuration Guide</a>.
 
-The snippets below use the checked-in example profile: a 512-sample LF dataset
-from Hugging Face, `Qwen/Qwen3.5-35B-A3B-Base`, and one 8-GPU node.
+### Receive Tracer Output
 
-### Data Source Config
-
-Choose where the LF training data comes from. The example profile uses a
-ready-made LF file from Hugging Face, so Trainer can skip raw trajectory
-conversion:
-
-<ConfigSnippet title="blocks/trainer/config.yaml">
-{"runtime_info:\n  input:\n    source:\n      type: hf_lf\n      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft\n      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json\n      hf_split: train\n\n    conversion:\n      data_name: glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5 # dataset key used by LLaMA-Factory\n      max_instances: 0                         # 0 = all samples"}
-</ConfigSnippet>
-
-For the normal Tracer → Trainer handoff, point Trainer at Tracer's converted LF
-file instead:
+For the normal Tracer -> Trainer handoff, point Trainer at Tracer's converted
+LF file:
 
 <ConfigSnippet title="blocks/trainer/config.yaml">
 {"runtime_info:\n  input:\n    source:\n      type: local_lf\n      lf_path: ../tracer/artifacts/sft_data/<job>/lf.json # Tracer's converted SFT file\n\n    conversion:\n      data_name: my_tracer_dataset\n      max_instances: 0"}
 </ConfigSnippet>
 
+The `local_lf` mode is the simplest handoff when Tracer has already produced
+`artifacts/sft_data/<job>/lf.json`. If you want Trainer to receive raw Harbor
+jobs and run conversion itself, use the dependency-backed `harbor_job` mode
+below. In that mode, `meta_info.dependencies.from` records that
+`source.job_dir` is supplied by Tracer:
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"meta_info:\n  dependencies:\n    from:\n      source.job_dir:\n        from: tracer.output.raw_trajectories_dir\n        when: {source.type: harbor_job}"}
+</ConfigSnippet>
+
 Use environment variables for private Hub access instead of committing tokens.
+
+If you are not continuing from Tracer, Trainer can also consume a ready-made LF
+file from Hugging Face:
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    source:\n      type: hf_lf\n      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft\n      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json\n      hf_split: train\n\n    conversion:\n      data_name: glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5 # dataset key used by LLaMA-Factory\n      max_instances: 0                         # 0 = all samples"}
+</ConfigSnippet>
 
 ### Conversion Config
 
@@ -179,20 +185,20 @@ The generated LLaMA-Factory YAML is saved under `artifacts/training_config/`;
 you do not need to maintain a separate checked-in training YAML. For the full
 artifact layout and checkpoint handoff, see [Output Format](/docs/blocks/trainer/outputs).
 
-## Hand Over to Evaluator
+## Output for Evaluator
 
 Trainer writes the model under `artifacts/model/<run>/` and records the latest
-checkpoint in `runtime_info.output.checkpoint_path`. To evaluate that checkpoint,
-serve it with vLLM and point Evaluator at the served model:
+checkpoint in `runtime_info.output.checkpoint_path`:
 
-<ConfigSnippet title="blocks/evaluator/config.yaml">
-{"runtime_info:\n  input:\n    local_model_serving:\n      model_path: ../trainer/artifacts/model/<run> # Trainer checkpoint directory to serve\n      model_name: Qwen3.5-35B-A3B                 # name exposed by the vLLM server\n\n    llm_api:\n      api_key: dummy-key                          # must match the vLLM server key\n      api_base_url: http://<GPU_NODE_IP>:8000/v1  # vLLM OpenAI-compatible endpoint\n      model: openai/Qwen3.5-35B-A3B               # openai/<model_name> exposed by vLLM"}
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  output:\n    checkpoint_path:\n      description: Path to the latest trained model checkpoint\n      value: artifacts/model/<run>"}
 </ConfigSnippet>
 
-The handoff has two parts: `model_path` chooses the Trainer checkpoint, and
-`llm_api` tells Evaluator how to call it. Keep `model_name` and
-`llm_api.model` aligned so the LiteLLM proxy routes requests to the right
-served checkpoint.
+Trainer does not currently declare a `meta_info.dependencies.to` edge because
+Evaluator can benchmark any remote API or local checkpoint, not only Trainer's
+latest output. When you do want to evaluate this checkpoint, continue with
+[Evaluator Getting Started](/docs/blocks/evaluator/getting-started); Evaluator
+will show how to serve the checkpoint and point its config at the served model.
 
 ## Dashboard Visualization
 

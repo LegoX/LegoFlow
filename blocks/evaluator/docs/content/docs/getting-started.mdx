@@ -46,6 +46,21 @@ Evaluator is registry-driven. Pick the benchmark and version first:
 For a fast first run, either choose a small benchmark variant when available or
 set `harbor_job.n_tasks` below.
 
+### Receive Trainer Output
+
+If you are evaluating a checkpoint produced by Trainer, serve it with vLLM on a
+GPU node and make Evaluator call that OpenAI-compatible endpoint:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    local_model_serving:\n      model_path: ../trainer/artifacts/model/<run> # Trainer checkpoint directory to serve\n      model_name: Qwen3.5-35B-A3B                 # name exposed by the vLLM server\n\n    llm_api:\n      api_key: dummy-key                          # must match the vLLM server key\n      api_base_url: http://<GPU_NODE_IP>:8000/v1  # vLLM OpenAI-compatible endpoint\n      model: openai/Qwen3.5-35B-A3B               # openai/<model_name> exposed by vLLM"}
+</ConfigSnippet>
+
+This handoff is not declared in `meta_info.dependencies` today because
+Evaluator can benchmark many model sources: a Trainer checkpoint, a remote API,
+or another local model. The important pieces are `model_path`, which chooses the
+checkpoint to serve, and `llm_api`, which tells Evaluator how to call it. Keep
+`local_model_serving.model_name` aligned with `llm_api.model`.
+
 ### LLM API Config
 
 Evaluator starts a per-job LiteLLM proxy in front of your model. For a remote
@@ -55,8 +70,8 @@ API, point `llm_api` at the shared endpoint:
 {"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      model: openai/Qwen3.5-35B-A3B             # openai/<served-model-name>\n      protocols: [openai_compatible, anthropic_compatible]\n      served_via: per_job_litellm_proxy\n      input_cost_per_token: 0.0\n      output_cost_per_token: 0.0\n\n    litellm_proxy:\n      port: 4101\n      master_key: dummy-key-cf"}
 </ConfigSnippet>
 
-For a local checkpoint, serve it with vLLM on a GPU node and make `llm_api`
-point at that vLLM endpoint:
+For a standalone local checkpoint, use the same shape and point `model_path` at
+that model directory:
 
 <ConfigSnippet title="blocks/evaluator/config.yaml">
 {"runtime_info:\n  input:\n    local_model_serving:\n      model_path: artifacts/models/Qwen3.5-35B-A3B\n      model_name: Qwen3.5-35B-A3B\n\n    llm_api:\n      api_key: dummy-key                         # must match the vLLM server key\n      api_base_url: http://<GPU_NODE_IP>:8000/v1\n      model: openai/Qwen3.5-35B-A3B"}
@@ -150,7 +165,7 @@ For benchmark selection and proxy details, see
 [LiteLLM Proxy](/docs/blocks/evaluator/advanced-usages/litellm-proxy). For the
 full artifact layout, see [Output Format](/docs/blocks/evaluator/outputs).
 
-## Hand Over
+## Final Outputs
 
 Evaluator is the terminal block in the current LegoFlow pipeline, so there is
 no next block to configure. Its outputs are the final benchmark artifacts:

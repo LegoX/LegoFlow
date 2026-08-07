@@ -44,13 +44,18 @@ the raw upstream endpoint:
 
 Never commit real API keys or private endpoints to `config.yaml`.
 
-### Task Source Config
+### Receive Curator Output
 
 For the full LegoFlow path, Tracer reads Curator's merged verified tasks:
 
 <ConfigSnippet title="blocks/tracer/config.yaml">
-{"runtime_info:\n  input:\n    task_source:\n      provider: local                                # local Curator output\n      dataset_name: ../curator/artifacts/merged_swe_tasks # contains task dirs + verifiable_tasks.txt\n      split: train"}
+{"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:\n        from: curator.output.merged_tasks_dir\n        when: {task_source.provider: local}\n\nruntime_info:\n  input:\n    task_source:\n      provider: local                                # receive Curator output from the local filesystem\n      dataset_name: ../curator/artifacts/merged_swe_tasks # Curator's merged verified task directory\n      split: train"}
 </ConfigSnippet>
+
+The `runtime_info.input.task_source.dataset_name` field is the path Tracer
+actually reads. The `meta_info.dependencies.from` entry explains where that
+value comes from in the block graph, so root-level checks can catch a broken
+Curator -> Tracer connection before rollout starts.
 
 During `/tracer:run`, Tracer copies this source into its own
 `artifacts/tasks/<dataset>/` area before Harbor starts. If
@@ -172,19 +177,27 @@ artifacts/sft_data/<job>/
 For the full conversion flow and supported scaffold keys, see
 [Trajectory Conversion](/docs/blocks/tracer/advanced-usages/trajectory-conversion) and [Supported Scaffolds](/docs/blocks/tracer/advanced-usages/scaffolds).
 
-## Hand Over to Trainer
+## Output for Trainer
 
-For most training runs, hand over the converted LF file rather than raw
+For most training runs, Tracer hands over the converted LF file rather than raw
 trajectories. After `/tracer:run`, choose the finished job directory under
-`artifacts/sft_data/` and point Trainer to its `lf.json`:
+`artifacts/sft_data/`:
 
-<ConfigSnippet title="blocks/trainer/config.yaml">
-{"runtime_info:\n  input:\n    source:\n      type: local_lf                              # use Tracer's converted LF file\n      lf_path: ../tracer/artifacts/sft_data/<job>/lf.json # replace <job> with the real Tracer job\n\n    conversion:\n      data_name: my_tracer_dataset                # dataset key registered in LLaMA-Factory\n      max_instances: 0                            # 0 = train on all examples in lf.json"}
+```text
+artifacts/sft_data/<job>/lf.json
+```
+
+Tracer's checked-in dependency contract currently declares the raw Harbor-job
+handoff for `source.type: harbor_job`:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"meta_info:\n  dependencies:\n    to:\n      raw_trajectories_dir:\n        to: trainer.input.source.job_dir\n        when: {trainer.input.source.type: harbor_job}\n\nruntime_info:\n  output:\n    raw_trajectories_dir:\n      path: artifacts/jobs\n    sft_data_dir:\n      path: artifacts/sft_data"}
 </ConfigSnippet>
 
-Use `source.type: local_lf` when Tracer already produced `lf.json`. Use
-`harbor_job` only when you intentionally want Trainer to convert a raw Tracer
-job itself.
+In the common SFT path, Trainer usually consumes `sft_data_dir` manually through
+`source.type: local_lf`. Continue with
+[Trainer Getting Started](/docs/blocks/trainer/getting-started) to see that
+downstream config.
 
 ## Dashboard Visualization
 
