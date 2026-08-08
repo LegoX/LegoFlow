@@ -100,23 +100,6 @@ Each block's own Getting Started page explains how to fill its `config.yaml`,
 which credentials it expects, and what outputs it writes. Keep those details in
 the block pages so this root guide can stay focused on the overall workflow.
 
-## Handoff Map
-
-LegoFlow connects blocks through artifacts. Treat this as the high-level map;
-use each block's Getting Started and Configuration Guide for the exact
-`config.yaml` fields.
-
-```text
-Curator artifacts/merged_swe_tasks/
-  -> Tracer task_source.dataset_name
-
-Tracer artifacts/sft_data/<job>/lf.json
-  -> Trainer source.lf_path with source.type: local_lf
-
-Trainer runtime_info.output.checkpoint_path
-  -> Evaluator local_model_serving.model_path, then serve with vLLM
-```
-
 ### Step 1: Task Curation
 
 Curator turns source signals such as GitHub PRs, issues, and online forums into
