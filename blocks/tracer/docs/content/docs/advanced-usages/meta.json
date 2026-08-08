@@ -1,0 +1,11 @@
+{
+  "title": "Advanced Guides",
+  "pages": [
+    "configuration",
+    "validation-checks",
+    "trajectory-conversion",
+    "scaffolds",
+    "scoring",
+    "litellm-proxy"
+  ]
+}

@@ -2,102 +2,67 @@
 title: Dashboard
 ---
 
-Curator publishes a live **dataset analytics** databoard:
+Curator's dashboard is a dataset analytics view for finished task collections.
+Use `/curator:dashboard` after PR collection and task creation to inspect task
+quality before handing the dataset to Tracer.
 
-```text
-https://swe-databoard.pages.dev/
-```
+## What It Monitors
 
-[Open the Databoard](https://swe-databoard.pages.dev/)
-
-## Difficulty and tag methodology
-
-Difficulty scoring and tagging follow the harbor
-[`scripts/task_analysis`](https://github.com/SWE-Lego/harbor/tree/main/scripts/task_analysis)
-method, applied uniformly to every dataset.
-
-### Difficulty score
-
-A weighted, log-scaled model over five dimensions of the solution patch, tests,
-and instruction. Each dimension is scaled to `1.0–5.0`, combined by weight, then
-mapped to a final `1.0–10.0` score:
-
-| Dimension | Weight | Signal |
-| --- | --- | --- |
-| `patch_scope` | 0.30 | changed lines + files + hunks |
-| `logic_complexity` | 0.25 | new defs/classes + control-flow additions |
-| `context_breadth` | 0.20 | distinct directories touched |
-| `test_complexity` | 0.15 | test lines + test files |
-| `instruction_complexity` | 0.10 | instruction length |
-
-The score is bucketed into a label:
-
-| Label | Score |
+| Monitor | What it tells you |
 | --- | --- |
-| `easy` | ≤ 4.0 |
-| `medium` | 4.1 – 7.0 |
-| `hard` | > 7.0 |
+| **Dataset size** | How many verified tasks are available in each curated dataset. |
+| **Language coverage** | Whether the dataset is balanced across Python, JavaScript, TypeScript, Go, C, C++, Java, Rust, and other supported languages. |
+| **Difficulty mix** | Easy/medium/hard buckets and numeric difficulty scores. |
+| **Semantic tags** | The four-tag schema `[language, area, topic, bug_class]`, useful for filtering and balancing. |
+| **Dataset comparison** | How Curator-generated tasks compare with other SWE datasets under the same tag and difficulty rubric. |
+| **Task drilldown** | Per-task metadata, repository identity, problem statement, patch/test signals, difficulty, and tags. |
 
-Scoring is static (no LLM) so it is deterministic and reproducible.
+This dashboard is not a live generation monitor. While Curator is still
+creating tasks, watch the logs, `verifiable_tasks.txt`, and `artifacts/index.yaml`.
 
-### Tags
+## Local Mode
 
-An LLM assigns exactly four tags per task, in order:
+Use local mode when you are developing or reviewing private datasets:
 
 ```text
-[language, area, topic, bug_class]
+/curator:dashboard
 ```
 
-- **language** — primary programming language (`python`, `go`, `typescript`, …).
-- **area** — one of `backend`, `frontend`, `fullstack`, `cli`, `library`,
-  `framework`.
-- **topic** — framework/library or focused technical topic (`fastapi`, `react`,
-  `async`, …).
-- **bug_class** — a domain-independent label for the defect mechanism
-  (`missing-fallback`, `incomplete-validation`, `wrong-default`, …), describing
-  the logical failure mode rather than the affected feature.
+Ask for a local preview when you want to inspect the generated dashboard on the
+current machine. The skill regenerates the dashboard from the current dataset
+metadata and points you to the local preview file or page.
 
-The tagger disables the model's thinking mode so it returns a strict JSON
-object, validates the 4-tuple (including the closed `area` vocabulary), and
-retries on malformed output. Runs are resumable and idempotent.
+Local mode is the default choice for private task data because it keeps problem
+statements, repository names, patches, and tags on your machine.
 
-Very large or awkward tasks can make the endpoint hang on a full-size prompt.
-The tagger handles these with **progressive truncation**: if a request fails,
-it retries with a shorter patch/instruction/test excerpt (and fewer changed
-files), stepping down through several levels until the request completes. This
-guarantees every task receives tags without discarding context for normal-size
-tasks.
+## Cloudflare Public Mode
 
-## Regenerating the databoard
+Use Cloudflare mode when you want a public dashboard URL for sharing:
 
-From `blocks/curator/dashboard/`:
-
-```bash
-# 1. Difficulty + tags for every dataset (resumable, 64-way concurrent).
-#    The canonical tagger lives in the swegen submodule; --datasets-dir
-#    points it at this dashboard's datasets/ directory.
-python3 ../repos/swegen/tools/tag_task_metadata.py \
-  --datasets-dir datasets --dataset all --jobs 64 --retries 3
-
-# 2. Render the multi-dataset HTML
-python3 progress_monitor_multi.py --output-html site/index.html
-
-# 3. Deploy
-cd site && CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... \
-  npx wrangler@latest pages deploy . --project-name=swe-databoard --branch=main
+```text
+/curator:dashboard publish to Cloudflare
 ```
 
-See `blocks/curator/dashboard/README.md` for dataset export and endpoint
-configuration.
+Before using public mode, configure Cloudflare credentials outside tracked
+source files:
 
-## Docs versus databoard
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- the target Pages project, for example `swe-databoard`
 
-There are two Cloudflare Pages projects:
+The API token needs permission to edit Cloudflare Pages for the account. Do not
+publish private task content unless the dataset is intended to be public.
 
-| Project | URL | Purpose |
-| --- | --- | --- |
-| `swe-swegen-docs` | `https://swe-swegen-docs.pages.dev` | This documentation site |
-| `swe-databoard` | `https://swe-databoard.pages.dev/` | Live dataset analytics dashboard |
+## When To Use It
 
-Use the docs when onboarding or reviewing the pipeline. Use the databoard to
-compare dataset difficulty and tag composition.
+Use `/curator:dashboard` when you want to answer questions like:
+
+- Did Curator produce enough verified tasks?
+- Which languages or task areas are underrepresented?
+- Are there too many easy or too many hard tasks?
+- Which bug classes dominate the current dataset?
+- Is the dataset ready for Tracer rollout?
+
+For the scoring rubric and tag schema, see
+[Quality Rubrics](/docs/blocks/curator/advanced-usages/quality-rubrics) and
+[Task Tagging](/docs/blocks/curator/advanced-usages/task-tagging).

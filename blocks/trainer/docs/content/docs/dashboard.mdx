@@ -2,88 +2,75 @@
 title: Dashboard
 ---
 
-trainer ships a real-time, read-only web dashboard for monitoring LLaMA-Factory (HuggingFace Trainer) training runs. It is a React frontend + a Python `server.py` backend under [`dashboard/`](https://github.com/SWE-Lego/SWE-Lego-Live/tree/main/blocks/trainer/dashboard), parses the standard training output directly, and can compare multiple runs or connect to wandb.
-
-<Callout title="No public dashboard URL is checked in" type="warn">
-The dashboard exposes run names, metrics, configuration, and logs. Keep it on
-localhost by default. For remote access, use an authenticated named tunnel with
-Cloudflare Access or an equivalent identity-aware proxy; never publish a quick
-tunnel URL in this repository.
-</Callout>
+Trainer's dashboard is a read-only monitor for LLaMA-Factory training runs. Use
+`/trainer:dashboard` to check training health, compare runs, and inspect final
+metrics without touching the training process.
 
 <Callout title="Monitoring only" type="info">
-This dashboard **monitors** training — it never launches or controls it. To launch training, use the [pipeline scripts](/docs/training). To drive training interactively, use the built-in Gradio LLaMA Board (`llamafactory-cli webui`), which is a separate tool.
+The dashboard never launches, pauses, resumes, or edits a training job. Use
+`/trainer:run` for training.
 </Callout>
 
-## What it monitors
+## What It Monitors
 
-For each run it reads, from `artifacts/model/<run>/`:
-
-| File | Used for |
+| Monitor | What it tells you |
 | --- | --- |
-| `trainer_log.jsonl` | live per-step loss, lr, grad norm, timing (primary source) |
-| `trainer_state.json` | eval points and extra metric keys from `log_history` |
-| `*_results.json` | final summaries (loss, runtime, samples/s, FLOPs) |
+| **Run progress** | Current step, epoch, percentage, ETA, and whether the run appears active or finished. |
+| **Training loss** | Loss curve for spotting divergence, instability, or stalled learning. |
+| **Learning rate** | Scheduler behavior, warmup, and decay across training steps. |
+| **Gradient norm** | Stability signal for catching possible exploding gradients. |
+| **Performance** | Step time, samples/sec, runtime, throughput, and FLOPs. |
+| **Evaluation metrics** | Eval loss and best checkpoint when the run includes an eval split. |
+| **Run comparison** | Side-by-side comparison of multiple runs, datasets, models, or hyperparameters. |
+| **Logs and artifacts** | Console logs, result JSONs, trainer state, checkpoints, and loss plots. |
 
-and the raw console logs from `artifacts/logs/`.
+Use the dashboard to decide whether training is healthy, whether a run has
+finished, and which checkpoint or run should be handed to Evaluator.
 
-## Run it
+## Local Mode
 
-From `blocks/trainer/`:
+Use local mode while training is active:
 
-```bash
-cd dashboard
-./start_dashboard.sh          # builds the frontend (first run) then serves :8091
+```text
+/trainer:dashboard
 ```
 
-Open `http://localhost:8091`. By default it reads `../artifacts/model` (runs) and `../artifacts/logs` (console logs) — the same locations the training scripts write to.
+In local mode, the skill reads the current training artifacts and gives you a
+quick status summary. If you ask for the web UI, it launches a local dashboard
+for richer charts and run comparison.
 
-## How a "run" is detected
+Local mode is the default because training logs and config snapshots can expose
+model paths, dataset names, host paths, and experiment details.
 
-Any immediate sub-directory of the save dir containing `trainer_log.jsonl` or `trainer_state.json` is treated as a run. Its state is `running` (jsonl updated < 3 min ago and `percentage` < 100), `finished` (`all_results.json` present or `percentage` ≈ 100), or `unknown`.
+## Cloudflare Public Mode
 
-## Panels
+Use Cloudflare mode only when you intentionally want to share training progress
+outside the machine:
 
-- **Overview** — step, epoch, progress, train/eval loss, lr, grad norm, step time, ETA
-- **Training** — loss, learning-rate schedule, gradient norm, epoch progress
-- **Evaluation** — `eval_loss` over steps, best checkpoint (empty if no eval split)
-- **Performance** — samples/s, steps/s, runtime, total FLOPs + per-step timing
-- **Compare** — overlay metrics from multiple runs on shared charts (PNG/CSV export)
-- **AI Analysis** — LLM-generated diagnostic report (configure a profile in Settings)
-- **Logs** — raw `train_*.log` console viewer
-- **Explorer** — plot any available metric key
-- **Settings** — LLM API profiles (stored in browser localStorage only)
-
-The UI supports a Chinese/English toggle and dark/light themes.
-
-## Expose externally
-
-For temporary private debugging, `start_dashboard.sh` can still start a quick
-tunnel:
-
-```bash
-TUNNEL=true ./start_dashboard.sh
+```text
+/trainer:dashboard publish to Cloudflare
 ```
 
-The script prints a temporary URL once the tunnel is up. Do not copy that URL
-into docs, issues, logs, or source control.
+Before using public mode, configure Cloudflare credentials outside tracked
+source files:
 
-<Callout title="Quick tunnels are unauthenticated" type="warn">
-Anyone with the URL can read the dashboard (logs, metrics, run names). Treat the URL as a secret and stop the tunnel when done. For persistent, access-controlled exposure, use a [named tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) + Cloudflare Access instead.
-</Callout>
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- the target Pages project for the Trainer dashboard
 
-## wandb integration (optional)
+The API token needs permission to edit Cloudflare Pages for the account. For
+long-running or public demos, prefer an access-controlled Cloudflare setup so
+logs and run metadata are not exposed to anyone with the URL.
 
-Point the server at a wandb project to pull remote run metrics alongside the local files:
+## When To Use It
 
-```bash
-export WANDB_API_KEY=...  WANDB_ENTITY=...  WANDB_PROJECT=llama-factory
-python server.py --port 8091 --save-dir ../artifacts/model \
-  --wandb-entity "$WANDB_ENTITY" --wandb-project "$WANDB_PROJECT" --static-dir dist
-```
+Use `/trainer:dashboard` when you want to answer questions like:
 
-See [`dashboard/README.md`](https://github.com/SWE-Lego/SWE-Lego-Live/tree/main/blocks/trainer/dashboard) for the full CLI options and environment variables.
+- Is the training run still alive?
+- Is loss decreasing normally?
+- Did throughput or step time suddenly change?
+- Which checkpoint is the latest or best?
+- How does this run compare with previous data/model settings?
 
-<Callout title="Two different sites" type="info">
-This dashboard is a **live local server** that reads training output. The documentation site you are reading is a separate static fumadocs site under `docs/`; see [Build & deploy the docs site](/docs/reference/config-variants#build-and-deploy-the-docs-site).
-</Callout>
+For training mechanics, see [Design](/docs/blocks/trainer/design). For artifact
+contracts, see [Output Format](/docs/blocks/trainer/outputs).

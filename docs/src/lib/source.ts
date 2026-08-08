@@ -36,6 +36,13 @@ const blockSources = {
 
 type BlockName = keyof typeof blockSources;
 
+const blockLabels: Record<BlockName, string> = {
+  curator: 'Curator',
+  tracer: 'Tracer',
+  trainer: 'Trainer',
+  evaluator: 'Evaluator',
+};
+
 function isBlockName(value: string | undefined): value is BlockName {
   return (
     value === 'curator' ||
@@ -50,7 +57,7 @@ function blockFolder(name: BlockName) {
 
   return {
     type: 'folder',
-    name,
+    name: blockLabels[name],
     collapsible: true,
     defaultOpen: false,
     children: tree.children,
@@ -104,6 +111,7 @@ function mergedPageTree() {
       return {
         ...node,
         children: [
+          ...(node.children ?? []),
           blockFolder('curator'),
           blockFolder('tracer'),
           blockFolder('trainer'),

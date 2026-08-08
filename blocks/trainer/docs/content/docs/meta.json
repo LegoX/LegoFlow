@@ -2,12 +2,9 @@
     "pages": [
         "index",
         "getting-started",
-        "examples",
-        "core-concepts",
-        "data-pipeline",
-        "training",
-        "test-cases",
-        "dashboard",
-        "reference"
+        "design",
+        "advanced-usages",
+        "outputs",
+        "dashboard"
     ]
 }

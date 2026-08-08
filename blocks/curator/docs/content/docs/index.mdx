@@ -1,34 +1,34 @@
 ---
-title: Motivation
+title: Overview
 ---
 
-Curator turns real GitHub pull requests into verified SWE-style coding tasks.
-It is the task-curation stage of the LegoFlow pipeline, sitting before
-trajectory generation, SFT, and RL.
+Collecting useful SWE tasks is harder than saving a patch and a repository URL.
+A downstream trajectory is only meaningful when the task is reproducible,
+understandable, and testable: it needs a clean instruction, a pinned code
+environment, a bug-introducing change, a ground-truth fix, and tests that can
+separate solved attempts from unsolved ones.
 
-```text
-GitHub PRs -> curator -> tracer -> trainer -> evaluator
-```
+Curator is the block that turns real GitHub pull requests into verified SWE
+coding tasks. It collects candidate PRs, filters them with LLM-assisted checks,
+generates task instructions, builds [Harbor](https://www.harborframework.com/)
+compatible task directories, and validates each task. The overall design of Curator is as follows.
 
-Curator exists because high-quality agent training data needs more than a
-patch and a repository URL. Each task must have a reproducible container,
-a clear instruction, a bug-introducing patch, a ground-truth fix, and a test
-script that separates solved from unsolved attempts.
+![Curator workflow from pull request discovery to verified task publication](/figures/curator.png)
 
-Curator provides:
+With Curator, you can:
 
-- Multi-language PR collection across Python, JavaScript, TypeScript, Go, C, C++, Java, and Rust
-- LLM-assisted PR filtering and task instruction generation
-- Harbor-compatible task directories with Docker environments and tests
-- NOP and Oracle validation before a task is exposed downstream
-- `verifiable_tasks.txt` manifests that downstream blocks can trust
-- Batch state and resume support for long-running data construction
-- Static difficulty scoring and task metadata for dataset analysis
+- Collect tasks across Python, JavaScript, TypeScript, Go, C, C++, Java, and Rust.
+- Filter noisy PRs before spending rollout or training budget on them.
+- Produce Harbor-compatible task directories with Docker environments and tests.
+- Run NOP and Oracle validation so downstream blocks receive verifiable tasks.
+- Save trusted manifests, batch state, and resume metadata for long-running data construction.
+- Attach difficulty scores and task metadata for further analysis.
 
 ## Where to go next
 
-- [Getting Started](/docs/getting-started) - set up the block and run a smoke generation
-- [Core Concepts](/docs/core-concepts) - PR pools, task skeletons, validation, and manifests
-- [Run Generation](/docs/run-generation) - run per-language generation scripts safely
-- [Outputs](/docs/outputs) - understand task directories, manifests, logs, and state packages
-- [Dashboard](/docs/dashboard) - compare dataset difficulty and tag composition
+- [Getting Started](/docs/blocks/curator/getting-started) - set up the block and run a smoke generation
+- [Design](/docs/blocks/curator/design) - understand how Curator discovers, builds, verifies, and publishes tasks
+- [Output Format](/docs/blocks/curator/outputs) - understand PR pools, task directories, manifests, logs, and state packages
+- [Quality Rubrics](/docs/blocks/curator/advanced-usages/quality-rubrics) - compare task difficulty and dataset quality
+- [Task Tagging](/docs/blocks/curator/advanced-usages/task-tagging) - understand task tags and metadata
+- [Dashboard](/docs/blocks/curator/dashboard) - monitor dataset size, language coverage, difficulty, tags, and task quality

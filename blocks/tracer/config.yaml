@@ -18,8 +18,8 @@ meta_info:
     ip: local        # CPU-only; runs on any node with Docker available
     user: null
     pwd: null
-    directory: /gpufs/haoli/code/
-    description: cpu node server for k8s cluster. By default you should work at ${directory}
+    directory: null
+    description: Local CPU/Docker node. Remote SSH fields are ignored when ip is local.
     public_storage: null
 
   repositories:
@@ -48,8 +48,8 @@ meta_info:
 runtime_info:
   input:
     llm_api:
-      api_key: human
-      api_base_url: human
+      api_key: human                          # fill in a private local copy before running; never commit a real key
+      api_base_url: human                     # fill in a private local copy before running; keep gateway URLs out of git
       model: "openai/Qwen3.6-35B-A3B"
       description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
       protocols: [openai_compatible, anthropic_compatible]
@@ -83,7 +83,7 @@ runtime_info:
       temperature: 0.7
 
     sft_conversion:
-      enabled: false                   # true = start.sh runs convert step after the Harbor job
+      enabled: true                    # true = start.sh runs convert step after the Harbor job
       scaffold: auto                   # auto | claude_code | open_code | openhands_sdk | terminus2
       tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base  # align conversion with trainer.model.model_name_or_path
       out_dir: artifacts/sft_data

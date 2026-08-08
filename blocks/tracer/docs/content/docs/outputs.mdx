@@ -1,0 +1,118 @@
+---
+title: Output Format
+---
+
+Tracer archives rollout outputs under `artifacts/`. The primary payload is a
+set of Harbor jobs: each job contains per-task trajectories, aggregate rollout
+results, optional SFT conversion output, and run history for auditing.
+
+## Artifact layout
+
+The main Tracer outputs are organized as follows:
+
+```text
+artifacts/
+├── tasks/                              # prepared task directories staged for Harbor
+│   └── <dataset>/                      # local or Hugging Face task source
+├── jobs/                               # Harbor rollout jobs
+│   └── <job>/
+│       ├── result.json                 # aggregate rewards, errors, and job stats
+│       ├── config.yaml                 # active config snapshot at launch
+│       └── <task>/
+│           └── agent/
+│               └── litellm-trajectory.jsonl # replayable trajectory for one task
+├── sft_data/                           # optional converted training data
+│   └── <job>/
+│       ├── im.jsonl                    # intermediate records with quality metadata
+│       ├── lf.json                     # LLaMA-Factory ShareGPT data
+│       ├── lf.stats.json               # token, turn, and score statistics
+│       └── .convert_sig.json           # conversion cache signature
+├── litellm/                            # per-job LiteLLM proxy configs
+├── logs/                               # rollout, proxy, and launch logs
+├── processed_tasks.yaml                # task IDs already consumed by Tracer
+├── archives/                           # immutable run snapshots
+└── index.yaml                          # append-only run history
+```
+
+Most users should start with `artifacts/jobs/<job>/`, then inspect
+`artifacts/sft_data/<job>/` only when training-data conversion is enabled.
+The dashboard reads the same artifact tree, so these files are also the easiest
+way to debug a run without learning the internal scripts first.
+
+## Task preparation outputs
+
+Before rollout, Tracer stages compatible task directories into:
+
+```text
+artifacts/tasks/<dataset>/
+```
+
+These tasks come from Curator output or a Hugging Face source. The processed
+task ledger is stored at:
+
+```text
+artifacts/processed_tasks.yaml
+```
+
+Use the ledger to avoid rerunning tasks that were already consumed. It is
+runtime state, not a hand-written task list.
+
+## Rollout job outputs
+
+Each rollout job writes one directory under `artifacts/jobs/`:
+
+```text
+artifacts/jobs/<job>/
+├── result.json
+├── config.yaml
+└── <task>/
+    ├── result.json
+    └── agent/
+        └── litellm-trajectory.jsonl
+```
+
+`litellm-trajectory.jsonl` is the primary Tracer output. It is the replayable
+agent trajectory for one task and the source material for later conversion.
+`result.json` at the job root summarizes rewards, errors, and aggregate rollout
+status for dashboards and debugging.
+
+## SFT conversion outputs
+
+When `sft_conversion.enabled` is `true`, Tracer converts successful rollouts
+through `swe_data_process` and writes:
+
+```text
+artifacts/sft_data/<job>/
+├── im.jsonl
+├── lf.json
+├── lf.stats.json
+└── .convert_sig.json
+```
+
+`lf.json` is the training-ready LLaMA-Factory file. `im.jsonl` keeps the richer
+intermediate records and quality metadata used by dashboards and filtering.
+
+<Callout title="Handing over to Trainer" type="info">
+Trainer should consume post-conversion data when available:
+`artifacts/sft_data/<job>/lf.json`. Raw trajectories under
+`artifacts/jobs/<job>/` are still useful for replay and debugging, but the
+cleanest training handoff is the converted LF file.
+</Callout>
+
+## Run history
+
+Each completed run can be archived under:
+
+```text
+artifacts/archives/run_NNN/
+├── metadata.yaml
+├── config.yaml
+└── scripts/
+```
+
+`artifacts/index.yaml` records the run timeline. Use it for history; use the
+active job directory for live rollout details.
+
+The launch script writes an archive entry after success, failure, or
+interruption, so interrupted jobs still leave a run snapshot for later
+inspection.

@@ -4,7 +4,8 @@ title: Introduction
 
 <div className="docs-intro-page">
 
-TL;DR: **LegoFlow** turns long-horizon agent data workflows into reusable, block-based pipelines that coding agents can run, inspect, and extend through plugin skills.
+
+## What is LegoFlow?
 
 Building agent and software-engineering data pipelines is hard to do well. A realistic SWE pipeline has to mine useful GitHub changes, turn them into verifiable tasks, roll agents out in isolated environments, filter and convert trajectories, and then run multiple rounds of model training and evaluation. Without a shared workflow, the process becomes fragile: scripts drift, handoffs break, and several people often have to coordinate just to close the loop.
 
@@ -28,23 +29,23 @@ Building agent and software-engineering data pipelines is hard to do well. A rea
 
 The overall data pipeline is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. The **root** block orchestrates four child blocks:
 
-- **curator**: curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums such as Stack Overflow. Carefully designed filtering requirements preserve high-quality instances across **8+** programming languages and **20+** task tags.
-- **tracer**: collects high-quality trajectories with verified rewards, supporting rollouts across multiple coding scaffolds such as Claude Code, OpenCode, OpenHands, and Terminus.
-- **trainer**: converts rollout traces into training-ready formats and launches end-to-end training workflows.
-- **evaluator**: measures checkpoints on coding benchmarks and supports detailed analysis with carefully designed rubrics and tags.
-{/*- **live dashboard**: displays live statistics across tasks, trajectories, training status, and evaluator results. It also supports experiment comparison and deeper analysis over curated rubrics and tags.*/}
+- **Curator**: curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums such as Stack Overflow. Carefully designed filtering requirements preserve high-quality instances across **8+** programming languages and **20+** task tags.
+- **Tracer**: collects high-quality trajectories with verified rewards, supporting rollouts across multiple coding scaffolds such as Claude Code, OpenCode, OpenHands, and Terminus.
+- **Trainer**: converts rollout traces into training-ready formats and launches end-to-end training workflows.
+- **Evaluator**: measures checkpoints on coding benchmarks and supports detailed analysis with carefully designed rubrics and tags.
+{/*- **live dashboard**: displays live statistics across tasks, trajectories, training status, and Evaluator results. It also supports experiment comparison and deeper analysis over curated rubrics and tags.*/}
 
 
 
 ### Why Blocks?
 
-Blocks make the pipeline easier to use and easier to change. Because every stage follows the same contract, users can operate the whole system through plugin skills, restart a failed stage from its archived state, swap one block without breaking the others, and inspect artifacts through consistent dashboards. This keeps the workflow approachable for general users while leaving room for advanced analysis and new agent-data domains. See [Block Design](/docs/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
+Blocks make the pipeline easier to use and easier to change. Because every stage follows the same contract, users can operate the whole system through plugin skills, restart a failed stage from its archived state, swap one block without breaking the others, and inspect artifacts through consistent dashboards. This keeps the workflow approachable for general users while leaving room for advanced analysis and new agent-data domains. See [What is a Block](/docs/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
 
 
 ## Where to go next
 
 - [Getting Started](/docs/getting-started)
-- [Block Design](/docs/block-design)
-- Block: [curator](/docs/blocks/curator) · [tracer](/docs/blocks/tracer) · [trainer](/docs/blocks/trainer) · [evaluator](/docs/blocks/evaluator)
+- [What is a Block](/docs/block-design)
+- Block: [Curator](/docs/blocks/curator) · [Tracer](/docs/blocks/tracer) · [Trainer](/docs/blocks/trainer) · [Evaluator](/docs/blocks/evaluator)
 
 </div>

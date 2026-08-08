@@ -2,10 +2,9 @@
   "pages": [
     "index",
     "getting-started",
-    "core-concepts",
-    "run-generation",
+    "advanced-usages",
+    "design",
     "outputs",
-    "test-cases",
     "dashboard"
   ]
 }

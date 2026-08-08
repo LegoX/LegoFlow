@@ -2,182 +2,206 @@
 title: Getting Started
 ---
 
-Tracer wraps pinned Harbor and `swe_data_process` checkouts in the
-LegoFlow block layout. It prepares verified tasks, rolls an agent out
-through a per-job LiteLLM proxy, archives the run, and can convert successful
-trajectories into training data.
+This page gets Tracer from verified tasks to agent trajectories. The path is:
+fill `config.yaml`, run setup, check the block, launch rollouts, then open the
+dashboard.
 
-## Recommended: operate via the Claude plugin
-
-The block ships a `tracer` Claude Code plugin that owns the complete lifecycle.
-Launch Claude from the repository root to load every block plugin, or from
-`blocks/tracer/` for the block-local plugin, then use:
-
-```text
-/tracer:setup          # pin repos, build all three environments, initialize the ledger
-/tracer:check          # read-only preflight of config, repos, tasks, endpoint, Docker
-/tracer:run            # confirm, run Harbor, archive, and perform tracer bookkeeping
-/tracer:dashboard      # preview/publish progress or refresh SFT data and statistics
-```
-
-From the repository root, the generic orchestration equivalents are:
-
-```text
-/root:check tracer
-/root:run tracer
-```
-
-Choose either `/root:run tracer` or `/tracer:run` for a given job, not both.
-Both flows validate first and require explicit confirmation before launching.
-The root command owns generic dispatch and archiving; the tracer command also
-documents the block-specific proxy, ledger, and post-run procedure.
-
-The commands read `config.yaml`. LLM settings live under
-`runtime_info.input.llm_api`, task selection under `task_source`, rollout scale
-under `harbor_job`, the runtime preset under `agent`, and conversion settings
-under `sft_conversion`. Edit that file instead of the scripts or skill files.
-
-The rest of this page describes the underlying commands for manual operation
-and debugging.
+You can read it as a concrete walkthrough: follow the example config snippets
+and commands in order, and you will see how a Tracer run is put together.
 
 ## Prerequisites
 
-- **Docker** with a reachable daemon.
-- **uv** and **Python 3 with PyYAML**.
-- **Python 3.13** for the pinned LiteLLM environment; `uv` can install it.
-- **An OpenAI-compatible LLM endpoint** and API key.
-- **A task source**: curator's merged Harbor tasks or a compatible Hugging Face
-  dataset.
+Before starting, make sure these are available:
 
-<Callout title="Where to run" type="info">
-Tracer runs on the host declared by `config.yaml` →
-`meta_info.resources.ip`. The checked-in value is `local`. Use a named `tmux`
-session for long jobs so they survive shell disconnects.
-</Callout>
+- Claude Code with the Tracer plugin loaded.
+- Docker, used by Harbor to run task containers.
+- `uv` and Python, used to build the Harbor, LiteLLM, and conversion envs.
+- An OpenAI-compatible LLM endpoint and API key.
+- A task source, usually Curator's `artifacts/merged_swe_tasks/` output.
+- Optional Cloudflare credentials, only needed if you want to publish the dashboard.
 
-## 1. Enter and configure the block
+If the Tracer slash commands are not visible in Claude Code, see
+[Q&A](/docs/qa#i-am-in-the-repository-root-but-cannot-find-the-plugin-skills).
 
-Run manual commands from the block root:
+## Setup
 
-```bash
-cd blocks/tracer
+Most Tracer issues come from a mismatch between the task source, model endpoint,
+agent scaffold, and conversion settings. Once `config.yaml` is aligned, the
+skills handle the environment and launch details.
+
+For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
+`runtime_info.input` pieces below. For every field, see the
+<a href="/docs/blocks/tracer/advanced-usages/configuration">Configuration Guide</a>.
+
+### LLM API Config
+
+Tracer starts a per-job LiteLLM proxy in front of your model. Point `llm_api` at
+the raw upstream endpoint:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      model: openai/Qwen3.6-35B-A3B                  # upstream model called by the agent\n      protocols: [openai_compatible, anthropic_compatible]\n      served_via: per_job_litellm_proxy\n\n    litellm_proxy:\n      port: 4003                                     # local proxy port for this Tracer job\n      master_key: dummy-key-cf                       # functional dummy key for the proxy"}
+</ConfigSnippet>
+
+Never commit real API keys or private endpoints to `config.yaml`.
+
+### Receive Curator Output
+
+For the full LegoFlow path, Tracer reads Curator's merged verified tasks:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:\n        from: curator.output.merged_tasks_dir\n        when: {task_source.provider: local}\n\nruntime_info:\n  input:\n    task_source:\n      provider: local                                # receive Curator output from the local filesystem\n      dataset_name: ../curator/artifacts/merged_swe_tasks # Curator's merged verified task directory\n      split: train"}
+</ConfigSnippet>
+
+The `runtime_info.input.task_source.dataset_name` field is the path Tracer
+actually reads. The `meta_info.dependencies.from` entry explains where that
+value comes from in the block graph, so root-level checks can catch a broken
+Curator -> Tracer connection before rollout starts.
+
+During `/tracer:run`, Tracer copies this source into its own
+`artifacts/tasks/<dataset>/` area before Harbor starts. If
+`verifiable_tasks.txt` exists, only those verified task IDs are staged.
+
+### Rollout Config
+
+Start with a small task cap and modest concurrency:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    harbor_job:\n      jobs_dir: artifacts/jobs              # Harbor jobs and trajectories land here\n      n_concurrent: 4                       # keep small for the first run\n      n_tasks: 10                           # null = all prepared tasks\n      max_retries: 2\n      timeout_multiplier: 5"}
+</ConfigSnippet>
+
+### Agent Config
+
+Choose one scaffold and keep its runtime image, version, and conversion scaffold
+aligned. The default Claude Code profile looks like this:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    agent:\n      name: custom-claude-code              # custom-claude-code | custom-openhands-sdk | custom-opencode\n      version: 2.1.118\n      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1\n      runtime_host_path: artifacts/agent-runtime/claude-code\n      max_turns: 80\n      temperature: 0.7"}
+</ConfigSnippet>
+
+### SFT Conversion Config
+
+If you want Trainer-ready LF data after rollout, enable conversion. Otherwise
+leave it off and use raw trajectories only.
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    sft_conversion:\n      enabled: true                         # false = skip conversion after rollout\n      scaffold: auto                        # auto infers from agent.name\n      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base\n      out_dir: artifacts/sft_data\n      max_instances: null                   # null = convert all successful trajectories"}
+</ConfigSnippet>
+
+Now run setup:
+
+```text
+/tracer:setup
 ```
 
-Fill the two checked-in `human` markers:
+This prepares the pinned `repos/harbor` and `repos/swe_data_process` checkouts,
+builds the Harbor/LiteLLM/conversion environments, and checks the local runtime
+paths. Re-running it is fine.
 
-```yaml
-runtime_info:
-  input:
-    llm_api:
-      api_key: <your-key>
-      api_base_url: https://your-openai-compatible-endpoint/v1
-      model: openai/Qwen3.6-35B-A3B
+## Check
+
+Before launching containers or spending model tokens, run:
+
+```text
+/tracer:check
 ```
 
-Do not commit a real key. Before continuing, also review
-`task_source.provider`, `task_source.dataset_name`, `harbor_job.n_tasks`,
-`harbor_job.n_concurrent`, and the complete `agent` preset. When changing
-agents, keep its import path, API protocol, version, runtime image/runtime
-mount, and SFT scaffold aligned.
+This is read-only. It checks config, repo pins, environments, task source,
+model endpoint, proxy port, Docker, agent runtime, and conversion settings. For
+exact pass conditions, see
+[Validation Checks](/docs/blocks/tracer/advanced-usages/validation-checks). A healthy report
+should leave you ready for task preparation and rollout.
 
-## 2. Update the managed repos
+Fix required failures before continuing.
 
-Tracer pins `harbor` and `swe_data_process` in `config.yaml`. Initialize the
-tracked Harbor submodule in a fresh clone, then let the updater enforce both
-pins:
+## Run Trajectories
 
-```bash
-git submodule update --init repos/harbor
-bash scripts/update_repos.sh
+Launch the rollout job:
+
+```text
+/tracer:run
 ```
 
-The updater refuses to overwrite local modifications and makes repositories
-marked `readonly: true` read-only after checkout. Use `--repo harbor` or
-`--repo swe_data_process` to update one dependency.
+Tracer starts the per-job LiteLLM proxy, builds the Harbor command from
+`config.yaml`, stages tasks under `artifacts/tasks/<dataset>/`, excludes
+already processed or manually retired tasks, captures trajectories, optionally
+converts SFT data, and archives the run.
 
-## 3. Build the environments
+Task preparation happens as part of the run path. For local Curator output,
+Tracer trusts `verifiable_tasks.txt` when it exists and stages only verified
+tasks. Hugging Face sources are downloaded and unpacked into the same
+`artifacts/tasks/<dataset>/` layout. Tracer also skips tasks already recorded in
+`artifacts/processed_tasks.yaml` or manually listed in `excluded_tasks.txt`, so
+ordinary follow-up runs continue from the remaining work.
 
-The three environments live outside the read-only repositories:
-
-```bash
-bash scripts/setup_harbor_env.sh
-
-uv python install 3.13
-uv venv artifacts/env/litellm-venv --python 3.13
-uv pip install --python artifacts/env/litellm-venv/bin/python \
-  "litellm[proxy]==1.83.14"
-
-bash scripts/setup_swe_data_process_env.sh
-```
-
-`/tracer:setup` performs these steps idempotently and verifies the imports.
-`start.sh` expects the environments to exist; it does not build missing ones
-on demand.
-
-## 4. Prepare tasks
-
-Stage the configured source as Harbor task directories:
-
-```bash
-bash scripts/prepare_tasks.sh
-```
-
-For a local curator source, the script copies only IDs from
-`verifiable_tasks.txt` when that manifest exists. If the local source has no
-manifest, the current implementation copies all structurally valid task
-directories and prints that behavior. Hugging Face sources are downloaded
-under `artifacts/tasks/.cache/` before compatible task directories are staged.
-
-Prepared tasks land under `artifacts/tasks/<dataset>/`. Existing valid tasks
-are reused; pass `--overwrite` to rebuild them. See
-[Prepare Tasks](/docs/run-jobs/prepare-tasks).
-
-Task preparation is explicit. A normal `start.sh` does not prepare tasks unless
-it is launched with `TRAJGEN_PREPARE_TASKS=1`.
-
-## 5. Validate the block
-
-Run the read-only preflight:
-
-```bash
-bash scripts/dryrun.sh
-```
-
-It validates the shared block schema and dependency wiring, repo pins, the
-Harbor/LiteLLM/converter environments, prepared tasks, LLM model visibility,
-the proxy port, Docker and runtime image, conversion settings, and the
-processed-task ledger. Cloudflare and registry credentials are optional
-warnings.
-
-Fix all failures before launching. To inspect the generated Harbor command
-without starting the proxy or rollouts:
-
-```bash
-bash scripts/start.sh --dry-run-command
-```
-
-## 6. Launch and inspect a job
-
-After the preflight passes:
-
-```bash
-bash scripts/start.sh
-```
-
-`start.sh` generates a job-specific LiteLLM config, starts the proxy, builds the
-Harbor command from `config.yaml`, excludes both manually blocked and
-already-processed tasks, runs the job, optionally converts SFT data, stops the
-proxy, and archives the exit status.
-
-The principal outputs are:
+The main outputs are:
 
 ```text
 artifacts/jobs/<job>/result.json
 artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
-artifacts/archives/run_NNN/
-artifacts/index.yaml
+artifacts/sft_data/<job>/lf.json      # only when sft_conversion.enabled: true
 ```
 
-When `sft_conversion.enabled: true`, successful trajectories are also written
-under `artifacts/sft_data/<job>/`. Use the [dashboard](/docs/dashboard) for
-job, instance, trajectory, and SFT views.
+For the artifact layout and handoff contract, see [Output Format](/docs/blocks/tracer/outputs).
+
+## Trajectory Conversion
+
+Raw rollout trajectories are useful for inspection, but Trainer usually needs
+clean SFT data. If `sft_conversion.enabled: true`, Tracer converts successful
+rollouts after `/tracer:run`. You can also ask `/tracer:dashboard` to refresh
+conversion and stats for a finished job.
+
+The conversion path has three layers:
+
+| Layer | Format | Purpose |
+| --- | --- | --- |
+| **Raw trajectory** | Scaffold-specific Harbor/LiteLLM logs from Claude Code, OpenCode, OpenHands SDK, or Terminus-2. | Preserve the exact rollout trace for debugging and analysis. |
+| **IM** | Intermediate JSONL with OpenAI-style messages and normalized `tool_calls`. | Give all scaffolds one shared trajectory schema for scoring and filtering. |
+| **LF** | LLaMA-Factory ShareGPT JSON array. | The Trainer-ready SFT format; this is the usual downstream handoff. |
+
+The converted files live under:
+
+```text
+artifacts/sft_data/<job>/
+├── im.jsonl       # scored intermediate message records
+├── lf.json        # Trainer-ready LLaMA-Factory / ShareGPT data
+└── lf.stats.json  # token, turn, and score statistics for the dashboard
+```
+
+For the full conversion flow and supported scaffold keys, see
+[Trajectory Conversion](/docs/blocks/tracer/advanced-usages/trajectory-conversion) and [Supported Scaffolds](/docs/blocks/tracer/advanced-usages/scaffolds).
+
+## Output for Trainer
+
+For most training runs, Tracer hands over the converted LF file rather than raw
+trajectories. After `/tracer:run`, choose the finished job directory under
+`artifacts/sft_data/`:
+
+```text
+artifacts/sft_data/<job>/lf.json
+```
+
+Tracer's checked-in dependency contract currently declares the raw Harbor-job
+handoff for `source.type: harbor_job`:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"meta_info:\n  dependencies:\n    to:\n      raw_trajectories_dir:\n        to: trainer.input.source.job_dir\n        when: {trainer.input.source.type: harbor_job}\n\nruntime_info:\n  output:\n    raw_trajectories_dir:\n      path: artifacts/jobs\n    sft_data_dir:\n      path: artifacts/sft_data"}
+</ConfigSnippet>
+
+In the common SFT path, Trainer usually consumes `sft_data_dir` manually through
+`source.type: local_lf`. Continue with
+[Trainer Getting Started](/docs/blocks/trainer/getting-started) to see that
+downstream config.
+
+## Dashboard Visualization
+
+After a job starts or finishes, open the dashboard:
+
+```text
+/tracer:dashboard
+```
+
+The dashboard helps inspect job progress, per-task trajectories, rewards,
+failure patterns, and converted SFT data. It reads `artifacts/` directly; if a
+run is still active, keep watching the job log and `artifacts/jobs/<job>/` too.
+
+For the internal rollout mechanism, see [Design](/docs/blocks/tracer/design).

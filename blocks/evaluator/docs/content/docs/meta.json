@@ -2,12 +2,9 @@
     "pages": [
         "index",
         "getting-started",
-        "core-concepts",
-        "run-jobs",
-        "job-analysis",
-        "local-model",
-        "test-cases",
-        "dashboard",
-        "reference"
+        "advanced-usages",
+        "design",
+        "outputs",
+        "dashboard"
     ]
 }

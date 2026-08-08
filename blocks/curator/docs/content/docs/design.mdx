@@ -1,0 +1,154 @@
+---
+title: Design
+---
+
+This page explains what Curator does behind each command. The mechanism follows
+the workflow in [Overview](/docs): collect useful pull requests, turn them into
+Harbor tasks, validate each task with baseline agents, and publish the verified
+task pool that Tracer can consume.
+
+![Curator workflow from pull request discovery to verified task publication](/figures/curator.png)
+
+## 1. Collect PRs
+
+`/curator:collect-prs` runs `scripts/collect_all_bg.sh`. The script hydrates
+`config.yaml`, installs the pinned `repos/swegen` package if needed, and starts
+the SWE-gen collector in the background:
+
+```bash
+python3 repos/swegen/tools/collect_prs_wo_image.py
+```
+
+The collector reads `runtime_info.input.pr_collection` to decide:
+
+- which languages to search;
+- how many repositories and PRs to collect;
+- how many PRs to keep from each repository;
+- where the language-specific PR id files should land.
+
+The goal is not to collect every PR. Curator is looking for PRs that are small
+enough, recent enough, and contextualized enough to become reproducible coding
+tasks.
+
+The output of this stage is a PR pool:
+
+```text
+artifacts/collected_prs/
+├── python_pr_ids.txt
+├── javascript_pr_ids.txt
+└── ...
+```
+
+Each line records one candidate PR id. Logs are written under
+`artifacts/logs/collect_all_<timestamp>.log`.
+
+## 2. Generate Task Candidates
+
+`/curator:create-tasks` launches the language workers through
+`scripts/start.sh`. The first pass chooses the LLM mode from
+`runtime_info.input.llm_api.cc_provider_mode`:
+
+- `openai_proxy` starts the OpenAI-compatible proxy before generation;
+- `native` uses the native Anthropic path directly.
+
+Then `scripts/create_all_bg.sh` fans out to the enabled language scripts, such
+as `scripts/create_py.sh`. Each language script reads its own timeout,
+concurrency, and task cap through `scripts/read_params.py`, then calls:
+
+```bash
+swegen create
+```
+
+For Python, the handoff is roughly:
+
+```bash
+swegen create \
+  --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
+  --output artifacts/swe_tasks/py-cc \
+  --state-dir artifacts/state/swegen-py \
+  --timeout ... \
+  --cc-timeout ...
+```
+
+This is the point where noisy PR history becomes a task candidate. SWE-gen pulls
+the PR context, prepares the repository state, asks the coding model to create a
+clear task, and separates the materials that should be visible to a solver from
+the materials used only for validation.
+
+## 3. Assemble Harbor Tasks
+
+Each generated candidate is written as a
+[Harbor](https://www.harborframework.com/) task directory. A typical task looks
+like this:
+
+```text
+artifacts/swe_tasks/py-cc/<task_id>/
+├── task.toml
+├── instruction.md
+├── environment/
+│   ├── Dockerfile
+│   └── bug.patch
+├── solution/
+│   ├── fix.patch
+│   └── solve.sh
+└── tests/
+    └── test.sh
+```
+
+The important boundary is simple: `instruction.md` is what a future agent reads;
+`solution/` and `tests/` are for verification. That keeps the benchmark usable
+without leaking the reference fix into the prompt.
+
+## 4. Validate And Score
+
+Curator does not trust a task just because the directory exists. During
+`swegen create`, Harbor runs the baseline agents:
+
+- **NOP baseline**: the buggy task should fail, giving reward `0`.
+- **Oracle pass**: applying the ground-truth fix should pass, giving reward `1`.
+
+Only tasks that pass both checks are appended to:
+
+```text
+artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt
+```
+
+Curator also records analysis metadata. Difficulty is computed from task
+features and written back into `task.toml`; tags and categories are used by the
+dashboard pages for quality review and slice-level analysis.
+
+## 5. Publish Verified Tasks
+
+At the end of `scripts/start.sh`, Curator starts a lightweight aggregator:
+
+```bash
+python scripts/extract_verified_tasks.py
+```
+
+The aggregator reads each language's `verifiable_tasks.txt`, copies only those
+verified task directories, and writes a combined manifest:
+
+```text
+artifacts/merged_swe_tasks/
+├── <task_id>/
+├── <task_id>/
+└── verifiable_tasks.txt
+```
+
+This merged directory is the clean downstream contract. Tracer should read this
+pool instead of scanning every intermediate task directory.
+
+## Command Gates
+
+The mechanism above is exposed through a small set of plugin skills:
+
+| Command | What it gates |
+| --- | --- |
+| `/curator:setup` | Initializes `repos/swegen`, installs the environment, and hydrates runtime inputs. |
+| `/curator:check` | Validates config, repo pin, GitHub tokens, LLM endpoint, and Docker before work starts. |
+| `/curator:collect-prs` | Runs the Discover stage and writes PR pools. |
+| `/curator:create-tasks` | Runs Prepare, Assembly, and Verification. |
+| `/curator:dashboard` | Scores finished tasks and visualizes dataset tags and difficulty. |
+
+For the shortest runnable path, see [Getting Started](/docs/blocks/curator/getting-started).
+For the exact files written by each stage, see [Output Format](/docs/blocks/curator/outputs).

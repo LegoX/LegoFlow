@@ -1,0 +1,63 @@
+---
+title: Validation Checks
+---
+
+Use this page when `/trainer:check` reports a problem and you want to understand
+what Trainer is validating. The slash command is the user-facing preflight: it
+checks the config shape, pinned repositories, conversion stack, source data,
+model path, DeepSpeed config, output directory safety, GPU visibility, and
+wandb/HF settings before a training job uses GPUs.
+
+The shell tests below are the lower-level version of that contract. Most users
+do not need to run them directly; they are useful when changing Trainer code,
+training launch scripts, plugin skills, or CI.
+
+## Run the Suite
+
+```bash
+# Cheap deterministic checks. Safe for local development.
+bash blocks/trainer/tests/run.sh
+
+# Add the real GPU training smoke.
+bash blocks/trainer/tests/run.sh --with-smoke
+```
+
+Each test returns `0` for pass, `77` for skip, and any other code for failure.
+The aggregate `run.sh` fails only when at least one test fails. Skipped tests
+are reported but do not fail the suite.
+
+## Check Cases
+
+| Case | What it checks | Pass condition |
+| --- | --- | --- |
+| `01_config_schema.sh` | Trainer `config.yaml` shape and supported ranges. | Required fields are present; `meta_info.name` is `trainer`; scaffold, W&B mode, and GPU count are valid. |
+| `02_repo_pins.sh` | `repos/LLaMA-Factory` and `repos/swe_data_process`. | Repos exist at pinned commits; `swe_data_process` keeps the expected source layout. |
+| `03_uv_env_editable.sh` | Training Python environment. | The configured env imports `torch`, `swe_data_process`, and `llamafactory`. CUDA is reported but not required for this cheap case. |
+| `04_converter_module.sh` | Scaffold-to-converter mapping. | The converter module selected by `source.scaffold` imports inside the training env. |
+| `05_source_job_dir.sh` | Harbor trajectory source. | For `harbor_job` input, the job directory contains at least one `agent/litellm-trajectory.jsonl`; other sources skip. |
+| `06_model_path.sh` | Local base model path. | A local model path exists and contains `config.json`; Hub model IDs skip the local filesystem check. |
+| `07_deepspeed_config.sh` | DeepSpeed JSON. | The configured file exists, parses as JSON, and declares a ZeRO optimization stage. |
+| `08_gpu_count.sh` | Visible GPU count. | `nvidia-smi` reports enough GPUs. CPU-only runners skip this case. |
+| `09_ci_smoke_contract.sh` | CI smoke wiring. | CI still launches the guarded, disposable training smoke path. |
+
+## Smoke Run
+
+The smoke test is `smoke/10_train_demo.sh`. It runs the real training pipeline
+against a disposable config copy and a staged 512-sample dataset, bounded by
+`SFT_SMOKE_MAX_STEPS`.
+
+It passes when `train.sh` exits successfully, the run writes a finite
+`train_loss`, `trainer_state.json` reaches the requested max steps, and no
+checkpoint directory is written. It skips when heavy prerequisites are missing:
+the uv env, base model, DeepSpeed config, staged dataset, or enough idle GPUs.
+
+## Files
+
+```text
+blocks/trainer/tests/
+|-- cases/
+|-- smoke/
+`-- run.sh
+```
+
+See `blocks/trainer/tests/README.md` for detailed failure recipes.
