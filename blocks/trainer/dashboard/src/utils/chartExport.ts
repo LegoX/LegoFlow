@@ -25,21 +25,24 @@ function resolveStyles(clone: SVGSVGElement, original: SVGSVGElement) {
 }
 
 function applyExportTheme(clone: SVGSVGElement) {
-  // White background
+  // Exports always render on the light "paper" plane, whatever theme is on screen,
+  // so the chrome below uses the light-mode chrome tokens from DASHBOARD_PALETTE.md.
+  // Series strokes are left alone — resolveStyles() has already baked them in via
+  // getComputedStyle, which resolves the var() references to concrete colors.
   const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   bg.setAttribute("width", "100%");
   bg.setAttribute("height", "100%");
-  bg.setAttribute("fill", "#ffffff");
+  bg.setAttribute("fill", "#fafaf7");
   clone.insertBefore(bg, clone.firstChild);
 
-  // Grid lines → light gray
+  // Gridlines → hairline
   clone.querySelectorAll("line[stroke-dasharray]").forEach((el) => {
-    el.setAttribute("stroke", "#e2e8f0");
+    el.setAttribute("stroke", "#e6e3da");
   });
 
-  // Axis lines → dark
+  // Axis lines → recessive, a step darker than the grid
   clone.querySelectorAll(".recharts-cartesian-axis line, .recharts-cartesian-axis-line").forEach((el) => {
-    el.setAttribute("stroke", "#94a3b8");
+    el.setAttribute("stroke", "#c9c3b6");
   });
 
   // All text → dark for readability
@@ -47,19 +50,19 @@ function applyExportTheme(clone: SVGSVGElement) {
     const currentFill = el.getAttribute("fill") || "";
     // Keep colored legend/tooltip text, but make axis ticks dark
     if (!currentFill || currentFill.startsWith("var(") ||
-        currentFill === "none" || currentFill === "#94a3b8" ||
+        currentFill === "none" || currentFill === "#a9a297" ||
         currentFill.includes("chart")) {
-      el.setAttribute("fill", "#334155");
+      el.setAttribute("fill", "#4a453e");
     }
     // If fill is a very light color (from dark theme), make it dark
     if (currentFill.match(/^#[c-f][c-f]/i) || currentFill.match(/^rgb\((1[5-9]\d|2\d\d)/)) {
-      el.setAttribute("fill", "#334155");
+      el.setAttribute("fill", "#4a453e");
     }
   });
 
   // Legend text
   clone.querySelectorAll(".recharts-legend-item-text").forEach((el) => {
-    el.setAttribute("fill", "#475569");
+    el.setAttribute("fill", "#6b665e");
   });
 }
 

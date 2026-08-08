@@ -20,9 +20,9 @@ interface Props {
 }
 
 const RUN_COLORS = [
-  "#6366f1", "#10b981", "#f59e0b", "#f43f5e",
-  "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16",
-  "#fb923c", "#a78bfa", "#2dd4bf", "#fbbf24",
+  "#efa07c", "#4a9440", "#fab219", "#e66767",
+  "#9085e9", "#199e70", "#d55181", "#c98500",
+  "#ec835a", "#9085e9", "#199e70", "#fab219",
 ];
 
 const DEFAULT_METRICS = [
@@ -170,15 +170,15 @@ function CompareChart({
             />
             <Tooltip
               contentStyle={{
-                background: "#1e293b",
-                border: "1px solid #334155",
+                background: "#302a24",
+                border: "1px solid #4a453e",
                 borderRadius: 8,
                 fontSize: 12,
               }}
               formatter={(v: number) => formatValue(v)}
             />
             <Legend
-              wrapperStyle={{ fontSize: 11, color: "#94a3b8" }}
+              wrapperStyle={{ fontSize: 11, color: "#a9a297" }}
               iconType="plainline"
             />
             {selectedRuns.map((id, i) => (

@@ -18,7 +18,7 @@ export default function TrainingPanel({ data }: Props) {
           title={t("train.loss")}
           data={data}
           keys={["loss"]}
-          colors={["#f43f5e"]}
+          colors={["#e66767"]}
           showArea
         />
         {hasEval ? (
@@ -26,14 +26,14 @@ export default function TrainingPanel({ data }: Props) {
             title={t("train.lossVsEval")}
             data={data}
             keys={["loss", "eval_loss"]}
-            colors={["#f43f5e", "#10b981"]}
+            colors={["#e66767", "#4a9440"]}
           />
         ) : (
           <ChartPanel
             title={t("train.gradNorm")}
             data={data}
             keys={["grad_norm"]}
-            colors={["#84cc16"]}
+            colors={["#c98500"]}
             showArea
           />
         )}
@@ -41,7 +41,7 @@ export default function TrainingPanel({ data }: Props) {
           title={t("train.lr")}
           data={data}
           keys={["lr"]}
-          colors={["#f59e0b"]}
+          colors={["#fab219"]}
           showArea
         />
         {hasEval && (
@@ -49,7 +49,7 @@ export default function TrainingPanel({ data }: Props) {
             title={t("train.gradNorm")}
             data={data}
             keys={["grad_norm"]}
-            colors={["#84cc16"]}
+            colors={["#c98500"]}
             showArea
           />
         )}
@@ -57,7 +57,7 @@ export default function TrainingPanel({ data }: Props) {
           title={t("train.epoch")}
           data={data}
           keys={["epoch"]}
-          colors={["#8b5cf6"]}
+          colors={["#9085e9"]}
         />
       </div>
     </div>

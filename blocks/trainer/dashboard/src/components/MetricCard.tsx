@@ -71,7 +71,7 @@ export default function MetricCard({
   metricKey,
   data,
   format = "number",
-  color = "#6366f1",
+  color = "#efa07c",
   icon,
 }: Props) {
   const values = data

@@ -33,8 +33,8 @@ export default function EvalPanel({ data }: Props) {
       <p className="text-xs text-slate-500 mb-4">{t("eval.desc")}</p>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <MetricCard label={t("eval.bestLoss")} metricKey="eval_loss" data={[best]} color="#10b981" />
-        <MetricCard label={t("eval.latestLoss")} metricKey="eval_loss" data={evals} color="#06b6d4" />
+        <MetricCard label={t("eval.bestLoss")} metricKey="eval_loss" data={[best]} color="#4a9440" />
+        <MetricCard label={t("eval.latestLoss")} metricKey="eval_loss" data={evals} color="#199e70" />
         <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
           <span className="text-xs text-slate-400 font-medium">{t("eval.bestStep")}</span>
           <div className="text-2xl font-semibold text-slate-100 font-mono mt-2">{best.step}</div>
@@ -46,8 +46,8 @@ export default function EvalPanel({ data }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartPanel title={t("eval.lossChart")} data={evals} keys={["eval_loss"]} colors={["#10b981"]} showArea />
-        <ChartPanel title={t("eval.vsTrain")} data={data} keys={["loss", "eval_loss"]} colors={["#f43f5e", "#10b981"]} />
+        <ChartPanel title={t("eval.lossChart")} data={evals} keys={["eval_loss"]} colors={["#4a9440"]} showArea />
+        <ChartPanel title={t("eval.vsTrain")} data={data} keys={["loss", "eval_loss"]} colors={["#e66767", "#4a9440"]} />
       </div>
     </div>
   );

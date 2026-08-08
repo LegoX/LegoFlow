@@ -536,13 +536,16 @@ function hexToRgba(hex, alpha) {
 
 function compareJobPalette(styles = getComputedStyle(document.documentElement)) {
   return [
-    styles.getPropertyValue("--c-accent").trim() || "#6366f1",
-    styles.getPropertyValue("--c-cyan").trim() || "#22d3ee",
-    styles.getPropertyValue("--c-good").trim() || "#34d399",
-    styles.getPropertyValue("--c-warn").trim() || "#fbbf24",
-    styles.getPropertyValue("--c-pink").trim() || "#f472b6",
-    styles.getPropertyValue("--c-violet").trim() || "#a78bfa",
-    styles.getPropertyValue("--c-bad").trim() || "#f87171",
+    // Categorical slots from DASHBOARD_PALETTE.md, in their fixed order. The brand
+    // accent and the status colors are deliberately not used here — neither may
+    // stand in for a series.
+    styles.getPropertyValue("--c-series-1").trim() || "#d95926",
+    styles.getPropertyValue("--c-series-2").trim() || "#199e70",
+    styles.getPropertyValue("--c-series-3").trim() || "#3987e5",
+    styles.getPropertyValue("--c-series-4").trim() || "#c98500",
+    styles.getPropertyValue("--c-series-5").trim() || "#d55181",
+    styles.getPropertyValue("--c-series-6").trim() || "#008300",
+    styles.getPropertyValue("--c-series-7").trim() || "#9085e9",
   ];
 }
 
@@ -1138,10 +1141,12 @@ function renderBreakdownChart(canvasId, tbl, cats) {
   const totals = sorted.map(c => (tbl.counts[c] || {}).total || 0);
   const resolved = sorted.map(c => (tbl.counts[c] || {}).resolved || 0);
   const styles = getComputedStyle(document.documentElement);
-  const grid = styles.getPropertyValue("--chart-grid").trim() || "#1e293b";
-  const tick = styles.getPropertyValue("--chart-tick").trim() || "#64748b";
-  const fg = styles.getPropertyValue("--c-fg").trim() || "#e2e8f0";
-  const accent = styles.getPropertyValue("--c-accent").trim() || "#6366f1";
+  const grid = styles.getPropertyValue("--chart-grid").trim() || "#302a24";
+  const tick = styles.getPropertyValue("--chart-tick").trim() || "#8a847a";
+  const fg = styles.getPropertyValue("--c-fg").trim() || "#f0ede7";
+  // Single series → every bar wears slot 1, not the brand accent (which stays out
+  // of plots) and not a status color. The title names the measure, so no legend.
+  const accent = styles.getPropertyValue("--c-series-1").trim() || "#d95926";
   const yRange = chartPercentYAxisRange(rates);
   const chart = new Chart(canvas, {
     type: "bar",
@@ -1225,17 +1230,20 @@ function renderCompareBreakdownChart(canvasId, jobs, tableKey) {
   if (labels.length === 0) return;
 
   const styles = getComputedStyle(document.documentElement);
-  const grid = styles.getPropertyValue("--chart-grid").trim() || "#1e293b";
-  const tick = styles.getPropertyValue("--chart-tick").trim() || "#64748b";
-  const fg = styles.getPropertyValue("--c-fg").trim() || "#e2e8f0";
+  const grid = styles.getPropertyValue("--chart-grid").trim() || "#302a24";
+  const tick = styles.getPropertyValue("--chart-tick").trim() || "#8a847a";
+  const fg = styles.getPropertyValue("--c-fg").trim() || "#f0ede7";
   const palette = [
-    styles.getPropertyValue("--c-accent").trim() || "#6366f1",
-    styles.getPropertyValue("--c-cyan").trim() || "#22d3ee",
-    styles.getPropertyValue("--c-good").trim() || "#34d399",
-    styles.getPropertyValue("--c-warn").trim() || "#fbbf24",
-    styles.getPropertyValue("--c-pink").trim() || "#f472b6",
-    styles.getPropertyValue("--c-violet").trim() || "#a78bfa",
-    styles.getPropertyValue("--c-bad").trim() || "#f87171",
+    // Categorical slots from DASHBOARD_PALETTE.md, in their fixed order. The brand
+    // accent and the status colors are deliberately not used here — neither may
+    // stand in for a series.
+    styles.getPropertyValue("--c-series-1").trim() || "#d95926",
+    styles.getPropertyValue("--c-series-2").trim() || "#199e70",
+    styles.getPropertyValue("--c-series-3").trim() || "#3987e5",
+    styles.getPropertyValue("--c-series-4").trim() || "#c98500",
+    styles.getPropertyValue("--c-series-5").trim() || "#d55181",
+    styles.getPropertyValue("--c-series-6").trim() || "#008300",
+    styles.getPropertyValue("--c-series-7").trim() || "#9085e9",
   ];
 
   const datasets = comparableJobs.map((job, index) => {
@@ -1757,9 +1765,9 @@ function renderCompareRuleScoreChart(canvasId, comparable, metricKeys, rowsByJob
   if (!canvas || typeof Chart === "undefined") return;
 
   const styles = getComputedStyle(document.documentElement);
-  const grid = styles.getPropertyValue("--chart-grid").trim() || "#1e293b";
-  const tick = styles.getPropertyValue("--chart-tick").trim() || "#64748b";
-  const fg = styles.getPropertyValue("--c-fg").trim() || "#e2e8f0";
+  const grid = styles.getPropertyValue("--chart-grid").trim() || "#302a24";
+  const tick = styles.getPropertyValue("--chart-tick").trim() || "#8a847a";
+  const fg = styles.getPropertyValue("--c-fg").trim() || "#f0ede7";
   const palette = compareJobPalette(styles);
   const labels = metricKeys.map(key => ruleScoreMetricLabelForKey(rowsByJob, key));
   const datasets = comparable.map((job, index) => {
@@ -1868,9 +1876,9 @@ function renderCompareErrorAnalysisChart(canvasId, comparable, metricKeys, rowsB
   if (!canvas || typeof Chart === "undefined") return;
 
   const styles = getComputedStyle(document.documentElement);
-  const grid = styles.getPropertyValue("--chart-grid").trim() || "#1e293b";
-  const tick = styles.getPropertyValue("--chart-tick").trim() || "#64748b";
-  const fg = styles.getPropertyValue("--c-fg").trim() || "#e2e8f0";
+  const grid = styles.getPropertyValue("--chart-grid").trim() || "#302a24";
+  const tick = styles.getPropertyValue("--chart-tick").trim() || "#8a847a";
+  const fg = styles.getPropertyValue("--c-fg").trim() || "#f0ede7";
   const palette = compareJobPalette(styles);
   const labels = metricKeys.map(key => getDeterministicFeatureMeta(key).label);
   const datasets = comparable.map((job, index) => {
@@ -2002,9 +2010,9 @@ function renderCompareTrialMetricChart(canvasId, rows, metric) {
   if (!canvas || typeof Chart === "undefined") return;
 
   const styles = getComputedStyle(document.documentElement);
-  const grid = styles.getPropertyValue("--chart-grid").trim() || "#1e293b";
-  const tick = styles.getPropertyValue("--chart-tick").trim() || "#64748b";
-  const fg = styles.getPropertyValue("--c-fg").trim() || "#e2e8f0";
+  const grid = styles.getPropertyValue("--chart-grid").trim() || "#302a24";
+  const tick = styles.getPropertyValue("--chart-tick").trim() || "#8a847a";
+  const fg = styles.getPropertyValue("--c-fg").trim() || "#f0ede7";
   const palette = compareJobPalette(styles);
   const values = rows.map(row => row[metric.key]);
   const numericValues = values.filter(v => typeof v === "number" && Number.isFinite(v));
