@@ -21,22 +21,35 @@ The easiest way to use LegoFlow is through plugin skills. Think of these as
 guided commands that know the project layout, check the right files, and ask
 for confirmation before expensive jobs start.
 
-At the repository root, load the root plugin and all block plugins together:
+Install all plugins once per machine. From the repository root, first register
+each local plugin directory as a Claude Code marketplace:
 
 ```bash
-claude \
-  --plugin-dir .claude/plugins/root-plugin \
-  --plugin-dir blocks/curator/.claude/plugins/curator-plugin \
-  --plugin-dir blocks/tracer/.claude/plugins/tracer-plugin \
-  --plugin-dir blocks/trainer/.claude/plugins/trainer-plugin \
-  --plugin-dir blocks/evaluator/.claude/plugins/evaluator-plugin
+claude plugin marketplace add ./.claude/plugins
+claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/tracer/.claude/plugins
+claude plugin marketplace add ./blocks/trainer/.claude/plugins
+claude plugin marketplace add ./blocks/evaluator/.claude/plugins
 ```
 
-After Claude Code starts, run `/reload-plugins` once. You should then see root
-and block skills such as `/root:setup`, `/root:check`, `/curator:create-tasks`, and
-`/tracer:dashboard`. These skills are the main entry points for LegoFlow: they
-guide users through setup, checks, runs, and inspection without requiring them
-to memorize the underlying scripts.
+Then install the plugin from each marketplace. The format is
+`<plugin-name>@<marketplace-name>`, as defined by each local
+`marketplace.json`:
+
+```bash
+claude plugin install root@root-block
+claude plugin install curator@curator-block
+claude plugin install tracer@tracer
+claude plugin install trainer@trainer-block
+claude plugin install evaluator@evaluator-block
+```
+
+In any active Claude Code session, run `/reload-plugins` once to pick them up,
+or restart the session. You should then see root and block skills such as
+`/root:setup`, `/root:check`, `/curator:create-tasks`, and `/tracer:dashboard`. These
+skills are the main entry points for LegoFlow: they guide users through setup,
+checks, runs, and inspection without requiring them to memorize the underlying
+scripts.
 
 
 
