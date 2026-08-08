@@ -17,6 +17,14 @@ rendered panels verbatim and only:
 
 Input : base_4ds.html (frozen 4-dataset snapshot; falls back to /tmp/deployed_index.html)
 Output: site/index.html
+
+NOTE (layout): this script still emits the **legacy** shell -- datasets as sidebar
+navigation -- because it can only rearrange the frozen snapshot's markup. The
+current layout (sidebar = Overview / Task List, datasets as an in-page filter) is
+produced by `progress_monitor_multi.py` and needs `datasets/<id>/tasks.jsonl`.
+Prefer a full regenerate; use this only while those inputs are unavailable. The
+`.ds-nav` / `.ds-item` rules this output depends on are kept in that module's CSS
+purely for it.
 """
 from __future__ import annotations
 

@@ -171,6 +171,119 @@ def aggregate_dataset(dataset_id: str) -> dict[str, Any]:
     }
 
 
+
+# ── Task List data ────────────────────────────────────────────────────────────
+# The Task List page needs per-task rows, which neither aggregate_dataset() nor the
+# rendered HTML carries. Rows are joined from tasks.jsonl (identity: instance_id,
+# repo, language) and tags.jsonl (difficulty + the 4-tag schema), then written as
+# sharded JSON so a 100k+ row dataset never lands in the HTML. Cloudflare Pages is
+# static, so "paging" is the client fetching the shard it needs.
+
+TASK_COLUMNS = ["id", "ds", "repo", "lang", "score", "label", "area", "bug", "lines"]
+TASK_SHARD_ROWS = 2000
+
+
+def _record_id(rec: dict[str, Any]) -> str:
+    """tags.jsonl is written by the swegen tagger, whose id field we cannot confirm
+    from this checkout (repos/swegen is not initialised). Accept the plausible
+    spellings rather than silently dropping every row on a key mismatch."""
+    for key in ("instance_id", "task_id", "id"):
+        val = rec.get(key)
+        if val:
+            return str(val)
+    return ""
+
+
+def iter_task_rows(dataset_id: str) -> list[list[Any]]:
+    """Join one dataset's tasks.jsonl with its tags.jsonl into compact list rows."""
+    tasks_file = DATASETS_DIR / dataset_id / "tasks.jsonl"
+    tags_file = DATASETS_DIR / dataset_id / "tags.jsonl"
+    if not tasks_file.exists():
+        return []
+
+    tags: dict[str, dict[str, Any]] = {}
+    if tags_file.exists():
+        with tags_file.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                rid = _record_id(rec)
+                if rid:
+                    tags[rid] = rec
+
+    rows: list[list[Any]] = []
+    with tasks_file.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                task = json.loads(line)
+            except Exception:
+                continue
+            tid = _record_id(task)
+            tag = tags.get(tid, {})
+            raw_tags = [str(t).strip().lower() for t in tag.get("tags", []) if str(t).strip()]
+            score = tag.get("difficulty_score")
+            rows.append([
+                tid,
+                dataset_id,
+                str(task.get("repo") or ""),
+                str(task.get("language") or (raw_tags[0] if raw_tags else "")).lower(),
+                round(float(score), 2) if score is not None else None,
+                str(tag.get("difficulty_label") or ""),
+                raw_tags[1] if len(raw_tags) >= 2 else "",
+                str(tag.get("bug_class") or "").strip().lower(),
+                int((tag.get("patch_stats") or {}).get("lines") or 0),
+            ])
+    return rows
+
+
+def export_task_shards(output_dir: Path) -> dict[str, Any]:
+    """Write data/tasks-<n>.json shards plus the manifest the Task List page reads.
+
+    Returns the manifest (also written to data/tasks-index.json)."""
+    data_dir = output_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    for stale in data_dir.glob("tasks-*.json"):
+        stale.unlink()
+
+    all_rows: list[list[Any]] = []
+    per_dataset: dict[str, int] = {}
+    for ds_id, _display, _desc in DATASETS:
+        rows = iter_task_rows(ds_id)
+        per_dataset[ds_id] = len(rows)
+        all_rows.extend(rows)
+
+    shards = []
+    for i in range(0, len(all_rows), TASK_SHARD_ROWS):
+        chunk = all_rows[i : i + TASK_SHARD_ROWS]
+        name = f"tasks-{i // TASK_SHARD_ROWS:04d}.json"
+        (data_dir / name).write_text(json.dumps(chunk, ensure_ascii=False), encoding="utf-8")
+        shards.append(name)
+
+    li, ai, bi = TASK_COLUMNS.index("lang"), TASK_COLUMNS.index("area"), TASK_COLUMNS.index("bug")
+    manifest = {
+        "columns": TASK_COLUMNS,
+        "shard_rows": TASK_SHARD_ROWS,
+        "total": len(all_rows),
+        "per_dataset": per_dataset,
+        "shards": shards,
+        "languages": sorted({r[li] for r in all_rows if r[li]}),
+        "areas": sorted({r[ai] for r in all_rows if r[ai]}),
+        "bug_classes": sorted({r[bi] for r in all_rows if r[bi]}),
+    }
+    (data_dir / "tasks-index.json").write_text(
+        json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+    )
+    return manifest
+
+
 def fmt_int(v) -> str:
     try:
         return f"{int(v):,}"
@@ -261,7 +374,7 @@ CSS = """
   --c-fg: #111111; --c-fg-dim: #4a453e; --c-fg-mute: #6b6b66; --c-fg-faint: #8c8c85;
   --c-accent: #b3431f; --c-accent-soft: #b3431f1f; --c-accent-border: #b3431f80;
   --c-good: #3f8f2f; --c-bad: #d03b3b; --c-warn: #c8860d; --c-violet: #4a3aa7;
-  --c-violet: #4a3aa7; --c-method-bg: #eef2ff; --c-method-head: #4338ca;
+  --c-method-bg: #b3431f14; --c-method-head: #b3431f;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: var(--c-bg); color: var(--c-fg);
@@ -279,6 +392,24 @@ code, pre, .mono { font-family: var(--font-mono); }
   display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 16px; }
 .logo-title { font-size: 20px; font-weight: 600; }
 .logo-sub { font-size: 16px; color: var(--c-fg-mute); }
+/* Sidebar is functional navigation only — pages, never datasets. Datasets are an
+   in-page filter (.chip) on both pages, so the two share one selection. Mirrors
+   the tracer dashboard's .nav-item / data-page structure. */
+.nav { padding: 10px 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 3px; }
+.nav-item { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
+  background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
+  padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 19px; font-weight: 600; }
+.nav-item:hover { background: #302a2440; color: var(--c-fg); }
+.nav-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #f5c9b4; }
+[data-theme="light"] .nav-item.active { color: var(--c-accent); }
+.nav-icon { flex: 0 0 auto; width: 20px; text-align: center; opacity: .85; }
+.nav-count { margin-left: auto; font-family: var(--font-mono); font-size: 16px; color: var(--c-fg-mute); }
+
+/* Legacy shell, kept for inject_v2.py only. That script performs surgery on the
+   frozen base_4ds.html snapshot -- which still carries the dataset-as-navigation
+   sidebar -- and swaps this whole stylesheet in wholesale, so dropping these rules
+   would leave its output unstyled. Nothing render_html() emits uses them; retire
+   them once inject_v2.py is replaced by a full regenerate. */
 .ds-nav { padding: 10px 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 3px; }
 .ds-item { background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
   padding: 10px 12px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 19px;
@@ -288,6 +419,41 @@ code, pre, .mono { font-family: var(--font-mono); }
 [data-theme="light"] .ds-item.active { color: var(--c-accent); }
 .ds-item .ds-name { font-weight: 600; font-size: 19px; }
 .ds-item .ds-count { font-size: 17px; color: var(--c-fg-mute); }
+
+.page { display: none; }
+.page.active { display: block; }
+
+/* Shared dataset filter */
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 20px; }
+.chip { background: var(--c-bg-2); border: 1px solid var(--c-border); color: var(--c-fg-dim);
+  border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 17px; }
+.chip:hover { color: var(--c-fg); border-color: var(--c-accent-border); }
+.chip.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #f5c9b4; font-weight: 600; }
+[data-theme="light"] .chip.active { color: var(--c-accent); }
+.chip .n { color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 15px; margin-left: 6px; }
+.filter-sep { flex: 1 1 auto; }
+.filter-input, .filter-select { background: var(--c-bg-2); border: 1px solid var(--c-border);
+  color: var(--c-fg); border-radius: 8px; padding: 7px 12px; font-size: 17px; outline: none; }
+.filter-input:focus, .filter-select:focus { border-color: var(--c-accent); }
+.filter-input { min-width: 260px; }
+
+/* Task list */
+.tbl-wrap { overflow-x: auto; }
+table.tasks { font-size: 17px; }
+table.tasks td { white-space: nowrap; }
+table.tasks td.id { font-family: var(--font-mono); font-size: 16px; max-width: 420px;
+  overflow: hidden; text-overflow: ellipsis; }
+.pill { border-radius: 999px; padding: 2px 10px; font-size: 15px; border: 1px solid transparent; }
+.pill.easy { background: #4a944022; color: var(--c-good); border-color: #4a944055; }
+.pill.medium { background: #fab21922; color: var(--c-warn); border-color: #fab21955; }
+.pill.hard { background: #d03b3b22; color: var(--c-bad); border-color: #d03b3b55; }
+.pager { display: flex; align-items: center; gap: 12px; margin-top: 16px; font-size: 17px; }
+.pager button { background: var(--c-bg-2); border: 1px solid var(--c-border); color: var(--c-fg-dim);
+  border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 17px; }
+.pager button:hover:not(:disabled) { color: var(--c-fg); border-color: var(--c-accent-border); }
+.pager button:disabled { opacity: .4; cursor: default; }
+.pager .status { color: var(--c-fg-mute); font-family: var(--font-mono); }
+.empty-state { padding: 48px 24px; text-align: center; color: var(--c-fg-mute); font-size: 19px; }
 .sidebar-section { padding: 12px 8px 8px; flex: 1; overflow: auto; }
 .section-label { text-transform: uppercase; font-size: 16px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 600; }
 .sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 19px; }
@@ -439,32 +605,178 @@ def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bo
 """
 
 
-def render_html(datasets: list[dict[str, Any]], output_path: Path) -> str:
+def combine_datasets(datasets: list[dict[str, Any]]) -> dict[str, Any]:
+    """Fold every dataset into one aggregate in the same shape aggregate_dataset
+    returns, so render_panel can draw the global view unchanged."""
+    scores: list[float] = []
+    labels: Counter[str] = Counter()
+    topics: Counter[str] = Counter()
+    areas: Counter[str] = Counter()
+    bugs: Counter[str] = Counter()
+    langs: Counter[str] = Counter()
+    total = tagged = with_topic = with_bug = 0
+    lines = hunks = files = 0.0
+
+    for d in datasets:
+        scores.extend(d["difficulty_scores"])
+        labels.update(d["difficulty_labels"])
+        topics.update(d["topics"])
+        areas.update(d["areas"])
+        bugs.update(d["bug_classes"])
+        langs.update(d["languages"])
+        total += d["total"]
+        tagged += d["tagged"]
+        with_topic += d["tasks_with_topic"]
+        with_bug += d["tasks_with_bug_class"]
+        # patch averages are per-tagged-task, so re-weight by each dataset's tagged count
+        lines += d["patch"]["avg_lines"] * d["tagged"]
+        hunks += d["patch"]["avg_hunks"] * d["tagged"]
+        files += d["patch"]["avg_files"] * d["tagged"]
+
+    denom = tagged or 1
+    return {
+        "id": "all",
+        "total": total,
+        "tagged": tagged,
+        "difficulty_scores": scores,
+        "difficulty_stats": score_stats(scores),
+        "difficulty_bins": score_bins(scores),
+        "difficulty_labels": dict(labels),
+        "topics": dict(topics.most_common()),
+        "tasks_with_topic": with_topic,
+        "areas": dict(areas.most_common()),
+        "bug_classes": dict(bugs.most_common()),
+        "tasks_with_bug_class": with_bug,
+        "languages": dict(langs.most_common()),
+        "patch": {"avg_lines": lines / denom, "avg_hunks": hunks / denom, "avg_files": files / denom},
+    }
+
+
+def render_comparison_table(datasets: list[dict[str, Any]]) -> str:
     by_id = {d["id"]: d for d in datasets}
-    grand_total = sum(d["total"] for d in datasets)
-    grand_tagged = sum(d["tagged"] for d in datasets)
-
-    ds_nav = []
-    panels = []
-    for idx, meta in enumerate(DATASETS):
-        ds_id, display, desc = meta
-        data = by_id.get(ds_id)
-        if data is None:
+    rows = []
+    for ds_id, display, _desc in DATASETS:
+        d = by_id.get(ds_id)
+        if d is None:
             continue
-        active = idx == 0
-        ds_nav.append(
-            f'<button class="ds-item{" active" if active else ""}" data-ds="{ds_id}" onclick="switchDs(\'{ds_id}\')">'
-            f'<span class="ds-name">{html.escape(display)}</span>'
-            f'<span class="ds-count">{fmt_int(data["total"])} tasks</span>'
-            f'</button>'
+        s = d["difficulty_stats"]
+        rows.append(
+            f"<tr><td><strong>{html.escape(display)}</strong></td>"
+            f"<td>{fmt_int(d['total'])}</td><td>{fmt_int(d['tagged'])}</td>"
+            f"<td>{fmt_float(s['mean'], 2)}</td><td>{fmt_float(s['median'], 1)}</td>"
+            f"<td>{fmt_float(d['patch']['avg_lines'], 1)}</td>"
+            f"<td>{render_label_bar(d)}</td></tr>"
         )
-        panels.append(render_panel(meta, data, active))
+    return f"""
+  <div class="panel">
+    <h2>Datasets <span>side by side</span></h2>
+    <table>
+      <tr><th>Dataset</th><th>Tasks</th><th>Tagged</th><th>Mean diff.</th><th>Median</th>
+          <th>Avg patch lines</th><th>Easy / medium / hard</th></tr>
+      {''.join(rows)}
+    </table>
+  </div>
+"""
 
-    first = datasets[0]
+
+def render_overview(datasets: list[dict[str, Any]], combined: dict[str, Any]) -> str:
+    by_id = {d["id"]: d for d in datasets}
+    chips = [
+        f'<button class="chip active" data-ds="all">All datasets'
+        f'<span class="n">{fmt_int(combined["total"])}</span></button>'
+    ]
+    panels = [render_panel(("all", "All datasets", ""), combined, True)]
+    for ds_id, display, desc in DATASETS:
+        d = by_id.get(ds_id)
+        if d is None:
+            continue
+        chips.append(
+            f'<button class="chip" data-ds="{ds_id}">{html.escape(display)}'
+            f'<span class="n">{fmt_int(d["total"])}</span></button>'
+        )
+        panels.append(render_panel((ds_id, display, desc), d, False))
+
+    # the cross-dataset table only makes sense on the combined view
+    panels[0] = panels[0].replace(
+        '<div class="grid2">', render_comparison_table(datasets) + '<div class="grid2">', 1
+    )
+    return f"""
+<div class="page active" id="page-overview">
+  <div class="filters">{''.join(chips)}</div>
+  {''.join(panels)}
+</div>
+"""
+
+
+def render_tasks_page(manifest: dict[str, Any]) -> str:
+    per_ds = manifest.get("per_dataset", {})
+    chips = [
+        f'<button class="chip active" data-ds="all">All datasets'
+        f'<span class="n">{fmt_int(manifest.get("total", 0))}</span></button>'
+    ]
+    for ds_id, display, _desc in DATASETS:
+        chips.append(
+            f'<button class="chip" data-ds="{ds_id}">{html.escape(display)}'
+            f'<span class="n">{fmt_int(per_ds.get(ds_id, 0))}</span></button>'
+        )
+    langs = "".join(
+        f'<option value="{html.escape(v)}">{html.escape(v)}</option>'
+        for v in manifest.get("languages", [])
+    )
+    return f"""
+<div class="page" id="page-tasks">
+  <div class="filters">{''.join(chips)}</div>
+  <div class="filters">
+    <select class="filter-select" id="f-label">
+      <option value="">All difficulty</option>
+      <option value="easy">easy</option><option value="medium">medium</option><option value="hard">hard</option>
+    </select>
+    <select class="filter-select" id="f-lang"><option value="">All languages</option>{langs}</select>
+    <input class="filter-input" id="f-q" type="search" placeholder="Search instance id or repo…">
+    <span class="filter-sep"></span>
+    <select class="filter-select" id="f-size">
+      <option value="50">50 / page</option><option value="100">100 / page</option><option value="200">200 / page</option>
+    </select>
+  </div>
+  <div class="panel">
+    <h2>Task list <span id="tasks-caption">—</span></h2>
+    <div class="tbl-wrap">
+      <table class="tasks">
+        <thead><tr><th>Instance</th><th>Dataset</th><th>Repo</th><th>Lang</th>
+          <th>Difficulty</th><th>Label</th><th>Area</th><th>Bug class</th><th>Patch lines</th></tr></thead>
+        <tbody id="tasks-body"></tbody>
+      </table>
+    </div>
+    <div id="tasks-empty" class="empty-state" hidden>No tasks match these filters.</div>
+    <div class="pager">
+      <button id="pg-prev">Prev</button>
+      <span class="status" id="pg-status">—</span>
+      <button id="pg-next">Next</button>
+    </div>
+  </div>
+</div>
+"""
+
+
+def render_html(
+    datasets: list[dict[str, Any]],
+    output_path: Path,
+    manifest: dict[str, Any] | None = None,
+) -> str:
+    manifest = manifest or {"total": 0, "per_dataset": {}, "shards": [], "languages": []}
+    combined = combine_datasets(datasets)
+    grand_total = combined["total"]
+    grand_tagged = combined["tagged"]
+
+    overview = render_overview(datasets, combined)
+    tasks_page = render_tasks_page(manifest)
+
     sidebar_stats = f"""
       <div class="section-label">Global</div>
       <div class="sidebar-stat"><span class="l">Datasets</span><span class="v">{len(datasets)}</span></div>
       <div class="sidebar-stat"><span class="l">Total tasks</span><span class="v">{fmt_int(grand_total)}</span></div>
+      <div class="sidebar-stat"><span class="l">Tagged</span><span class="v">{fmt_int(grand_tagged)}</span></div>
+      <div class="sidebar-stat"><span class="l">Mean difficulty</span><span class="v">{fmt_float(combined['difficulty_stats']['mean'], 2)}</span></div>
     """
 
     doc = f"""<!DOCTYPE html>
@@ -482,35 +794,243 @@ def render_html(datasets: list[dict[str, Any]], output_path: Path) -> str:
       <div class="logo-mark">SL</div>
       <div><div class="logo-title">SWE Databoard</div></div>
     </div>
-    <div class="ds-nav">
-      <div class="section-label">Datasets</div>
-      {''.join(ds_nav)}
+    <div class="nav">
+      <div class="section-label">Views</div>
+      <button class="nav-item active" data-page="overview">
+        <span class="nav-icon">◧</span><span class="nav-label">Overview</span></button>
+      <button class="nav-item" data-page="tasks">
+        <span class="nav-icon">☰</span><span class="nav-label">Task List</span>
+        <span class="nav-count">{fmt_int(manifest.get('total', 0))}</span></button>
     </div>
     <div class="sidebar-section">{sidebar_stats}</div>
   </aside>
   <div class="main">
     <div class="topbar">
       <div>
-        <h1>Dataset Analytics</h1>
+        <h1 id="page-title">Overview</h1>
+        <div class="sub" id="page-sub">{len(datasets)} datasets · {fmt_int(grand_total)} tasks</div>
       </div>
       <button class="theme-btn" onclick="toggleTheme()">Theme</button>
     </div>
     <div class="content">
-      {''.join(panels)}
+      {overview}
+      {tasks_page}
     </div>
   </div>
 </div>
 <script>
-function switchDs(id) {{
-  document.querySelectorAll('.ds-panel').forEach(function(p) {{ p.classList.toggle('active', p.dataset.ds === id); }});
-  document.querySelectorAll('.ds-item').forEach(function(b) {{ b.classList.toggle('active', b.dataset.ds === id); }});
-  location.hash = id;
+var TASK_MANIFEST = {json.dumps(manifest, ensure_ascii=False)};
+var PAGE_META = {{
+  overview: {{title: 'Overview', sub: '{len(datasets)} datasets · {fmt_int(grand_total)} tasks'}},
+  tasks: {{title: 'Task List', sub: '{fmt_int(manifest.get("total", 0))} tasks · filter and page through every dataset'}}
+}};
+
+function showPage(name) {{
+  document.querySelectorAll('.page').forEach(function (p) {{
+    p.classList.toggle('active', p.id === 'page-' + name);
+  }});
+  document.querySelectorAll('.nav-item').forEach(function (b) {{
+    b.classList.toggle('active', b.dataset.page === name);
+  }});
+  var meta = PAGE_META[name] || PAGE_META.overview;
+  document.getElementById('page-title').textContent = meta.title;
+  document.getElementById('page-sub').textContent = meta.sub;
+  location.hash = name;
+  if (name === 'tasks') {{ ensureTasksLoaded(); }}
 }}
+
 function toggleTheme() {{
   var el = document.documentElement;
   el.dataset.theme = el.dataset.theme === 'dark' ? 'light' : 'dark';
 }}
-if (location.hash) {{ switchDs(location.hash.slice(1)); }}
+
+document.querySelectorAll('.nav-item').forEach(function (b) {{
+  b.addEventListener('click', function () {{ showPage(b.dataset.page); }});
+}});
+
+/* Overview: the dataset chips swap which aggregate panel is shown. */
+document.querySelectorAll('#page-overview .chip').forEach(function (c) {{
+  c.addEventListener('click', function () {{
+    var id = c.dataset.ds;
+    document.querySelectorAll('#page-overview .chip').forEach(function (o) {{
+      o.classList.toggle('active', o === c);
+    }});
+    document.querySelectorAll('#page-overview .ds-panel').forEach(function (p) {{
+      p.classList.toggle('active', p.dataset.ds === id);
+    }});
+  }});
+}});
+
+/* ── Task List ──────────────────────────────────────────────────────────────
+   Pages is static, so paging means fetching the shard that holds the rows for
+   the requested page. Shards are cached once fetched. Filtering needs the whole
+   set, so any active filter pulls every shard once (bounded by shard count) and
+   then pages over the filtered result in memory. */
+var COLS = TASK_MANIFEST.columns || [];
+var IDX = {{}};
+COLS.forEach(function (c, i) {{ IDX[c] = i; }});
+
+var shardCache = {{}};
+var filtered = null;
+var page = 0;
+var loadedAll = false;
+var tasksInit = false;
+
+function pageSize() {{ return parseInt(document.getElementById('f-size').value, 10) || 50; }}
+function activeDs() {{
+  var el = document.querySelector('#page-tasks .chip.active');
+  return el ? el.dataset.ds : 'all';
+}}
+function filterState() {{
+  return {{
+    ds: activeDs(),
+    label: document.getElementById('f-label').value,
+    lang: document.getElementById('f-lang').value,
+    q: document.getElementById('f-q').value.trim().toLowerCase()
+  }};
+}}
+function hasFilter(f) {{ return f.ds !== 'all' || f.label || f.lang || f.q; }}
+
+function fetchShard(name) {{
+  if (shardCache[name]) {{ return Promise.resolve(shardCache[name]); }}
+  return fetch('data/' + name).then(function (r) {{
+    if (!r.ok) {{ throw new Error('shard ' + name + ': HTTP ' + r.status); }}
+    return r.json();
+  }}).then(function (rows) {{ shardCache[name] = rows; return rows; }});
+}}
+
+function fetchAllShards() {{
+  if (loadedAll) {{ return Promise.resolve(); }}
+  return Promise.all((TASK_MANIFEST.shards || []).map(fetchShard)).then(function () {{
+    loadedAll = true;
+  }});
+}}
+
+function matches(row, f) {{
+  if (f.ds !== 'all' && row[IDX.ds] !== f.ds) {{ return false; }}
+  if (f.label && row[IDX.label] !== f.label) {{ return false; }}
+  if (f.lang && row[IDX.lang] !== f.lang) {{ return false; }}
+  if (f.q) {{
+    var hay = (row[IDX.id] + ' ' + row[IDX.repo]).toLowerCase();
+    if (hay.indexOf(f.q) === -1) {{ return false; }}
+  }}
+  return true;
+}}
+
+function renderRows(rows, offset, total) {{
+  var body = document.getElementById('tasks-body');
+  var empty = document.getElementById('tasks-empty');
+  body.innerHTML = '';
+  empty.hidden = rows.length > 0;
+
+  rows.forEach(function (r) {{
+    var tr = document.createElement('tr');
+    function td(text, cls) {{
+      var c = document.createElement('td');
+      if (cls) {{ c.className = cls; }}
+      c.textContent = text === null || text === undefined || text === '' ? '—' : text;
+      return c;
+    }}
+    tr.appendChild(td(r[IDX.id], 'id'));
+    tr.appendChild(td(r[IDX.ds]));
+    tr.appendChild(td(r[IDX.repo]));
+    tr.appendChild(td(r[IDX.lang]));
+    tr.appendChild(td(r[IDX.score]));
+    var lc = document.createElement('td');
+    var lab = r[IDX.label];
+    if (lab) {{
+      var span = document.createElement('span');
+      span.className = 'pill ' + lab;
+      span.textContent = lab;
+      lc.appendChild(span);
+    }} else {{ lc.textContent = '—'; }}
+    tr.appendChild(lc);
+    tr.appendChild(td(r[IDX.area]));
+    tr.appendChild(td(r[IDX.bug]));
+    tr.appendChild(td(r[IDX.lines]));
+    body.appendChild(tr);
+  }});
+
+  var from = total === 0 ? 0 : offset + 1;
+  var to = offset + rows.length;
+  document.getElementById('pg-status').textContent =
+    from.toLocaleString() + '–' + to.toLocaleString() + ' of ' + total.toLocaleString();
+  document.getElementById('tasks-caption').textContent = total.toLocaleString() + ' matching';
+  document.getElementById('pg-prev').disabled = page === 0;
+  document.getElementById('pg-next').disabled = to >= total;
+}}
+
+function refreshTasks() {{
+  var f = filterState();
+  var size = pageSize();
+  var status = document.getElementById('pg-status');
+
+  if (!hasFilter(f)) {{
+    /* unfiltered: fetch only the shards this page spans */
+    filtered = null;
+    var total = TASK_MANIFEST.total || 0;
+    var shardRows = TASK_MANIFEST.shard_rows || 1;
+    var offset = page * size;
+    if (offset >= total) {{ page = 0; offset = 0; }}
+    var first = Math.floor(offset / shardRows);
+    var last = Math.floor(Math.max(offset + size - 1, offset) / shardRows);
+    var names = (TASK_MANIFEST.shards || []).slice(first, last + 1);
+    if (!names.length) {{ renderRows([], 0, total); return; }}
+    status.textContent = 'loading…';
+    Promise.all(names.map(fetchShard)).then(function (chunks) {{
+      var flat = [].concat.apply([], chunks);
+      var start = offset - first * shardRows;
+      renderRows(flat.slice(start, start + size), offset, total);
+    }}).catch(function (e) {{ status.textContent = String(e.message || e); }});
+    return;
+  }}
+
+  status.textContent = 'loading…';
+  fetchAllShards().then(function () {{
+    var all = [];
+    (TASK_MANIFEST.shards || []).forEach(function (n) {{
+      all = all.concat(shardCache[n] || []);
+    }});
+    filtered = all.filter(function (r) {{ return matches(r, f); }});
+    var offset = page * size;
+    if (offset >= filtered.length) {{ page = 0; offset = 0; }}
+    renderRows(filtered.slice(offset, offset + size), offset, filtered.length);
+  }}).catch(function (e) {{ status.textContent = String(e.message || e); }});
+}}
+
+function ensureTasksLoaded() {{
+  if (tasksInit) {{ return; }}
+  tasksInit = true;
+
+  document.querySelectorAll('#page-tasks .chip').forEach(function (c) {{
+    c.addEventListener('click', function () {{
+      document.querySelectorAll('#page-tasks .chip').forEach(function (o) {{
+        o.classList.toggle('active', o === c);
+      }});
+      page = 0;
+      refreshTasks();
+    }});
+  }});
+  ['f-label', 'f-lang', 'f-size'].forEach(function (id) {{
+    document.getElementById(id).addEventListener('change', function () {{ page = 0; refreshTasks(); }});
+  }});
+  var q = document.getElementById('f-q');
+  var t = null;
+  q.addEventListener('input', function () {{
+    clearTimeout(t);
+    t = setTimeout(function () {{ page = 0; refreshTasks(); }}, 250);
+  }});
+  document.getElementById('pg-prev').addEventListener('click', function () {{
+    if (page > 0) {{ page--; refreshTasks(); }}
+  }});
+  document.getElementById('pg-next').addEventListener('click', function () {{
+    page++; refreshTasks();
+  }});
+
+  refreshTasks();
+}}
+
+showPage((location.hash || '#overview').slice(1) === 'tasks' ? 'tasks' : 'overview');
 </script>
 </body>
 </html>
@@ -537,9 +1057,13 @@ def main():
         print(f"  {display:26s}: total={data['total']:>7,}  tagged={data['tagged']:>7,}  "
               f"mean_diff={data['difficulty_stats']['mean']:.2f}")
 
-    render_html(datasets, args.output_html)
+    manifest = export_task_shards(args.output_html.parent)
+    print(f"  {'task shards':26s}: rows={manifest['total']:>7,}  shards={len(manifest['shards'])}")
+
+    render_html(datasets, args.output_html, manifest)
     print(f"{'='*70}")
     print(f"✓ generated: {args.output_html}  ({args.output_html.stat().st_size/1024:.0f} KB)")
+    print(f"✓ task data: {args.output_html.parent / 'data'}  ({len(manifest['shards'])} shards)")
     print(f"{'='*70}")
 
 
