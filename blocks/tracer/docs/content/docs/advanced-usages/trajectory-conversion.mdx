@@ -42,7 +42,9 @@ The scaffold can be explicit or automatic:
 
 - explicit: `claude_code`, `open_code`, `openhands_sdk`, or `terminus2`;
 - automatic: derive from `runtime_info.input.agent.name`, such as
-  `custom-claude-code -> claude_code`.
+  `custom-claude-code -> claude_code`,
+  `custom-opencode -> open_code`, or
+  `custom-openhands-sdk -> openhands_sdk`.
 
 Historical jobs can outlive the current config. If a job was produced by a
 different scaffold than the active `agent.name`, set the scaffold explicitly

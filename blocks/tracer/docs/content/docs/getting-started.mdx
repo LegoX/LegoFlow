@@ -72,10 +72,29 @@ Start with a small task cap and modest concurrency:
 ### Agent Config
 
 Choose one scaffold and keep its runtime image, version, and conversion scaffold
-aligned. The default Claude Code profile looks like this:
+aligned. Do not change only `version`: the runtime image tag and
+`runtime_host_path` must point to the same agent runtime.
+
+Tracer currently uses these pinned scaffold versions:
+
+| Scaffold | `agent.name` | `agent.version` | Runtime image |
+| --- | --- | --- | --- |
+| Claude Code | `custom-claude-code` | `2.1.118` | `docker.io/jierun/c-cc-2.1.118:v0.1` |
+| OpenCode | `custom-opencode` | `1.18.7` | `docker.io/jierun/c-oc-1.18.7:v0.1` |
+| OpenHands SDK | `custom-openhands-sdk` | `1.33.0` | `docker.io/jierun/c-oh-sdk-1.33.0:v0.1` |
+
+The default Claude Code profile looks like this:
 
 <ConfigSnippet title="blocks/tracer/config.yaml">
 {"runtime_info:\n  input:\n    agent:\n      name: custom-claude-code              # custom-claude-code | custom-openhands-sdk | custom-opencode\n      version: 2.1.118\n      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1\n      runtime_host_path: artifacts/agent-runtime/claude-code\n      max_turns: 80\n      temperature: 0.7"}
+</ConfigSnippet>
+
+If you switch scaffolds, keep the names and paths consistent. For example,
+OpenCode should use the OpenCode version, image, host path, and conversion key
+together:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    agent:\n      name: custom-opencode\n      version: 1.18.7\n      runtime_image: docker.io/jierun/c-oc-1.18.7:v0.1\n      runtime_host_path: artifacts/agent-runtime/opencode\n\n    sft_conversion:\n      scaffold: open_code                    # or keep auto for a new matching run"}
 </ConfigSnippet>
 
 ### SFT Conversion Config
@@ -84,7 +103,7 @@ If you want Trainer-ready LF data after rollout, enable conversion. Otherwise
 leave it off and use raw trajectories only.
 
 <ConfigSnippet title="blocks/tracer/config.yaml">
-{"runtime_info:\n  input:\n    sft_conversion:\n      enabled: true                         # false = skip conversion after rollout\n      scaffold: auto                        # auto infers from agent.name\n      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base\n      out_dir: artifacts/sft_data\n      max_instances: null                   # null = convert all successful trajectories"}
+{"runtime_info:\n  input:\n    sft_conversion:\n      enabled: true                         # false = skip conversion after rollout\n      scaffold: auto                        # auto infers from agent.name; use an explicit key for old jobs\n      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base\n      out_dir: artifacts/sft_data\n      max_instances: null                   # null = convert all successful trajectories"}
 </ConfigSnippet>
 
 Now run setup:

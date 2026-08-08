@@ -75,7 +75,7 @@ runtime_info:
       timeout_multiplier: 5
 
     agent:
-      name: custom-claude-code   # Custom agent choices: custom-claude-code, custom-openhands-sdk, custom-opencode. For a non-default choice, also align import_path, api_protocol, version, runtime_image, runtime_host_path, and an explicit sft_conversion.scaffold.
+      name: custom-claude-code   # Supported pinned versions: custom-claude-code=2.1.118, custom-opencode=1.18.7, custom-openhands-sdk=1.33.0.
       version: 2.1.118
       runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
       runtime_host_path: artifacts/agent-runtime/claude-code   # pre-extracted; see /tracer:check reference
@@ -84,7 +84,7 @@ runtime_info:
 
     sft_conversion:
       enabled: true                    # true = start.sh runs convert step after the Harbor job
-      scaffold: auto                   # auto | claude_code | open_code | openhands_sdk | terminus2
+      scaffold: auto                   # auto derives from agent.name; explicit choices: claude_code | open_code | openhands_sdk | terminus2
       tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base  # align conversion with trainer.model.model_name_or_path
       out_dir: artifacts/sft_data
       max_instances: null
