@@ -5,6 +5,11 @@
 
 set -euo pipefail
 
+if [[ "${CURATOR_SKIP_EXTERNAL_PREFLIGHT:-0}" == "1" ]]; then
+  echo "SKIP: external LLM preflight disabled for cheap CI cases"
+  exit 77
+fi
+
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck disable=SC1091
 source "$BLOCK_DIR/scripts/load_runtime_env.sh"
