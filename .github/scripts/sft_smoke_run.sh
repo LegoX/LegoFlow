@@ -6,7 +6,7 @@ set -euo pipefail
 
 BUDGET="${1:-2700}"
 REPO_ROOT="${GITHUB_WORKSPACE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-BLOCK_DIR="$REPO_ROOT/subblock/trainer"
+BLOCK_DIR="$REPO_ROOT/blocks/trainer"
 LOG="$BLOCK_DIR/artifacts/logs/smoke-launch.log"
 SHA="${GITHUB_SHA:-$(git -C "$REPO_ROOT" rev-parse HEAD)}"
 
@@ -80,31 +80,45 @@ runtime_dir="$4"
 shared_root="${runtime_dir%/runtime/sft}"
 export PATH="$shared_root/uv/bin:/root/.local/bin:$PATH"
 
+# Redefined here: the heredoc is quoted, so the caller's definition never
+# crosses the ssh boundary (this failed with exit 127). The env file lives at a
+# different absolute path on the pod than on the runner, so derive it from
+# shared_root rather than hard-coding the runner's.
+prepare_smoke_config() {  # <block_dir> -> echoes the run copy
+  local bd="$1"
+  local run_cfg="$bd/artifacts/.config.smoke-run.yaml"
+  mkdir -p "$bd/artifacts"
+  cp "$bd/tests/smoke/config.yaml" "$run_cfg"
+  if [ -f "$shared_root/.env" ]; then . "$shared_root/.env"; fi
+  python3 "$bd/../../scripts/inject_smoke_secrets.py" "$run_cfg" >&2
+  echo "$run_cfg"
+}
+
 cd "$repo_dir"
 git -c fetch.recurseSubmodules=false fetch origin "$sha"
 git reset --hard "$sha"
 git submodule sync -- \
-  subblock/trainer/repos/LLaMA-Factory \
-  subblock/trainer/repos/swe_data_process
+  blocks/trainer/repos/LLaMA-Factory \
+  blocks/trainer/repos/swe_data_process
 # The managed GPU host authenticates GitHub over SSH. Keep the tracked
 # developer-facing URLs as HTTPS, but use host-local SSH overrides here.
-git config submodule.subblock/trainer/repos/LLaMA-Factory.url \
+git config submodule.blocks/trainer/repos/LLaMA-Factory.url \
   git@github.com:SWE-Lego/LLaMA-Factory.git
-git config submodule.subblock/trainer/repos/swe_data_process.url \
+git config submodule.blocks/trainer/repos/swe_data_process.url \
   git@github.com:SWE-Lego/swe_data_process.git
-if git -C subblock/trainer/repos/LLaMA-Factory rev-parse --git-dir >/dev/null 2>&1; then
-  git -C subblock/trainer/repos/LLaMA-Factory remote set-url origin \
+if git -C blocks/trainer/repos/LLaMA-Factory rev-parse --git-dir >/dev/null 2>&1; then
+  git -C blocks/trainer/repos/LLaMA-Factory remote set-url origin \
     git@github.com:SWE-Lego/LLaMA-Factory.git
 fi
-if git -C subblock/trainer/repos/swe_data_process rev-parse --git-dir >/dev/null 2>&1; then
-  git -C subblock/trainer/repos/swe_data_process remote set-url origin \
+if git -C blocks/trainer/repos/swe_data_process rev-parse --git-dir >/dev/null 2>&1; then
+  git -C blocks/trainer/repos/swe_data_process remote set-url origin \
     git@github.com:SWE-Lego/swe_data_process.git
 fi
 git submodule update --init --recursive --force -- \
-  subblock/trainer/repos/LLaMA-Factory \
-  subblock/trainer/repos/swe_data_process
+  blocks/trainer/repos/LLaMA-Factory \
+  blocks/trainer/repos/swe_data_process
 
-cd subblock/trainer
+cd blocks/trainer
 rm -rf artifacts/env artifacts/data/examples
 mkdir -p artifacts/data
 ln -s "$runtime_dir/artifacts/env" artifacts/env

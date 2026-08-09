@@ -3,7 +3,7 @@ meta_info:
   label: SFT Training
   description: Trains a language model using supervised fine-tuning (SFT).
   parent: root
-  subblocks: {}
+  blocks: {}
   dependencies:
     from:
       # This block's own upstream hand-off: dataset_path receives curator's output.

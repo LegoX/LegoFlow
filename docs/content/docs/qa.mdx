@@ -1,0 +1,46 @@
+---
+title: Q&A
+---
+
+This page collects common issues users may hit while running LegoFlow locally.
+Start here when a block skill is missing, a setup step feels unclear, or a run
+fails before it launches expensive work.
+
+## Q1: I am in the repository root but cannot find the plugin skills
+
+A: Claude Code only shows skills from plugins loaded into the current session. If
+commands such as `/root:setup`, `/curator:check`, or `/tracer:run` are missing,
+restart Claude Code from the repository root and load the root plugin plus every
+block plugin:
+
+```bash
+claude \
+  --plugin-dir .claude/plugins/root-plugin \
+  --plugin-dir blocks/curator/.claude/plugins/curator-plugin \
+  --plugin-dir blocks/tracer/.claude/plugins/tracer-plugin \
+  --plugin-dir blocks/trainer/.claude/plugins/trainer-plugin \
+  --plugin-dir blocks/evaluator/.claude/plugins/evaluator-plugin
+```
+
+After Claude Code starts, run:
+
+```text
+/reload-plugins
+```
+
+Then type `/` and search for the block command again. If you only want one
+block, you can launch Claude Code from that block directory and load only its
+local plugin, but the root command should be run from the repository root.
+
+## Q2: A check command fails before the run starts
+
+A: That is expected behavior. The `/<block>:check` commands are designed to fail
+early before a costly collection, rollout, training, or evaluation job starts.
+Read the failed check, fix the corresponding `config.yaml` field or credential,
+then run the same check again.
+
+## Q3: Where should I put secrets?
+
+A: Do not commit real API keys, GitHub tokens, Docker passwords, or Cloudflare
+tokens to `config.yaml`. Use environment variables, ignored `.env` files, or the
+secret mechanism recommended by the block's setup skill.

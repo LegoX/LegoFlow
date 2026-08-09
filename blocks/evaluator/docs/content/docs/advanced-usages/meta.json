@@ -1,0 +1,11 @@
+{
+  "title": "Advanced Guides",
+  "pages": [
+    "configuration",
+    "validation-checks",
+    "select-benchmark",
+    "litellm-proxy",
+    "local-model-evaluation",
+    "job-analysis"
+  ]
+}

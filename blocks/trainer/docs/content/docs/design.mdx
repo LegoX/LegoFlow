@@ -1,0 +1,137 @@
+---
+title: Design
+---
+
+This page explains what Trainer does behind the run command: it obtains a
+LLaMA-Factory dataset, registers it, generates a training config, launches
+training, and records the checkpoint contract for Evaluator.
+
+## 1. Read The Data Source
+
+`/trainer:run` enters through `scripts/start.sh`. The script first runs
+`scripts/dryrun.sh`, then hands the real work to `scripts/train.sh`.
+
+The first decision comes from `runtime_info.input.source.type`:
+
+| Source type | What Trainer reads |
+| --- | --- |
+| `harbor_job` | Raw trajectories from a Tracer Harbor job. |
+| `hf_lf` | A ShareGPT-style LF dataset from the Hugging Face Hub. |
+| `local_lf` | A local ShareGPT-style JSON file. |
+
+For the full LegoFlow handoff, the simplest path is usually `local_lf`: point
+Trainer at the `lf.json` produced by Tracer and start training from there. Use
+`harbor_job` when you only have raw rollout logs and want Trainer to perform the
+fallback conversion.
+
+## 2. Prepare LF Data
+
+Trainer's job is to make sure LLaMA-Factory receives one registered LF dataset.
+The path depends on `source.type`:
+
+| Source type | Preparation |
+| --- | --- |
+| `local_lf` | Register the LF JSON file directly. |
+| `hf_lf` | Download one exact Hub file, or let LLaMA-Factory load the Hub dataset at train time. |
+| `harbor_job` | Convert raw Tracer trajectories into LF data, then register the result. |
+
+When the raw Harbor path is used, Trainer writes:
+
+```text
+artifacts/data/im_data/<data_name>.jsonl
+artifacts/data/lf_data/<data_name>.json
+```
+
+The LF JSON is the file LLaMA-Factory consumes. The IM file is mainly useful
+for debugging conversion quality. For scaffold-specific conversion, IM/LF
+formats, and scoring details, see Tracer's
+[Trajectory Conversion](/docs/blocks/tracer/advanced-usages/trajectory-conversion).
+
+## 3. Register The Dataset
+
+Before training, `scripts/train.sh` writes or updates:
+
+```text
+artifacts/data/lf_data/dataset_info.json
+```
+
+This file tells LLaMA-Factory how to load the selected dataset. For a converted
+Harbor job or a local LF file, the entry points to a JSON file. For a Hub dataset
+without an exact `hf_file_name`, the entry points to `hf_hub_url`, with optional
+subset and split fields.
+
+Trainer also applies `conversion.max_instances` when you want a smoke-sized
+run. For raw Harbor jobs, it uses `conversion.exclude_repos_file` to keep
+evaluation benchmark repos out of the training set by default.
+
+## 4. Generate Training Config
+
+Trainer does not ask users to hand-write a LLaMA-Factory YAML. It derives one
+from `config.yaml`:
+
+```text
+artifacts/training_config/<run_name>.yaml
+```
+
+The generated YAML includes the model path, dataset name, template, sequence
+length, DeepSpeed config, batch size, gradient accumulation, learning rate,
+checkpoint policy, wandb mode, and output directory.
+
+Relative `training.output_dir` values are resolved under:
+
+```text
+artifacts/model/<output_dir>/
+```
+
+That keeps model artifacts inside the block unless the user intentionally
+chooses an absolute path.
+
+## 5. Launch Training
+
+The actual training command is:
+
+```bash
+python -m llamafactory.cli train artifacts/training_config/<run_name>.yaml
+```
+
+`scripts/train.sh` sets `FORCE_TORCHRUN=1` and `NPROC_PER_NODE` from
+`runtime_info.input.infrastructure.n_gpus_per_node`, so a multi-GPU run is still
+driven by the same config file.
+
+Logs are written to:
+
+```text
+artifacts/logs/<run_name>_<timestamp>.log
+artifacts/logs/torchelastic/
+```
+
+The second directory captures per-rank torch errors, which makes failed
+distributed runs much easier to diagnose.
+
+## 6. Publish The Checkpoint Contract
+
+After training, Trainer updates `runtime_info.output` in `config.yaml`. The key
+handoff field is:
+
+```yaml
+runtime_info:
+  output:
+    checkpoint_path:
+      value: artifacts/model/<run_name>/checkpoint-...
+```
+
+Evaluator can read this path when you benchmark a locally served Trainer model.
+Trainer also records the training log, `train_results.json`, loss plot, wandb
+run id, final loss, total steps, and runtime when those files are present.
+
+## Command Gates
+
+| Command | What it gates |
+| --- | --- |
+| `/trainer:setup` | Installs the LLaMA-Factory and `swe_data_process` environments. |
+| `/trainer:check` | Validates config, source data, credentials, GPUs, and output paths. |
+| `/trainer:run` | Runs dry-run checks, data conversion or dataset loading, registration, training, and output updates. |
+| `/trainer:dashboard` | Opens the dashboard that reads training outputs directly. |
+
+For the shortest runnable path, see [Getting Started](/docs/blocks/trainer/getting-started).
+For the exact files written by each stage, see [Output Format](/docs/blocks/trainer/outputs).

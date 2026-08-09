@@ -2,13 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# SWE Lego Live
+# LegoFlow
 
 Root orchestration block for the self-evolving LLM development pipeline. Coordinates data curation (curator), trajectory generation (tracer), and supervised fine-tuning (trainer) in sequence, with a standalone evaluator.
 
 ## Block System
 
-This repo is organized as a tree of blocks. The root directory is the root block; every directory under `subblock/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md`, and follows the principles in `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`. Every agent with this repo SHOULD READ that file before any actions.
+This repo is organized as a tree of blocks. The root directory is the root block; every directory under `blocks/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md`, and follows the principles in `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`. Every agent with this repo SHOULD READ that file before any actions.
 
 ### config.yaml schema
 
@@ -17,7 +17,7 @@ Every block's `config.yaml` — root included — follows this structure (two to
 ```yaml
 meta_info:
   name, label, description, parent
-  subblocks:         # parent blocks only: children with a role one-liner — NO wiring here
+  blocks:         # parent blocks only: children with a role one-liner — NO wiring here
     <child>: {role: "<one phrase>"}
   dependencies:      # this block's own upstream AND downstream edges (mandatory; both keys always present)
     from:            # upstream hand-offs this block consumes
@@ -47,7 +47,7 @@ runtime_info:
 
 **Wiring rule**: `meta_info.dependencies` shows both directions from each block's own file. `from` is declared by the **consumer** — the key is the dot-path in that block's `runtime_info.input` that receives the value, never a freeform label. `to` is declared by the **producer** — the key is one of its own `runtime_info.output` keys, the value names the exact consumer input field. The same edge is declared on both ends; the validator cross-checks them. Only values originating outside the block tree go in `runtime_info.input`.
 
-**Enforcement**: `python3 scripts/validate_config.py --root .` validates the whole tree (schema, dependency resolution in both directions, fill markers, path consistency, `from`/`to` drift); `--block subblock/<name>` validates one block. Every block's `dryrun.sh` and the `:check` skills run it.
+**Enforcement**: `python3 scripts/validate_config.py --root .` validates the whole tree (schema, dependency resolution in both directions, fill markers, path consistency, `from`/`to` drift); `--block blocks/<name>` validates one block. Every block's `dryrun.sh` and the `:check` skills run it.
 
 ### Execution location rule
 
@@ -57,20 +57,20 @@ If — and only if — `meta_info.resources.ip` is set to a real remote IP, the 
 
 ## Block Identity (Root)
 
-- **Name**: swe_lego_live
+- **Name**: legoflow
 - **Parent**: none
 - **Children**: curator → tracer → trainer (+ evaluator, standalone)
 
 ## What To Read First
 
-1. `config.yaml` (root) — the subblock roster; then each active subblock's `config.yaml` for identity, resources, dependency wiring, and runtime values. Live state is in each subblock's `artifacts/index.yaml`, not `config.yaml`.
+1. `config.yaml` (root) — the block roster; then each active block's `config.yaml` for identity, resources, dependency wiring, and runtime values. Live state is in each block's `artifacts/index.yaml`, not `config.yaml`.
 2. `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md` — full block system specification
 
-The root `config.yaml` holds orchestration identity only (subblock roster, roles); all external inputs and outputs are owned by the subblock configs listed below. Each subblock has its own `CLAUDE.md` agent contract.
+The root `config.yaml` holds orchestration identity only (block roster, roles); all external inputs and outputs are owned by the block configs listed below. Each block has its own `CLAUDE.md` agent contract.
 
 ## Input/Output Contract
 
-The root block consumes no external **pipeline** inputs — those are filled into each active subblock's `runtime_info.input`. The only exception is two optional, tree-wide infrastructure sections in the root config:
+The root block consumes no external **pipeline** inputs — those are filled into each active block's `runtime_info.input`. The only exception is two optional, tree-wide infrastructure sections in the root config:
 
 **root** (`config.yaml` → `runtime_info.input`) — both default to all-empty, meaning "feature off":
 - `cloudflare.{account_id, api_token, pages_project_prefix}`: used by every block's dashboard publishing (`dashboard/run_cloudflare_pages_sync.sh`, `docs/deploy_cloudflare_pages.sh`)
@@ -78,23 +78,23 @@ The root block consumes no external **pipeline** inputs — those are filled int
 
 Every block reads these through `scripts/shared_credentials.sh`, which resolves each field as **env > root `config.yaml` > that block's legacy env file** (`~/.config/{swegen,trajgen,harbor_webui}_*_cloudflare.env`, still supported). `config.yaml` is git-tracked, so keep `api_token` / `password` empty there and supply them via `$CLOUDFLARE_API_TOKEN` / `$DOCKER_PASSWORD`. Missing credentials are always a WARN, never a FAIL — nothing in the core pipeline depends on them.
 
-Required external values per subblock:
+Required external values per block:
 
-**curator** (`subblock/curator/config.yaml` → `runtime_info.input`):
+**curator** (`blocks/curator/config.yaml` → `runtime_info.input`):
 - PR collection tokens are provided through `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored local token file (`gh_token.txt`) — never through `config.yaml`
 - `llm_api.api_key`, `llm_api.api_base_url`: OpenAI-compatible LLM endpoint
 - `llm_api.pr_model`, `llm_api.task_model`: model names for PR evaluation and task completion
 
-**tracer** (`subblock/tracer/config.yaml` → `runtime_info.input`):
+**tracer** (`blocks/tracer/config.yaml` → `runtime_info.input`):
 - `llm_api.api_key`, `llm_api.api_base_url`, `llm_api.model`: OpenAI-compatible LLM endpoint and model used by the per-job LiteLLM proxy
 
 **Outputs** (downstream-consumable artifacts):
-- `curator.output.merged_tasks_dir`: verified SWE tasks flattened into `subblock/curator/artifacts/merged_swe_tasks/` by `scripts/extract_verified_tasks.py`, which copies only task IDs listed in each language's `verifiable_tasks.txt` and writes a combined `merged_swe_tasks/verifiable_tasks.txt`. This is what tracer consumes.
-- `curator.output.swe_tasks_dir`: the per-language source pool at `subblock/curator/artifacts/swe_tasks/{lang}-cc/`, whose `{lang}-cc/verifiable_tasks.txt` lists the task IDs that passed NOP/Oracle validation. Input to the merge step above; no longer handed to a downstream block directly.
-- `tracer.output.raw_trajectories_dir`: raw agent trajectories under `subblock/tracer/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
-- `tracer.output.sft_data_dir`: LLaMA-Factory LF-format SFT JSON converted from those trajectories at `subblock/tracer/artifacts/sft_data/<job>/lf.json` (produced by `subblock/tracer/scripts/convert_trajectories.sh`, which runs the `swe_data_process` converters under their own uv env at `subblock/tracer/artifacts/env/swe-data-process-uv`)
+- `curator.output.merged_tasks_dir`: verified SWE tasks flattened into `blocks/curator/artifacts/merged_swe_tasks/` by `scripts/extract_verified_tasks.py`, which copies only task IDs listed in each language's `verifiable_tasks.txt` and writes a combined `merged_swe_tasks/verifiable_tasks.txt`. This is what tracer consumes.
+- `curator.output.swe_tasks_dir`: the per-language source pool at `blocks/curator/artifacts/swe_tasks/{lang}-cc/`, whose `{lang}-cc/verifiable_tasks.txt` lists the task IDs that passed NOP/Oracle validation. Input to the merge step above; no longer handed to a downstream block directly.
+- `tracer.output.raw_trajectories_dir`: raw agent trajectories under `blocks/tracer/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`
+- `tracer.output.sft_data_dir`: LLaMA-Factory LF-format SFT JSON converted from those trajectories at `blocks/tracer/artifacts/sft_data/<job>/lf.json` (produced by `blocks/tracer/scripts/convert_trajectories.sh`, which runs the `swe_data_process` converters under their own uv env at `blocks/tracer/artifacts/env/swe-data-process-uv`)
 
-**Producer→consumer contract**: tracer consumes **only** tasks listed in curator's `verifiable_tasks.txt`. `subblock/tracer/scripts/prepare_tasks.sh` enforces this by filtering through the manifest it finds at the root of the local task source — currently `merged_swe_tasks/verifiable_tasks.txt`, written by the merge step; a source without a manifest falls back to copying every task dir; task IDs already processed are tracked in `subblock/tracer/artifacts/processed_tasks.yaml` and re-excluded via `HARBOR_EXCLUDE_TASKS` in tracer's `config.yaml`. Each consumer declares its upstream in its own `meta_info.dependencies.from` (e.g. trainer wires `source.job_dir: {from: tracer.output.raw_trajectories_dir, when: {source.type: harbor_job}}`), mirrored by the producer's own `dependencies.to` (tracer wires `raw_trajectories_dir: {to: trainer.input.source.job_dir, when: {...}}`).
+**Producer→consumer contract**: tracer consumes **only** tasks listed in curator's `verifiable_tasks.txt`. `blocks/tracer/scripts/prepare_tasks.sh` enforces this by filtering through the manifest it finds at the root of the local task source — currently `merged_swe_tasks/verifiable_tasks.txt`, written by the merge step; a source without a manifest falls back to copying every task dir; task IDs already processed are tracked in `blocks/tracer/artifacts/processed_tasks.yaml`, which together with the git-tracked `blocks/tracer/excluded_tasks.txt` is what tracer's `HARBOR_EXCLUDE_TASKS` names — those two files are the exclusion sources, not a list mirrored into `config.yaml`. Each consumer declares its upstream in its own `meta_info.dependencies.from` (e.g. trainer wires `source.job_dir: {from: tracer.output.raw_trajectories_dir, when: {source.type: harbor_job}}`), mirrored by the producer's own `dependencies.to` (tracer wires `raw_trajectories_dir: {to: trainer.input.source.job_dir, when: {...}}`).
 
 ## How To Run
 
@@ -113,17 +113,17 @@ scripts/clean.sh --all   # wipe every block's artifacts/ except git-tracked file
                          # (destroys envs, datasets, checkpoints; confirms twice)
 ```
 
-## Subblocks
+## Blocks
 
-All subblocks run **locally** by default (`meta_info.resources.ip: local`). Override to a remote IP only on explicit user request.
+All blocks run **locally** by default (`meta_info.resources.ip: local`). Override to a remote IP only on explicit user request.
 
 | Block | Execution | Key tool | Status |
 |---|---|---|---|
-| `subblock/curator/` | Local (CPU + Docker) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
-| `subblock/tracer/` | Local (CPU + Docker) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
-| `subblock/trainer/` | Local (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
+| `blocks/curator/` | Local (CPU + Docker) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
+| `blocks/tracer/` | Local (CPU + Docker) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
+| `blocks/trainer/` | Local (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
 
-Each subblock has its own `CLAUDE.md` with its full agent contract.
+Each block has its own `CLAUDE.md` with its full agent contract.
 
 ## Artifact Archiving
 
@@ -150,4 +150,4 @@ Append one entry to `artifacts/index.yaml`:
 
 ## Live State
 
-Live state (what's running, what just finished) lives in the newest entry of each subblock's `artifacts/index.yaml`, written automatically by `scripts/archive_run.sh` (invoked from `start.sh`'s EXIT trap). `config.yaml` is one-shot per run and is not edited during execution.
+Live state (what's running, what just finished) lives in the newest entry of each block's `artifacts/index.yaml`, written automatically by `scripts/archive_run.sh` (invoked from `start.sh`'s EXIT trap). `config.yaml` is one-shot per run and is not edited during execution.

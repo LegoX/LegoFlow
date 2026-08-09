@@ -1,8 +1,8 @@
 # block — a Claude Code plugin for block-structured projects
 
-This plugin packages the **block** convention used by [SWE-Lego-Live](https://github.com/) into five slash commands you can use in any Claude Code session.
+This plugin packages the **block** convention used by [LegoFlow](https://github.com/) into five slash commands you can use in any Claude Code session.
 
-A **block** is the basic collaboration unit in a block-structured project: a self-describing directory containing a `config.yaml` (identity, I/O, status), a `CLAUDE.md` (agent contract), `scripts/{start,dryrun,clean}.sh`, `artifacts/`, and a `subblock/` tree of children. See `resources/BLOCK_DEFINITION.md` (bundled) for the full specification.
+A **block** is the basic collaboration unit in a block-structured project: a self-describing directory containing a `config.yaml` (identity, I/O, status), a `CLAUDE.md` (agent contract), `scripts/{start,dryrun,clean}.sh`, `artifacts/`, and a `blocks/` tree of children. See `resources/BLOCK_DEFINITION.md` (bundled) for the full specification.
 
 ## Commands
 
@@ -11,8 +11,8 @@ A **block** is the basic collaboration unit in a block-structured project: a sel
 | `/root:create` | Interview-driven scaffolding of a new block — produces the full directory tree per `BLOCK_DEFINITION.md`. Accepts a filled-in `BLOCK_INTAKE.md` or a chat description. |
 | `/root:check` | Recursively sanity-check every block at and beneath the current directory: `config.yaml` schema, `runtime_info.input` completeness, inter-block dependency resolution, repo pin matches, environment + remote-resource reachability, and live availability of every OpenAI-compatible LLM endpoint declared in any block's input (probes `GET /models` — no chat completion calls). Read-only; reports every failure in one pass. |
 | `/root:run` | Resolve and preflight the selected block, then execute that block's `scripts/start.sh` directly (locally, or in a tmux+SSH session if `meta_info.resources.ip` is set). Archives the run on completion. |
-| `/root:setup` | One-shot bootstrap for the root block tree — verify shared tooling, ensure the root `config.yaml` matches the contract, and (on confirmation) recurse into each subblock's own `:setup` skill in order. Idempotent. |
-| `/root:dashboard` | Open (or start) the unified dashboard aggregating live state — last run id, status, duration, key metrics — across every subblock into one webui. Read-only. |
+| `/root:setup` | One-shot bootstrap for the root block tree — verify shared tooling, ensure the root `config.yaml` matches the contract, and (on confirmation) recurse into each block's own `:setup` skill in order. Idempotent. |
+| `/root:dashboard` | Open (or start) the unified dashboard aggregating live state — last run id, status, duration, key metrics — across every block into one webui. Read-only. |
 
 ## Install
 
@@ -47,7 +47,7 @@ root-plugin/
     └── dashboard/SKILL.md       # /root:dashboard
 ```
 
-The plugin is self-contained — it does not require the SWE-Lego-Live repo to be present.
+The plugin is self-contained — it does not require the LegoFlow repo to be present.
 
 ## Quick usage
 

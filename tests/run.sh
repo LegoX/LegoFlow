@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# CI test runner for the ROOT block (swe_lego_live).
+# CI test runner for the ROOT block (legoflow).
 #
 # Always runs the cheap root cases (pytest + tests/cases/*.sh). The smoke is
-# opt-in and SELECTABLE — pick the isolated smoke of one subblock, every
-# subblock's isolated smoke, or the root CHAINED end-to-end smoke:
+# opt-in and SELECTABLE — pick the isolated smoke of one block, every
+# block's isolated smoke, or the root CHAINED end-to-end smoke:
 #
 #   bash tests/run.sh                      # cheap cases only (no net/GPU/Docker)
 #   bash tests/run.sh --smoke root         # the chained pipeline (curator->tracer
 #                                          #   ->trainer->evaluator, real wiring, fail-fast)
 #   bash tests/run.sh --with-smoke         # alias for --smoke root
-#   bash tests/run.sh --smoke curator       # ONE subblock's isolated smoke
-#   bash tests/run.sh --smoke subblocks    # every subblock's isolated smoke, in turn
+#   bash tests/run.sh --smoke curator       # ONE block's isolated smoke
+#   bash tests/run.sh --smoke blocks    # every block's isolated smoke, in turn
 #
 # Root-chain options (only meaningful with --smoke root), forwarded verbatim to
 # tests/smoke/run_pipeline.sh:
@@ -21,19 +21,19 @@
 # Other:
 #   --smoke-only                  skip the cheap cases, run only the smoke
 #
-# Distinction: a SUBBLOCK smoke is isolated (fixed fixtures, one block); the
+# Distinction: a BLOCK smoke is isolated (fixed fixtures, one block); the
 # ROOT smoke chains all four blocks, feeding each block's real output into the
 # next. "Run the root smoke" therefore exercises every block end-to-end, which
-# is different from "run each subblock's smoke" independently.
+# is different from "run each block's smoke" independently.
 #
 # Each cheap case exits 0=PASS, 77=SKIP, anything else=FAIL.
 
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SUBBLOCKS=(curator tracer trainer evaluator)
+BLOCKS=(curator tracer trainer evaluator)
 
-SMOKE_TARGET=""                          # "", root, <subblock>, subblocks/all
+SMOKE_TARGET=""                          # "", root, <block>, blocks/all
 SMOKE_FROM=""; SMOKE_TO=""
 SMOKE_BUDGET="${ROOT_SMOKE_BUDGET:-}"
 CASES=1
@@ -42,7 +42,7 @@ CASES=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --with-smoke)  SMOKE_TARGET="root"; shift ;;
-    --smoke)       SMOKE_TARGET="${2:?--smoke needs a target: root|<subblock>|subblocks}"; shift 2 ;;
+    --smoke)       SMOKE_TARGET="${2:?--smoke needs a target: root|<block>|blocks}"; shift 2 ;;
     --from)        SMOKE_FROM="${2:?}"; shift 2 ;;
     --to)          SMOKE_TO="${2:?}"; shift 2 ;;
     --budget)      SMOKE_BUDGET="${2:?}"; shift 2 ;;
@@ -90,10 +90,10 @@ run_root_smoke() {
   echo
 }
 
-run_subblock_smoke() {  # run_subblock_smoke <block>
-  local b="$1" runner="$ROOT_DIR/subblock/$1/tests/run.sh" rc
+run_block_smoke() {  # run_block_smoke <block>
+  local b="$1" runner="$ROOT_DIR/blocks/$1/tests/run.sh" rc
   echo "================================================================="
-  echo ">> smoke: subblock/$b (isolated) — tests/run.sh --with-smoke"
+  echo ">> smoke: blocks/$b (isolated) — tests/run.sh --with-smoke"
   echo "================================================================="
   if [[ ! -x "$runner" && ! -f "$runner" ]]; then
     tally 77 "smoke/$b (no tests/run.sh)"; echo; return
@@ -130,17 +130,17 @@ case "$SMOKE_TARGET" in
   "")
     echo "INFO: smoke skipped. Choose one with:"
     echo "       --smoke root        (chained end-to-end: all 4 blocks)"
-    echo "       --smoke <subblock>  (one of: ${SUBBLOCKS[*]})"
-    echo "       --smoke subblocks   (each subblock's isolated smoke)"
+    echo "       --smoke <block>  (one of: ${BLOCKS[*]})"
+    echo "       --smoke blocks   (each block's isolated smoke)"
     ;;
   root)
     run_root_smoke ;;
-  subblocks|all)
-    for b in "${SUBBLOCKS[@]}"; do run_subblock_smoke "$b"; done ;;
+  blocks|all)
+    for b in "${BLOCKS[@]}"; do run_block_smoke "$b"; done ;;
   curator|tracer|trainer|evaluator)
-    run_subblock_smoke "$SMOKE_TARGET" ;;
+    run_block_smoke "$SMOKE_TARGET" ;;
   *)
-    echo "ERROR: unknown --smoke target '$SMOKE_TARGET' (want: root | ${SUBBLOCKS[*]} | subblocks)" >&2
+    echo "ERROR: unknown --smoke target '$SMOKE_TARGET' (want: root | ${BLOCKS[*]} | blocks)" >&2
     exit 2 ;;
 esac
 

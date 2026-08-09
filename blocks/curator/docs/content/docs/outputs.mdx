@@ -1,0 +1,160 @@
+---
+title: Output Format
+---
+
+Curator archives all runtime outputs under `artifacts/`. This keeps generated
+data, logs, manifests, and resume state separate from source files, while still
+giving downstream blocks a stable place to read verified tasks.
+
+## Artifact layout
+
+The main Curator outputs are organized as follows:
+
+```text
+artifacts/
+├── collected_prs/                       # PR pools collected per language
+├── swe_tasks/                           # per-language Harbor task directories
+│   └── <lang>-cc/
+│       ├── <task_id>/                   # one generated task directory
+│       ├── verifiable_tasks.txt         # verified task IDs safe downstream
+│       └── .swegen-create-batch/        # resume and batch-state files
+├── merged_swe_tasks/                    # optional flattened verified tasks
+├── logs/
+│   └── swegen-create/                   # task-generation logs for debugging
+├── index.yaml                           # optional run archive index
+│
+└── ...
+```
+
+Most users only need two groups of outputs: PR collection outputs, which record
+the candidate pull requests, and create-task outputs, which hold verified Harbor
+tasks ready for Tracer.
+
+## Step 1: PR Collection Outputs
+
+### PR pools
+
+The collection stage writes language-specific PR pools under
+`artifacts/collected_prs/`. Each pool is a text file with one GitHub pull
+request per line:
+
+```text
+owner/repo:pr-123
+```
+
+Generation reads these fixed files through `swegen create --input-ids-file`.
+Because `swegen create` parses the input once at startup, collection and task
+generation are separate stages. See [Getting Started](/docs/blocks/curator/getting-started) for
+the command flow.
+
+## Step 2: Task Creation Outputs
+
+### Task directories
+
+Generated tasks are grouped by language:
+
+```text
+artifacts/swe_tasks/<lang>-cc/
+```
+
+Each task is a [Harbor](https://www.harborframework.com/) task directory:
+
+```text
+<task_id>/
+├── task.toml                            # metadata, scoring, timeouts, and tags
+├── instruction.md                       # natural-language problem statement
+├── environment/
+│   ├── Dockerfile                       # reproducible build environment
+│   └── bug.patch                        # patch that introduces the failing behavior
+├── solution/
+│   ├── fix.patch                        # ground-truth fix
+│   └── solve.sh                         # applies the fix patch
+└── tests/
+    └── test.sh                          # verification entrypoint
+```
+
+The task ID is derived from the repository and PR number, for example
+`owner__repo-123`.
+
+### Merged verified tasks
+
+To collective process the tasks from all languages, one can wrap them up by running 
+```bash
+python scripts/extract_verified_tasks.py
+```
+
+where all tasks will be merged to `artifacts/merged_swe_tasks/<task_id>/`. This is convenient for Tracer since it expects a single task directory.
+
+<Callout title="Handing over to Tracer" type="info">
+Tracer should consume Curator outputs through the verified manifest, not by
+scanning every task directory. The stable handoff is
+`artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt`, or
+`artifacts/merged_swe_tasks/` when you intentionally export a flat verified
+task root.
+</Callout>
+
+
+### Verified manifest
+
+The most important output is:
+
+```text
+artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt
+```
+
+This manifest is the authoritative downstream contract. A task directory
+existing on disk is not enough; Tracer and other consumers should only read task
+IDs that appear in `verifiable_tasks.txt`.
+
+### Batch state
+
+Batch state lives next to each language output:
+
+```text
+artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/<hash>.json
+```
+
+It records each PR case, attempts, status, errors, model fingerprint, elapsed
+time, and selected task ID: the basis for resume, deduplication, failure
+analysis, and progress accounting. Include it in state packages, but do not
+commit it to Git.
+
+The `<hash>` is derived from the **resolved absolute path** of the input PR
+file, so moving a restored run to a different clone path changes the hash. To
+resume after moving nodes, keep the language output dir, its
+`verifiable_tasks.txt`, the `.swegen-create-batch/*.json`, and the matching
+`artifacts/collected_prs/` input files together, and relocate or regenerate the
+state filename to match the new resolved input path before relaunching
+`scripts/create_{lang}.sh`.
+
+
+### Logs
+
+Create logs live under:
+
+```text
+artifacts/logs/swegen-create/
+```
+
+These logs are useful for debugging model failures, Docker failures, and
+timeout tuning. They are audit artifacts rather than source files.
+
+### Run index
+
+When the block scripts archive a run, they append a summary to:
+
+```text
+artifacts/index.yaml
+```
+
+Read this file for run history and high-level status. Read the task directories
+and manifests for the actual dataset payload.
+
+### Difficulty and metadata
+
+Curator adds static difficulty metadata to `task.toml`, including
+`difficulty_score`, `difficulty_label`, `difficulty`, `category`, and `tags`.
+These fields support dataset analysis, sampling, and dashboard views. The
+scoring and tagging methods are documented in
+[Quality Rubrics](/docs/blocks/curator/advanced-usages/quality-rubrics) and
+[Task Tagging](/docs/blocks/curator/advanced-usages/task-tagging).

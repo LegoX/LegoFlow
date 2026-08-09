@@ -14,12 +14,12 @@ The args string is free-form natural language (may be empty). The agent reads th
 
 ### Target resolution
 
-List `./subblock/` to get the set of valid block names, then read the args string and decide:
+List `./blocks/` to get the set of valid block names, then read the args string and decide:
 
-- **Single block clearly identified** (literal name or unambiguous paraphrase — consult each block's `CLAUDE.md` when the user uses a description) → `TARGET_DIR=./subblock/<name>/`.
+- **Single block clearly identified** (literal name or unambiguous paraphrase — consult each block's `CLAUDE.md` when the user uses a description) → `TARGET_DIR=./blocks/<name>/`.
 - **Multiple blocks mentioned, or genuinely ambiguous** → ask the user which one. Do not guess.
 - **No block mentioned** (empty, generic, or refers to the whole pipeline) → `TARGET_DIR=CWD` (the root). The root may lack its own `config.yaml`; treat that as a warning, not an abort.
-- **Block inferred but `./subblock/<name>/` doesn't exist** → abort with the actual `./subblock/` listing and ask the user to pick. Never fall back to root silently.
+- **Block inferred but `./blocks/<name>/` doesn't exist** → abort with the actual `./blocks/` listing and ask the user to pick. Never fall back to root silently.
 
 ### Confirmation
 
@@ -60,28 +60,28 @@ Read `resources/BLOCK_DEFINITION.md` bundled in this plugin (sibling of the `ski
 
 ## Step 1 — Load this block
 
-The "current block" is `TARGET_DIR` (CWD when `block_name` is unset; `./subblock/<block_name>/` when set). Read, in order:
+The "current block" is `TARGET_DIR` (CWD when `block_name` is unset; `./blocks/<block_name>/` when set). Read, in order:
 
 1. `<TARGET_DIR>/config.yaml`:
-   - If `block_name` is **set**, this file is required — abort with "Missing `config.yaml` under `subblock/<block_name>/`." if absent.
-   - If `block_name` is **unset** (root mode), the root `config.yaml` is expected to exist (orchestration identity + `meta_info.subblocks` roster). If it is absent, fall back to the pseudo-root pattern: skip config-driven preflight (Step 3 checks #3–#7 are scoped to subblocks via their own configs) and proceed, emitting a warning.
+   - If `block_name` is **set**, this file is required — abort with "Missing `config.yaml` under `blocks/<block_name>/`." if absent.
+   - If `block_name` is **unset** (root mode), the root `config.yaml` is expected to exist (orchestration identity + `meta_info.blocks` roster). If it is absent, fall back to the pseudo-root pattern: skip config-driven preflight (Step 3 checks #3–#7 are scoped to blocks via their own configs) and proceed, emitting a warning.
 2. `<TARGET_DIR>/CLAUDE.md` — read it; honor any block-specific rules it states.
 3. `<TARGET_DIR>/dashboard/overview.mdx` — useful context, not load-bearing.
 
-If `config.yaml` is required but absent (subblock target), go back to user and ask them to double check this really is a block.
+If `config.yaml` is required but absent (block target), go back to user and ask them to double check this really is a block.
 
-## Step 2 — Load subblocks
+## Step 2 — Load blocks
 
-For each `name` listed under `meta_info.subblocks` in `./config.yaml`, read `./subblock/<name>/config.yaml`. Keep a map:
+For each `name` listed under `meta_info.blocks` in `./config.yaml`, read `./blocks/<name>/config.yaml`. Keep a map:
 
 ```
 <name> -> {
-  latest_run: <newest entry in subblock/<name>/artifacts/index.yaml, or null>,
+  latest_run: <newest entry in blocks/<name>/artifacts/index.yaml, or null>,
   output: <child runtime_info.output, may have null values>
 }
 ```
 
-If a declared subblock directory is missing, record it as a preflight failure (do not abort yet — collect all failures first).
+If a declared block directory is missing, record it as a preflight failure (do not abort yet — collect all failures first).
 
 ## Step 3 — Preflight checklist (fail-fast, all failures reported together)
 
@@ -101,24 +101,24 @@ If any check fails, print all failures in one message and stop. Do **not** inven
 
 ## Step 4 — Execute
 
-The execution model depends on whether `TARGET_DIR` is a **leaf block** (no entries under `meta_info.subblocks`) or a **parent block** (has subblocks declared).
+The execution model depends on whether `TARGET_DIR` is a **leaf block** (no entries under `meta_info.blocks`) or a **parent block** (has blocks declared).
 
 ### Step 4a — Parent block: dispatch to children, never to their `start.sh`
 
-**Rule (non-negotiable):** when `TARGET_DIR` has subblocks, this skill's job is *orchestration only*. It MUST invoke each child block's own `/<child>:run` skill (via the slash-command surface), in the dependency-resolved order declared under `meta_info.subblocks`. It MUST NOT reach into `subblock/<child>/scripts/start.sh` directly, MUST NOT shell out into the child's directory, and MUST NOT duplicate the child's preflight logic.
+**Rule (non-negotiable):** when `TARGET_DIR` has blocks, this skill's job is *orchestration only*. It MUST invoke each child block's own `/<child>:run` skill (via the slash-command surface), in the dependency-resolved order declared under `meta_info.blocks`. It MUST NOT reach into `blocks/<child>/scripts/start.sh` directly, MUST NOT shell out into the child's directory, and MUST NOT duplicate the child's preflight logic.
 
 Rationale: each block owns its own contract (preflight, confirmation, archiving, remote-execution decision). Bypassing the child skill bypasses those guarantees and breaks the recursion model — the parent would silently inherit responsibility for things the child is supposed to enforce.
 
 Procedure at a parent:
 
-1. Topologically sort the children by the dependency graph read from **each child's own** `meta_info.dependencies.from` (`subblock/<name>/config.yaml`): a child that consumes `<src>.output.<key>` must run after `<src>`. Edges that are conditionally inactive (`when:` not matching) or optional (`required: false`) still order the sort but do not block execution. Break ties by the declaration order in the root's `meta_info.subblocks`.
+1. Topologically sort the children by the dependency graph read from **each child's own** `meta_info.dependencies.from` (`blocks/<name>/config.yaml`): a child that consumes `<src>.output.<key>` must run after `<src>`. Edges that are conditionally inactive (`when:` not matching) or optional (`required: false`) still order the sort but do not block execution. Break ties by the declaration order in the root's `meta_info.blocks`.
 2. For each child in that order, invoke `/<child>:run` and wait for it to complete. The child skill is responsible for its own preflight, confirmation, execution, and archiving.
 3. If a child fails or the user aborts at its confirmation gate, stop the parent's dispatch immediately — do not run downstream children. Report which child stopped the pipeline and surface its failure verbatim.
 4. The parent block does not have its own `scripts/start.sh` to execute; it has nothing to run beyond dispatching children. If the user explicitly asks for "just the root" (no children), there is nothing to do — say so and exit.
 
 ### Step 4b — Leaf block: run `scripts/start.sh`
 
-Only leaf blocks (no subblocks declared) run their own `start.sh`. Parent blocks never do — see 4a.
+Only leaf blocks (no blocks declared) run their own `start.sh`. Parent blocks never do — see 4a.
 
 - **Local execution** (no `meta_info.resources.ip`, or it is `local`/null): `cd <TARGET_DIR>` then run `bash ./scripts/start.sh`, streaming stdout/stderr. Optionally capture the session to a file you'd move into the archive as `session.log`.
 - **Remote execution** (`meta_info.resources.ip` is a real IP):

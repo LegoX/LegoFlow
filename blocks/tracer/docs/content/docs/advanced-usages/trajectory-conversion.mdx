@@ -1,0 +1,77 @@
+---
+title: Trajectory Conversion
+---
+
+A finished Tracer job leaves raw Harbor trajectories. Conversion turns the
+successful instances into training data that Trainer can consume.
+
+## Pipeline
+
+```text
+Raw Harbor trajectories
+  └─ scaffold converter
+       └─▶ IM JSONL
+             └─ TQS / optional LLM scoring
+                  └─▶ LF JSON
+                        └─▶ Trainer
+```
+
+The conversion entry point is `scripts/convert_trajectories.sh`. It reads
+`runtime_info.input.sft_conversion` from `config.yaml`, resolves the target job
+under `runtime_info.input.harbor_job.jobs_dir`, chooses a scaffold converter,
+and writes all output under `sft_conversion.out_dir`.
+
+## Formats
+
+| Format | File | What it contains | Who uses it |
+| --- | --- | --- | --- |
+| **Raw trajectory** | `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl` | The request/response stream captured by the LiteLLM trajectory logger. Shape depends on the agent scaffold. | Debugging, dashboard previews, conversion input. |
+| **IM** | `artifacts/sft_data/<job>/im.jsonl` | One normalized record per trajectory with OpenAI-style messages, `tool_calls`, metadata, and score fields. | Scoring, filtering, technical analysis. |
+| **LF** | `artifacts/sft_data/<job>/lf.json` | LLaMA-Factory ShareGPT-style JSON array. | Trainer SFT input. |
+| **Stats** | `artifacts/sft_data/<job>/lf.stats.json` | Counts, token lengths, turns, scores, and conversion summaries. | Dashboard and dataset QA. |
+
+`lf.json` is the handoff file Trainer normally reads when
+`trainer.source.type: local_lf`.
+
+## Job and Scaffold Resolution
+
+With `--job latest`, the converter selects the most recently modified directory
+under `artifacts/jobs/`. For a named job, it reads that job directly.
+
+The scaffold can be explicit or automatic:
+
+- explicit: `claude_code`, `open_code`, `openhands_sdk`, or `terminus2`;
+- automatic: derive from `runtime_info.input.agent.name`, such as
+  `custom-claude-code -> claude_code`.
+
+Historical jobs can outlive the current config. If a job was produced by a
+different scaffold than the active `agent.name`, set the scaffold explicitly
+before refreshing conversion.
+
+## Reasoning Filtering
+
+Claude Code, OpenCode, and OpenHands SDK conversion support reasoning-content
+filtering. The checked-in default is adaptive mode:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    sft_conversion:\n      reasoning_check_mode: adaptive\n      reasoning_content_ratio_threshold: 0.2"}
+</ConfigSnippet>
+
+Adaptive mode keeps useful reasoning while filtering records whose reasoning
+content ratio looks suspicious for downstream training. Terminus-2 does not use
+this filter because its trajectory structure separates reasoning differently.
+
+## Idempotent Refresh
+
+The converter writes `.convert_sig.json` next to the outputs. The signature is
+computed from the resolved reward-1.0 instance set and conversion inputs:
+scaffold, tokenizer, max instance cap, exclude file, and reasoning filter
+settings. When the signature is unchanged, dashboard refresh can skip
+reconversion safely.
+
+For dashboard-driven refreshes, use `/tracer:dashboard`. For the core rollout
+path, set:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    sft_conversion:\n      enabled: true\n      scaffold: auto\n      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base\n      out_dir: artifacts/sft_data"}
+</ConfigSnippet>

@@ -92,8 +92,8 @@ def live_overlay(config_path: Path):
     values this check would otherwise reject. Both smoke flavours leave a backup
     next to (or beside) the config, named with the owning process's pid:
 
-        subblock/<b>/config.yaml.root-smoke-bak.<pid>      root chain
-        subblock/<b>/tests/smoke/.config.yaml.backup.<pid> block smoke
+        blocks/<b>/config.yaml.root-smoke-bak.<pid>      root chain
+        blocks/<b>/tests/smoke/.config.yaml.backup.<pid> block smoke
 
     The pid is what makes this safe: a backup whose process is gone is debris
     from a crashed run, and must NOT suppress the check — otherwise one crashed
@@ -121,6 +121,33 @@ def walk(node, trail, out):
         out.append((".".join(trail), node))
 
 
+# A commented-out example is still committed text. `curator/config.yaml` carried
+# a worked example with a real gateway host in it, invisible to the YAML walk
+# below because a comment has no parsed value. Fill-in instructions belong in
+# docs/, not in config comments.
+COMMENTED_ASSIGNMENT = re.compile(
+    r"#.*?\b(" + "|".join(sorted(SECRET_KEYS)) + r")\s*:\s*(\S+)"
+)
+
+
+def scan_comments(text: str, rel: str, out: list) -> None:
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if "#" not in line:
+            continue
+        m = COMMENTED_ASSIGNMENT.search(line)
+        if not m:
+            continue
+        leaf, v = m.group(1), m.group(2).strip().strip("\"'")
+        if v.lower() in PLACEHOLDERS or v.startswith("PENDING_SET_BY_") or FAKE_VALUE.match(v):
+            continue
+        if v.startswith("<") and v.endswith(">"):
+            continue  # <YOUR_KEY> style placeholder
+        if KEYISH.match(v):
+            out.append(f"{rel}:{lineno}: commented-out {leaf} looks like a live API key")
+        elif leaf in URL_KEYS and v.startswith(("http://", "https://")) and not is_local_url(v):
+            out.append(f"{rel}:{lineno}: commented-out {leaf} = {v!r} is a non-local endpoint")
+
+
 bad = []
 skipped = []
 stale = []
@@ -136,8 +163,10 @@ for rel in paths:
     # hold injected values, so it is checked normally, but say why it looks odd.
     for bak in list(p.parent.glob(p.name + ".root-smoke-bak.*")):
         stale.append((rel, bak.name))
+    raw_text = p.read_text(encoding="utf-8")
+    scan_comments(raw_text, rel, bad)
     try:
-        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        data = yaml.safe_load(raw_text) or {}
     except Exception:
         continue  # schema cases own parse errors
     leaves = []

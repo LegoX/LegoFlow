@@ -1,0 +1,77 @@
+---
+title: Job Analysis
+---
+
+A raw eval job tells you which tasks resolved and which didn't. **Job analysis** turns that into the attribution and scoring artifacts the [dashboard](/docs/blocks/evaluator/dashboard) reads — failure distributions, task breakdowns, resolved-vs-unresolved metrics, and per-instance summaries.
+
+After each eval, `start.sh` runs `scripts/analyze_job.sh "$JOB_DIR"` automatically. It is **non-fatal**: a failed analysis never fails a completed eval run.
+
+## What it produces
+
+The pipeline runs Harbor's `job_analysis` over a completed job and writes results into `<job_dir>/analysis/` — the exact layout the dashboard reads:
+
+```text
+artifacts/jobs/<job>/analysis/
+├── report_failed.json / report_resolved.json
+├── report_task_analysis.json
+├── traj_analysis/score_comparison.json
+├── instance_analysis/{summary,correlations}.json
+├── instances.jsonl
+└── analysis_config.yaml
+```
+
+## Running it
+
+```bash
+# Analyze the newest job under jobs_dir (no arg), or a specific job dir
+bash scripts/analyze_job.sh
+bash scripts/analyze_job.sh artifacts/jobs/<job>
+```
+
+Safe to re-run, and safe to run on old jobs.
+
+| Aspect | Behavior |
+| --- | --- |
+| **Opt-out** | set `runtime_info.input.job_analysis.enabled: false` in `config.yaml` |
+| **Cost** | LLM judge is off by default → pure-CPU, zero token cost. Enable with `JOB_ANALYSIS_JUDGE=1` (needs `ANTHROPIC_API_KEY`) |
+| **Engine** | uses `artifacts/env/harbor-uv` (has `scipy` + `pyyaml`); the read-only Harbor repo is only `cd`-ed into for imports — all output lands in the writable job dir |
+| **Gold dependency** | needs a gold dataset; auto-generated when missing, skips cleanly if it cannot be built |
+
+<Callout title="Multilingual domain classification" type="info">
+`task_analysis` domain classification relies on Harbor's `classifier.py` repo→domain map, which is Python-SWE-bench-Verified-centric. For multilingual repos (apache/druid, lucene, …) the domain falls back to `other`. Any local tweak to that classifier is overwritten by `update_repos.sh` — keep such changes out of the read-only repo.
+</Callout>
+
+## Gold Dataset Prep
+
+Job analysis needs per-instance reference data at:
+
+```text
+artifacts/datasets/<gold_base>/<id>/tests/config.json
+```
+
+When it is absent, `analyze_job.sh` auto-runs:
+
+```bash
+bash scripts/prepare_dataset.sh [<dataset_name>]
+```
+
+The prep path runs the matching Harbor adapter, then tags task metadata
+(`language`, `area`, `topic`, `bug_class`, difficulty) for dashboard
+breakdowns. It is idempotent and best-effort: if tagging fails, the gold data is
+still usable, but dashboard breakdowns are less rich.
+
+| `dataset_name` | Adapter | HuggingFace source |
+| --- | --- | --- |
+| `swebench-verified` | `swebench` | `princeton-nlp/SWE-bench_Verified` |
+| `swebench_multilingual` | `swebench_multilingual` | `SWE-bench/SWE-bench_Multilingual` |
+| `swebenchpro` | `swebenchpro` | `ScaleAI/SWE-bench_Pro` |
+
+<Callout title="Use a JSON-clean tagging model" type="warn">
+`tag_task_metadata.py` expects clean JSON from the tagging endpoint. Reasoning
+models that emit `<think>...` in the content field can break tagging. Use
+`job_analysis.tag_llm` or `PREP_TAG_BASE_URL` / `PREP_TAG_MODEL` /
+`PREP_TAG_API_KEY` to point tagging at a JSON-clean instruct endpoint.
+</Callout>
+
+Keep this endpoint separate from the model under evaluation when needed, and do
+not commit its key.

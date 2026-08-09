@@ -1,0 +1,77 @@
+---
+title: Quality Rubrics
+---
+
+This page explains how Curator scores task quality after tasks are generated.
+Use it when you want to compare datasets, sample by difficulty, or understand
+why one task looks harder than another. 
+
+## Difficulty Score
+
+Curator follows the Harbor
+[`scripts/task_analysis`](https://github.com/SWE-Lego/harbor/tree/main/scripts/task_analysis)
+rubric. The score is static and reproducible: no LLM judge is used for the
+difficulty number.
+
+The rubric looks at five signals from the solution patch, tests, and
+instruction. Each signal is scaled to `1.0-5.0`, combined by weight, then mapped
+to a final `1.0-10.0` score.
+
+| Dimension | Weight | Signal |
+| --- | --- | --- |
+| `patch_scope` | 0.30 | Changed lines, files, and hunks. |
+| `logic_complexity` | 0.25 | New functions/classes and control-flow additions. |
+| `context_breadth` | 0.20 | Distinct directories touched by the fix. |
+| `test_complexity` | 0.15 | Test lines and test files. |
+| `instruction_complexity` | 0.10 | Problem statement length and detail. |
+
+The final score is bucketed into a simple label:
+
+| Label | Score |
+| --- | --- |
+| `easy` | `<= 4.0` |
+| `medium` | `4.1-7.0` |
+| `hard` | `> 7.0` |
+
+## Where Scores Live
+
+Curator writes scoring metadata back into each task's `task.toml`:
+
+```text
+artifacts/swe_tasks/<lang>-cc/<task_id>/task.toml
+```
+
+The important fields are:
+
+```text
+difficulty_score
+difficulty_label
+difficulty
+category
+tags
+```
+
+Use these fields for dataset sampling and dashboard comparison. For example, a
+small smoke dataset can keep mostly `easy` and `medium` tasks, while a training
+or evaluation dataset may intentionally keep more `hard` cases.
+
+## Regenerating Scores
+
+From `blocks/curator/`, regenerate task metadata with:
+
+```bash
+python3 ./repos/swegen/tools/tag_task_metadata.py \
+  --datasets-dir datasets --dataset all --jobs 64 --retries 3
+```
+
+This command is resumable. It can be re-run after new verified tasks are added.
+
+## Dashboard
+
+The public dashboard compares difficulty and tag composition across curated
+datasets:
+
+[Open the Dashboard](https://swe-databoard.pages.dev/)
+
+The dashboard is for finished datasets. During task generation, inspect logs,
+`verifiable_tasks.txt`, and `artifacts/index.yaml` instead.

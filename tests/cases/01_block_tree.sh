@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Root case 01: block-tree structural integrity.
-# Every expected subblock exists, its config.yaml parses, meta_info.name
-# matches the directory name, and parent == swe_lego_live.
+# Every expected block exists, its config.yaml parses, meta_info.name
+# matches the directory name, and parent == legoflow.
 # (Shell mirror of tests/test_root_block.py so `tests/run.sh` is self-contained
 #  on a runner without pytest.)
 
@@ -17,26 +17,26 @@ except ImportError:
 
 root = sys.argv[1]
 EXPECTED = ["curator", "tracer", "trainer", "evaluator"]
-PARENT = "swe_lego_live"
+PARENT = "legoflow"
 errs = []
 for name in EXPECTED:
-    d = os.path.join(root, "subblock", name)
+    d = os.path.join(root, "blocks", name)
     cfg_path = os.path.join(d, "config.yaml")
     if not os.path.isdir(d):
-        errs.append(f"missing subblock dir: subblock/{name}"); continue
+        errs.append(f"missing block dir: blocks/{name}"); continue
     if not os.path.isfile(cfg_path):
-        errs.append(f"missing subblock/{name}/config.yaml"); continue
+        errs.append(f"missing blocks/{name}/config.yaml"); continue
     try:
         cfg = yaml.safe_load(open(cfg_path, encoding="utf-8")) or {}
     except Exception as e:
-        errs.append(f"subblock/{name}/config.yaml does not parse: {e}"); continue
+        errs.append(f"blocks/{name}/config.yaml does not parse: {e}"); continue
     meta = cfg.get("meta_info") or {}
     if "meta_info" not in cfg or "runtime_info" not in cfg:
-        errs.append(f"subblock/{name}/config.yaml missing meta_info/runtime_info")
+        errs.append(f"blocks/{name}/config.yaml missing meta_info/runtime_info")
     if meta.get("name") != name:
-        errs.append(f"subblock/{name}: meta_info.name={meta.get('name')!r} != {name!r}")
+        errs.append(f"blocks/{name}: meta_info.name={meta.get('name')!r} != {name!r}")
     if meta.get("parent") != PARENT:
-        errs.append(f"subblock/{name}: meta_info.parent={meta.get('parent')!r} != {PARENT!r}")
+        errs.append(f"blocks/{name}: meta_info.parent={meta.get('parent')!r} != {PARENT!r}")
 
 if errs:
     for e in errs: print("FAIL:", e, file=sys.stderr)

@@ -19,17 +19,17 @@
 #
 # Exports:
 #   CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN CLOUDFLARE_PAGES_PROJECT_PREFIX
-#   DOCKER_REGISTRY DOCKER_USERNAME DOCKER_PASSWORD DOCKER_MIRROR
+#   DOCKER_REGISTRY DOCKER_USERNAME DOCKER_PASSWORD DOCKER_MIRROR DOCKER_HOST
 #   SHARED_CLOUDFLARE_SOURCE SHARED_DOCKER_SOURCE   (env|root-config|legacy-file|unset)
 #   SHARED_ROOT_CONFIG                              (path actually used, or "")
 
 # Walk up from a starting directory to the tree root (the dir holding both
-# config.yaml and subblock/). Falls back to git toplevel.
+# config.yaml and blocks/). Falls back to git toplevel.
 _shared_find_root() {
   local dir="${1:-$PWD}"
   dir="$(cd "$dir" 2>/dev/null && pwd)" || return 1
   while [[ "$dir" != "/" ]]; do
-    if [[ -f "$dir/config.yaml" && -d "$dir/subblock" ]]; then
+    if [[ -f "$dir/config.yaml" && -d "$dir/blocks" ]]; then
       printf '%s\n' "$dir"
       return 0
     fi
@@ -123,7 +123,7 @@ load_shared_credentials() {
   local dk_src="unset"
   [[ -n "${DOCKER_USERNAME:-}" || -n "${DOCKER_PASSWORD:-}" ]] && dk_src="env"
   local k
-  for k in registry username password mirror; do
+  for k in registry username password mirror host; do
     local upper="DOCKER_${k^^}"
     if [[ -z "${!upper:-}" ]]; then
       v="$(_shared_cfg_get "$cfg" "docker.$k")"
@@ -137,6 +137,7 @@ load_shared_credentials() {
   export DOCKER_USERNAME="${DOCKER_USERNAME:-}"
   export DOCKER_PASSWORD="${DOCKER_PASSWORD:-}"
   export DOCKER_MIRROR="${DOCKER_MIRROR:-}"
+  export DOCKER_HOST="${DOCKER_HOST:-}"
   export SHARED_DOCKER_SOURCE="$dk_src"
 
   return 0

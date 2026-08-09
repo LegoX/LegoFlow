@@ -42,11 +42,11 @@ set -uo pipefail
 ACTION="${1:-start}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # Read trainer's pod resources + output_dir from the SMOKE config (that's what the
-# checkpoint was trained with). subblock/trainer/config.yaml is the production config
+# checkpoint was trained with). blocks/trainer/config.yaml is the production config
 # at evaluator time — the evaluator stage overlays evaluator, not trainer — so it would carry the
 # wrong output_dir / resources here.
 SFT_CFG="$ROOT_DIR/tests/smoke/trainer/config.yaml"
-EVAL_CFG="$ROOT_DIR/subblock/evaluator/config.yaml"
+EVAL_CFG="$ROOT_DIR/blocks/evaluator/config.yaml"
 TUNNEL_PIDFILE="$ROOT_DIR/.smoke-run/serve-tunnel.pid"
 
 cfg() {  # cfg <file> <dotted-key>
@@ -74,7 +74,7 @@ R_KEY="$(cfg "$SFT_CFG" meta_info.resources.key)";  R_KEY="${R_KEY:-${SMOKE_REMO
 R_PORT="$(cfg "$SFT_CFG" meta_info.resources.port)"
 R_DIR="$(cfg "$SFT_CFG" meta_info.resources.directory)"
 OUTPUT_DIR="$(cfg "$SFT_CFG" runtime_info.input.training.output_dir)"
-MODEL_ROOT="$R_DIR/subblock/trainer/artifacts/model/$OUTPUT_DIR"
+MODEL_ROOT="$R_DIR/blocks/trainer/artifacts/model/$OUTPUT_DIR"
 
 # --- Serving params from the evaluator config ------------------------------------
 VLLM_PORT="$(cfg "$EVAL_CFG" runtime_info.input.serving.vllm.port)";            VLLM_PORT="${VLLM_PORT:-8000}"
@@ -214,7 +214,7 @@ PYEOF" || echo "WARN: could not normalise tokenizer_config (continuing)"
     echo "      vLLM       : :$VLLM_PORT  dp=$DP tp=$TP  max_len=$MAXLEN  served_name=$SERVED_NAME  (conda $VLLM_CONDA_ENV)"
     echo "      base_url   : $BASE_URL   api_key=$VLLM_API_KEY (matches evaluator llm_api.api_key)"
 
-    LOG_DIR="$R_DIR/subblock/trainer/artifacts/logs"
+    LOG_DIR="$R_DIR/blocks/trainer/artifacts/logs"
     DP_FLAG=""; [[ "$DP" -gt 1 ]] && DP_FLAG="--data-parallel-size ${DP}"
     # vLLM in the pod's conda env, launched inside a detached tmux session so it
     # survives the SSH connection closing (a bare nohup child can get reaped).

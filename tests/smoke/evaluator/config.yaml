@@ -1,5 +1,5 @@
 # ROOT SMOKE — stage 4/4: eval.
-# Overlaid onto subblock/evaluator/config.yaml by tests/smoke/run_pipeline.sh.
+# Overlaid onto blocks/evaluator/config.yaml by tests/smoke/run_pipeline.sh.
 # Schema-compatible with production eval; deltas tagged "# ROOT:".
 #
 # Evaluates the checkpoint trainer just produced on the SWE-bench Verified
@@ -11,8 +11,8 @@ meta_info:
   name: evaluator
   label: "Evaluation"
   description: Evaluates the sft checkpoint (served via remote vLLM+LiteLLM) on the SWE-bench Verified 100-subset.
-  parent: swe_lego_live
-  subblocks: {}
+  parent: legoflow
+  blocks: {}
   dependencies:
     from:
       # ROOT: the model under test is the trainer's persisted checkpoint —
@@ -101,7 +101,7 @@ runtime_info:
       registry_path: repos/harbor/registry.json
 
     harbor_job:
-      jobs_dir: artifacts/jobs/root-smoke   # ROOT: isolate from prod + subblock smoke
+      jobs_dir: artifacts/jobs/root-smoke   # ROOT: isolate from prod + block smoke
       n_concurrent: 8
       n_tasks: 100                           # ROOT: the verified 100-subset (design step 4)
       max_retries: 1

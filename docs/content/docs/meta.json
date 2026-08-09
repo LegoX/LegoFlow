@@ -2,9 +2,8 @@
     "pages": [
         "index",
         "getting-started",
-        "example-usages",
+        "blocks",
         "block-design",
-        "sub-block",
-        "reference"
+        "qa"
     ]
 }

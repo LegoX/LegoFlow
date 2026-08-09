@@ -15,7 +15,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SWEGEN_CFG="$ROOT_DIR/subblock/curator/config.yaml"
+SWEGEN_CFG="$ROOT_DIR/blocks/curator/config.yaml"
 
 # Archive this run when start.sh exits (success, error, or signal).
 RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -92,7 +92,7 @@ ssh_run() {
   fi
 }
 
-echo "=== Starting Block: swe_lego_live ==="
+echo "=== Starting Block: legoflow ==="
 echo ""
 
 # ── Read execution-location config ───────────────────────────────────────────
@@ -114,11 +114,11 @@ if [[ $IS_LOCAL -eq 1 ]]; then
   echo "Repo path   : ${REPO_DIR}"
 else
   if [[ -z "$REMOTE_DIR" || "$REMOTE_DIR" == "null" ]]; then
-    echo "ERROR: meta_info.resources.directory not set in subblock/curator/config.yaml" >&2
+    echo "ERROR: meta_info.resources.directory not set in blocks/curator/config.yaml" >&2
     exit 1
   fi
   if [[ -z "$REMOTE_USER" || "$REMOTE_USER" == "null" ]]; then
-    echo "ERROR: meta_info.resources.user not set in subblock/curator/config.yaml" >&2
+    echo "ERROR: meta_info.resources.user not set in blocks/curator/config.yaml" >&2
     exit 1
   fi
   REMOTE_HOST="${REMOTE_USER}@${REMOTE_IP}"
@@ -154,11 +154,11 @@ if [[ $DO_SYNC -eq 1 ]]; then
       --exclude='.git/' \
       --exclude='artifacts/' \
       --exclude='.claude/' \
-      --exclude='subblock/curator/repos/' \
-      --exclude='subblock/tracer/repos/' \
-      --exclude='subblock/curator/artifacts/' \
-      --exclude='subblock/tracer/artifacts/' \
-      --exclude='subblock/curator/gh_token.txt' \
+      --exclude='blocks/curator/repos/' \
+      --exclude='blocks/tracer/repos/' \
+      --exclude='blocks/curator/artifacts/' \
+      --exclude='blocks/tracer/artifacts/' \
+      --exclude='blocks/curator/gh_token.txt' \
       "${ROOT_DIR}/" "${REMOTE_HOST}:${REPO_DIR}/"
     echo "  synced to ${REMOTE_HOST}:${REPO_DIR}"
     echo ""
@@ -210,7 +210,7 @@ attach_hint() {
 if [[ $START_SWEGEN -eq 1 ]]; then
   echo "Step 3: Starting curator ..."
   SWEGEN_SESSION="curator-py"
-  SWEGEN_DIR="${REPO_DIR}/subblock/curator"
+  SWEGEN_DIR="${REPO_DIR}/blocks/curator"
 
   if tmux_has_session "${SWEGEN_SESSION}"; then
     echo "  [SKIP] tmux session '${SWEGEN_SESSION}' already exists"
@@ -228,7 +228,7 @@ fi
 if [[ $START_TRAJGEN -eq 1 ]]; then
   echo "Step 4: Starting tracer ..."
   TRAJGEN_SESSION="tracer"
-  TRAJGEN_DIR="${REPO_DIR}/subblock/tracer"
+  TRAJGEN_DIR="${REPO_DIR}/blocks/tracer"
 
   if tmux_has_session "${TRAJGEN_SESSION}"; then
     echo "  [SKIP] tmux session '${TRAJGEN_SESSION}' already exists"

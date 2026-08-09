@@ -25,11 +25,11 @@ BLOCKS = ["curator", "tracer", "trainer", "evaluator"]
 
 cfgs = {}
 for b in BLOCKS:
-    p = os.path.join(root, "subblock", b, "config.yaml")
+    p = os.path.join(root, "blocks", b, "config.yaml")
     try:
         cfgs[b] = yaml.safe_load(open(p, encoding="utf-8")) or {}
     except Exception as e:
-        print(f"FAIL: cannot parse subblock/{b}/config.yaml: {e}", file=sys.stderr); sys.exit(1)
+        print(f"FAIL: cannot parse blocks/{b}/config.yaml: {e}", file=sys.stderr); sys.exit(1)
 
 def output_keys(cfg):
     out = (cfg.get("runtime_info") or {}).get("output") or {}
@@ -52,7 +52,7 @@ checked = 0
 for b in BLOCKS:
     deps = (cfgs[b].get("meta_info") or {}).get("dependencies")
     if not isinstance(deps, dict) or set(deps.keys()) != {"from", "to"}:
-        errs.append(f"subblock/{b}: meta_info.dependencies must have exactly `from` and `to` keys")
+        errs.append(f"blocks/{b}: meta_info.dependencies must have exactly `from` and `to` keys")
         continue
 
     for dep_key, dep_val in (deps.get("from") or {}).items():
@@ -61,15 +61,15 @@ for b in BLOCKS:
         if ref in (None, ""):
             continue
         if not isinstance(ref, str) or ".output." not in ref:
-            errs.append(f"subblock/{b}: {label} = {ref!r} is not `<block>.output.<key>` (string or dict `from:`)")
+            errs.append(f"blocks/{b}: {label} = {ref!r} is not `<block>.output.<key>` (string or dict `from:`)")
             continue
         src_block, _, rest = ref.partition(".output.")
         out_key = rest.split(".")[0]
         if src_block not in cfgs:
-            errs.append(f"subblock/{b}: {label} -> unknown block {src_block!r}")
+            errs.append(f"blocks/{b}: {label} -> unknown block {src_block!r}")
             continue
         if out_key not in output_keys(cfgs[src_block]):
-            errs.append(f"subblock/{b}: {label} -> {src_block}.output.{out_key} not declared "
+            errs.append(f"blocks/{b}: {label} -> {src_block}.output.{out_key} not declared "
                         f"(has: {sorted(output_keys(cfgs[src_block]))})")
             continue
         checked += 1
@@ -80,14 +80,14 @@ for b in BLOCKS:
         if ref in (None, ""):
             continue
         if not isinstance(ref, str) or ".input." not in ref:
-            errs.append(f"subblock/{b}: {label} = {ref!r} is not `<block>.input.<path>` (string or dict `to:`)")
+            errs.append(f"blocks/{b}: {label} = {ref!r} is not `<block>.input.<path>` (string or dict `to:`)")
             continue
         consumer, _, path = ref.partition(".input.")
         if consumer not in cfgs:
-            errs.append(f"subblock/{b}: {label} -> unknown block {consumer!r}")
+            errs.append(f"blocks/{b}: {label} -> unknown block {consumer!r}")
             continue
         if not input_path_exists(cfgs[consumer], path):
-            errs.append(f"subblock/{b}: {label} -> {consumer}.input.{path} not declared")
+            errs.append(f"blocks/{b}: {label} -> {consumer}.input.{path} not declared")
             continue
         checked += 1
 

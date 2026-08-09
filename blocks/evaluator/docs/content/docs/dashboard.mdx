@@ -1,0 +1,78 @@
+---
+title: Dashboard
+---
+
+Evaluator's dashboard is the benchmark result and analysis browser. Use
+`/evaluator:dashboard` to inspect jobs, scores, failure modes, post-eval
+analysis, and step-by-step trajectories.
+
+## What It Monitors
+
+| Monitor | What it tells you |
+| --- | --- |
+| **Benchmark jobs** | Which dataset, model endpoint, agent scaffold, and config profile each job used. |
+| **Resolve rate** | Overall pass/fail reward summaries and per-job success rates. |
+| **Failure patterns** | Error types, verifier failures, unresolved categories, empty patches, and timeouts. |
+| **Task breakdowns** | Performance by language, area, topic, bug class, difficulty, and benchmark slice. |
+| **Agent trajectories** | Messages, tool calls, observations, file edits, and final answers for each task. |
+| **Job comparison** | Side-by-side comparison across models, checkpoints, scaffolds, or benchmark runs. |
+| **Analysis artifacts** | Reports produced after a job finishes, including instance and trajectory analysis. |
+
+For the richest view, let post-eval job analysis finish first. Raw jobs still
+appear, but failure attribution and task breakdowns will be limited.
+
+## Local Mode
+
+Use local mode for normal evaluation debugging:
+
+```text
+/evaluator:dashboard
+```
+
+In local mode, the skill summarizes the latest or selected job and can open the
+local web dashboard. This keeps trajectories, verifier logs, model outputs, and
+benchmark run metadata on the machine where the job was produced.
+
+Ask for local mode when you want to:
+
+- check current benchmark accuracy;
+- inspect unresolved tasks;
+- compare two evaluation jobs;
+- browse a task trajectory step by step;
+- regenerate or inspect post-eval analysis for an old job.
+
+## Cloudflare Public Mode
+
+Use Cloudflare mode when you want to share a public benchmark dashboard:
+
+```text
+/evaluator:dashboard publish to Cloudflare
+```
+
+Before using public mode, configure Cloudflare credentials outside tracked
+source files:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- the target Pages project, for example the Harbor/Evaluator dashboard project
+
+The API token needs permission to edit Cloudflare Pages for the account. If you
+want public trajectory browsing at scale, configure the dashboard's chunked or
+R2-backed trajectory mode before publishing.
+
+Cloudflare mode is helpful for reporting and team review, but publish only data
+that is safe to expose: job configs, trajectories, verifier reports, and model
+outputs can contain sensitive details.
+
+## When To Use It
+
+Use `/evaluator:dashboard` when you want to answer questions like:
+
+- What is the model's benchmark resolve rate?
+- Which task categories are failing?
+- Did failures come from verifier errors, agent behavior, endpoint issues, or timeouts?
+- How does this checkpoint compare with another model or scaffold?
+- Which trajectories should be inspected manually?
+
+For Evaluator mechanics, see [Design](/docs/blocks/evaluator/design). For artifact
+contracts, see [Output Format](/docs/blocks/evaluator/outputs).

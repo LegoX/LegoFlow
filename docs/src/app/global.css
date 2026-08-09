@@ -52,6 +52,55 @@ figure.shiki {
   vertical-align: -0.14em !important;
 }
 
+article p,
+article li {
+  text-align: start;
+  text-wrap: pretty;
+  overflow-wrap: break-word;
+}
+
+article p {
+  hyphens: auto;
+}
+
+.docs-tldr {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin: 1.25rem 0 1.4rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid color-mix(in oklab, var(--swe-live-accent) 24%, #e6e3da);
+  border-left: 4px solid var(--swe-live-accent);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--swe-live-accent) 8%, #fafaf7);
+  color: var(--color-fd-foreground);
+}
+
+.docs-tldr-label {
+  flex: 0 0 auto;
+  color: var(--swe-live-accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.55;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.docs-tldr span:last-child {
+  line-height: 1.65;
+}
+
+@media (max-width: 640px) {
+  .docs-tldr {
+    display: block;
+  }
+
+  .docs-tldr-label {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+}
+
 .docs-brand-title {
   font-family: Georgia, Cambria, "Times New Roman", Times, serif;
   font-size: 1.18rem;

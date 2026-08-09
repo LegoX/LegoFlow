@@ -1,5 +1,5 @@
 # ROOT SMOKE — stage 3/4: trainer.
-# Overlaid onto subblock/trainer/config.yaml by tests/smoke/run_pipeline.sh.
+# Overlaid onto blocks/trainer/config.yaml by tests/smoke/run_pipeline.sh.
 # Deltas from production are tagged "# ROOT:".
 #
 # Model and dataset match production; only the step count differs and tracer's
@@ -14,8 +14,8 @@ meta_info:
   name: trainer
   label: "SFT Training"
   description: SFT on the production dataset + tracer reward==1 trajectories; persists a checkpoint for eval.
-  parent: swe_lego_live
-  subblocks: {}
+  parent: legoflow
+  blocks: {}
   dependencies:
     from:
       # stage 2 -> 3: the CONVERTED reward==1 LF, not raw trajectories
@@ -42,7 +42,7 @@ meta_info:
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
       branch: swe-lego-live
-      commit: 67aadd1e029c6e9a4b3c4b18bfc68557edb6d3c5
+      commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
       path: repos/swe_data_process
       readonly: true
 

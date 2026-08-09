@@ -1,0 +1,76 @@
+---
+title: Dashboard
+---
+
+Trainer's dashboard is a read-only monitor for LLaMA-Factory training runs. Use
+`/trainer:dashboard` to check training health, compare runs, and inspect final
+metrics without touching the training process.
+
+<Callout title="Monitoring only" type="info">
+The dashboard never launches, pauses, resumes, or edits a training job. Use
+`/trainer:run` for training.
+</Callout>
+
+## What It Monitors
+
+| Monitor | What it tells you |
+| --- | --- |
+| **Run progress** | Current step, epoch, percentage, ETA, and whether the run appears active or finished. |
+| **Training loss** | Loss curve for spotting divergence, instability, or stalled learning. |
+| **Learning rate** | Scheduler behavior, warmup, and decay across training steps. |
+| **Gradient norm** | Stability signal for catching possible exploding gradients. |
+| **Performance** | Step time, samples/sec, runtime, throughput, and FLOPs. |
+| **Evaluation metrics** | Eval loss and best checkpoint when the run includes an eval split. |
+| **Run comparison** | Side-by-side comparison of multiple runs, datasets, models, or hyperparameters. |
+| **Logs and artifacts** | Console logs, result JSONs, trainer state, checkpoints, and loss plots. |
+
+Use the dashboard to decide whether training is healthy, whether a run has
+finished, and which checkpoint or run should be handed to Evaluator.
+
+## Local Mode
+
+Use local mode while training is active:
+
+```text
+/trainer:dashboard
+```
+
+In local mode, the skill reads the current training artifacts and gives you a
+quick status summary. If you ask for the web UI, it launches a local dashboard
+for richer charts and run comparison.
+
+Local mode is the default because training logs and config snapshots can expose
+model paths, dataset names, host paths, and experiment details.
+
+## Cloudflare Public Mode
+
+Use Cloudflare mode only when you intentionally want to share training progress
+outside the machine:
+
+```text
+/trainer:dashboard publish to Cloudflare
+```
+
+Before using public mode, configure Cloudflare credentials outside tracked
+source files:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- the target Pages project for the Trainer dashboard
+
+The API token needs permission to edit Cloudflare Pages for the account. For
+long-running or public demos, prefer an access-controlled Cloudflare setup so
+logs and run metadata are not exposed to anyone with the URL.
+
+## When To Use It
+
+Use `/trainer:dashboard` when you want to answer questions like:
+
+- Is the training run still alive?
+- Is loss decreasing normally?
+- Did throughput or step time suddenly change?
+- Which checkpoint is the latest or best?
+- How does this run compare with previous data/model settings?
+
+For training mechanics, see [Design](/docs/blocks/trainer/design). For artifact
+contracts, see [Output Format](/docs/blocks/trainer/outputs).

@@ -1,0 +1,82 @@
+---
+title: Dashboard
+---
+
+Tracer's dashboard is the progress and trajectory monitor for rollout jobs.
+Use `/tracer:dashboard` to inspect jobs, task outcomes, trajectory previews, and
+optional SFT conversion outputs.
+
+## What It Monitors
+
+| Monitor | What it tells you |
+| --- | --- |
+| **Run status** | Latest archived run, completion state, timestamps, notes, and archive path. |
+| **Harbor jobs** | Job-level task counts, reward summaries, retries, and errors. |
+| **Task coverage** | Which tasks were attempted, completed, skipped, failed, or already processed. |
+| **Agent trajectories** | Per-task messages, tool calls, observations, bounded previews, and failure traces. |
+| **SFT conversion** | Whether successful rollouts were converted into LF data for Trainer. |
+| **Quality signals** | Score distributions, low-score examples, tool-error rates, and segment comparisons. |
+
+The dashboard helps you see whether rollout is healthy, which task slices fail,
+and whether the generated trajectories are ready for training.
+
+Behind the scenes it reads `artifacts/index.yaml`, `artifacts/jobs/<job>/`,
+`artifacts/processed_tasks.yaml`, and optional `artifacts/sft_data/<job>/`
+outputs. Those files are the same surfaces you can inspect manually when a run
+needs closer debugging.
+
+## Local Mode
+
+Use local mode while debugging or monitoring private runs:
+
+```text
+/tracer:dashboard
+```
+
+In local mode, the skill reads the current block artifacts and opens or points
+you to a local dashboard. This is the safest mode for inspecting trajectory
+content, because prompts, tool outputs, model responses, and failure traces stay
+on your machine.
+
+Ask for local mode when you want to:
+
+- check whether a job is still running;
+- inspect failed or low-score trajectories;
+- confirm SFT conversion created `lf.json` and stats;
+- compare outcomes across models, scaffolds, jobs, or task types.
+
+## Cloudflare Public Mode
+
+Use Cloudflare mode when you want a public progress board:
+
+```text
+/tracer:dashboard publish to Cloudflare
+```
+
+Before using public mode, configure Cloudflare credentials outside tracked
+source files:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- the target Pages project, for example `swe-tracer-databoard`
+
+The API token needs permission to edit Cloudflare Pages for the account. If you
+want full online trajectory loading, configure the matching R2 bucket binding
+before publishing. Otherwise, publish only metrics and bounded previews.
+
+Cloudflare mode is useful for team monitoring, but treat trajectory content as
+sensitive. Reduce samples or use metrics-only publishing when runs include
+private prompts, repository paths, or model outputs.
+
+## When To Use It
+
+Use `/tracer:dashboard` when you want to answer questions like:
+
+- How many tasks resolved successfully?
+- Which tasks failed repeatedly and should be excluded?
+- Which scaffold or model is producing better trajectories?
+- Did the run produce Trainer-ready SFT data?
+- Are errors coming from the agent, environment, verifier, or model endpoint?
+
+For rollout mechanics, see [Design](/docs/blocks/tracer/design). For artifact
+contracts, see [Output Format](/docs/blocks/tracer/outputs).
