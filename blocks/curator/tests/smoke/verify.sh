@@ -45,18 +45,18 @@ fi
 
 # Manifest empty. Distinguish:
 #   (a) smoke ran but the verifier flaked on every attempted PR (upstream
-#       Dockerfile/PR drift — see task #19 "refresh swegen smoke fixture").
-#       Known long-running upstream rot, NOT a swegen regression — SKIP
+#       Dockerfile/PR drift — see task #19 "refresh legoflow-curator smoke fixture").
+#       Known long-running upstream rot, NOT a legoflow-curator regression — SKIP
 #       (→ yellow warning so the CI signal stays honest without redding
 #       every dev push when the fixture decays).
-#   (b) smoke didn't even create a task dir — real swegen-side regression
+#   (b) smoke didn't even create a task dir — real legoflow-curator-side regression
 #       — FAIL (→ red).
 shopt -s nullglob
 TASK_DIRS=("$OUTPUT"/*/)
 shopt -u nullglob
-LOG="$BLOCK_DIR/artifacts/swe_tasks/.swegen-smoke-py.log"
+LOG="$BLOCK_DIR/artifacts/swe_tasks/.legoflow-curator-smoke-py.log"
 if (( ${#TASK_DIRS[@]} > 0 )); then
-  echo "SKIP: $MANIFEST empty, but ${#TASK_DIRS[@]} task dir(s) were created — swegen ran end-to-end but no PR passed NOP/Oracle verification (likely upstream fixture drift; see task #19 to refresh the smoke PR list)."
+  echo "SKIP: $MANIFEST empty, but ${#TASK_DIRS[@]} task dir(s) were created — legoflow-curator ran end-to-end but no PR passed NOP/Oracle verification (likely upstream fixture drift; see task #19 to refresh the smoke PR list)."
   for d in "${TASK_DIRS[@]}"; do
     printf '         %s\n' "$(basename "$d")"
   done
@@ -67,7 +67,7 @@ if (( ${#TASK_DIRS[@]} > 0 )); then
   exit 77
 fi
 
-echo "FAIL: $MANIFEST empty AND no task dirs under $OUTPUT — swegen create did not run"
+echo "FAIL: $MANIFEST empty AND no task dirs under $OUTPUT — legoflow-curator create did not run"
 if [[ -f "$LOG" ]]; then
   echo "--- last 30 lines of $LOG ---"
   tail -30 "$LOG" || true

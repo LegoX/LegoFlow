@@ -12,17 +12,17 @@ meta_info:
         when: {tracer.input.task_source.provider: local}
 
   repos:
-    swegen:
-      name: swegen
-      commit_id: null   # latest
+    legoflow-curator:
+      name: legoflow-curator
+      commit_id: 3ba57a1d07ac277d72546d705bf2de6f82ca373e
       role: core pipeline - CLI, task generation, validation, scoring
 
   environment:
-    venv_name: swegen-env
-    venv_path: artifacts/envs/swegen-env
-    requirements: repos/swegen/pyproject.toml
+    venv_name: legoflow-curator-env
+    venv_path: artifacts/envs/legoflow-curator-env
+    requirements: repos/legoflow-curator/pyproject.toml
     python_version: "3.12+"
-    description: Virtual environment for swegen CLI and dependencies
+    description: Virtual environment for legoflow-curator CLI and dependencies
 
   resources:
     ip: local        # CPU-only; runs on any node with Docker available
@@ -92,5 +92,5 @@ runtime_info:
       extract_command: python scripts/extract_verified_tasks.py
 
     logs:
-      path: artifacts/logs/swegen-create
+      path: artifacts/logs/legoflow-curator-create
       description: "Per-language create logs: cc_<lang>_March.txt"

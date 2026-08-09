@@ -571,7 +571,7 @@ echo "=== starting LiteLLM proxy ===" | tee "$LOG_FILE"
 # Default to a single proxy worker. The eval proxy is pure async I/O in front of
 # one upstream backend, so 1 worker comfortably serves n_concurrent tasks. More
 # importantly, multi-worker boot crash-loops on slow/network filesystems: each
-# worker re-imports litellm (~60s on /mnt/public), which exceeds uvicorn's
+# worker re-imports LiteLLM slowly on a cold networked filesystem, which exceeds uvicorn's
 # multiprocess boot tolerance and every child dies ("Child process [...] died"),
 # so the port never serves. Override with LITELLM_NUM_WORKERS=N if needed.
 export LITELLM_NUM_WORKERS="${LITELLM_NUM_WORKERS:-1}"

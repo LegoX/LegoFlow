@@ -3,12 +3,12 @@
 cd "$(dirname "$0")/.."
 set -euo pipefail
 
-# Activate the swegen venv so `python` and `swegen` resolve to the editable install.
-if [[ -f artifacts/envs/swegen-env/bin/activate ]]; then
+# Activate the legoflow-curator venv so `python` and `legoflow-curator` resolve to the editable install.
+if [[ -f artifacts/envs/legoflow-curator-env/bin/activate ]]; then
     # shellcheck disable=SC1091
-    source artifacts/envs/swegen-env/bin/activate
+    source artifacts/envs/legoflow-curator-env/bin/activate
 else
-    echo "ERROR: venv at artifacts/envs/swegen-env not found — run /curator:setup first" >&2
+    echo "ERROR: venv at artifacts/envs/legoflow-curator-env not found — run /curator:setup first" >&2
     exit 1
 fi
 
@@ -20,24 +20,33 @@ echo "=== curator dryrun ==="
 # --- shared block-contract validation (schema, deps, fill markers) ------------
 REPO_ROOT="$(cd ../.. && pwd)"
 if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
-  python3 "$REPO_ROOT/scripts/validate_config.py" --block "$(pwd)" \
+  # Tracked configs intentionally retain `human` markers; runtime credentials
+  # are supplied through the environment and checked explicitly below.
+  python3 "$REPO_ROOT/scripts/validate_config.py" --block "$(pwd)" --schema-only \
     || { echo "ERROR: config contract validation failed (see lines above)"; exit 1; }
 else
   echo "WARN: shared validator not found — skipping contract validation"
 fi
 
-python -c "import swegen; print('swegen: OK')" || { echo "ERROR: run pip install -e repos/swegen/"; exit 1; }
+python -c "import legoflow_curator; print('legoflow-curator: OK')" || { echo "ERROR: run pip install -e repos/legoflow-curator/"; exit 1; }
 python -c "import yaml; yaml.safe_load(open('config.yaml')); print('config.yaml: OK')"
 
+missing_runtime=0
 for var in GITHUB_TOKENS OPENAI_API_KEY OPENAI_API_BASE_URL OPENAI_MODEL ANTHROPIC_MODEL; do
     val="${!var:-}"
-    [ -n "$val" ] && echo "${var}: set" || echo "WARN: ${var} not set"
+    if [ -n "$val" ]; then
+        echo "${var}: set"
+    else
+        echo "ERROR: ${var} not set" >&2
+        missing_runtime=1
+    fi
 done
+[[ "$missing_runtime" -eq 0 ]] || exit 1
 
 # Claude Code path (writes verifiable_tasks.txt). When the provider is OpenAI-only
 # (cc_provider_mode=openai_proxy), ANTHROPIC_BASE_URL must point at a running LiteLLM
 # proxy; otherwise CC verification fails silently and no tasks are ever verified.
-cc_mode="${SWEGEN_CC_PROVIDER_MODE:-}"
+cc_mode="${LEGOFLOW_CURATOR_CC_PROVIDER_MODE:-}"
 echo "cc_provider_mode: ${cc_mode:-unset}"
 if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
     # /health probes every configured model (~20s under load); fall back to it
@@ -62,7 +71,7 @@ docker run --rm hello-world >/dev/null 2>&1 && echo "Docker: OK" || echo "WARN: 
 # pulls). Resolved by scripts/shared_credentials.sh in this order: env > root
 # config.yaml (runtime_info.input.cloudflare/docker) > this block's legacy env
 # file. Never blocks /curator:run.
-CF_ENV_FILE="${ENV_FILE:-${SWEGEN_HOME:-$HOME}/.config/swegen_progress_cloudflare.env}"
+CF_ENV_FILE="${ENV_FILE:-${LEGOFLOW_CURATOR_HOME:-$HOME}/.config/legoflow_curator_dashboard_cloudflare.env}"
 if [ -f "$REPO_ROOT/scripts/shared_credentials.sh" ]; then
     CF_LEGACY_ENV_FILE="$CF_ENV_FILE"
     # shellcheck source=/dev/null

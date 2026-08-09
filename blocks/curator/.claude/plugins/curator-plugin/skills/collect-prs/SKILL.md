@@ -2,17 +2,17 @@
 name: collect-prs
 description: >
   Collect GitHub PRs into the per-language `{lang}_pr_ids.txt` files that
-  `swegen create` consumes. Wraps `repos/swegen/tools/collect_prs_wo_image.py`
+  `legoflow-curator create` consumes. Wraps `repos/legoflow-curator/tools/collect_prs_wo_image.py`
   driven by `config.yaml -> runtime_info.input.pr_collection`
   (languages, repo_num, max_prs_per_repo, output_dir, token_limit, and the
   global filter thresholds), which `scripts/load_runtime_env.sh` exports as
-  `SWEGEN_COLLECT_*` / `SWEGEN_PR_*` / `COLLECT_TOKEN_LIMIT`. The collector
+  `LEGOFLOW_CURATOR_COLLECT_*` / `LEGOFLOW_CURATOR_PR_*` / `COLLECT_TOKEN_LIMIT`. The collector
   combines tokens from its token file with `GITHUB_TOKENS` / `GITHUB_TOKEN`;
   tokens never come from `config.yaml`.
   Long-running for a full multi-language pass; supports a small first-run
   sample. This is the PR-collection stage that precedes `/curator:create-tasks`.
   Triggers on phrases like "collect PRs", "gather PRs", "run PR collection",
-  "collect github prs for swegen", "refresh pr_ids".
+  "collect github prs for legoflow-curator", "refresh pr_ids".
 ---
 
 # /curator:collect-prs
@@ -27,7 +27,7 @@ Validate:
 
 1. Current directory is `blocks/curator/`.
 2. `config.yaml` parses and has `meta_info.name == "curator"`.
-3. `repos/swegen/tools/collect_prs_wo_image.py` exists (submodule initialized;
+3. `repos/legoflow-curator/tools/collect_prs_wo_image.py` exists (submodule initialized;
    if missing, tell the user to run `/curator:setup`).
 4. `scripts/collect_all_bg.sh` and `scripts/load_runtime_env.sh` exist.
 
@@ -36,16 +36,16 @@ Read `config.yaml -> runtime_info.input.pr_collection` and `CLAUDE.md`
 
 ## Step 1 - Resolve collection tokens
 
-The collector first reads `repos/swegen/gh_token.txt` (one token per line)
+The collector first reads `repos/legoflow-curator/gh_token.txt` (one token per line)
 unless `COLLECT_GITHUB_TOKEN_FILE` overrides that path, then merges
-`GITHUB_TOKENS` and `GITHUB_TOKEN`. `scripts/load_runtime_env.sh` imports those
-environment variables from the interactive shell (including `~/.bashrc`) and
-may hydrate `GITHUB_TOKENS` from block/home token files.
+`GITHUB_TOKENS` and `GITHUB_TOKEN`. `scripts/load_runtime_env.sh` preserves the
+caller's exported environment and may hydrate `GITHUB_TOKENS` from ignored
+block/home token files when the caller did not provide one.
 
 ```bash
 source scripts/load_runtime_env.sh
 load_runtime_env
-COLLECT_GITHUB_TOKEN_FILE="${COLLECT_GITHUB_TOKEN_FILE:-repos/swegen/gh_token.txt}"
+COLLECT_GITHUB_TOKEN_FILE="${COLLECT_GITHUB_TOKEN_FILE:-repos/legoflow-curator/gh_token.txt}"
 test -s "$COLLECT_GITHUB_TOKEN_FILE" || \
   test -n "${GITHUB_TOKENS:-}${GITHUB_TOKEN:-}"
 ```
@@ -87,29 +87,29 @@ load_runtime_env
 
 This exports, from `config.yaml -> runtime_info.input.pr_collection`:
 
-- `SWEGEN_COLLECT_LANGUAGES`, `SWEGEN_COLLECT_REPO_NUM`,
-  `SWEGEN_COLLECT_MAX_PRS_PER_REPO`, `SWEGEN_COLLECT_OUTPUT_DIR`,
+- `LEGOFLOW_CURATOR_COLLECT_LANGUAGES`, `LEGOFLOW_CURATOR_COLLECT_REPO_NUM`,
+  `LEGOFLOW_CURATOR_COLLECT_MAX_PRS_PER_REPO`, `LEGOFLOW_CURATOR_COLLECT_OUTPUT_DIR`,
   `COLLECT_TOKEN_LIMIT`
-- global filters: `SWEGEN_PR_MIN_STARS`, `SWEGEN_PR_MIN_MERGED_PRS`,
-  `SWEGEN_PR_MIN_LANGUAGE_PERCENTAGE`, `SWEGEN_PR_MAX_DAYS_SINCE_PUSH`,
-  `SWEGEN_PR_MIN_ISSUE_BODY_LENGTH`, `SWEGEN_PR_MIN_FILES_CHANGED`,
-  `SWEGEN_PR_MAX_FILES_CHANGED`, `SWEGEN_PR_MAX_LINES_CHANGED`
+- global filters: `LEGOFLOW_CURATOR_PR_MIN_STARS`, `LEGOFLOW_CURATOR_PR_MIN_MERGED_PRS`,
+  `LEGOFLOW_CURATOR_PR_MIN_LANGUAGE_PERCENTAGE`, `LEGOFLOW_CURATOR_PR_MAX_DAYS_SINCE_PUSH`,
+  `LEGOFLOW_CURATOR_PR_MIN_ISSUE_BODY_LENGTH`, `LEGOFLOW_CURATOR_PR_MIN_FILES_CHANGED`,
+  `LEGOFLOW_CURATOR_PR_MAX_FILES_CHANGED`, `LEGOFLOW_CURATOR_PR_MAX_LINES_CHANGED`
 
-Only vars still unset after the interactive environment and block `.env` are
-filled from `config.yaml`; the block `.env` is sourced after the interactive
-environment. Per-language threshold overrides live in the collector's
+Only vars still unset after the caller environment and block `.env` are filled
+from `config.yaml`; the ignored block `.env` intentionally overrides the
+caller environment. Per-language threshold overrides live in the collector's
 `LANGUAGE_OVERRIDES` and take precedence over the globals.
 
 Print a compact summary and get explicit confirmation before a full or
 single-language run:
 
 ```text
-swegen collect-prs plan
+legoflow-curator collect-prs plan
   scope        : <sample|single-language|full>
-  languages    : <SWEGEN_COLLECT_LANGUAGES>
-  repo_num     : <SWEGEN_COLLECT_REPO_NUM>
-  max_prs/repo : <SWEGEN_COLLECT_MAX_PRS_PER_REPO>
-  output_dir   : <SWEGEN_COLLECT_OUTPUT_DIR>
+  languages    : <LEGOFLOW_CURATOR_COLLECT_LANGUAGES>
+  repo_num     : <LEGOFLOW_CURATOR_COLLECT_REPO_NUM>
+  max_prs/repo : <LEGOFLOW_CURATOR_COLLECT_MAX_PRS_PER_REPO>
+  output_dir   : <LEGOFLOW_CURATOR_COLLECT_OUTPUT_DIR>
   token_limit  : <COLLECT_TOKEN_LIMIT> (of <N> unique file + env tokens)
   filters      : stars>=.. merged>=.. lang%>=.. files<=.. lines<=..
   logs         : artifacts/logs/collect_all_<stamp>.log
@@ -121,7 +121,7 @@ never launch either without a "yes".
 ## Step 5 - Launch
 
 **Full / single-language / config-driven** — use the wrapper, which reads the
-`SWEGEN_COLLECT_*` env (with direct env vars still winning):
+`LEGOFLOW_CURATOR_COLLECT_*` env (with direct env vars still winning):
 
 ```bash
 # full: languages from config
@@ -136,7 +136,7 @@ knobs that make it small (thresholds still come from config/defaults):
 
 ```bash
 source scripts/load_runtime_env.sh && load_runtime_env
-python3 repos/swegen/tools/collect_prs_wo_image.py \
+python3 repos/legoflow-curator/tools/collect_prs_wo_image.py \
   --languages python \
   --repo_num 2 \
   --max_prs_per_repo 10 \
@@ -159,7 +159,7 @@ After launch print:
 
 For a background full run, poll once after a short delay to confirm the
 process started and is writing to the log. Do not start `/curator:create-tasks`
-merely because the output files have appeared: `swegen create` snapshots its
+merely because the output files have appeared: `legoflow-curator create` snapshots its
 input file at startup, so PR IDs appended later are not included in that run.
 
 ## Guardrails
@@ -167,7 +167,7 @@ input file at startup, so PR IDs appended later are not included in that run.
 - Never run two collectors concurrently in the same block.
 - Never write GitHub tokens or API keys into `config.yaml` or logs; use shell
   environment variables or ignored local token/env files.
-- Do not edit `repos/swegen/` source while collecting.
+- Do not edit `repos/legoflow-curator/` source while collecting.
 - Per-run parameter changes go through env overrides shown to the user, not
   silent `config.yaml` edits.
 - Do not delete existing `*_pr_ids.txt` or `*_prs.jsonl` unless the user asks;

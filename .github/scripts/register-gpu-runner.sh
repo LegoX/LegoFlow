@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 # Register a GitHub Actions self-hosted runner ON THE CURRENT (GPU) MACHINE,
-# carrying the `swe-lego-gpu` label that the CI `trainer-smoke` job is pinned to.
+# carrying the `legoflow-gpu` label that the CI `trainer-smoke` job is pinned to.
 #
 # Run this on the GPU host itself — the runner binds to whatever machine it is
 # started on, and trainer-smoke needs the 8× GPUs that live here. Every other CI
-# job stays on the generic `swe-lego-ci` pool; this box also gets `swe-lego-ci`
+# job stays on the generic `legoflow-ci` pool; this box also gets `legoflow-ci`
 # so it can help with those too.
 #
 # Usage (on the GPU machine):
 #   REG_TOKEN=<token> bash .github/scripts/register-gpu-runner.sh
 #
 #   token: repo Settings → Actions → Runners → New self-hosted runner, or
-#     gh api -X POST repos/SWE-Lego/SWE-Lego-Live/actions/runners/registration-token -q .token
+#     gh api -X POST "repos/<owner>/<repository>/actions/runners/registration-token" -q .token
 #
 # Env knobs:
 #   REG_TOKEN     (required) runner registration token
 #   RUNNER_DIR    install dir (default: ./actions-runner-gpu under CWD)
 #   RUNNER_NAME   runner name (default: gpu-<hostname>)
-#   LABELS        labels (default: swe-lego-ci,swe-lego-gpu)
+#   LABELS        labels (default: legoflow-ci,legoflow-gpu)
 #   RUNNER_VERSION  actions/runner version to download (default: 2.323.0)
 set -euo pipefail
 
@@ -25,7 +25,7 @@ REPO_URL="https://github.com/SWE-Lego/SWE-Lego-Live"
 : "${REG_TOKEN:?set REG_TOKEN (registration token from the repo Actions settings)}"
 RUNNER_DIR="${RUNNER_DIR:-$PWD/actions-runner-gpu}"
 RUNNER_NAME="${RUNNER_NAME:-gpu-$(hostname)}"
-LABELS="${LABELS:-swe-lego-ci,swe-lego-gpu}"
+LABELS="${LABELS:-legoflow-ci,legoflow-gpu}"
 RUNNER_VERSION="${RUNNER_VERSION:-2.323.0}"
 
 GPU_COUNT="$(command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null | wc -l | tr -d ' ' || echo 0)"
@@ -33,7 +33,7 @@ if [ "${GPU_COUNT:-0}" -lt 8 ]; then
   if [ "${ALLOW_NON_GPU:-0}" = "1" ]; then
     echo "WARNING: host reports ${GPU_COUNT} GPU(s) (<8) but ALLOW_NON_GPU=1 — registering anyway." >&2
   else
-    echo "ERROR: this host reports ${GPU_COUNT} GPU(s) (<8). The 'swe-lego-gpu' label is" >&2
+    echo "ERROR: this host reports ${GPU_COUNT} GPU(s) (<8). The 'legoflow-gpu' label is" >&2
     echo "       reserved for the 8-GPU training host — trainer-smoke is scheduled ONLY by it." >&2
     echo "       Registering a CPU box here would let the gated smoke SKIP and the job go" >&2
     echo "       GREEN without ever running training. Aborting." >&2
@@ -69,5 +69,5 @@ Start it one of two ways (from $RUNNER_DIR):
   sudo ./svc.sh install && sudo ./svc.sh start   # as a systemd service
 
 Once online it shows up under repo Settings → Actions → Runners with the
-'swe-lego-gpu' label, and the CI trainer-smoke job will schedule onto it.
+'legoflow-gpu' label, and the CI trainer-smoke job will schedule onto it.
 EOF

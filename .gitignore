@@ -37,6 +37,7 @@ yarn-error.log*
 docs/out/
 docs/.next/
 docs/.source/
+.wrangler/
 
 # OS artifacts
 .DS_Store
@@ -57,10 +58,10 @@ artifacts/*
 !artifacts/.gitkeep
 blocks/*/artifacts/index.yaml
 
-# SWE-gen block — generated data and virtual env
+# LegoFlow Curator block — generated data and virtual env
 blocks/curator/artifacts/*
 blocks/curator/scripts/jobs/*
-blocks/curator/scripts/.swegen-*/
+blocks/curator/scripts/.legoflow-curator-*/
 
 # Tracer block — runtime mount + per-run artifacts (kept manifest yamls tracked)
 blocks/tracer/artifacts/*

@@ -1,16 +1,16 @@
 # Curator Docs Site
 
 Fumadocs/Next.js documentation site for the Curator block. The generated
-Cloudflare Pages project is `swe-swegen-docs`, published at:
+Cloudflare Pages project is `legoflow-curator-docs`, published at:
 
 ```text
-https://swe-swegen-docs.pages.dev
+https://legoflow-curator-docs.pages.dev
 ```
 
 The live progress databoard is a separate Pages project:
 
 ```text
-https://swe-databoard.pages.dev/
+https://legoflow-databoard.pages.dev/
 ```
 
 ## Develop locally
@@ -58,11 +58,11 @@ Optional overrides:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PROJECT_NAME` | `swe-swegen-docs` | Cloudflare Pages project name |
-| `BRANCH_NAME` | `swegen` | Pages deployment branch |
+| `PROJECT_NAME` | `legoflow-curator-docs` | Cloudflare Pages project name |
+| `BRANCH_NAME` | `legoflow-curator` | Pages deployment branch |
 | `OUT_DIR` | `out` | Directory deployed by wrangler |
 | `WRANGLER_PKG` | `wrangler@latest` | Wrangler package used through `npx --yes` |
-| `ENV_FILE` | `~/.config/swegen_docs_cloudflare.env` | Optional credential/config file |
+| `ENV_FILE` | `~/.config/legoflow_curator_docs_cloudflare.env` | Optional credential/config file |
 
 The deploy script creates or reuses the Pages project, builds the docs, and
 deploys `out/` with `wrangler pages deploy`.

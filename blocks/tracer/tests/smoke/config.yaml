@@ -20,7 +20,7 @@ meta_info:
     ip: local
     user: null
     pwd: null
-    directory: /gpufs/haoli/code/
+    directory: null
     description: cpu node server for k8s cluster. By default you should work at ${directory}
     public_storage: null
 

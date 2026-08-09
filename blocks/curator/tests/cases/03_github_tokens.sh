@@ -17,20 +17,22 @@ fi
 IFS=',' read -r -a tokens <<<"$GITHUB_TOKENS"
 bad=0
 ok=0
+index=0
 for tok in "${tokens[@]}"; do
+  index=$((index+1))
   tok="${tok// /}"
   [[ -z "$tok" ]] && continue
   code="$(curl -s -o /dev/null -w '%{http_code}' \
     -H "Authorization: token $tok" \
     -H "Accept: application/vnd.github+json" \
-    -H "User-Agent: swegen-ci/1.0" \
+    -H "User-Agent: legoflow-curator-ci/1.0" \
     --max-time 15 \
     https://api.github.com/rate_limit || echo 000)"
   if [[ "$code" == "200" ]]; then
     ok=$((ok+1))
   else
     bad=$((bad+1))
-    echo "FAIL: token ...${tok: -6} returned HTTP $code"
+    echo "FAIL: token #$index returned HTTP $code"
   fi
 done
 

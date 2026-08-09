@@ -1,6 +1,6 @@
-# 参考数据集 repo 列表（自动生成，请勿手动编辑）
-# 来源: SWE-bench_Verified, SWE-bench_Pro, SWE-bench_Multilingual
-# 每行一个 owner/repo，在转换脚本中传入 --exclude-repos-file 使用
+# Reference-dataset repositories (generated; do not edit manually)
+# Sources: SWE-bench_Verified, SWE-bench_Pro, SWE-bench_Multilingual
+# One owner/repo per line; pass this file with --exclude-repos-file
 NodeBB/NodeBB
 ansible/ansible
 apache/druid

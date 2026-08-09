@@ -90,9 +90,9 @@ stay `""` there and come from the environment instead.
      `pages_project_prefix` if they want one.
    - Have the user supply `CLOUDFLARE_API_TOKEN` in their own environment, or
      in whichever per-block env file they already use (curator:
-     `swegen_progress_cloudflare.env`, tracer:
+     `legoflow_curator_dashboard_cloudflare.env`, tracer:
      `trajgen_progress_cloudflare.env`, evaluator:
-     `harbor_webui_cloudflare.env`, all under `$SWEGEN_HOME/.config/`) — those
+     `harbor_webui_cloudflare.env`, all under `$LEGOFLOW_CURATOR_HOME/.config/`) — those
      remain supported as a fallback. **Never accept the token pasted directly
      in chat** — have the user write it themselves via a `!`-prefixed shell
      command or their own editor, then confirm back to you when done. Never

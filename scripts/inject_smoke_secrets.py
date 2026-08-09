@@ -4,10 +4,8 @@
 The tracked smoke configs under tests/smoke/<block>/ and
 blocks/<block>/tests/smoke/ carry the *structure* of a run — every field the
 production config has — but never the values. Endpoints, keys and remote hosts
-live outside the repo, in the shared env file the CI runner and the local host
-both read:
-
-    /gpufs/haoli/cicd/shared/.env
+live outside the repo and are supplied through the runner environment (for
+example by an operator-managed env file).
 
 so a checkout can be shared, forked or opened by anyone without leaking them,
 while the configs keep tracking schema changes like any other source file.
@@ -62,6 +60,8 @@ FIELD_ENV = {
     "meta_info.resources.ip": "REMOTE_IP",
     "meta_info.resources.user": "REMOTE_USER",
     "meta_info.resources.key": "REMOTE_KEY",
+    "meta_info.resources.port": "REMOTE_PORT",
+    "meta_info.resources.directory": "REMOTE_DIR",
 }
 
 

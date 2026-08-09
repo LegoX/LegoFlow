@@ -27,7 +27,7 @@ meta_info:
     ip: local
     user: null
     pwd: null
-    directory: /gpufs/haoli/code/
+    directory: null
     public_storage: null
 
   repositories:
@@ -73,7 +73,7 @@ runtime_info:
     # ROOT: consume curator's verified tasks (NOT a HF slice). For provider=local,
     # prepare_tasks.sh reads the source dir from `dataset_name` and copies only
     # the IDs listed in that dir's verifiable_tasks.txt. Path is relative to the
-    # tracer block dir; run_pipeline.sh rewrites it to the absolute swegen smoke
+    # tracer block dir; run_pipeline.sh rewrites it to the absolute legoflow-curator smoke
     # output dir at launch.
     task_source:
       provider: local
@@ -81,11 +81,11 @@ runtime_info:
       split: train
 
     # ROOT: harbor has no native "run a task N times" knob, and max_retries only
-    # retries on FAILURE (not on reward==0). swegen hands off few verified tasks,
+    # retries on FAILURE (not on reward==0). legoflow-curator hands off few verified tasks,
     # so a single solve attempt makes the reward==1 gate luck-dependent. The
     # orchestrator replicates each verified task `smoke_attempts` times (distinct
     # dir names == distinct harbor tasks) so tracer gets that many independent
-    # solve attempts. P(>=1 reward==1) rises from ~p to ~1-(1-p)^N. With swegen
+    # solve attempts. P(>=1 reward==1) rises from ~p to ~1-(1-p)^N. With legoflow-curator
     # now banking several DIVERSE verified tasks, a small N suffices. At
     # n_concurrent=1 (below) replication just multiplies wall-clock, so keep N=1:
     # 6 diverse verified tasks already give 6 sequential solve attempts.

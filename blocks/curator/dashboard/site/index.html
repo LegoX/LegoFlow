@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SWE Datasets Dashboard</title>
+<title>legoflow-databoard</title>
 <style>
 :root {
   --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
@@ -107,12 +107,12 @@ td strong { font-weight: 600; }
 <div class="layout">
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-mark">SL</div>
-      <div><div class="logo-title">SWE Databoard</div><div class="logo-sub">multi-dataset · LLM-tagged</div></div>
+      <div class="logo-mark">LF</div>
+      <div><div class="logo-title">legoflow-databoard</div><div class="logo-sub">multi-dataset metadata</div></div>
     </div>
     <div class="ds-nav">
       <div class="section-label">Datasets</div>
-      <button class="ds-item active" data-ds="self_made" onclick="switchDs('self_made')"><span class="ds-name">LegoFlow-Instances</span><span class="ds-count">45,881 tasks</span></button><button class="ds-item" data-ds="swe_rebench" onclick="switchDs('swe_rebench')"><span class="ds-name">SWE-rebench</span><span class="ds-count">21,336 tasks</span></button><button class="ds-item" data-ds="swe_rebench_v2" onclick="switchDs('swe_rebench_v2')"><span class="ds-name">SWE-rebench-V2</span><span class="ds-count">32,079 tasks</span></button><button class="ds-item" data-ds="openswe_filtered" onclick="switchDs('openswe_filtered')"><span class="ds-name">OpenSWE-filtered</span><span class="ds-count">22,806 tasks</span></button><button class="ds-item" data-ds="scale_swe" onclick="switchDs('scale_swe')"><span class="ds-name">Scale-SWE</span><span class="ds-count">20,181 tasks</span></button>
+      <button class="ds-item active" data-ds="self_made" onclick="switchDs('self_made')"><span class="ds-name">LegoFlow Curator Instances</span><span class="ds-count">45,881 tasks</span></button><button class="ds-item" data-ds="swe_rebench" onclick="switchDs('swe_rebench')"><span class="ds-name">SWE-rebench</span><span class="ds-count">21,336 tasks</span></button><button class="ds-item" data-ds="swe_rebench_v2" onclick="switchDs('swe_rebench_v2')"><span class="ds-name">SWE-rebench-V2</span><span class="ds-count">32,079 tasks</span></button><button class="ds-item" data-ds="openswe_filtered" onclick="switchDs('openswe_filtered')"><span class="ds-name">OpenSWE-filtered</span><span class="ds-count">22,806 tasks</span></button><button class="ds-item" data-ds="scale_swe" onclick="switchDs('scale_swe')"><span class="ds-name">Scale-SWE</span><span class="ds-count">20,181 tasks</span></button>
     </div>
     <div class="sidebar-section">
       <div class="section-label">Global</div>
@@ -139,7 +139,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="panel">
-    <h2>Difficulty distribution <span>LegoFlow-Instances</span></h2>
+    <h2>Difficulty distribution <span>LegoFlow Curator Instances</span></h2>
     <table>
       <tr><th>Label breakdown</th><th>easy</th><th>medium</th><th>hard</th></tr>
       <tr>

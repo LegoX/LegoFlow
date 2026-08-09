@@ -4,7 +4,7 @@
 @import "tw-animate-css";
 
 :root {
-  --swe-live-accent: #b3431f;
+  --legoflow-accent: #b3431f;
 }
 
 /* ── Warm "paper" palette — match the project-page landing site.
@@ -69,16 +69,16 @@ article p {
   align-items: flex-start;
   margin: 1.25rem 0 1.4rem;
   padding: 0.95rem 1rem;
-  border: 1px solid color-mix(in oklab, var(--swe-live-accent) 24%, #e6e3da);
-  border-left: 4px solid var(--swe-live-accent);
+  border: 1px solid color-mix(in oklab, var(--legoflow-accent) 24%, #e6e3da);
+  border-left: 4px solid var(--legoflow-accent);
   border-radius: 8px;
-  background: color-mix(in oklab, var(--swe-live-accent) 8%, #fafaf7);
+  background: color-mix(in oklab, var(--legoflow-accent) 8%, #fafaf7);
   color: var(--color-fd-foreground);
 }
 
 .docs-tldr-label {
   flex: 0 0 auto;
-  color: var(--swe-live-accent);
+  color: var(--legoflow-accent);
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.55;
@@ -112,7 +112,7 @@ article p {
 .docs-live-word {
   position: relative;
   display: inline-flex;
-  color: var(--swe-live-accent);
+  color: var(--legoflow-accent);
 }
 
 .docs-live-pulse-dot {
@@ -122,8 +122,8 @@ article p {
   width: 0.32em;
   height: 0.32em;
   border-radius: 999px;
-  background: var(--swe-live-accent);
-  box-shadow: 0 0 0 0 color-mix(in oklab, var(--swe-live-accent) 45%, transparent);
+  background: var(--legoflow-accent);
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--legoflow-accent) 45%, transparent);
   animation: docs-live-dot-pulse 2.4s ease-in-out infinite;
 }
 
@@ -132,12 +132,12 @@ article p {
   100% {
     opacity: 0.38;
     transform: scale(0.82);
-    box-shadow: 0 0 0 0 color-mix(in oklab, var(--swe-live-accent) 22%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--legoflow-accent) 22%, transparent);
   }
 
   45% {
     opacity: 1;
     transform: scale(1);
-    box-shadow: 0 0 0 0.34em color-mix(in oklab, var(--swe-live-accent) 0%, transparent);
+    box-shadow: 0 0 0 0.34em color-mix(in oklab, var(--legoflow-accent) 0%, transparent);
   }
 }

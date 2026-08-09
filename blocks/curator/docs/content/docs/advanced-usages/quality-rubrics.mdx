@@ -60,7 +60,7 @@ or evaluation dataset may intentionally keep more `hard` cases.
 From `blocks/curator/`, regenerate task metadata with:
 
 ```bash
-python3 ./repos/swegen/tools/tag_task_metadata.py \
+python3 ./repos/legoflow-curator/tools/tag_task_metadata.py \
   --datasets-dir datasets --dataset all --jobs 64 --retries 3
 ```
 
@@ -71,7 +71,7 @@ This command is resumable. It can be re-run after new verified tasks are added.
 The public dashboard compares difficulty and tag composition across curated
 datasets:
 
-[Open the Dashboard](https://swe-databoard.pages.dev/)
+[Open the Dashboard](https://legoflow-databoard.pages.dev/)
 
 The dashboard is for finished datasets. During task generation, inspect logs,
 `verifiable_tasks.txt`, and `artifacts/index.yaml` instead.

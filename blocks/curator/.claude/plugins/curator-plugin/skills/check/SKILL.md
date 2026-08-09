@@ -2,10 +2,10 @@
 name: check
 description: >
   Preflight the curator block. Validates config.yaml schema; verifies that
-  `repos/swegen/` is checked out at the pinned commit; verifies
+  `repos/legoflow-curator/` is checked out at the pinned commit; verifies
   GITHUB_TOKENS reach the GitHub API (one `GET /rate_limit` per token);
   exercises the LLM endpoint with an actual `chat.completions.create`
-  ping through `swegen.llm_env.hydrate_cross_provider_env` (so a
+  ping through `legoflow_curator.llm_env.hydrate_cross_provider_env` (so a
   misconfigured cross-provider env is caught here, not on first task);
   verifies `DOCKER_HOST` is set and the daemon is reachable
   (`docker info`); optionally runs a Harbor smoke against a known
@@ -29,7 +29,7 @@ Run only from `blocks/curator/`. Validate:
 
 1. `./config.yaml` exists and parses.
 2. `meta_info.name == "curator"`.
-3. `./repos/swegen/pyproject.toml` exists.
+3. `./repos/legoflow-curator/pyproject.toml` exists.
 4. `./scripts/dryrun.sh` exists.
 
 If any of these fail, continue with checks that can still run and include
@@ -54,17 +54,17 @@ Check these without changing the workspace:
 For the submodule, run:
 
 ```bash
-git -C repos/swegen rev-parse HEAD
+git -C repos/legoflow-curator rev-parse HEAD
 ```
 
-If `meta_info.repos.swegen.commit_id` is non-null, the HEAD must match it.
+If `meta_info.repos.legoflow-curator.commit_id` is non-null, the HEAD must match it.
 If the config says `null`, report the HEAD as informational, not a failure.
 
 ## Step 2 - GitHub credentials
 
 Resolve tokens from `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an explicit token
-file. Note that the collector `repos/swegen/tools/collect_prs_wo_image.py`
-defaults to `repos/swegen/gh_token.txt` unless
+file. Note that the collector `repos/legoflow-curator/tools/collect_prs_wo_image.py`
+defaults to `repos/legoflow-curator/gh_token.txt` unless
 `COLLECT_GITHUB_TOKEN_FILE` overrides it.
 
 For each token, call:
@@ -79,12 +79,12 @@ failure for real runs and a warning for pure dashboard inspection.
 ## Step 3 - LLM endpoint
 
 This check is mandatory before `/curator:create-tasks`; do not skip it just because
-`scripts/dryrun.sh` passes. Use the installed SWEgen package, not an ad hoc
+`scripts/dryrun.sh` passes. Use the installed LegoFlow Curator package, not an ad hoc
 request:
 
 ```python
 from openai import OpenAI
-from swegen.llm_env import hydrate_cross_provider_env, get_openai_compatible_config
+from legoflow_curator.llm_env import hydrate_cross_provider_env, get_openai_compatible_config
 
 hydrate_cross_provider_env()
 model, key, base = get_openai_compatible_config()
@@ -139,8 +139,8 @@ warn that Harbor may incorrectly probe `/tmp/podman-fresh.sock`.
 If the user asks for a smoke check, validate the submodule sample task:
 
 ```bash
-swegen validate \
-  repos/swegen/artifacts/swe_tasks/py-cc \
+legoflow-curator validate \
+  repos/legoflow-curator/artifacts/swe_tasks/py-cc \
   --task tox-dev__tox-3813 \
   --jobs-dir artifacts/experiments/quick-verify/harbor-jobs-quick \
   --env docker \
@@ -155,7 +155,7 @@ task is missing, report that `/curator:setup` must initialize the submodule.
 `dryrun.sh` also reports the two tree-wide optional credentials, resolved by
 `<repo_root>/scripts/shared_credentials.sh` in the order **env > root
 `config.yaml` → `runtime_info.input.{cloudflare,docker}` > this block's legacy
-`~/.config/swegen_progress_cloudflare.env`**. The reported source tells the user
+`~/.config/legoflow_curator_dashboard_cloudflare.env`**. The reported source tells the user
 which of the three won, so say it in the report rather than just "configured".
 
 - **Cloudflare Pages** — needs an `npx`/node toolchain on `PATH` plus
@@ -215,7 +215,7 @@ inapplicable rows.
 
 | Layer | Check | Status | Detail |
 |-------|-------|:------:|--------|
-| det  | config · repos/swegen pin · scripts present | ✓ | ok=<N> |
+| det  | config · repos/legoflow-curator pin · scripts present | ✓ | ok=<N> |
 | det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim detail> |
 | det  | github tokens   | <✓/✗>   | <N tokens ok, total remaining K> |
 | det  | llm (openai)    | <✓/✗>   | <base> / <model> |
@@ -254,7 +254,7 @@ Re-run `/curator:check`.
 
 - Read-only except for the optional Harbor smoke jobs directory.
 - Do not edit `config.yaml`, `.env`, token files, or `artifacts/index.yaml`.
-- Do not launch `scripts/start.sh` or `swegen create`; that is `/curator:create-tasks`.
+- Do not launch `scripts/start.sh` or `legoflow-curator create`; that is `/curator:create-tasks`.
 - Do not hide credential or provider errors. Quote the provider error
   message, but never print secret values.
 

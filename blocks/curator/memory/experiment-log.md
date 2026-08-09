@@ -10,7 +10,7 @@
 
 ## Goal
 
-Verify that the full SWE-gen pipeline runs correctly under the refactored
+Verify that the full LegoFlow Curator pipeline runs correctly under the refactored
 directory layout.
 
 ## Steps
@@ -28,7 +28,7 @@ existing PR IDs.
 ### Step 2: Task creation
 
 ```bash
-swegen create \
+legoflow-curator create \
   --input-ids-file ./artifacts/collected_prs/python_pr_ids.txt \
   --max-pr 1 --n-concurrent 1 \
   --output ./artifacts/swe_tasks/py-cc \
@@ -66,7 +66,7 @@ Extracted 9 verified tasks (8 original samples + 1 newly created), written to
 |------|---------|--------|------|
 | Install | `pip install -e .` | OK | 5s |
 | Collect PRs | `collect_prs_wo_image.py` | skipped (used samples) | — |
-| Create tasks | `swegen create` | 1 task verified | 15m 28s |
+| Create tasks | `legoflow-curator create` | 1 task verified | 15m 28s |
 | Score | `score_tasks.py` | 4 tasks scored | <1s |
 | Extract | `extract_verified_tasks.py` | 9 tasks extracted | <1s |
 

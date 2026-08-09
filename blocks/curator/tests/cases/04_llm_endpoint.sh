@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CI test 04: LLM endpoint completes a real chat.completions request.
-# Mirrors /curator:check — uses swegen.llm_env.hydrate_cross_provider_env() so a
+# Mirrors /curator:check — uses legoflow_curator.llm_env.hydrate_cross_provider_env() so a
 # misconfigured cross-provider env is caught here, not on first task.
 
 set -euo pipefail
@@ -10,14 +10,14 @@ BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$BLOCK_DIR/scripts/load_runtime_env.sh"
 load_runtime_env >/dev/null 2>&1 || true
 
-VENV_PY="$BLOCK_DIR/artifacts/envs/swegen-env/bin/python"
-[[ -x "$VENV_PY" ]] || { echo "FAIL: swegen venv python missing — run /curator:setup"; exit 1; }
+VENV_PY="$BLOCK_DIR/artifacts/envs/legoflow-curator-env/bin/python"
+[[ -x "$VENV_PY" ]] || { echo "FAIL: legoflow-curator venv python missing — run /curator:setup"; exit 1; }
 
-PYTHONPATH="$BLOCK_DIR/repos/swegen/src:${PYTHONPATH:-}" "$VENV_PY" - <<'PY' || exit $?
+PYTHONPATH="$BLOCK_DIR/repos/legoflow-curator/src:${PYTHONPATH:-}" "$VENV_PY" - <<'PY' || exit $?
 import sys, time
 try:
     from openai import OpenAI, APITimeoutError, APIConnectionError, InternalServerError
-    from swegen.llm_env import hydrate_cross_provider_env, get_openai_compatible_config
+    from legoflow_curator.llm_env import hydrate_cross_provider_env, get_openai_compatible_config
 except Exception as e:
     print(f"FAIL: import error: {e}", file=sys.stderr)
     sys.exit(1)

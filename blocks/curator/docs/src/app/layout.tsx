@@ -3,7 +3,7 @@ import { Metadata } from "next";
 import "./global.css";
 
 export const metadata: Metadata = {
-  title: "SWE-gen",
+  title: "LegoFlow Curator",
   description:
     "Convert GitHub PRs into verified SWE-Bench tasks across 8 programming languages.",
 };

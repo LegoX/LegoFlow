@@ -17,10 +17,10 @@ artifacts/
 │   └── <lang>-cc/
 │       ├── <task_id>/                   # one generated task directory
 │       ├── verifiable_tasks.txt         # verified task IDs safe downstream
-│       └── .swegen-create-batch/        # resume and batch-state files
+│       └── .legoflow-curator-create-batch/        # resume and batch-state files
 ├── merged_swe_tasks/                    # optional flattened verified tasks
 ├── logs/
-│   └── swegen-create/                   # task-generation logs for debugging
+│   └── legoflow-curator-create/                   # task-generation logs for debugging
 ├── index.yaml                           # optional run archive index
 │
 └── ...
@@ -42,8 +42,8 @@ request per line:
 owner/repo:pr-123
 ```
 
-Generation reads these fixed files through `swegen create --input-ids-file`.
-Because `swegen create` parses the input once at startup, collection and task
+Generation reads these fixed files through `legoflow-curator create --input-ids-file`.
+Because `legoflow-curator create` parses the input once at startup, collection and task
 generation are separate stages. See [Getting Started](/docs/blocks/curator/getting-started) for
 the command flow.
 
@@ -111,7 +111,7 @@ IDs that appear in `verifiable_tasks.txt`.
 Batch state lives next to each language output:
 
 ```text
-artifacts/swe_tasks/<lang>-cc/.swegen-create-batch/<hash>.json
+artifacts/swe_tasks/<lang>-cc/.legoflow-curator-create-batch/<hash>.json
 ```
 
 It records each PR case, attempts, status, errors, model fingerprint, elapsed
@@ -122,7 +122,7 @@ commit it to Git.
 The `<hash>` is derived from the **resolved absolute path** of the input PR
 file, so moving a restored run to a different clone path changes the hash. To
 resume after moving nodes, keep the language output dir, its
-`verifiable_tasks.txt`, the `.swegen-create-batch/*.json`, and the matching
+`verifiable_tasks.txt`, the `.legoflow-curator-create-batch/*.json`, and the matching
 `artifacts/collected_prs/` input files together, and relocate or regenerate the
 state filename to match the new resolved input path before relaunching
 `scripts/create_{lang}.sh`.
@@ -133,7 +133,7 @@ state filename to match the new resolved input path before relaunching
 Create logs live under:
 
 ```text
-artifacts/logs/swegen-create/
+artifacts/logs/legoflow-curator-create/
 ```
 
 These logs are useful for debugging model failures, Docker failures, and

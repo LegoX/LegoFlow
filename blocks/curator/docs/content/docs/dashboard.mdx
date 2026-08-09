@@ -6,6 +6,19 @@ Curator's dashboard is a dataset analytics view for finished task collections.
 Use `/curator:dashboard` after PR collection and task creation to inspect task
 quality before handing the dataset to Tracer.
 
+The dashboard currently compares five registered collections:
+
+| id | Display | Source |
+| --- | --- | --- |
+| `self_made` | LegoFlow Curator Instances | LegoFlow-SWE-Curator task directories or task tarballs |
+| `swe_rebench` | SWE-rebench | `nebius/SWE-rebench` |
+| `swe_rebench_v2` | SWE-rebench-V2 | `nebius/SWE-rebench-V2` |
+| `openswe_filtered` | OpenSWE-filtered | `SWE-Lego/openswe_filtered_for_rl` |
+| `scale_swe` | Scale-SWE | `AweAI-Team/Scale-SWE` |
+
+`dashboard/dataset_registry.py` is the code-level source of truth for this
+roster.
+
 ## What It Monitors
 
 | Monitor | What it tells you |
@@ -15,10 +28,31 @@ quality before handing the dataset to Tracer.
 | **Difficulty mix** | Easy/medium/hard buckets and numeric difficulty scores. |
 | **Semantic tags** | The four-tag schema `[language, area, topic, bug_class]`, useful for filtering and balancing. |
 | **Dataset comparison** | How Curator-generated tasks compare with other SWE datasets under the same tag and difficulty rubric. |
-| **Task drilldown** | Per-task metadata, repository identity, problem statement, patch/test signals, difficulty, and tags. |
 
 This dashboard is not a live generation monitor. While Curator is still
 creating tasks, watch the logs, `verifiable_tasks.txt`, and `artifacts/index.yaml`.
+
+## Metadata Sources
+
+Curator-created tasks are exported directly from complete task directories or
+task tarballs. Their difficulty and four semantic tags come from
+`task.toml` (`metadata.difficulty`, `metadata.tags`,
+`scoring.difficulty_score`, and `scoring.difficulty_label`). Exporting these
+tasks does not call a network service or LLM. Missing or invalid task metadata
+fails the export and identifies every affected task.
+
+External datasets are normalized to `tasks.jsonl`, then prepared with:
+
+```bash
+python3 ../repos/legoflow-curator/tools/tag_task_metadata.py \
+  --datasets-dir datasets --dataset <external-id> --jobs 64 --retries 3
+python3 metadata_records.py \
+  --dataset <external-id> --tags-file datasets/<external-id>/tags.jsonl
+```
+
+This produces `tags.jsonl` before rendering. `progress_monitor_multi.py` only
+reads and validates prepared `tags.jsonl` files; it never generates metadata.
+Records include their metadata schema version and scorer/tagger provenance.
 
 ## Local Mode
 
@@ -31,6 +65,15 @@ Use local mode when you are developing or reviewing private datasets:
 Ask for a local preview when you want to inspect the generated dashboard on the
 current machine. The skill regenerates the dashboard from the current dataset
 metadata and points you to the local preview file or page.
+
+For a focused E2E check that only has Curator-created tasks, render the
+`self_made` dataset without requiring the four external datasets:
+
+```bash
+python3 dashboard/progress_monitor_multi.py \
+  --dataset self_made \
+  --output-html artifacts/experiments/dashboard/index.html
+```
 
 Local mode is the default choice for private task data because it keeps problem
 statements, repository names, patches, and tags on your machine.
@@ -48,7 +91,7 @@ source files:
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
-- the target Pages project, for example `swe-databoard`
+- the target Pages project, for example `legoflow-databoard`
 
 The API token needs permission to edit Cloudflare Pages for the account. Do not
 publish private task content unless the dataset is intended to be public.

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `/curator:create-tasks` the canonical task-generation command, retain a thin `/curator:run` uniform-interface compatibility adapter, and publish the updated Curator docs at `swe-swegen-docs.pages.dev`.
+**Goal:** Make `/curator:create-tasks` the canonical task-generation command, retain a thin `/curator:run` uniform-interface compatibility adapter, and publish the updated Curator docs at `legoflow-curator-docs.pages.dev`.
 
-**Architecture:** The existing full run skill moves unchanged in behavior to a new `create-tasks` skill. A minimal `run` skill remains only to preserve the repository's uniform `/<block>:run` plugin layout; it delegates all arguments and decisions to the canonical skill. Root targeting is independent and directly executes the selected block's `scripts/start.sh`. Maintained Fumadocs source stays under `blocks/curator/docs`, whose deploy target changes to the existing `swe-swegen-docs` Pages project.
+**Architecture:** The existing full run skill moves unchanged in behavior to a new `create-tasks` skill. A minimal `run` skill remains only to preserve the repository's uniform `/<block>:run` plugin layout; it delegates all arguments and decisions to the canonical skill. Root targeting is independent and directly executes the selected block's `scripts/start.sh`. Maintained Fumadocs source stays under `blocks/curator/docs`, whose deploy target changes to the existing `legoflow-curator-docs` Pages project.
 
 **Tech Stack:** Claude Code plugin skills (Markdown frontmatter), Bash contract tests, Fumadocs/Next.js, Cloudflare Pages/Wrangler, GitHub CLI.
 
@@ -28,13 +28,13 @@ dispatch is superseded by this decision record.
 
 ## Global Constraints
 
-- The current namespace is `/curator:*`; do not restore `blocks/swegen` or `/swegen:*`.
+- The current namespace is `/curator:*`; do not restore `blocks/legoflow-curator` or `/legoflow-curator:*`.
 - `/curator:create-tasks` is the only user-facing task-generation command.
 - `/curator:run` remains only as a uniform-interface compatibility adapter.
 - `/root:run <block>` directly executes the selected block's `scripts/start.sh`.
 - Do not change task-generation scripts, PR collection behavior, or artifact formats.
 - Keep all documentation in English and make only command/documentation/deployment changes required by the design.
-- The prior PR #60 is merged; delivery uses the same `swegen` branch in a new follow-up PR to `dev`.
+- The prior PR #60 is merged; delivery uses the same `legoflow-curator` branch in a new follow-up PR to `dev`.
 - Deploy production docs only after the follow-up PR is merged.
 
 ---
@@ -91,7 +91,7 @@ if not re.search(r"^name:\s*run\s*$", compat_text, re.MULTILINE):
     raise SystemExit("FAIL: compatibility skill frontmatter is not run")
 if "/curator:create-tasks" not in compat_text:
     raise SystemExit("FAIL: run compatibility skill does not delegate")
-if "scripts/start_with_" in compat_text or "swegen create" in compat_text:
+if "scripts/start_with_" in compat_text or "legoflow-curator create" in compat_text:
     raise SystemExit("FAIL: run compatibility skill duplicates implementation")
 if "/curator:create-tasks" not in manifest_data.get("description", ""):
     raise SystemExit("FAIL: plugin manifest omits canonical command")
@@ -228,7 +228,7 @@ git commit -m "feat(curator): add explicit create-tasks command"
 **Interfaces:**
 - Consumes: canonical command and compatibility adapter from Task 1.
 - Produces: English user guidance that recommends only `/curator:create-tasks`;
-  deployment defaults for the `swe-swegen-docs` Pages project.
+  deployment defaults for the `legoflow-curator-docs` Pages project.
 
 - [ ] **Step 1: Write the failing documentation contract test**
 
@@ -269,9 +269,9 @@ if stale:
 
 deploy = (block / "docs/deploy_cloudflare_pages.sh").read_text(encoding="utf-8")
 readme = (block / "docs/README.md").read_text(encoding="utf-8")
-if 'PROJECT_NAME="${PROJECT_NAME:-swe-swegen-docs}"' not in deploy:
-    raise SystemExit("FAIL: deploy target is not swe-swegen-docs")
-if "https://swe-swegen-docs.pages.dev" not in readme:
+if 'PROJECT_NAME="${PROJECT_NAME:-legoflow-curator-docs}"' not in deploy:
+    raise SystemExit("FAIL: deploy target is not legoflow-curator-docs")
+if "https://legoflow-curator-docs.pages.dev" not in readme:
     raise SystemExit("FAIL: docs README does not name the production site")
 
 print("PASS: curator create-tasks documentation")
@@ -309,16 +309,16 @@ while direct users should choose `/curator:create-tasks` for mode selection.
 In `blocks/curator/docs/deploy_cloudflare_pages.sh`, change:
 
 ```diff
--# (swe-databoard); this one defaults to swe-curator-docs.
-+# (swe-databoard); this one publishes at swe-swegen-docs.
+-# (legoflow-databoard); this one defaults to swe-curator-docs.
++# (legoflow-databoard); this one publishes at legoflow-curator-docs.
 
 -PROJECT_NAME="${PROJECT_NAME:-swe-curator-docs}"
-+PROJECT_NAME="${PROJECT_NAME:-swe-swegen-docs}"
++PROJECT_NAME="${PROJECT_NAME:-legoflow-curator-docs}"
 ```
 
 In `blocks/curator/docs/README.md`, change the project name, live URL, and
-`PROJECT_NAME` default to `swe-swegen-docs` /
-`https://swe-swegen-docs.pages.dev`.
+`PROJECT_NAME` default to `legoflow-curator-docs` /
+`https://legoflow-curator-docs.pages.dev`.
 
 - [ ] **Step 5: Update test documentation**
 
@@ -453,7 +453,7 @@ and documentation migration.
 - Git/GitHub state only.
 
 **Interfaces:**
-- Consumes: verified `swegen` branch.
+- Consumes: verified `legoflow-curator` branch.
 - Produces: merged follow-up PR in `dev`.
 
 - [ ] **Step 1: Refresh the base and verify ancestry**
@@ -461,7 +461,7 @@ and documentation migration.
 Run:
 
 ```bash
-git fetch --no-tags --recurse-submodules=no origin dev swegen
+git fetch --no-tags --recurse-submodules=no origin dev legoflow-curator
 git merge-base --is-ancestor origin/dev HEAD
 ```
 
@@ -473,10 +473,10 @@ already-pushed history unless explicitly approved.
 Run:
 
 ```bash
-git push -u origin swegen
+git push -u origin legoflow-curator
 ```
 
-Expected: remote `swegen` advances by fast-forward.
+Expected: remote `legoflow-curator` advances by fast-forward.
 
 - [ ] **Step 3: Create a new PR to `dev`**
 
@@ -490,13 +490,13 @@ The body must summarize the canonical command, compatibility adapter, website
 source migration, and local verification. Use:
 
 ```bash
-PR_URL="$(gh pr create --base dev --head swegen \
+PR_URL="$(gh pr create --base dev --head legoflow-curator \
   --title "feat(curator): add explicit create-tasks command" \
   --body "$(cat <<'EOF'
 ## Summary
 - add `/curator:create-tasks` as the canonical generation command
 - retain a thin `/curator:run` adapter for the uniform plugin interface
-- publish maintained Curator docs through the `swe-swegen-docs` project
+- publish maintained Curator docs through the `legoflow-curator-docs` project
 
 ## Test plan
 - [ ] root and Curator static contract suites
@@ -514,7 +514,7 @@ Return the new PR URL; do not claim that it is PR #60.
 Use:
 
 ```bash
-PR_NUMBER="$(gh pr list --head swegen --base dev --state open \
+PR_NUMBER="$(gh pr list --head legoflow-curator --base dev --state open \
   --json number --jq '.[0].number')"
 gh pr checks "$PR_NUMBER" --watch --interval 10
 ```
@@ -527,7 +527,7 @@ this PR.
 Run:
 
 ```bash
-PR_NUMBER="$(gh pr list --head swegen --base dev --state open \
+PR_NUMBER="$(gh pr list --head legoflow-curator --base dev --state open \
   --json number --jq '.[0].number')"
 gh pr merge "$PR_NUMBER" --merge
 git fetch --no-tags --recurse-submodules=no origin dev
@@ -544,8 +544,8 @@ Expected: PR state is `MERGED`, and the implementation commit is an ancestor of
 
 **Interfaces:**
 - Consumes: merged Curator docs and credentials from
-  `~/.config/swegen_docs_cloudflare.env` or exported Cloudflare variables.
-- Produces: updated <https://swe-swegen-docs.pages.dev/>.
+  `~/.config/legoflow_curator_docs_cloudflare.env` or exported Cloudflare variables.
+- Produces: updated <https://legoflow-curator-docs.pages.dev/>.
 
 - [ ] **Step 1: Deploy the maintained Curator docs**
 
@@ -556,7 +556,7 @@ bash blocks/curator/docs/deploy_cloudflare_pages.sh
 ```
 
 Expected: build succeeds and Wrangler reports a successful deployment to
-project `swe-swegen-docs` on branch `swegen`.
+project `legoflow-curator-docs` on branch `legoflow-curator`.
 
 - [ ] **Step 2: Verify the live command documentation**
 
@@ -566,7 +566,7 @@ Run:
 python3 - <<'PY'
 from urllib.request import urlopen
 
-url = "https://swe-swegen-docs.pages.dev/docs/run-generation/"
+url = "https://legoflow-curator-docs.pages.dev/docs/run-generation/"
 body = urlopen(url, timeout=30).read().decode("utf-8", errors="replace")
 assert "/curator:create-tasks" in body, "canonical command missing from deployed site"
 assert "/curator:run" not in body, "legacy public command still present"

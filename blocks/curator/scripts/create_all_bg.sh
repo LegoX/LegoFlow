@@ -3,16 +3,16 @@ cd "$(dirname "$0")/.."
 # Run all 8 create scripts in background.
 
 set -euo pipefail
-source artifacts/envs/swegen-env/bin/activate
+source artifacts/envs/legoflow-curator-env/bin/activate
 source scripts/load_runtime_env.sh
 
 load_runtime_env
 
-mkdir -p artifacts/logs/swegen-create
+mkdir -p artifacts/logs/legoflow-curator-create
 
-# Install the swegen package once, up front, so the eight parallel language
+# Install the legoflow-curator package once, up front, so the eight parallel language
 # scripts don't race on concurrent `pip install -e` into the shared venv.
-python -c 'import swegen' 2>/dev/null || pip install -e repos/swegen/
+python -c 'import legoflow_curator' 2>/dev/null || pip install -e repos/legoflow-curator/
 
 echo "Starting create scripts (params from config.yaml)..."
 
@@ -46,4 +46,4 @@ if [[ "$started" -eq 0 ]]; then
     exit 1
 fi
 
-echo "${started} create script(s) started. Check artifacts/logs/swegen-create/cc_*_<timestamp>.txt"
+echo "${started} create script(s) started. Check artifacts/logs/legoflow-curator-create/cc_*_<timestamp>.txt"

@@ -26,8 +26,8 @@ generation limits.
 | `meta_info.name`, `label`, `description`, `parent` | Curator identity and parent block. | Do not edit for normal runs. | Default block identity. |
 | `meta_info.dependencies.from` | Curator has no upstream task source. | Do not edit. | Keep default unless changing handoffs. |
 | `meta_info.dependencies.to.merged_tasks_dir` | Wires curated tasks to Tracer when Tracer uses a local task source. | Do not edit unless rewiring pipeline outputs. | Keep default unless changing handoffs. |
-| `meta_info.repos.swegen` | Pinned task-generation repository. | Do not edit unless intentionally updating implementation code. | Pinned commits in `repos/`. |
-| `meta_info.environment.*` | Python environment and dependency metadata for `swegen`. | Read during setup; normally do not edit. | `artifacts/env/...`, Python `3.12` / `3.13`. |
+| `meta_info.repos.legoflow-curator` | Pinned task-generation repository. | Do not edit unless intentionally updating implementation code. | Pinned commits in `repos/`. |
+| `meta_info.environment.*` | Python environment and dependency metadata for `legoflow-curator`. | Read during setup; normally do not edit. | `artifacts/env/...`, Python `3.12` / `3.13`. |
 | `meta_info.resources.*` | Host where Curator runs. | Keep local unless moving work to a remote node. | `local`; remote IP only for SSH runs. |
 | `runtime_info.input.pr_collection.enabled` | Whether PR collection is active. | Disable only if using already collected inputs. | `true`, `false`. |
 | `runtime_info.input.pr_collection.languages` | Languages to collect from GitHub. | Edit to narrow or expand task sources. | `[python, rust]`, `[c, cpp, go, java]`. |

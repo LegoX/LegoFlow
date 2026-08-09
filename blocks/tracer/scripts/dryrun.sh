@@ -584,7 +584,7 @@ fi
 # Live probe: GET <api_base_url>/models, assert configured model (stripped of any
 # litellm provider prefix like "openai/") appears in data[].id. A non-2xx response
 # is sometimes a CF-gating artifact when running inside Claude Code's sandboxed
-# shell (see memory: project-swegen-llm-endpoint) — we downgrade to WARN in that
+# shell (see memory: project-legoflow-curator-llm-endpoint) — we downgrade to WARN in that
 # case so the rest of the report stays useful.
 if [[ -n "$MODEL_API_BASE_URL" && -n "$MODEL_API_MODEL" ]]; then
   LLM_PROBE_RESULT="$(MODEL_API_BASE_URL="$MODEL_API_BASE_URL" MODEL_API_KEY="$MODEL_API_KEY" MODEL_API_MODEL="$MODEL_API_MODEL" python3 - <<'PY' 2>&1
@@ -630,7 +630,7 @@ PY
       fi
       ;;
     HTTP:401|HTTP:403)
-      warn "LLM endpoint returned ${LLM_PROBE_RESULT#HTTP:} from this shell — may be a CF/sandbox artifact (see memory: project-swegen-llm-endpoint). Re-probe from a non-sandboxed shell to confirm."
+      warn "LLM endpoint returned ${LLM_PROBE_RESULT#HTTP:} from this shell — may be a CF/sandbox artifact (see memory: project-legoflow-curator-llm-endpoint). Re-probe from a non-sandboxed shell to confirm."
       ;;
     HTTP:*)
       fail "LLM endpoint returned ${LLM_PROBE_RESULT#HTTP:} for $MODEL_API_BASE_URL/models"
@@ -968,7 +968,7 @@ echo "--- 10. Cloudflare Pages / registry credentials (optional) ---"
 # Credentials resolve through scripts/shared_credentials.sh: env > root
 # config.yaml (runtime_info.input.cloudflare/docker) > this block's legacy env
 # file, which stays supported so existing setups keep working untouched.
-CF_ENV_FILE="${ENV_FILE:-${SWEGEN_HOME:-$HOME}/.config/trajgen_progress_cloudflare.env}"
+CF_ENV_FILE="${ENV_FILE:-${LEGOFLOW_CURATOR_HOME:-$HOME}/.config/trajgen_progress_cloudflare.env}"
 SHARED_CREDS="$BLOCK_DIR/../../scripts/shared_credentials.sh"
 if [[ -f "$SHARED_CREDS" ]]; then
   CF_LEGACY_ENV_FILE="$CF_ENV_FILE"

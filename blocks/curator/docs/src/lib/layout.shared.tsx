@@ -6,7 +6,7 @@ export function baseOptions(): BaseLayoutProps {
       title: (
         <div className="flex items-center gap-2 mr-4">
           <p className="font-mono tracking-tight text-lg font-normal">
-            SWE-gen
+            LegoFlow Curator
           </p>
         </div>
       ),
@@ -19,7 +19,7 @@ export function baseOptions(): BaseLayoutProps {
         active: "nested-url",
       },
       {
-        url: "https://swe-databoard.pages.dev/",
+        url: "https://legoflow-databoard.pages.dev/",
         text: "dashboard",
         active: "none",
         external: true,

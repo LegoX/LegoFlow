@@ -96,7 +96,7 @@ LOG="$BLOCK_DIR/artifacts/logs/smoke-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p "$(dirname "$LOG")"
 echo "INFO: smoke log -> $LOG"
 
-# Warm cpfs/networked-FS cache: the first `harbor --help` import takes ~20 s
+# Warm the networked-filesystem cache: the first `harbor --help` import takes ~20 s
 # on a cold gpufs mount (lots of pydantic/asyncio modules to page in), which
 # trips dryrun.sh's hardcoded `timeout 15`. Second run is ~9 s. Cheap to do.
 echo "INFO: warming harbor CLI cache"
@@ -113,7 +113,7 @@ fi
 
 # LiteLLM proxy: force a single uvicorn worker for the smoke. See the matching
 # block in evaluator's smoke for the full rationale — short version: gunicorn's 30s
-# worker-boot timeout vs slow cpfs litellm[proxy] import = crashloop. Single
+# worker-boot timeout vs a slow networked-filesystem LiteLLM import = crashloop. Single
 # worker skips gunicorn. Tracer sometimes recovers from the crashloop (vs
 # evaluator, which never does); set it here too so the smoke is deterministic.
 export LITELLM_NUM_WORKERS=1

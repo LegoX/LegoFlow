@@ -16,7 +16,6 @@ const State = {
   trajectory: null,
   activeStep: 0,
   theme: localStorage.getItem("harbor.theme") || "dark",
-  lang: localStorage.getItem("harbor.lang") || "en",
   charts: [],
   chartTimers: [],
   trajectoryChunkManifest: null,
@@ -28,46 +27,30 @@ const State = {
 };
 
 const NAV = [
-  { id: "overview", label: "Overview", labelZh: "总览", icon: "▦" },
-  { id: "jobs", label: "All jobs", labelZh: "全部任务", icon: "▤" },
-  { id: "job", label: "Single job", labelZh: "单个任务", icon: "◧", needsJob: true },
-  { id: "compare", label: "Compare", labelZh: "对比", icon: "◊" },
-  { id: "trajectory", label: "Trajectory", labelZh: "轨迹", icon: "↗", needsJob: true },
+  { id: "overview", label: "Overview", icon: "▦" },
+  { id: "jobs", label: "All jobs", icon: "▤" },
+  { id: "job", label: "Single job", icon: "◧", needsJob: true },
+  { id: "compare", label: "Compare", icon: "◊" },
+  { id: "trajectory", label: "Trajectory", icon: "↗", needsJob: true },
 ];
 
-const I18N = {
-  en: {
-    jobs: "Jobs",
-    filterJobs: "Filter jobs…",
-    compare: "Compare",
-    openCompare: "Open compare",
-    clear: "Clear",
-    compareHelp: "Use the + button next to a job to add it to Compare.",
-    reload: "Reload",
-    toggleTheme: "Toggle theme",
-    switchLanguage: "切换到中文",
-    langButton: "中",
-  },
-  zh: {
-    jobs: "任务",
-    filterJobs: "筛选任务…",
-    compare: "对比",
-    openCompare: "打开对比",
-    clear: "清空",
-    compareHelp: "点击任务旁边的 + 按钮加入对比。",
-    reload: "刷新",
-    toggleTheme: "切换主题",
-    switchLanguage: "Switch to English",
-    langButton: "EN",
-  },
+const LABELS = {
+  jobs: "Jobs",
+  filterJobs: "Filter jobs…",
+  compare: "Compare",
+  openCompare: "Open compare",
+  clear: "Clear",
+  compareHelp: "Use the + button next to a job to add it to Compare.",
+  reload: "Reload",
+  toggleTheme: "Toggle theme",
 };
 
 // -- utilities ----------------------------------------------------------------
 
 function $(sel, root = document) { return root.querySelector(sel); }
 function $$(sel, root = document) { return [...root.querySelectorAll(sel)]; }
-function t(key) { return (I18N[State.lang] || I18N.en)[key] || I18N.en[key] || key; }
-function navLabel(item) { return State.lang === "zh" ? (item.labelZh || item.label) : item.label; }
+function t(key) { return LABELS[key] || key; }
+function navLabel(item) { return item.label; }
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -682,7 +665,7 @@ function toggleCompareJob(jobName) {
 }
 
 function applyLanguage() {
-  document.documentElement.setAttribute("lang", State.lang === "zh" ? "zh-CN" : "en");
+  document.documentElement.setAttribute("lang", "en");
   const jobsLabel = $("#jobs-section-label");
   if (jobsLabel) jobsLabel.textContent = t("jobs");
   const jobFilter = $("#job-filter");
@@ -699,11 +682,6 @@ function applyLanguage() {
   if (reload) reload.title = t("reload");
   const themeToggle = $("#theme-toggle");
   if (themeToggle) themeToggle.title = t("toggleTheme");
-  const langToggle = $("#lang-toggle");
-  if (langToggle) {
-    langToggle.textContent = t("langButton");
-    langToggle.title = t("switchLanguage");
-  }
 }
 
 // -- routing ------------------------------------------------------------------
@@ -2554,12 +2532,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   $("#theme-toggle").textContent = State.theme === "dark" ? "☀" : "☾";
   applyLanguage();
-  $("#lang-toggle").addEventListener("click", async () => {
-    State.lang = State.lang === "en" ? "zh" : "en";
-    localStorage.setItem("harbor.lang", State.lang);
-    applyLanguage();
-    await render();
-  });
 
   // reload
   $("#reload").addEventListener("click", () => { location.reload(); });

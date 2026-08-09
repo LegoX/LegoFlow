@@ -968,7 +968,7 @@ def collect_trial_facts(
 
 
 def extract_cot_stats(messages: list[Any]) -> dict[str, Any]:
-    """Aggregate assistant reasoning_content stats (same口径 as the oh_for_experiments dashboard).
+    """Aggregate assistant reasoning_content stats using the same methodology as the experiments dashboard.
 
     COT turn ratio = nonempty reasoning_content / assistant turns.
     COT chars/turn (mean) = mean length over nonempty reasoning_content only.

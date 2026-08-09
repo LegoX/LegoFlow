@@ -1,12 +1,12 @@
 #!/bin/bash
 # Single entry point for SWE task generation (all 8 languages, in background).
 #
-# On the FIRST invocation (SWEGEN_LAUNCHER_ACTIVE unset) start.sh selects the
+# On the FIRST invocation (LEGOFLOW_CURATOR_LAUNCHER_ACTIVE unset) start.sh selects the
 # correct provider launcher from config.yaml -> llm_api.cc_provider_mode:
 #   * openai_proxy -> scripts/start_with_openai_api.sh   (starts a local LiteLLM
 #                     proxy first, so Claude Code verification cannot fail silently)
 #   * native       -> scripts/start_with_anthropic_api.sh (no proxy)
-# The launcher re-invokes this script with SWEGEN_LAUNCHER_ACTIVE=1, and that
+# The launcher re-invokes this script with LEGOFLOW_CURATOR_LAUNCHER_ACTIVE=1, and that
 # second pass runs the real generation (archive trap + create_all_bg). The guard
 # makes `bash scripts/start.sh` and `/root:run curator` safe in every mode —
 # neither can accidentally skip the proxy that openai_proxy providers require.
@@ -14,11 +14,11 @@ set -e
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$BLOCK_DIR"
 
-if [ -z "${SWEGEN_LAUNCHER_ACTIVE:-}" ]; then
-    PY_BIN="${PY_BIN:-artifacts/envs/swegen-env/bin/python}"
+if [ -z "${LEGOFLOW_CURATOR_LAUNCHER_ACTIVE:-}" ]; then
+    PY_BIN="${PY_BIN:-artifacts/envs/legoflow-curator-env/bin/python}"
     [ -x "$PY_BIN" ] || PY_BIN=python3
     MODE="$("$PY_BIN" -c "import yaml;c=yaml.safe_load(open('config.yaml'));print((c.get('runtime_info',{}).get('input',{}).get('llm_api',{}) or {}).get('cc_provider_mode',''))" 2>/dev/null || true)"
-    export SWEGEN_LAUNCHER_ACTIVE=1
+    export LEGOFLOW_CURATOR_LAUNCHER_ACTIVE=1
     case "$MODE" in
         openai_proxy) exec bash "$BLOCK_DIR/scripts/start_with_openai_api.sh" "$@" ;;
         native)       exec bash "$BLOCK_DIR/scripts/start_with_anthropic_api.sh" "$@" ;;

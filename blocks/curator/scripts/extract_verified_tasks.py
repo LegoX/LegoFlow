@@ -50,7 +50,7 @@ def is_current(src: Path, dst: Path) -> bool:
     answer but costs a stat per file, which at a few hundred tasks took over a
     minute per pass — far too slow for something that runs on a timer while
     generation is in flight. copytree preserves the source's directory mtime,
-    and swegen rewrites the task directory when it regenerates a task, so the
+    and legoflow-curator rewrites the task directory when it regenerates a task, so the
     top-level comparison catches the case that matters. --force covers the rest.
     """
     try:

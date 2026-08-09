@@ -24,7 +24,7 @@ cd "$BLOCK_DIR"
 
 INTERVAL="${AGGREGATE_INTERVAL:-300}"
 MAX_HOURS="${AGGREGATE_MAX_HOURS:-24}"
-PY_BIN="${PY_BIN:-artifacts/envs/swegen-env/bin/python}"
+PY_BIN="${PY_BIN:-artifacts/envs/legoflow-curator-env/bin/python}"
 [[ -x "$PY_BIN" ]] || PY_BIN=python3
 
 LOG_DIR="$BLOCK_DIR/artifacts/logs"

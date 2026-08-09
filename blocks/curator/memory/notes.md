@@ -18,7 +18,7 @@ End-to-end pipeline validation log — performed entirely and autonomously by an
 |------|---------|--------|------|
 | Install | `pip install -e .` | OK | 5s |
 | Collect PRs | `collect_prs_wo_image.py` | skipped (used samples) | — |
-| Create tasks | `swegen create` | 1 task verified | 15m 28s |
+| Create tasks | `legoflow-curator create` | 1 task verified | 15m 28s |
 | Score | `score_tasks.py` | 4 tasks scored | <1s |
 | Extract | `python scripts/extract_verified_tasks.py` | 9 tasks extracted | <1s |
 
@@ -30,12 +30,12 @@ Verified task from this run: `tox-dev__tox-3813`
 
 > Source: memory/adaptive-tuning-validation.md (2026-04-22)
 
-**Machine**: hk01dgx060 | **Python**: 3.12.2 | **Docker**: 29.0.0
+**Environment**: generic Linux host | **Python**: 3.12.2 | **Docker**: 29.0.0
 
 ### Validated cycle
 
 1. `read_params.py` correctly reads params from `inputs.yaml`
-2. `swegen create` uses timeout/cc_timeout from inputs.yaml
+2. `legoflow-curator create` uses timeout/cc_timeout from inputs.yaml
 3. Monitor cycle collects status and updates `inputs.yaml` status fields
 4. Adaptive decision: `success_rate 0.50 > 0.4` → `n_concurrent` 16 → 20
 5. PR pool check: `10 < 100` threshold → collect_pr_needed triggered

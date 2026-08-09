@@ -92,15 +92,14 @@ REASONING_PARSER="${REASONING_PARSER:-}"
 # Set VLLM_CONDA_ENV="" to skip conda activation if vllm is already on PATH.
 # ------------------------------------------------------------------------------
 VLLM_CONDA_ENV="${VLLM_CONDA_ENV-vllm_0.18.1}"
-# Auto-detect conda.sh across common install layouts (miniconda3, anaconda3 under
-# $HOME, /opt, or /anaconda3) and fall back to `conda info --base`. Override with
+# Auto-detect conda.sh from the user's home or a conventional /opt install and
+# fall back to `conda info --base`. Override with
 # CONDA_SH=... if your install lives elsewhere.
 if [[ -z "${CONDA_SH:-}" ]]; then
   for _candidate in \
     "$HOME/miniconda3/etc/profile.d/conda.sh" \
     "$HOME/anaconda3/etc/profile.d/conda.sh" \
     "/opt/conda/etc/profile.d/conda.sh" \
-    "/anaconda3/etc/profile.d/conda.sh" \
     "/opt/anaconda3/etc/profile.d/conda.sh"; do
     [[ -f "$_candidate" ]] && { CONDA_SH="$_candidate"; break; }
   done

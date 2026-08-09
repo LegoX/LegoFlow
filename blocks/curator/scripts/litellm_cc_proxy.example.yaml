@@ -1,4 +1,4 @@
-# Example LiteLLM proxy config for swegen's Claude Code (CC) verification path.
+# Example LiteLLM proxy config for legoflow-curator's Claude Code (CC) verification path.
 #
 # Use this when cc_provider_mode = openai_proxy (provider is OpenAI-only, e.g.
 # Qwen / GLM / sglang / vLLM). It translates the Anthropic /v1/messages calls
