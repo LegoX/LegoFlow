@@ -16,6 +16,7 @@ import {
   Sun,
   Moon,
   Languages,
+  Info,
 } from "lucide-react";
 import { useRuns, useMetrics } from "./hooks/useMetrics";
 import type { RunInfo } from "./types";
@@ -121,6 +122,7 @@ function useTheme() {
 export default function App() {
   const [activePanel, setActivePanel] = useState("overview");
   const [selectedRun, setSelectedRun] = useState("");
+  const [infoOpen, setInfoOpen] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(15);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { theme, toggle: toggleTheme } = useTheme();
@@ -246,7 +248,7 @@ export default function App() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-slate-400 hover:text-slate-200 transition-colors"
+              className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-indigo-500 transition-colors"
             >
               <ChevronRight
                 size={16}
@@ -284,23 +286,52 @@ export default function App() {
             <span className="text-xs text-slate-500 font-mono">
               {metrics.length} {t("app.steps")}
             </span>
+            <div className="relative">
+              <button
+                onClick={() => setInfoOpen((v) => !v)}
+                className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-indigo-500 transition-colors"
+                title={t("app.info")}
+              >
+                <Info size={14} />
+              </button>
+              {infoOpen && (
+                <div className="absolute right-0 top-11 z-40 w-[min(560px,92vw)] rounded-lg border border-slate-800 bg-slate-900 p-4 shadow-xl text-left">
+                  <h3 className="text-sm font-semibold mb-2">{t("app.info")}</h3>
+                  <table className="w-full text-xs">
+                    <tbody>
+                      {[
+                        ["runs found", String(runs.length)],
+                        ["selected run", selectedRun || "\u2014"],
+                        ["refresh interval", `${refreshInterval / 1000}s`],
+                        ["API served from", location.origin],
+                      ].map(([k, v]) => (
+                        <tr key={k} className="border-b border-slate-800">
+                          <td className="py-1 pr-2 text-slate-400">{k}</td>
+                          <td className="py-1 font-mono break-all">{v}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
             <button
               onClick={toggleLang}
-              className="text-slate-400 hover:text-slate-200 transition-colors text-xs font-medium"
+              className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-indigo-500 transition-colors"
               title={t("app.langToggle")}
             >
               <Languages size={14} />
             </button>
             <button
               onClick={toggleTheme}
-              className="text-slate-400 hover:text-slate-200 transition-colors"
+              className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-indigo-500 transition-colors"
               title={theme === "dark" ? t("app.lightMode") : t("app.darkMode")}
             >
               {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
             </button>
             <button
               onClick={handleRefresh}
-              className="text-slate-400 hover:text-slate-200 transition-colors"
+              className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:border-indigo-500 transition-colors"
               title={t("app.hardRefresh")}
             >
               <RefreshCw size={14} />

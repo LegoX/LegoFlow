@@ -702,6 +702,56 @@ function applyLanguage() {
   if (reload) reload.title = t("reload");
   const themeToggle = $("#theme-toggle");
   if (themeToggle) themeToggle.title = t("toggleTheme");
+  // Info drawer: what this board is reading. Built with DOM nodes and textContent
+  // rather than innerHTML — this file has no HTML-escaping helper, and paths are
+  // not trusted input.
+  const infoToggle = $("#info-toggle");
+  const infoPanel = $("#info-panel");
+  if (infoToggle && infoPanel) {
+    const renderInfo = () => {
+      infoPanel.replaceChildren();
+      const h = document.createElement("h3");
+      h.textContent = "What this board is reading";
+      infoPanel.appendChild(h);
+
+      const sub = document.createElement("div");
+      sub.className = "sub";
+      sub.textContent = "Sources";
+      infoPanel.appendChild(sub);
+
+      const rows = [
+        ["jobs indexed", State.jobs.length ? String(State.jobs.length) : "\u2014"],
+        ["job detail loaded", State.jobsDetail],
+        ["served from", location.origin + location.pathname],
+      ];
+      const table = document.createElement("table");
+      for (const [k, v] of rows) {
+        const tr = document.createElement("tr");
+        const tdk = document.createElement("td");
+        tdk.textContent = k;
+        const tdv = document.createElement("td");
+        tdv.className = "mono";
+        tdv.textContent = v;
+        tr.append(tdk, tdv);
+        table.appendChild(tr);
+      }
+      infoPanel.appendChild(table);
+    };
+    infoToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (infoPanel.hidden) renderInfo();
+      infoPanel.hidden = !infoPanel.hidden;
+    });
+    document.addEventListener("click", (e) => {
+      if (!infoPanel.hidden && !infoPanel.contains(e.target) && e.target !== infoToggle) {
+        infoPanel.hidden = true;
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") infoPanel.hidden = true;
+    });
+  }
+
   const langToggle = $("#lang-toggle");
   if (langToggle) {
     langToggle.textContent = t("langButton");

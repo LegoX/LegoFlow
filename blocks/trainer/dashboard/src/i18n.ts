@@ -27,6 +27,7 @@ const dict: Record<string, Record<Lang, string>> = {
   "app.lightMode": { en: "Switch to light mode", zh: "切换亮色模式" },
   "app.darkMode": { en: "Switch to dark mode", zh: "切换暗色模式" },
   "app.langToggle": { en: "切换中文", zh: "Switch to EN" },
+  "app.info": { en: "What this board is reading", zh: "当前看板读取的内容" },
 
   // Nav panels
   "nav.overview": { en: "Overview", zh: "总览" },

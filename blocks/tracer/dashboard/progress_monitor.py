@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import base64 as _b64
 import json
 import os
 import re
@@ -2149,6 +2150,20 @@ def build_coverage_summary(
 # HTML rendering
 # ---------------------------------------------------------------------------
 
+FAVICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+    '<rect width="64" height="64" rx="14" fill="#b3431f"/>'
+    '<text x="32" y="42" text-anchor="middle" font-family="Georgia,serif" '
+    'font-weight="700" font-size="30" fill="#fafaf7">LF</text></svg>'
+)
+FAVICON_DATA_URI = "data:image/svg+xml;base64," + _b64.b64encode(
+    FAVICON_SVG.encode("utf-8")
+).decode("ascii")
+
+ICON_INFO = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
+             '<circle cx="12" cy="12" r="9"></circle><path d="M12 16v-5"></path>'
+             '<path d="M12 8h.01"></path></svg>')
+
 CSS = """
 :root {
   color-scheme: light;
@@ -2263,6 +2278,18 @@ button, input, select { font: inherit; }
 button { border: 1px solid var(--line); background: var(--button-bg); color: var(--text); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
 button:hover { border-color: var(--accent-border); background: var(--button-hover); color: var(--text); }
 .icon { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.info-wrap { position: relative; }
+.info-panel { position: absolute; right: 0; top: 44px; z-index: 60; width: min(560px, 92vw);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 14px 16px; text-align: left; }
+:root[data-theme="dark"] .info-panel { box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.info-panel h3 { margin: 0 0 8px; font-size: 14px; font-weight: 650; }
+.info-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.info-panel td { padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.info-panel td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; word-break: break-all; }
+.info-panel .sub { color: var(--muted); font-size: 11.5px; margin: 10px 0 4px;
+  text-transform: uppercase; letter-spacing: .05em; font-weight: 650; }
 .icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; }
 .theme-toggle { min-width: 0; white-space: nowrap; }
 .theme-toggle .theme-sun { display: none; }
@@ -2649,6 +2676,29 @@ def render_html(
     sft_sorted = sorted(sft, key=lambda s: s["job"])
     now_str = now_bjt().strftime("%Y-%m-%d %H:%M:%S BJT")
 
+    # What this board read, so a surprising number can be traced to a path
+    # without leaving the page.
+    _sources = [
+        ("Harbor jobs", jobs_dir, len(jobs)),
+        ("SFT data", sft_dir, len(sft)),
+        ("Harbor job dir", harbor_jobs_dir, None),
+        ("Run index", index_path, None),
+    ]
+    info_html = (
+        "<h3>What this board is reading</h3>"
+        "<div class='sub'>Sources</div><table>"
+        + "".join(
+            f"<tr><td>{html.escape(name)}</td>"
+            f"<td class='mono'>{html.escape(str(path))}</td>"
+            f"<td>{'' if n is None else f'{n:,} found'}"
+            f"{'' if Path(path).exists() else '<em>not found</em>'}</td></tr>"
+            for name, path, n in _sources
+        )
+        + "</table>"
+        f"<div class='sub'>Refresh</div><table><tr><td>interval</td>"
+        f"<td class='mono'>{refresh_seconds}s</td><td></td></tr></table>"
+    )
+
     missing_jobs = sum(1 for j in jobs_sorted if not j.get("source_exists", True))
     if sft_sorted:
         sft_rows = "".join(render_sft_row(s) for s in sft_sorted)
@@ -2789,7 +2839,8 @@ def render_html(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="{refresh_seconds}">
-<title>tracer</title>
+<title>LegoFlow-Tracer</title>
+<link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
 <script>
 (() => {{
   const saved = localStorage.getItem('tracer-theme');
@@ -2831,6 +2882,10 @@ def render_html(
       <div class="topbar-actions">
         <span class="update-status">Updated {html.escape(now_str)} &middot; refresh {refresh_seconds}s</span>
         <button class="copy-btn" data-copy="data/summary.json">Copy summary</button>
+        <div class="info-wrap">
+          <button id="infoToggle" class="icon-btn" type="button" aria-label="Dashboard info" title="What this board is reading">{ICON_INFO}</button>
+          <div class="info-panel" id="infoPanel" hidden>{info_html}</div>
+        </div>
         <button id="refreshNow" class="icon-btn refresh-btn" type="button" aria-label="Refresh dashboard" title="Refresh dashboard">{icon_refresh}</button>
         <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="Toggle black and white theme" title="Toggle theme"><span class="theme-moon">{icon_moon}</span><span class="theme-sun">{icon_sun}</span></button>
       </div>
@@ -4026,6 +4081,15 @@ function selectSample(sample, button) {{
 }}
 
 document.addEventListener('click', event => {{
+  const info = document.getElementById('infoPanel');
+  const infoBtn = document.getElementById('infoToggle');
+  if (info && infoBtn) {{
+    if (event.target === infoBtn || infoBtn.contains(event.target)) {{
+      info.hidden = !info.hidden;
+      return;
+    }}
+    if (!info.hidden && !info.contains(event.target)) {{ info.hidden = true; }}
+  }}
   const nav = event.target.closest('.nav-item');
   if (nav) setPage(nav.dataset.page);
   const copy = event.target.closest('[data-copy]');

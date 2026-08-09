@@ -765,3 +765,25 @@ pre.code-block {
   overflow-y: auto;
 }
 [data-theme="light"] .preface-pre { background: #1a1714; color: #fafaf7; }
+
+/* Top-right controls: one size, one weight, one palette across every block's board. */
+.icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center;
+  justify-content: center; flex: 0 0 36px; background: var(--c-bg-2);
+  border: 1px solid var(--c-border); color: var(--c-fg-dim); border-radius: 8px;
+  cursor: pointer; font: inherit; font-size: 14px; }
+.icon-btn:hover { color: var(--c-fg); border-color: var(--c-accent-border); }
+.icon-btn .icon { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Info drawer — what this board is reading */
+.info-wrap { position: relative; }
+.info-panel { position: absolute; right: 0; top: 44px; z-index: 60; width: min(560px, 92vw);
+  background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5); padding: 14px 16px; text-align: left; }
+[data-theme="light"] .info-panel { box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+.info-panel h3 { margin: 0 0 8px; font-size: 14px; font-weight: 650; }
+.info-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.info-panel td { padding: 4px 6px; border-bottom: 1px solid var(--c-border); }
+.info-panel td.mono { font-family: var(--font-mono); font-size: 11.5px; word-break: break-all; }
+.info-panel .sub { color: var(--c-fg-mute); font-size: 11.5px; margin: 10px 0 4px;
+  text-transform: uppercase; letter-spacing: .05em; font-weight: 650; }

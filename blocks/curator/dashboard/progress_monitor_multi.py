@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import html
 import json
+import base64
 import math
 import re
 import sys
@@ -353,6 +354,21 @@ code, pre, .mono { font-family: var(--font-mono); }
 :root[data-theme="dark"] .theme-toggle .theme-moon { display: none; }
 
 .content { flex: 1; overflow: auto; padding: 18px 24px 32px; }
+/* Info drawer — what this board is reading, straight from config.yaml */
+.info-wrap { position: relative; }
+.info-panel { position: absolute; right: 0; top: 44px; z-index: 40; width: min(560px, 92vw);
+  background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 14px 16px; }
+:root[data-theme="dark"] .info-panel { box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.info-panel h3 { margin: 0 0 8px; font-size: 14px; font-weight: 650; }
+.info-panel table { font-size: 12px; }
+.info-panel td.mono { font-family: var(--font-mono); font-size: 11.5px; word-break: break-all;
+  text-align: left; }
+.info-panel .method-card { background: transparent; border: 0; padding: 0; }
+.info-panel .method-card h3 { display: none; }
+.info-panel .method-body { font-size: 12.5px; line-height: 1.65; }
+.info-panel .sub { color: var(--c-fg-mute); font-size: 11.5px; margin: 10px 0 4px;
+  text-transform: uppercase; letter-spacing: .05em; font-weight: 650; }
 .section-head { font-size: 12px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .07em; color: var(--c-fg-mute); margin: 22px 0 10px; }
 .section-head:first-child { margin-top: 4px; }
@@ -638,6 +654,46 @@ def render_rate_bars(rows: list[tuple[str, int, int]]) -> str:
     return '<div class="tag-rows">' + "\n".join(out) + "</div>"
 
 
+def render_info(batches: list[dict[str, Any]], prs: dict[str, Any],
+                filters: dict[str, Any], config_path: Path) -> str:
+    """What the board read, named exactly as config.yaml names it, so a surprising
+    number can be traced back to a path without leaving the page."""
+    def rows(items):
+        return "".join(
+            f"<tr><td>{html.escape(n)}</td><td class='mono'>{html.escape(pth)}</td>"
+            f"<td>{extra}</td></tr>" for n, pth, extra in items
+        )
+
+    task_rows = rows([
+        (b["name"], b["path"],
+         f"{b['total']:,} tasks" if b["exists"] else "<em>not found</em>")
+        for b in batches
+    ]) or "<tr><td colspan='3'>none configured</td></tr>"
+
+    pr_rows = rows([
+        (d["name"], d["dir"], "" if d["exists"] else "<em>not found</em>")
+        for d in (prs.get("dirs") or [])
+    ]) or "<tr><td colspan='3'>none configured</td></tr>"
+
+    filter_rows = "".join(
+        f"<tr><td>{html.escape(str(k))}</td><td class='mono'>{html.escape(str(v))}</td>"
+        f"<td></td></tr>" for k, v in (filters or {}).items()
+    ) or "<tr><td colspan='3'>none</td></tr>"
+
+    return (
+        "<h3>What this board is reading</h3>"
+        f"<div class='mini'>config: {html.escape(str(config_path))}</div>"
+        "<div class='sub'>Task batches</div>"
+        f"<table>{task_rows}</table>"
+        "<div class='sub'>PR collection</div>"
+        f"<table>{pr_rows}</table>"
+        "<div class='sub'>Collection filters</div>"
+        f"<table>{filter_rows}</table>"
+        "<div class='mini'>language, difficulty and tags come from each task's "
+        "task.toml, never from its directory name</div>"
+    )
+
+
 def render_overview(combined: dict[str, Any], batches: list[dict[str, Any]],
                     prs: dict[str, Any]) -> str:
     """Headline figures first, then the stage-by-stage funnel, then per-language
@@ -724,10 +780,6 @@ def render_overview(combined: dict[str, Any], batches: list[dict[str, Any]],
   <div class="section-head">Task composition</div>
   {body}
 
-  <div class="section-head">Method</div>
-  <div class="grid2">
-{METHODOLOGY_HTML}
-  </div>
 </div>
 """
 
@@ -906,6 +958,23 @@ def render_collection(prs: dict[str, Any], filters: dict[str, Any],
 """
 
 
+FAVICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+    '<rect width="64" height="64" rx="14" fill="#b3431f"/>'
+    '<text x="32" y="42" text-anchor="middle" font-family="Georgia,serif" '
+    'font-weight="700" font-size="30" fill="#fafaf7">LF</text></svg>'
+)
+FAVICON_DATA_URI = "data:image/svg+xml;base64," + base64.b64encode(
+    FAVICON_SVG.encode("utf-8")
+).decode("ascii")
+
+METRICS_SVG = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
+               '<path d="M4 19h16"></path><path d="M7 19v-7"></path>'
+               '<path d="M12 19V5"></path><path d="M17 19v-10"></path></svg>')
+
+INFO_SVG = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
+            '<circle cx="12" cy="12" r="9"></circle><path d="M12 16v-5"></path>'
+            '<path d="M12 8h.01"></path></svg>')
 MOON_SVG = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
             '<path d="M20.5 14.5A8.7 8.7 0 0 1 9.5 3.5a7 7 0 1 0 11 11Z"></path></svg>')
 SUN_SVG = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
@@ -922,7 +991,9 @@ def render_html(
     prs: dict[str, Any] | None = None,
     filters: dict[str, Any] | None = None,
     samples: dict[str, Any] | None = None,
+    config_path: Path = CONFIG_PATH,
 ) -> str:
+    info_html = render_info(batches, prs or {}, filters or {}, config_path)
     prs = prs or {"exists": False, "dir": "", "languages": {}, "total_prs": 0, "total_repos": 0}
     combined = combine_datasets(batches)
     grand_total = combined["total"]
@@ -939,7 +1010,7 @@ def render_html(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SWE Datasets Dashboard</title>
+<title>LegoFlow-Curator</title>\n<link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
 <style>{CSS}</style>
 </head>
 <body>
@@ -977,6 +1048,19 @@ def render_html(
         <div class="sub" id="page-sub">{overview_sub}</div>
       </div>
       <div class="topbar-actions">
+        <div class="info-wrap">
+          <button id="metricsToggle" class="icon-btn" type="button"
+            aria-label="Scoring and tagging" title="How difficulty and tags are produced">{METRICS_SVG}</button>
+          <div class="info-panel" id="metricsPanel" hidden>
+            <h3>Difficulty scoring &amp; semantic tagging</h3>
+            {METHODOLOGY_HTML}
+          </div>
+        </div>
+        <div class="info-wrap">
+          <button id="infoToggle" class="icon-btn" type="button"
+            aria-label="Dashboard info" title="What this board is reading">{INFO_SVG}</button>
+          <div class="info-panel" id="infoPanel" hidden>{info_html}</div>
+        </div>
         <button id="themeToggle" class="icon-btn theme-toggle" type="button"
           aria-label="Toggle theme" title="Toggle theme"><span class="theme-moon">{MOON_SVG}</span><span class="theme-sun">{SUN_SVG}</span></button>
       </div>
@@ -1003,6 +1087,33 @@ var PAGE_META = {{
   var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   document.documentElement.dataset.theme = saved || (prefersDark ? 'dark' : 'light');
 }})();
+
+/* Two top-right drawers, mutually exclusive: one says what was read, the other
+   how difficulty and tags were produced. */
+var DRAWERS = [['infoToggle', 'infoPanel'], ['metricsToggle', 'metricsPanel']]
+  .map(function (p) {{
+    return {{btn: document.getElementById(p[0]), panel: document.getElementById(p[1])}};
+  }})
+  .filter(function (d) {{ return d.btn && d.panel; }});
+
+DRAWERS.forEach(function (d) {{
+  d.btn.addEventListener('click', function (e) {{
+    e.stopPropagation();
+    var wasHidden = d.panel.hidden;
+    DRAWERS.forEach(function (o) {{ o.panel.hidden = true; }});
+    d.panel.hidden = !wasHidden;
+  }});
+}});
+document.addEventListener('click', function (e) {{
+  DRAWERS.forEach(function (d) {{
+    if (!d.panel.hidden && !d.panel.contains(e.target) && !d.btn.contains(e.target)) {{
+      d.panel.hidden = true;
+    }}
+  }});
+}});
+document.addEventListener('keydown', function (e) {{
+  if (e.key === 'Escape') {{ DRAWERS.forEach(function (d) {{ d.panel.hidden = true; }}); }}
+}});
 
 document.getElementById('themeToggle').addEventListener('click', function () {{
   var el = document.documentElement;
@@ -1225,7 +1336,7 @@ def main():
     samples = write_samples(batches, args.output_html.parent)
     print(f"  samples                {sum(v['count'] for v in samples.values())} task(s) cached "
           f"across {len(samples)} batch(es)")
-    render_html(batches, args.output_html, prs, cfg["pr_filters"], samples)
+    render_html(batches, args.output_html, prs, cfg["pr_filters"], samples, args.config)
     print(f"✓ generated: {args.output_html}  ({args.output_html.stat().st_size/1024:.0f} KB)")
     print("=" * 70)
     return 1 if problems else 0
