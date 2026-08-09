@@ -460,7 +460,14 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
 .tag-count { text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 11.5px; }
 .tag-card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; }
 .tag-card h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
-.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 12px; margin-left: 6px; }
+.tag-card h3 { display: flex; align-items: center; gap: 6px; }
+.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 12px; }
+.help-btn { margin-left: auto; flex: 0 0 auto; width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--c-border); border-radius: 999px;
+  color: var(--c-fg-mute); cursor: pointer; }
+.help-btn:hover { color: var(--c-accent); border-color: var(--c-accent-border); }
+.help-btn .icon { width: 13px; height: 13px; }
 .muted { color: var(--c-fg-dim); font-size: 13px; }
 
 /* Task List: one row per dataset, tracer's Jobs list shape. */
@@ -962,6 +969,58 @@ def render_task_list(batches: list[dict[str, Any]],
 """
 
 
+# Which stage each threshold is applied at, and what it means. Definitions are
+# lifted from blocks/curator/CLAUDE.md:355-362 rather than inferred from the names.
+FILTER_DOCS: dict[str, tuple[str, str, str]] = {
+    "min_stars": ("repo", "SWEGEN_PR_MIN_STARS",
+                  "Repository must have at least this many GitHub stars."),
+    "min_merged_prs": ("repo", "SWEGEN_PR_MIN_MERGED_PRS",
+                       "Repository must already have at least this many merged pull requests."),
+    "min_language_percentage": ("repo", "SWEGEN_PR_MIN_LANGUAGE_PERCENTAGE",
+                                "The target language must make up at least this fraction of "
+                                "the repository's code."),
+    "max_days_since_push": ("repo", "SWEGEN_PR_MAX_DAYS_SINCE_PUSH",
+                            "Skip repositories whose last push is older than this many days."),
+    "min_issue_body_length": ("pr", "SWEGEN_PR_MIN_ISSUE_BODY_LENGTH",
+                              "The pull request's linked issue must have a body at least this "
+                              "many characters long — short issues rarely describe a task."),
+    "min_files_changed": ("pr", "SWEGEN_PR_MIN_FILES_CHANGED",
+                          "The pull request must touch at least this many files."),
+    "max_files_changed": ("pr", "SWEGEN_PR_MAX_FILES_CHANGED",
+                          "The pull request must touch no more than this many files."),
+    "max_lines_changed": ("pr", "SWEGEN_PR_MAX_LINES_CHANGED",
+                          "Additions plus deletions must not exceed this."),
+}
+
+HELP_SVG = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
+            '<circle cx="12" cy="12" r="9"></circle>'
+            '<path d="M9.6 9.4a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.8.7-.8 1.2v.5"></path>'
+            '<path d="M12 17h.01"></path></svg>')
+
+
+def render_filter_help() -> str:
+    """Modal body: one definition list per stage."""
+    out = []
+    for stage, label, note in (
+        ("repo", "Repository filters",
+         "Applied while searching GitHub, before any pull request is looked at."),
+        ("pr", "Pull request filters",
+         "Applied to each pull request inside a repository that passed the stage above."),
+    ):
+        rows = "".join(
+            f"<tr><td>{html.escape(k)}<div class='mini' style='margin:2px 0 0'>"
+            f"{html.escape(env)}</div></td><td>{html.escape(desc)}</td></tr>"
+            for k, (st, env, desc) in FILTER_DOCS.items() if st == stage
+        )
+        out.append(f"<div class='sub'>{label}</div>"
+                   f"<div class='mini' style='margin:0 0 8px'>{note}</div>"
+                   f"<table>{rows}</table>")
+    out.append("<div class='mini'>Each threshold can also be set through the environment "
+               "variable shown under its name; the value in config.yaml is used when that "
+               "is unset. Per-language overrides live in the collector and win over both.</div>")
+    return "".join(out)
+
+
 def render_collection(prs: dict[str, Any], filters: dict[str, Any],
                       combined: dict[str, Any], batches: list[dict[str, Any]]) -> str:
     """Repo/PR collection and the funnel through to verified tasks.
@@ -1019,14 +1078,24 @@ def render_collection(prs: dict[str, Any], filters: dict[str, Any],
 
     # Filters are settings, not measurements — a table states that plainly, where a
     # bar invites reading them as quantities on the same scale as everything else.
-    filter_rows = "".join(
+    def filter_group(stage: str) -> str:
+        rows = "".join(
+            f"<tr><td>{html.escape(str(k))}</td><td class='mono'>{html.escape(str(v))}</td></tr>"
+            for k, v in (filters or {}).items()
+            if FILTER_DOCS.get(str(k), ("other",))[0] == stage
+        )
+        return f"<table>{rows}</table>" if rows else ""
+
+    ungrouped = "".join(
         f"<tr><td>{html.escape(str(k))}</td><td class='mono'>{html.escape(str(v))}</td></tr>"
-        for k, v in (filters or {}).items()
+        for k, v in (filters or {}).items() if str(k) not in FILTER_DOCS
     )
-    filter_table = (
-        f'<table><tr><th>Setting</th><th>Value</th></tr>{filter_rows}</table>'
-        if filter_rows else '<div class="muted">no filters configured</div>'
-    )
+    repo_group, pr_group = filter_group("repo"), filter_group("pr")
+    filter_table = "".join(filter(None, [
+        f"<div class='sub'>Repository-level</div>{repo_group}" if repo_group else "",
+        f"<div class='sub'>Pull-request-level</div>{pr_group}" if pr_group else "",
+        f"<div class='sub'>Other</div><table>{ungrouped}</table>" if ungrouped else "",
+    ])) or '<div class="muted">no filters configured</div>' 
 
     top_repos: Counter[str] = Counter()
     for e in langs.values():
@@ -1073,7 +1142,9 @@ def render_collection(prs: dict[str, Any], filters: dict[str, Any],
     <section class="tag-card"><h3>Most-collected repositories <span>top 12 by PR count</span></h3>
       {repo_table}
     </section>
-    <section class="tag-card"><h3>Collection filters <span>configuration, not measurements</span></h3>
+    <section class="tag-card"><h3>Collection filters <span>configuration, not measurements</span>
+      <button class="help-btn" id="filterHelp" type="button" aria-label="What these mean"
+        title="What each threshold means">{HELP_SVG}</button></h3>
       {filter_table}
     </section>
   </div>
@@ -1119,6 +1190,7 @@ def render_html(
     config_path: Path = CONFIG_PATH,
 ) -> str:
     info_html = render_info(batches, prs or {}, filters or {}, config_path)
+    filter_help = render_filter_help()
     prs = prs or {"exists": False, "dir": "", "languages": {}, "total_prs": 0, "total_repos": 0}
     combined = combine_datasets(batches)
     grand_total = combined["total"]
@@ -1200,6 +1272,17 @@ def render_html(
   </div>
 </div>
 
+<div class="modal" id="filterHelpPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3>Collection filters</h3>
+        <div class="sub">the thresholds a repository and a pull request must clear to be collected</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">{filter_help}</div>
+  </div>
+</div>
+
 <div class="modal" id="infoPanel" role="dialog" aria-modal="true" hidden>
   <div class="modal-box">
     <div class="modal-head">
@@ -1227,7 +1310,8 @@ var PAGE_META = {{
 }})();
 
 /* Two modals, one at a time. Closed by the X, by the backdrop, or by Escape. */
-var MODALS = [['infoToggle', 'infoPanel'], ['metricsToggle', 'metricsPanel']]
+var MODALS = [['infoToggle', 'infoPanel'], ['metricsToggle', 'metricsPanel'],
+              ['filterHelp', 'filterHelpPanel']]
   .map(function (p) {{
     return {{btn: document.getElementById(p[0]), panel: document.getElementById(p[1])}};
   }})
