@@ -195,9 +195,15 @@ def collect_task_dim(tasks_dir: Path) -> dict[str, dict[str, Any]]:
         language = normalize_language(override) if override else infer_language(task_name, metadata)
         label, score = infer_difficulty(data, metadata)
 
+        # An adapter that records the repository explicitly is more reliable than
+        # splitting the directory name, which assumes the "owner__repo-N" shape.
+        extra = metadata.get("extra") if isinstance(metadata.get("extra"), dict) else {}
+        owner, repo_name = str(extra.get("user") or ""), str(extra.get("repo") or "")
+        repo = f"{owner}/{repo_name}" if owner and repo_name else (repo_name or task_repo(task_name))
+
         tasks[task_name] = {
             "task_name": task_name,
-            "repo": task_repo(task_name),
+            "repo": repo,
             "language": language,
             # harbor 4-tuple: [language, area, topic, bug_class]
             "area": tags[1].strip().lower() if len(tags) >= 2 and tags[1] else "",
