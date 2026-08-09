@@ -364,7 +364,7 @@ code, pre, .mono { font-family: var(--font-mono); }
   justify-content: center; padding: 32px 24px; background: rgba(17, 17, 17, .32); }
 :root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .5); }
 .modal[hidden] { display: none; }
-.modal-box { width: min(760px, 100%); max-height: min(80vh, 780px); display: flex;
+.modal-box { width: min(920px, 94vw); max-height: min(80vh, 780px); display: flex;
   flex-direction: column; background: var(--c-panel); border: 1px solid var(--c-border);
   border-radius: 16px; box-shadow: 0 24px 64px rgba(0, 0, 0, .18); overflow: hidden; }
 :root[data-theme="dark"] .modal-box { box-shadow: 0 24px 64px rgba(0, 0, 0, .6); }
@@ -386,7 +386,7 @@ code, pre, .mono { font-family: var(--font-mono); }
 .modal-body td { padding: 8px 0; border-bottom: 1px solid var(--c-border);
   vertical-align: top; text-align: left; line-height: 1.5; }
 .modal-body tr:last-child td { border-bottom: 0; }
-.modal-body td:first-child { color: var(--c-fg-mute); width: 34%; padding-right: 18px;
+.modal-body td:first-child { color: var(--c-fg-mute); width: 27%; padding-right: 20px;
   white-space: nowrap; }
 .modal-body td.mono { font-family: var(--font-mono); font-size: 11.5px; word-break: break-all;
   color: var(--c-fg); }
@@ -443,16 +443,36 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
 .stacked.empty { color: var(--c-fg-mute); font-size: 12px; background: transparent; }
 .seg { opacity: .82; }
 .seg.easy { background: var(--c-good); } .seg.medium { background: var(--c-warn); } .seg.hard { background: var(--c-bad); }
+/* Label bar and its legend on one line, order statistics beside them: the two
+   tables this replaces spent a full row each on seven short numbers. */
+.diff-split { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.4fr);
+  gap: 10px 28px; align-items: center; }
+.diff-bar .stacked { height: 11px; }
+.diff-bar .mini { display: none; }
+.diff-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px;
+  font-size: 11.5px; color: var(--c-fg-mute); }
+.diff-legend b { color: var(--c-fg); font-family: var(--font-mono); font-weight: 650;
+  margin-left: 3px; }
+.diff-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+  margin-right: 5px; vertical-align: -1px; opacity: .82; }
+.diff-legend .dot.easy { background: var(--c-good); }
+.diff-legend .dot.medium { background: var(--c-warn); }
+.diff-legend .dot.hard { background: var(--c-bad); }
+.diff-stats th, .diff-stats td { padding: 5px 8px; }
+@media (max-width: 820px) { .diff-split { grid-template-columns: 1fr; } }
 .mini { font-size: 12px; color: var(--c-fg-mute); margin-top: 2px; font-family: var(--font-mono); }
 
 /* Distribution bars. The old layout was a flex row with a fixed 230px label and a
    fixed 150px count, which left a wide dead gutter on short labels; and every list
    ran as one tall single column. Now each row is a 3-column grid sized to content,
    and the list itself flows into as many columns as the card is wide. */
-.tag-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 2px 22px; align-content: start; }
-.tag-row { display: grid; grid-template-columns: minmax(80px, 150px) minmax(90px, 1fr) 78px;
-  gap: 8px; align-items: center; padding: 2px 0; font-size: 12.5px; }
+/* Wide gutters between column groups, tight ones inside a row: the label should
+   read as attached to its own bar, not float between two of them. */
+.tag-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 2px 44px; align-content: start; }
+.tag-row { display: grid; grid-template-columns: minmax(64px, 118px) minmax(80px, 1fr) 74px;
+  column-gap: 7px; align-items: center; padding: 2px 0; font-size: 12.5px; }
+.tag-row .tag-count { padding-left: 4px; }
 .tag-name { font-family: var(--font-mono); font-size: 12px; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag-track { height: 7px; background: var(--c-track); border-radius: 4px; overflow: hidden; }
@@ -636,27 +656,28 @@ def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bo
 
   <div class="panel">
     <h2>Difficulty distribution <span>{display}</span></h2>
-    <table>
-      <tr><th>Label breakdown</th><th>easy</th><th>medium</th><th>hard</th></tr>
-      <tr>
-        <td>{render_label_bar(data)}</td>
-        <td>{fmt_int(label_count(data, 'easy'))}</td>
-        <td>{fmt_int(label_count(data, 'medium'))}</td>
-        <td>{fmt_int(label_count(data, 'hard'))}</td>
-      </tr>
-    </table>
-    <table style="margin-top:14px;">
-      <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
-      <tr>
-        <td>{fmt_int(stats['count'])}</td>
-        <td>{fmt_float(stats['min'], 1)}</td>
-        <td>{fmt_float(stats['p25'], 1)}</td>
-        <td>{fmt_float(stats['median'], 1)}</td>
-        <td>{fmt_float(stats['mean'], 2)}</td>
-        <td>{fmt_float(stats['p75'], 1)}</td>
-        <td>{fmt_float(stats['max'], 1)}</td>
-      </tr>
-    </table>
+    <div class="diff-split">
+      <div>
+        <div class="diff-bar">{render_label_bar(data)}</div>
+        <div class="diff-legend">
+          <span><i class="dot easy"></i>easy <b>{fmt_int(label_count(data, 'easy'))}</b></span>
+          <span><i class="dot medium"></i>medium <b>{fmt_int(label_count(data, 'medium'))}</b></span>
+          <span><i class="dot hard"></i>hard <b>{fmt_int(label_count(data, 'hard'))}</b></span>
+        </div>
+      </div>
+      <table class="diff-stats">
+        <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
+        <tr>
+          <td>{fmt_int(stats['count'])}</td>
+          <td>{fmt_float(stats['min'], 1)}</td>
+          <td>{fmt_float(stats['p25'], 1)}</td>
+          <td>{fmt_float(stats['median'], 1)}</td>
+          <td>{fmt_float(stats['mean'], 2)}</td>
+          <td>{fmt_float(stats['p75'], 1)}</td>
+          <td>{fmt_float(stats['max'], 1)}</td>
+        </tr>
+      </table>
+    </div>
   </div>
 
   <div class="grid2">
