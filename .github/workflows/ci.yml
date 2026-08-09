@@ -126,6 +126,7 @@ jobs:
         working-directory: blocks/curator
         run: |
           set -euo pipefail
+          source "$CICD_SHARED/.env"
           CANON="${SHARED_RUNTIME}/curator"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh curator"; exit 1; }
           mkdir -p repos artifacts artifacts/swe_tasks
@@ -134,7 +135,10 @@ jobs:
           if [ -e "$CANON/repos/legoflow-curator/.git" ]; then
             ln -s "$CANON/repos/legoflow-curator" repos/legoflow-curator
           else
-            export GITHUB_TOKEN="${GITHUB_TOKENS%%,*}"
+            if [ -n "${GITHUB_TOKENS:-}" ]; then
+              export GITHUB_TOKEN="${GITHUB_TOKENS%%,*}"
+            fi
+            [ -n "${GITHUB_TOKEN:-}" ] || { echo "ERROR: no private-submodule token configured"; exit 1; }
             GIT_TERMINAL_PROMPT=0 git -C ../.. \
               -c 'credential.helper=!f() { echo username=x-access-token; echo password=$GITHUB_TOKEN; }; f' \
               submodule update --init --recursive -- blocks/curator/repos/legoflow-curator
@@ -220,13 +224,17 @@ jobs:
         working-directory: blocks/curator
         run: |
           set -euo pipefail
+          source "$CICD_SHARED/.env"
           CANON="${SHARED_RUNTIME}/curator"
           mkdir -p repos artifacts
           rm -rf repos/legoflow-curator artifacts/envs gh_token.txt
           if [ -e "$CANON/repos/legoflow-curator/.git" ]; then
             ln -s "$CANON/repos/legoflow-curator" repos/legoflow-curator
           else
-            export GITHUB_TOKEN="${GITHUB_TOKENS%%,*}"
+            if [ -n "${GITHUB_TOKENS:-}" ]; then
+              export GITHUB_TOKEN="${GITHUB_TOKENS%%,*}"
+            fi
+            [ -n "${GITHUB_TOKEN:-}" ] || { echo "ERROR: no private-submodule token configured"; exit 1; }
             GIT_TERMINAL_PROMPT=0 git -C ../.. \
               -c 'credential.helper=!f() { echo username=x-access-token; echo password=$GITHUB_TOKEN; }; f' \
               submodule update --init --recursive -- blocks/curator/repos/legoflow-curator
