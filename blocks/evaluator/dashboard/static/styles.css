@@ -24,6 +24,8 @@
   --chart-grid: #302a24;
   --chart-axis: #4a423a;
   --chart-tick: #a9a297;
+  /* softened accent for repeated bar fills; brand colour unchanged */
+  --c-accent-fill: #c9805f;
   /* categorical series — fixed order, never cycled; 3-series cap on all-pairs forms */
   --c-series-1: #d95926;
   --c-series-2: #199e70;
@@ -58,6 +60,7 @@
   --chart-grid: #e6e3da;
   --chart-axis: #c9c3b6;
   --chart-tick: #6b6b66;
+  --c-accent-fill: #c96a45;
   --c-series-1: #eb6834;
   --c-series-2: #1baf7a;
   --c-series-3: #2a78d6;
@@ -393,7 +396,7 @@ table.tbl tr.group-row td {
 .bar-chart .bar .label { color: var(--c-fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-chart .bar .track { background: #302a2466; border-radius: 4px; height: 10px; overflow: hidden; }
 [data-theme="light"] .bar-chart .bar .track { background: #e6e3da; }
-.bar-chart .bar .fill { height: 100%; background: var(--c-accent); border-radius: 4px; }
+.bar-chart .bar .fill { height: 100%; background: var(--c-accent-fill); border-radius: 4px; }
 .bar-chart .bar .num { text-align: right; color: var(--c-fg); font-family: ui-monospace, monospace; font-size: 11.5px; }
 .bar-chart.split .bar { grid-template-columns: 140px 1fr 1fr 100px; }
 .bar-chart.split .track { background: #302a2466; position: relative; height: 14px; border-radius: 4px; }
@@ -777,8 +780,8 @@ pre.code-block {
 
 /* Modal — centred dialog over a dimmed page. Same spec across every block. */
 .modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center;
-  justify-content: center; padding: 24px; background: rgba(0, 0, 0, .6); }
-[data-theme="light"] .modal { background: rgba(17, 17, 17, .45); }
+  justify-content: center; padding: 24px; background: rgba(0, 0, 0, .5); }
+[data-theme="light"] .modal { background: rgba(17, 17, 17, .32); }
 .modal[hidden] { display: none; }
 .modal-box { width: min(720px, 100%); max-height: min(78vh, 760px); display: flex;
   flex-direction: column; background: var(--c-panel); border: 1px solid var(--c-border);

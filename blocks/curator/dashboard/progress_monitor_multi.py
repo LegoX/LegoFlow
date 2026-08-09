@@ -294,6 +294,9 @@ CSS = """
   --c-accent: #b3431f; --c-accent-soft: #b3431f1f; --c-accent-border: #b3431f80;
   --c-good: #3f8f2f; --c-bad: #d03b3b; --c-warn: #c8860d; --c-violet: #4a3aa7;
   --c-track: #e6e3da;
+  /* bar fills carry no text and repeat dozens of times per page, so they use a
+     softened tint of the accent; the brand colour itself is unchanged */
+  --c-accent-fill: #c96a45;
   --c-method-bg: #b3431f14; --c-method-head: #b3431f;
   font-size: 15px;
 }
@@ -304,6 +307,7 @@ CSS = """
   --c-accent: #efa07c; --c-accent-soft: #efa07c33; --c-accent-border: #efa07c80;
   --c-good: #4a9440; --c-bad: #d03b3b; --c-warn: #fab219; --c-violet: #9085e9;
   --c-track: #302a24;
+  --c-accent-fill: #c9805f;
   --c-method-bg: #efa07c1f; --c-method-head: #f5c9b4;
 }
 * { box-sizing: border-box; }
@@ -357,8 +361,8 @@ code, pre, .mono { font-family: var(--font-mono); }
 /* Modal — a centred dialog over a dimmed page, so what it says is the only thing
    competing for attention. Replaces a top-right dropdown that was easy to miss. */
 .modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center;
-  justify-content: center; padding: 24px; background: rgba(17, 17, 17, .45); }
-:root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .6); }
+  justify-content: center; padding: 24px; background: rgba(17, 17, 17, .32); }
+:root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .5); }
 .modal[hidden] { display: none; }
 .modal-box { width: min(720px, 100%); max-height: min(78vh, 760px); display: flex;
   flex-direction: column; background: var(--c-panel); border: 1px solid var(--c-border);
@@ -422,6 +426,7 @@ th:first-child, td:first-child { text-align: left; }
 th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .stacked { display: flex; height: 9px; border-radius: 5px; overflow: hidden; background: var(--c-track); min-width: 110px; }
 .stacked.empty { color: var(--c-fg-mute); font-size: 12px; background: transparent; }
+.seg { opacity: .82; }
 .seg.easy { background: var(--c-good); } .seg.medium { background: var(--c-warn); } .seg.hard { background: var(--c-bad); }
 .mini { font-size: 12px; color: var(--c-fg-mute); margin-top: 2px; font-family: var(--font-mono); }
 
@@ -436,7 +441,7 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
 .tag-name { font-family: var(--font-mono); font-size: 12px; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag-track { height: 7px; background: var(--c-track); border-radius: 4px; overflow: hidden; }
-.tag-fill { display: block; height: 100%; background: var(--c-accent); }
+.tag-fill { display: block; height: 100%; background: var(--c-accent-fill); }
 .tag-count { text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 11.5px; }
 .tag-card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; }
 .tag-card h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }

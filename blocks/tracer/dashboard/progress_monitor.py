@@ -2183,6 +2183,9 @@ CSS = """
   --button-bg: #fff;
   --button-hover: #f1efe9;
   --bar-bg: #e6e3da;
+  /* bar fills repeat dozens of times per page; a softened tint of the accent
+     keeps the page calm without changing the brand colour */
+  --accent-fill: #c96a45;
   --bar-text: #111111;
   --active-row: #f1efe9;
   --warn-bg: #fab21922;
@@ -2221,6 +2224,7 @@ CSS = """
   --button-bg: #1a171480;
   --button-hover: #302a2440;
   --bar-bg: #302a2466;
+  --accent-fill: #c9805f;
   --bar-text: #f0ede7;
   --active-row: #302a2440;
   --warn-bg: #fab21922;
@@ -2279,8 +2283,8 @@ button { border: 1px solid var(--line); background: var(--button-bg); color: var
 button:hover { border-color: var(--accent-border); background: var(--button-hover); color: var(--text); }
 .icon { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center;
-  justify-content: center; padding: 24px; background: rgba(17, 17, 17, .45); }
-:root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .6); }
+  justify-content: center; padding: 24px; background: rgba(17, 17, 17, .32); }
+:root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .5); }
 .modal[hidden] { display: none; }
 .modal-box { width: min(720px, 100%); max-height: min(78vh, 760px); display: flex;
   flex-direction: column; background: var(--panel); border: 1px solid var(--line);
@@ -2352,7 +2356,7 @@ td.job { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:
 .badge.missing { background: var(--badge-missing-bg); color: var(--badge-missing-text); }
 .badge.scaffold { background: var(--badge-scaffold-bg); color: var(--badge-scaffold-text); }
 .bar { position: relative; height: 18px; min-width: 140px; background: var(--bar-bg); border-radius: 999px; overflow: hidden; }
-.bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--blue); border-radius: inherit; }
+.bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--accent-fill); border-radius: inherit; }
 .bar span { position: relative; z-index: 1; display: block; line-height: 18px; text-align: center; font-size: 12px; color: var(--bar-text); font-weight: 650; }
 .muted { color: var(--muted); }
 .difficulty-warning { color: var(--amber); font-size: 12px; margin-top: 2px; }
@@ -2389,7 +2393,7 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .mini-bar-row { display: grid; grid-template-columns: minmax(110px, 220px) minmax(120px, 1fr) 80px; gap: 10px; align-items: center; }
 .mini-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
 .mini-bar-track { height: 10px; border-radius: 999px; background: var(--bar-bg); overflow: hidden; }
-.mini-bar-fill { height: 100%; background: var(--ink); border-radius: inherit; }
+.mini-bar-fill { height: 100%; background: var(--accent-fill); border-radius: inherit; }
 .mini-bar-value { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .split-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, .72fr); gap: 14px; align-items: start; }
 .source-link { border: 0; background: transparent; color: inherit; padding: 0; text-align: left; font: inherit; max-width: 100%; }
