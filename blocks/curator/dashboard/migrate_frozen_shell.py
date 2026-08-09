@@ -102,13 +102,31 @@ def build(doc: str) -> str:
         raise SystemExit("shell markers not found — did render_html's structure change?")
     out = shell[:start] + overview + shell[end:]
 
-    # sidebar/topbar counters the empty render could not know
+    # Sidebar counters. render_html() rendered the shell against an empty dataset
+    # list, so every one of these currently reads 0 -- which is indistinguishable
+    # from a real measurement. Backfill the two that are recoverable and blank the
+    # rest: `tagged` was stripped from the snapshot by inject_v2.py's unify pass,
+    # and a pooled mean difficulty needs per-dataset tagged counts as weights, so
+    # neither can be derived from rendered HTML. An em dash says "not available";
+    # a zero would lie.
     out = out.replace(
         '<span class="l">Total tasks</span><span class="v">0</span>',
         f'<span class="l">Total tasks</span><span class="v">{grand_total:,}</span>',
     ).replace(
         '<span class="l">Datasets</span><span class="v">0</span>',
         f'<span class="l">Datasets</span><span class="v">{len(datasets)}</span>',
+    ).replace(
+        '<span class="l">Tagged</span><span class="v">0</span>',
+        '<span class="l">Tagged</span><span class="v" title="not recoverable from the '
+        'rendered snapshot">&mdash;</span>',
+    ).replace(
+        '<span class="l">Mean difficulty</span><span class="v">0.00</span>',
+        '<span class="l">Mean difficulty</span><span class="v" title="needs per-dataset '
+        'tagged counts to pool; see each dataset\'s own panel">&mdash;</span>',
+    ).replace(
+        '<span class="nav-count">0</span>',
+        '<span class="nav-count" title="task rows are not exported in this snapshot">'
+        '&mdash;</span>',
     )
     out = re.sub(
         r"(id=\"page-sub\">)0 datasets · 0 tasks",
