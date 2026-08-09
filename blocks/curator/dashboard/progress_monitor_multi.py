@@ -354,21 +354,34 @@ code, pre, .mono { font-family: var(--font-mono); }
 :root[data-theme="dark"] .theme-toggle .theme-moon { display: none; }
 
 .content { flex: 1; overflow: auto; padding: 18px 24px 32px; }
-/* Info drawer — what this board is reading, straight from config.yaml */
-.info-wrap { position: relative; }
-.info-panel { position: absolute; right: 0; top: 44px; z-index: 40; width: min(560px, 92vw);
-  background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 14px 16px; }
-:root[data-theme="dark"] .info-panel { box-shadow: 0 10px 30px rgba(0,0,0,.5); }
-.info-panel h3 { margin: 0 0 8px; font-size: 14px; font-weight: 650; }
-.info-panel table { font-size: 12px; }
-.info-panel td.mono { font-family: var(--font-mono); font-size: 11.5px; word-break: break-all;
-  text-align: left; }
-.info-panel .method-card { background: transparent; border: 0; padding: 0; }
-.info-panel .method-card h3 { display: none; }
-.info-panel .method-body { font-size: 12.5px; line-height: 1.65; }
-.info-panel .sub { color: var(--c-fg-mute); font-size: 11.5px; margin: 10px 0 4px;
-  text-transform: uppercase; letter-spacing: .05em; font-weight: 650; }
+/* Modal — a centred dialog over a dimmed page, so what it says is the only thing
+   competing for attention. Replaces a top-right dropdown that was easy to miss. */
+.modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center;
+  justify-content: center; padding: 24px; background: rgba(17, 17, 17, .45); }
+:root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .6); }
+.modal[hidden] { display: none; }
+.modal-box { width: min(720px, 100%); max-height: min(78vh, 760px); display: flex;
+  flex-direction: column; background: var(--c-panel); border: 1px solid var(--c-border);
+  border-radius: 14px; box-shadow: 0 24px 60px rgba(0, 0, 0, .28); overflow: hidden; }
+:root[data-theme="dark"] .modal-box { box-shadow: 0 24px 60px rgba(0, 0, 0, .65); }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 16px 20px; border-bottom: 1px solid var(--c-border); }
+.modal-head h3 { margin: 0; font-size: 16px; font-weight: 650; }
+.modal-head .sub { color: var(--c-fg-mute); font-size: 12px; margin-top: 3px; }
+.modal-close { background: transparent; border: 1px solid transparent; color: var(--c-fg-mute);
+  border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 18px; line-height: 1;
+  flex: 0 0 32px; }
+.modal-close:hover { color: var(--c-fg); border-color: var(--c-border); }
+.modal-body { padding: 16px 20px 20px; overflow: auto; }
+.modal-body table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.modal-body td { padding: 5px 7px; border-bottom: 1px solid var(--c-border); text-align: left; }
+.modal-body td.mono { font-family: var(--font-mono); font-size: 11.5px; word-break: break-all; }
+.modal-body .sub { color: var(--c-fg-mute); font-size: 11.5px; margin: 14px 0 5px;
+  text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+.modal-body .sub:first-child { margin-top: 0; }
+.modal-body .method-card { background: transparent; border: 0; padding: 0; }
+.modal-body .method-card h3 { display: none; }
+.modal-body .method-body { font-size: 13px; line-height: 1.7; }
 .section-head { font-size: 12px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .07em; color: var(--c-fg-mute); margin: 22px 0 10px; }
 .section-head:first-child { margin-top: 4px; }
@@ -681,7 +694,6 @@ def render_info(batches: list[dict[str, Any]], prs: dict[str, Any],
     ) or "<tr><td colspan='3'>none</td></tr>"
 
     return (
-        "<h3>What this board is reading</h3>"
         f"<div class='mini'>config: {html.escape(str(config_path))}</div>"
         "<div class='sub'>Task batches</div>"
         f"<table>{task_rows}</table>"
@@ -1049,19 +1061,10 @@ def render_html(
         <div class="sub" id="page-sub">{overview_sub}</div>
       </div>
       <div class="topbar-actions">
-        <div class="info-wrap">
-          <button id="metricsToggle" class="icon-btn" type="button"
-            aria-label="Scoring and tagging" title="How difficulty and tags are produced">{METRICS_SVG}</button>
-          <div class="info-panel" id="metricsPanel" hidden>
-            <h3>Difficulty scoring &amp; semantic tagging</h3>
-            {METHODOLOGY_HTML}
-          </div>
-        </div>
-        <div class="info-wrap">
-          <button id="infoToggle" class="icon-btn" type="button"
-            aria-label="Dashboard info" title="What this board is reading">{INFO_SVG}</button>
-          <div class="info-panel" id="infoPanel" hidden>{info_html}</div>
-        </div>
+        <button id="metricsToggle" class="icon-btn" type="button"
+          aria-label="Scoring and tagging" title="How difficulty and tags are produced">{METRICS_SVG}</button>
+        <button id="infoToggle" class="icon-btn" type="button"
+          aria-label="Dashboard info" title="What this board is reading">{INFO_SVG}</button>
         <button id="themeToggle" class="icon-btn theme-toggle" type="button"
           aria-label="Toggle theme" title="Toggle theme"><span class="theme-moon">{MOON_SVG}</span><span class="theme-sun">{SUN_SVG}</span></button>
       </div>
@@ -1071,6 +1074,28 @@ def render_html(
       {render_collection(prs, filters or {}, combined, batches)}
       {render_task_list(batches, samples)}
     </div>
+  </div>
+</div>
+
+<div class="modal" id="metricsPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3>Difficulty scoring &amp; semantic tagging</h3>
+        <div class="sub">how each task's difficulty and 4-tag metadata are produced</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">{METHODOLOGY_HTML}</div>
+  </div>
+</div>
+
+<div class="modal" id="infoPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3>What this board is reading</h3>
+        <div class="sub">resolved from config.yaml at render time</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">{info_html}</div>
   </div>
 </div>
 <script>
@@ -1089,31 +1114,30 @@ var PAGE_META = {{
   document.documentElement.dataset.theme = saved || (prefersDark ? 'dark' : 'light');
 }})();
 
-/* Two top-right drawers, mutually exclusive: one says what was read, the other
-   how difficulty and tags were produced. */
-var DRAWERS = [['infoToggle', 'infoPanel'], ['metricsToggle', 'metricsPanel']]
+/* Two modals, one at a time. Closed by the X, by the backdrop, or by Escape. */
+var MODALS = [['infoToggle', 'infoPanel'], ['metricsToggle', 'metricsPanel']]
   .map(function (p) {{
     return {{btn: document.getElementById(p[0]), panel: document.getElementById(p[1])}};
   }})
   .filter(function (d) {{ return d.btn && d.panel; }});
 
-DRAWERS.forEach(function (d) {{
-  d.btn.addEventListener('click', function (e) {{
-    e.stopPropagation();
-    var wasHidden = d.panel.hidden;
-    DRAWERS.forEach(function (o) {{ o.panel.hidden = true; }});
-    d.panel.hidden = !wasHidden;
+function closeModals() {{ MODALS.forEach(function (m) {{ m.panel.hidden = true; }}); }}
+
+MODALS.forEach(function (m) {{
+  m.btn.addEventListener('click', function () {{
+    var wasHidden = m.panel.hidden;
+    closeModals();
+    m.panel.hidden = !wasHidden;
   }});
-}});
-document.addEventListener('click', function (e) {{
-  DRAWERS.forEach(function (d) {{
-    if (!d.panel.hidden && !d.panel.contains(e.target) && !d.btn.contains(e.target)) {{
-      d.panel.hidden = true;
+  m.panel.addEventListener('click', function (e) {{
+    // the backdrop is the panel itself; clicks inside .modal-box must not close it
+    if (e.target === m.panel || (e.target.hasAttribute && e.target.hasAttribute('data-close'))) {{
+      m.panel.hidden = true;
     }}
   }});
 }});
 document.addEventListener('keydown', function (e) {{
-  if (e.key === 'Escape') {{ DRAWERS.forEach(function (d) {{ d.panel.hidden = true; }}); }}
+  if (e.key === 'Escape') {{ closeModals(); }}
 }});
 
 document.getElementById('themeToggle').addEventListener('click', function () {{

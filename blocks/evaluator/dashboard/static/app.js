@@ -708,16 +708,13 @@ function applyLanguage() {
   const infoToggle = $("#info-toggle");
   const infoPanel = $("#info-panel");
   if (infoToggle && infoPanel) {
+    const infoBody = $("#info-body");
     const renderInfo = () => {
-      infoPanel.replaceChildren();
-      const h = document.createElement("h3");
-      h.textContent = "What this board is reading";
-      infoPanel.appendChild(h);
-
+      infoBody.replaceChildren();
       const sub = document.createElement("div");
       sub.className = "sub";
       sub.textContent = "Sources";
-      infoPanel.appendChild(sub);
+      infoBody.appendChild(sub);
 
       const rows = [
         ["jobs indexed", State.jobs.length ? String(State.jobs.length) : "\u2014"],
@@ -735,15 +732,16 @@ function applyLanguage() {
         tr.append(tdk, tdv);
         table.appendChild(tr);
       }
-      infoPanel.appendChild(table);
+      infoBody.appendChild(table);
     };
     infoToggle.addEventListener("click", (e) => {
       e.stopPropagation();
       if (infoPanel.hidden) renderInfo();
       infoPanel.hidden = !infoPanel.hidden;
     });
-    document.addEventListener("click", (e) => {
-      if (!infoPanel.hidden && !infoPanel.contains(e.target) && e.target !== infoToggle) {
+    // the backdrop is the panel itself; clicks inside .modal-box must not close it
+    infoPanel.addEventListener("click", (e) => {
+      if (e.target === infoPanel || (e.target.hasAttribute && e.target.hasAttribute("data-close"))) {
         infoPanel.hidden = true;
       }
     });

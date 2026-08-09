@@ -295,23 +295,47 @@ export default function App() {
                 <Info size={14} />
               </button>
               {infoOpen && (
-                <div className="absolute right-0 top-11 z-40 w-[min(560px,92vw)] rounded-lg border border-slate-800 bg-slate-900 p-4 shadow-xl text-left">
-                  <h3 className="text-sm font-semibold mb-2">{t("app.info")}</h3>
-                  <table className="w-full text-xs">
-                    <tbody>
-                      {[
-                        ["runs found", String(runs.length)],
-                        ["selected run", selectedRun || "\u2014"],
-                        ["refresh interval", `${refreshInterval / 1000}s`],
-                        ["API served from", location.origin],
-                      ].map(([k, v]) => (
-                        <tr key={k} className="border-b border-slate-800">
-                          <td className="py-1 pr-2 text-slate-400">{k}</td>
-                          <td className="py-1 font-mono break-all">{v}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div
+                  className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/60"
+                  role="dialog"
+                  aria-modal="true"
+                  onClick={(e) => {
+                    // backdrop only; clicks inside the box must not close it
+                    if (e.target === e.currentTarget) setInfoOpen(false);
+                  }}
+                >
+                  <div className="w-[min(720px,100%)] max-h-[78vh] flex flex-col rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden text-left">
+                    <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-800">
+                      <div>
+                        <h3 className="text-base font-semibold">{t("app.info")}</h3>
+                        <div className="text-xs text-slate-400 mt-1">resolved at load time</div>
+                      </div>
+                      <button
+                        onClick={() => setInfoOpen(false)}
+                        className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-200 hover:border hover:border-slate-800 text-lg leading-none"
+                        aria-label="Close"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="px-5 py-4 overflow-auto">
+                      <table className="w-full text-xs">
+                        <tbody>
+                          {[
+                            ["runs found", String(runs.length)],
+                            ["selected run", selectedRun || "\u2014"],
+                            ["refresh interval", `${refreshInterval / 1000}s`],
+                            ["API served from", location.origin],
+                          ].map(([k, v]) => (
+                            <tr key={k} className="border-b border-slate-800">
+                              <td className="py-1.5 pr-2 text-slate-400">{k}</td>
+                              <td className="py-1.5 font-mono break-all">{v}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

@@ -2278,18 +2278,29 @@ button, input, select { font: inherit; }
 button { border: 1px solid var(--line); background: var(--button-bg); color: var(--text); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
 button:hover { border-color: var(--accent-border); background: var(--button-hover); color: var(--text); }
 .icon { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.info-wrap { position: relative; }
-.info-panel { position: absolute; right: 0; top: 44px; z-index: 60; width: min(560px, 92vw);
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 14px 16px; text-align: left; }
-:root[data-theme="dark"] .info-panel { box-shadow: 0 10px 30px rgba(0,0,0,.5); }
-.info-panel h3 { margin: 0 0 8px; font-size: 14px; font-weight: 650; }
-.info-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.info-panel td { padding: 4px 6px; border-bottom: 1px solid var(--line); }
-.info-panel td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+.modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center;
+  justify-content: center; padding: 24px; background: rgba(17, 17, 17, .45); }
+:root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .6); }
+.modal[hidden] { display: none; }
+.modal-box { width: min(720px, 100%); max-height: min(78vh, 760px); display: flex;
+  flex-direction: column; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.28); overflow: hidden; text-align: left; }
+:root[data-theme="dark"] .modal-box { box-shadow: 0 24px 60px rgba(0,0,0,.65); }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.modal-head h3 { margin: 0; font-size: 16px; font-weight: 650; }
+.modal-head .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.modal-close { background: transparent; border: 1px solid transparent; color: var(--muted);
+  border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 18px; line-height: 1; flex: 0 0 32px; }
+.modal-close:hover { color: var(--text); border-color: var(--line); }
+.modal-body { padding: 16px 20px 20px; overflow: auto; }
+.modal-body table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.modal-body td { padding: 5px 7px; border-bottom: 1px solid var(--line); text-align: left; }
+.modal-body td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px; word-break: break-all; }
-.info-panel .sub { color: var(--muted); font-size: 11.5px; margin: 10px 0 4px;
-  text-transform: uppercase; letter-spacing: .05em; font-weight: 650; }
+.modal-body .sub { color: var(--muted); font-size: 11.5px; margin: 14px 0 5px;
+  text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+.modal-body .sub:first-child { margin-top: 0; }
 .icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; }
 .theme-toggle { min-width: 0; white-space: nowrap; }
 .theme-toggle .theme-sun { display: none; }
@@ -2685,7 +2696,6 @@ def render_html(
         ("Run index", index_path, None),
     ]
     info_html = (
-        "<h3>What this board is reading</h3>"
         "<div class='sub'>Sources</div><table>"
         + "".join(
             f"<tr><td>{html.escape(name)}</td>"
@@ -2882,14 +2892,21 @@ def render_html(
       <div class="topbar-actions">
         <span class="update-status">Updated {html.escape(now_str)} &middot; refresh {refresh_seconds}s</span>
         <button class="copy-btn" data-copy="data/summary.json">Copy summary</button>
-        <div class="info-wrap">
-          <button id="infoToggle" class="icon-btn" type="button" aria-label="Dashboard info" title="What this board is reading">{ICON_INFO}</button>
-          <div class="info-panel" id="infoPanel" hidden>{info_html}</div>
-        </div>
+        <button id="infoToggle" class="icon-btn" type="button" aria-label="Dashboard info" title="What this board is reading">{ICON_INFO}</button>
         <button id="refreshNow" class="icon-btn refresh-btn" type="button" aria-label="Refresh dashboard" title="Refresh dashboard">{icon_refresh}</button>
         <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="Toggle black and white theme" title="Toggle theme"><span class="theme-moon">{icon_moon}</span><span class="theme-sun">{icon_sun}</span></button>
       </div>
     </div>
+<div class="modal" id="infoPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3>What this board is reading</h3>
+        <div class="sub">resolved at render time</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">{info_html}</div>
+  </div>
+</div>
 <main class="content">
   <section id="overview" class="section active" data-title="Overview" data-subtitle="Monitor generation health, pass rate, quality score, and data coverage.">
     <div class="grid kpis">
@@ -4084,11 +4101,12 @@ document.addEventListener('click', event => {{
   const info = document.getElementById('infoPanel');
   const infoBtn = document.getElementById('infoToggle');
   if (info && infoBtn) {{
-    if (event.target === infoBtn || infoBtn.contains(event.target)) {{
-      info.hidden = !info.hidden;
+    if (infoBtn.contains(event.target)) {{ info.hidden = !info.hidden; return; }}
+    // the backdrop is the panel itself; clicks inside .modal-box must not close it
+    if (event.target === info || (event.target.hasAttribute && event.target.hasAttribute('data-close'))) {{
+      info.hidden = true;
       return;
     }}
-    if (!info.hidden && !info.contains(event.target)) {{ info.hidden = true; }}
   }}
   const nav = event.target.closest('.nav-item');
   if (nav) setPage(nav.dataset.page);
