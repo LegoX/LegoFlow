@@ -385,6 +385,25 @@ code, pre, .mono { font-family: var(--font-mono); }
 .section-head { font-size: 12px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .07em; color: var(--c-fg-mute); margin: 22px 0 10px; }
 .section-head:first-child { margin-top: 4px; }
+
+/* Collapsible sections. Statistics stays open — it is the reason to open the page;
+   everything denser is one click away, via native details/summary so it works
+   without JS. */
+.fold { margin: 18px 0 0; }
+.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
+  gap: 8px; padding: 9px 12px; border: 1px solid var(--c-border); border-radius: 10px;
+  background: var(--c-panel); font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--c-fg-mute); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary:hover { color: var(--c-fg); border-color: var(--c-accent-border); }
+.fold > summary .caret { transition: transform .15s ease; flex: 0 0 auto; }
+.fold[open] > summary .caret { transform: rotate(90deg); }
+.fold[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  color: var(--c-fg); }
+.fold > summary .hint { margin-left: auto; text-transform: none; letter-spacing: 0;
+  font-weight: 500; font-size: 11.5px; color: var(--c-fg-faint); }
+.fold-body { border: 1px solid var(--c-border); border-top: 0;
+  border-radius: 0 0 10px 10px; padding: 14px; }
 .page { display: none; }
 .page.active { display: block; }
 
@@ -426,6 +445,16 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
 
 /* Task List: one row per dataset, tracer's Jobs list shape. */
 .ds-list { display: flex; flex-direction: column; gap: 8px; }
+.ds-line { display: flex; align-items: stretch; gap: 8px; }
+.ds-line .ds-row { flex: 1; min-width: 0; }
+.samples-btn { flex: 0 0 auto; align-self: stretch; background: var(--c-bg-2);
+  border: 1px solid var(--c-border); color: var(--c-fg-dim); border-radius: 10px;
+  padding: 0 14px; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 650;
+  white-space: nowrap; }
+.samples-btn:hover:not(:disabled) { color: var(--c-accent); border-color: var(--c-accent-border); }
+.samples-btn:disabled { opacity: .45; cursor: default; }
+.samples-btn .n { color: var(--c-fg-mute); font-weight: 500; margin-left: 5px; }
+.modal-wide { width: min(1040px, 100%); max-height: min(86vh, 900px); }
 .ds-row { display: grid; grid-template-columns: minmax(180px, 1.4fr) repeat(5, minmax(76px, 1fr)) minmax(130px, 1.2fr);
   gap: 12px; align-items: center; width: 100%; text-align: left; cursor: pointer;
   background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
@@ -452,7 +481,7 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
   font: inherit; font-size: 13px; padding: 0 0 8px; }
 
 /* Sample task viewer */
-.sample-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px; }
+.sample-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px; }
 .sample-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
   background: var(--c-bg-2); border: 1px solid var(--c-border); border-radius: 8px;
   padding: 8px 10px; cursor: pointer; font: inherit; font-size: 12.5px; color: var(--c-fg);
@@ -462,7 +491,7 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
 .sample-row .sid { font-family: var(--font-mono); font-size: 11.5px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sample-row .smeta { color: var(--c-fg-mute); font-size: 11px; white-space: nowrap; }
-.sample-view { margin-top: 12px; border: 1px solid var(--c-border); border-radius: 10px;
+.sample-view { margin-top: 14px; border: 1px solid var(--c-border); border-radius: 10px;
   background: var(--c-bg-2); overflow: hidden; }
 .sample-head { padding: 10px 14px; border-bottom: 1px solid var(--c-border); }
 .sample-head .t { font-family: var(--font-mono); font-size: 13px; font-weight: 650; word-break: break-all; }
@@ -781,16 +810,24 @@ def render_overview(combined: dict[str, Any], batches: list[dict[str, Any]],
     <div class="card"><div class="k">Tagged</div><div class="v">{fmt_int(combined['tagged'])}</div></div>
   </div>
 
-  <div class="section-head">Pipeline funnel</div>
-  {funnel}
-  <div class="panel">
-    <h2>Task creation success <span>by language &mdash; verified / attempted</span></h2>
-    {render_rate_bars(rate_rows)}
-    <div class="mini">language is read from each task's task.toml, not its directory</div>
-  </div>
+  <details class="fold">
+    <summary>{CARET_SVG}Pipeline funnel
+      <span class="hint">repos &rarr; PRs &rarr; tasks, and success by language</span></summary>
+    <div class="fold-body">
+      {funnel}
+      <div class="panel" style="margin-bottom:0">
+        <h2>Task creation success <span>by language &mdash; verified / attempted</span></h2>
+        {render_rate_bars(rate_rows)}
+        <div class="mini">language is read from each task's task.toml, not its directory</div>
+      </div>
+    </div>
+  </details>
 
-  <div class="section-head">Task composition</div>
-  {body}
+  <details class="fold">
+    <summary>{CARET_SVG}Task composition
+      <span class="hint">difficulty, language, area, topic and bug-class distributions</span></summary>
+    <div class="fold-body">{body}</div>
+  </details>
 
 </div>
 """
@@ -802,49 +839,62 @@ def fmt_pct(v) -> str:
 
 def render_task_list(batches: list[dict[str, Any]],
                      samples: dict[str, Any] | None = None) -> str:
-    """One row per configured batch; clicking a row opens that batch's profile."""
-    rows, details = [], []
+    """One line per batch: the row opens its profile, Samples opens the viewer.
+
+    The two are siblings rather than nested, because a <button> cannot legally
+    contain another <button>.
+    """
+    lines, details = [], []
     for b in batches:
         stats = b["difficulty_stats"]
         missing = "" if b["exists"] else '<span class="desc">path not found</span>'
         origin = '<span class="desc">imported dataset</span>' if b.get("external") else ""
-        rows.append(f"""
-      <button class="ds-row" data-ds="{html.escape(b['name'])}">
-        <span><span class="name">{html.escape(b['name'])}</span>
-          <span class="desc">{html.escape(b['path'])}</span>{origin}{missing}</span>
-        <span><span class="k">Tasks</span><span class="v">{fmt_int(b['total'])}</span></span>
-        <span><span class="k">Verified</span><span class="v">{fmt_int(b['verified'])}</span></span>
-        <span><span class="k">Yield</span><span class="v">{fmt_pct(b['yield'])}</span></span>
-        <span><span class="k">Tagged</span><span class="v">{fmt_int(b['tagged'])}</span></span>
-        <span><span class="k">Mean diff.</span><span class="v">{fmt_float(stats['mean'], 2)}</span></span>
-        <span><span class="k">Easy / medium / hard</span>{render_label_bar(b)}</span>
-      </button>""")
-        panel = render_panel((b["name"], b["name"], b["path"]), b, False)
         idx = (samples or {}).get(b["name"])
-        if idx:
-            sample_rows = "".join(
-                f'<button class="sample-row" data-batch="{html.escape(b["name"])}" '
-                f'data-task="{html.escape(t["task_name"])}">'
-                f'<span class="sid">{html.escape(t["task_name"])}</span>'
-                f'<span class="smeta">{html.escape(str(t.get("language") or ""))}'
-                f' · {html.escape(str(t.get("difficulty") or ""))}</span></button>'
-                for t in idx["tasks"]
-            )
-            block = (
-                f'<div class="panel"><h2>Sample tasks '
-                f'<span>{idx["count"]} of {b["total"]:,} &mdash; open one to see what a task contains</span></h2>'
-                f'<div class="sample-list">{sample_rows}</div>'
-                f'<div class="sample-view" id="sv-{html.escape(b["name"])}" hidden></div></div>'
-            )
-            panel = panel.replace('<div class="cards">', block + '<div class="cards">', 1)
-        details.append(panel)
-    body = ''.join(rows) or '<div class="empty-state">No batches configured — set runtime_info.input.dashboard.datasets in config.yaml.</div>'
+        sample_btn = (
+            f'<button class="samples-btn" data-samples="{html.escape(b["name"])}" '
+            f'title="Open {idx["count"]} sample tasks">Samples <span class="n">{idx["count"]}</span></button>'
+            if idx else '<button class="samples-btn" disabled title="no samples cached">Samples</button>'
+        )
+        lines.append(f"""
+      <div class="ds-line">
+        <button class="ds-row" data-ds="{html.escape(b['name'])}">
+          <span><span class="name">{html.escape(b['name'])}</span>
+            <span class="desc">{html.escape(b['path'])}</span>{origin}{missing}</span>
+          <span><span class="k">Tasks</span><span class="v">{fmt_int(b['total'])}</span></span>
+          <span><span class="k">Verified</span><span class="v">{fmt_int(b['verified'])}</span></span>
+          <span><span class="k">Yield</span><span class="v">{fmt_pct(b['yield'])}</span></span>
+          <span><span class="k">Tagged</span><span class="v">{fmt_int(b['tagged'])}</span></span>
+          <span><span class="k">Mean diff.</span><span class="v">{fmt_float(stats['mean'], 2)}</span></span>
+          <span><span class="k">Easy / medium / hard</span>{render_label_bar(b)}</span>
+        </button>
+        {sample_btn}
+      </div>""")
+        details.append(render_panel((b["name"], b["name"], b["path"]), b, False))
+
+    body = "".join(lines) or (
+        '<div class="empty-state">No batches configured &mdash; set '
+        'runtime_info.input.dashboard.tasks in config.yaml.</div>'
+    )
     return f"""
 <div class="page" id="page-tasks">
   <div class="ds-list">{body}</div>
   <div class="ds-detail" id="ds-detail" hidden>
     <button class="back-link" id="ds-back">&larr; All batches</button>
     {''.join(details)}
+  </div>
+</div>
+
+<div class="modal" id="samplesPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box modal-wide">
+    <div class="modal-head">
+      <div><h3 id="samplesTitle">Sample tasks</h3>
+        <div class="sub" id="samplesSub">pick one to see what a task contains</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="sample-list" id="samplesList"></div>
+      <div class="sample-view" id="samplesView" hidden></div>
+    </div>
   </div>
 </div>
 """
@@ -979,6 +1029,8 @@ FAVICON_SVG = (
 FAVICON_DATA_URI = "data:image/svg+xml;base64," + base64.b64encode(
     FAVICON_SVG.encode("utf-8")
 ).decode("ascii")
+
+CARET_SVG = ('<svg class="caret icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="M9 6l6 6-6 6"></path></svg>')
 
 METRICS_SVG = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
                '<path d="M4 19h16"></path><path d="M7 19v-7"></path>'
@@ -1121,7 +1173,11 @@ var MODALS = [['infoToggle', 'infoPanel'], ['metricsToggle', 'metricsPanel']]
   }})
   .filter(function (d) {{ return d.btn && d.panel; }});
 
-function closeModals() {{ MODALS.forEach(function (m) {{ m.panel.hidden = true; }}); }}
+function closeModals() {{
+  MODALS.forEach(function (m) {{ m.panel.hidden = true; }});
+  var sp = document.getElementById('samplesPanel');
+  if (sp) {{ sp.hidden = true; }}
+}}
 
 MODALS.forEach(function (m) {{
   m.btn.addEventListener('click', function () {{
@@ -1184,8 +1240,10 @@ document.querySelectorAll('.ds-row').forEach(function (row) {{
   }});
 }});
 
-/* Sample viewer: fetch a batch's cached samples once, then render tabs. */
+/* Sample viewer. The cached JSON per batch is fetched once, then the modal shows
+   a picker over the ten samples and the selected one's files as tabs. */
 var sampleCache = {{}};
+var samplesModal = document.getElementById('samplesPanel');
 
 function escapeHtml(t) {{
   return String(t).replace(/[&<>]/g, function (c) {{
@@ -1202,9 +1260,8 @@ function highlightDiff(text) {{
   }}).join('\\n');
 }}
 
-function renderSample(batch, sample) {{
-  var view = document.getElementById('sv-' + batch);
-  if (!view) {{ return; }}
+function showSample(sample) {{
+  var view = document.getElementById('samplesView');
   var meta = [sample.language, sample.difficulty, sample.area, sample.topic, sample.bug_class]
     .filter(Boolean).join(' · ');
   var tabs = sample.parts.map(function (p, i) {{
@@ -1216,13 +1273,14 @@ function renderSample(batch, sample) {{
   view.hidden = false;
   view.innerHTML =
     '<div class="sample-head"><div class="t">' + escapeHtml(sample.task_name) + '</div>' +
-    '<div class="m">' + escapeHtml(sample.repo || '') + (meta ? ' &nbsp;|&nbsp; ' + escapeHtml(meta) : '') + '</div></div>' +
+    '<div class="m">' + escapeHtml(sample.repo || '') +
+    (meta ? ' &nbsp;|&nbsp; ' + escapeHtml(meta) : '') + '</div></div>' +
     '<div class="tabs">' + tabs + '</div>' +
-    '<div class="sample-body"><pre class="sample-pre" id="sp-' + batch + '"></pre></div>';
+    '<div class="sample-body"><pre class="sample-pre" id="samplesPre"></pre></div>';
 
   function show(i) {{
     var part = sample.parts[i];
-    var pre = document.getElementById('sp-' + batch);
+    var pre = document.getElementById('samplesPre');
     pre.innerHTML = /\\.patch$/.test(part.file) ? highlightDiff(part.text) : escapeHtml(part.text);
     view.querySelectorAll('.tab').forEach(function (t) {{
       t.classList.toggle('active', t.dataset.i === String(i));
@@ -1235,34 +1293,65 @@ function renderSample(batch, sample) {{
   else {{ view.innerHTML += '<div class="empty-state">no readable files in this task</div>'; }}
 }}
 
-document.querySelectorAll('.sample-row').forEach(function (row) {{
-  row.addEventListener('click', function () {{
-    var batch = row.dataset.batch, task = row.dataset.task;
-    document.querySelectorAll('.sample-row[data-batch="' + batch + '"]').forEach(function (o) {{
+function openSamples(batch) {{
+  var info = SAMPLE_INDEX[batch];
+  var list = document.getElementById('samplesList');
+  var view = document.getElementById('samplesView');
+  document.getElementById('samplesTitle').textContent = 'Sample tasks — ' + batch;
+  view.hidden = true;
+  view.innerHTML = '';
+  closeModals();
+  samplesModal.hidden = false;
+
+  if (!info) {{
+    list.innerHTML = '<div class="empty-state">no samples cached for this batch</div>';
+    return;
+  }}
+  document.getElementById('samplesSub').textContent =
+    info.count + ' of this batch — pick one to see what a task contains';
+  list.innerHTML = info.tasks.map(function (t) {{
+    return '<button class="sample-row" data-task="' + escapeHtml(t.task_name) + '">' +
+      '<span class="sid">' + escapeHtml(t.task_name) + '</span>' +
+      '<span class="smeta">' + escapeHtml([t.language, t.difficulty].filter(Boolean).join(' · ')) +
+      '</span></button>';
+  }}).join('');
+
+  function pick(row) {{
+    list.querySelectorAll('.sample-row').forEach(function (o) {{
       o.classList.toggle('active', o === row);
     }});
-    var view = document.getElementById('sv-' + batch);
-    view.hidden = false;
-    view.innerHTML = '<div class="empty-state">loading…</div>';
-
-    var pick = function (list) {{
-      var s = list.filter(function (x) {{ return x.task_name === task; }})[0];
-      if (s) {{ renderSample(batch, s); }}
-      else {{ view.innerHTML = '<div class="empty-state">sample not found</div>'; }}
-    }};
-    if (sampleCache[batch]) {{ pick(sampleCache[batch]); return; }}
-    var info = SAMPLE_INDEX[batch];
-    if (!info) {{ view.innerHTML = '<div class="empty-state">no samples cached</div>'; return; }}
-    fetch(info.file).then(function (r) {{
-      if (!r.ok) {{ throw new Error('HTTP ' + r.status); }}
-      return r.json();
-    }}).then(function (list) {{
-      sampleCache[batch] = list;
-      pick(list);
-    }}).catch(function (e) {{
-      view.innerHTML = '<div class="empty-state">could not load samples: ' + escapeHtml(e.message) + '</div>';
-    }});
+    var s = (sampleCache[batch] || []).filter(function (x) {{
+      return x.task_name === row.dataset.task;
+    }})[0];
+    if (s) {{ showSample(s); }}
+  }}
+  list.querySelectorAll('.sample-row').forEach(function (row) {{
+    row.addEventListener('click', function () {{ pick(row); }});
   }});
+
+  if (sampleCache[batch]) {{ return; }}
+  view.hidden = false;
+  view.innerHTML = '<div class="empty-state">loading…</div>';
+  fetch(info.file).then(function (r) {{
+    if (!r.ok) {{ throw new Error('HTTP ' + r.status); }}
+    return r.json();
+  }}).then(function (data) {{
+    sampleCache[batch] = data;
+    view.hidden = true;
+    view.innerHTML = '';
+  }}).catch(function (e) {{
+    view.innerHTML = '<div class="empty-state">could not load samples: ' +
+      escapeHtml(e.message) + '</div>';
+  }});
+}}
+
+document.querySelectorAll('.samples-btn[data-samples]').forEach(function (btn) {{
+  btn.addEventListener('click', function () {{ openSamples(btn.dataset.samples); }});
+}});
+samplesModal.addEventListener('click', function (e) {{
+  if (e.target === samplesModal || (e.target.hasAttribute && e.target.hasAttribute('data-close'))) {{
+    samplesModal.hidden = true;
+  }}
 }});
 
 var back = document.getElementById('ds-back');
