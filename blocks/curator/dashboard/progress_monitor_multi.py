@@ -25,7 +25,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).parent))
 
 from check_task_dir import check_task_dir, format_result  # noqa: E402
-from collection_stats import collect_pr_stats  # noqa: E402
+from collection_stats import collect_pr_stats_multi  # noqa: E402
 from task_toml import collect_task_dim, read_verified_ids  # noqa: E402
 
 DASHBOARD_ROOT = Path(__file__).parent
@@ -42,10 +42,11 @@ def _resolve(path_str: str, base: Path) -> Path:
 
 
 def load_dashboard_config(config_path: Path = CONFIG_PATH) -> dict[str, Any]:
-    """Resolve the monitored batches and the PR-collection directory.
+    """Resolve the monitored task batches and PR-collection directories.
 
-    `collected_prs_dir` falls back to pr_collection.output_dir so the same path
-    is not configured twice.
+    `tasks` and `prs` are both `name: path` maps. A task path must be a list of
+    harbor tasks; a PR path is a collection directory whose per-language files are
+    discovered automatically — one entry covers every language.
     """
     try:
         import yaml
@@ -59,30 +60,31 @@ def load_dashboard_config(config_path: Path = CONFIG_PATH) -> dict[str, Any]:
     base = config_path.parent.resolve()
     inp = ((cfg.get("runtime_info") or {}).get("input") or {})
     dash = inp.get("dashboard") or {}
-    datasets = dash.get("datasets") or {}
 
-    batches = []
-    for name, raw in datasets.items():
-        # `name: path`, or `name: {path: ..., external: true}` for imported
-        # datasets that have no PR provenance.
-        if isinstance(raw, dict):
-            path_str, external = str(raw.get("path") or ""), bool(raw.get("external"))
-        else:
-            path_str, external = str(raw or ""), False
-        if not path_str.strip():
-            continue
-        batches.append({
-            "name": str(name),
-            "path": _resolve(path_str, base),
-            "external": external,
-        })
+    def entries(section: Any) -> list[dict[str, Any]]:
+        out = []
+        for name, raw in (section or {}).items():
+            # `name: path`, or `name: {path: ..., external: true}` for imported
+            # datasets that have no PR provenance.
+            if isinstance(raw, dict):
+                path_str, external = str(raw.get("path") or ""), bool(raw.get("external"))
+            else:
+                path_str, external = str(raw or ""), False
+            if path_str.strip():
+                out.append({"name": str(name), "path": _resolve(path_str, base),
+                            "external": external})
+        return out
 
-    prs_raw = str(dash.get("collected_prs_dir") or "").strip()
-    if not prs_raw:
-        prs_raw = str((inp.get("pr_collection") or {}).get("output_dir") or "").strip()
+    prs = entries(dash.get("prs"))
+    if not prs:
+        # fall back to the collector's own output dir rather than configuring it twice
+        legacy = str((inp.get("pr_collection") or {}).get("output_dir") or "").strip()
+        if legacy:
+            prs = [{"name": "collected_prs", "path": _resolve(legacy, base), "external": False}]
+
     return {
-        "batches": batches,
-        "collected_prs_dir": _resolve(prs_raw, base) if prs_raw else None,
+        "batches": entries(dash.get("tasks")),
+        "prs": prs,
         "pr_filters": (inp.get("pr_collection") or {}).get("filters") or {},
     }
 
@@ -536,14 +538,17 @@ def combine_datasets(batches: list[dict[str, Any]]) -> dict[str, Any]:
 
     labels: Counter[str] = Counter()
     langs: Counter[str] = Counter()
+    lang_verified: Counter[str] = Counter()
     areas: Counter[str] = Counter()
     topics: Counter[str] = Counter()
     bugs: Counter[str] = Counter()
     scores: list[float] = []
     tagged = 0
 
-    for meta in seen.values():
+    for task_name, meta in seen.items():
         langs[meta["language"]] += 1
+        if task_name in verified:
+            lang_verified[meta["language"]] += 1
         if meta["difficulty"] and meta["difficulty"] != "unknown":
             labels[meta["difficulty"]] += 1
         if meta["score"] is not None:
@@ -568,6 +573,7 @@ def combine_datasets(batches: list[dict[str, Any]]) -> dict[str, Any]:
         "difficulty_bins": score_bins(scores),
         "difficulty_labels": dict(labels),
         "languages": dict(langs.most_common()),
+        "languages_verified": dict(lang_verified),
         "areas": dict(areas.most_common()),
         "topics": dict(topics.most_common()),
         "bug_classes": dict(bugs.most_common()),
@@ -577,10 +583,28 @@ def combine_datasets(batches: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def render_rate_bars(rows: list[tuple[str, int, int]]) -> str:
+    """name / numerator / denominator -> a bar per row, scaled 0-100%."""
+    rows = [r for r in rows if r[2]]
+    if not rows:
+        return '<div class="muted">no data</div>'
+    out = []
+    for name, num, den in sorted(rows, key=lambda r: -(r[1] / r[2])):
+        pct = num / den * 100.0
+        out.append(
+            '<div class="tag-row">'
+            f'<span class="tag-name">{html.escape(name)}</span>'
+            f'<span class="tag-track"><span class="tag-fill" style="width:{pct:.2f}%"></span></span>'
+            f'<span class="tag-count">{pct:.1f}% ({num:,}/{den:,})</span>'
+            '</div>'
+        )
+    return '<div class="tag-rows">' + "\n".join(out) + "</div>"
+
+
 def render_overview(combined: dict[str, Any], batches: list[dict[str, Any]],
                     prs: dict[str, Any]) -> str:
-    """Global only: every batch folded into one set of figures, plus the headline
-    collection rates. Per-batch detail lives on the Task List."""
+    """Headline figures first, then the stage-by-stage funnel, then per-language
+    task-creation success. Per-batch detail lives on the Task List."""
     body = render_panel(("all", "All batches", ""), combined, True)
     body = body.replace('<div class="ds-panel active" data-ds="all">', "", 1).rstrip()
     if body.endswith("</div>"):
@@ -592,40 +616,64 @@ def render_overview(combined: dict[str, Any], batches: list[dict[str, Any]],
     scanned = o.get("PRs Scanned")
     merged = o.get("PRs Merged")
     qualifying = o.get("PRs Qualifying")
-    # union, not sum: pipeline pools overlap, so adding their totals would
-    # double-count the tasks that appear in more than one
+    collected = (prs or {}).get("total_prs") or 0
+    repos = (prs or {}).get("total_repos") or 0
+
     pipeline_ids: set[str] = set()
     for b in batches:
         if not b.get("external"):
             pipeline_ids |= set(b.get("tasks", {}))
-    pipeline_tasks = len(pipeline_ids)
+    generated = len(pipeline_ids)
+    verified = combined["verified"]
 
     def rate(num, den):
         return (num / den) if (num is not None and den) else None
 
-    collection = ""
+    # PR retention: of everything the collector scanned, what survived filtering.
+    pr_retention = rate(qualifying, scanned)
+    # Task creation success: verified out of every task the pipeline attempted.
+    create_rate = rate(verified, combined["total"])
+
+    funnel = ""
     if o:
-        collection = f"""
+        funnel = f"""
   <div class="panel">
-    <h2>Collection &rarr; tasks <span>headline rates</span></h2>
+    <h2>From repos to verified tasks <span>each stage against the one above</span></h2>
     <table>
-      <tr><th>Stage</th><th>Count</th><th>Rate</th></tr>
+      <tr><th>Stage</th><th>Count</th><th>Kept</th></tr>
       <tr><td>Repos searched</td><td>{fmt_int(searched)}</td><td>&mdash;</td></tr>
       <tr><td>Repos with qualifying PRs</td><td>{fmt_int(kept)}</td><td>{fmt_pct(rate(kept, searched))}</td></tr>
       <tr><td>PRs scanned</td><td>{fmt_int(scanned)}</td><td>&mdash;</td></tr>
       <tr><td>PRs merged</td><td>{fmt_int(merged)}</td><td>{fmt_pct(rate(merged, scanned))}</td></tr>
       <tr><td>PRs qualifying</td><td>{fmt_int(qualifying)}</td><td>{fmt_pct(rate(qualifying, scanned))}</td></tr>
-      <tr><td>Tasks generated</td><td>{fmt_int(pipeline_tasks)}</td><td>{fmt_pct(rate(pipeline_tasks, qualifying))}</td></tr>
-      <tr><td>Tasks verified</td><td>{fmt_int(combined['verified'])}</td><td>{fmt_pct(combined['yield'])}</td></tr>
+      <tr><td>Tasks attempted</td><td>{fmt_int(generated)}</td><td>{fmt_pct(rate(generated, qualifying))}</td></tr>
+      <tr><td>Tasks verified</td><td>{fmt_int(verified)}</td><td>{fmt_pct(rate(verified, generated))}</td></tr>
     </table>
-    <div class="mini">rates are against the previous stage; imported datasets are excluded
-      from "tasks generated" &mdash; they have no PR provenance</div>
+    <div class="mini">imported datasets are excluded from the task rows &mdash; they have no PR provenance</div>
   </div>
 """
 
+    lang_total = combined.get("languages", {})
+    lang_ok = combined.get("languages_verified", {})
+    rate_rows = [(name, lang_ok.get(name, 0), n) for name, n in lang_total.items()]
+
     return f"""
 <div class="page active" id="page-overview">
-  {collection}
+  <div class="cards">
+    <div class="card"><div class="k">Repos</div><div class="v">{fmt_int(repos)}</div></div>
+    <div class="card"><div class="k">PRs collected</div><div class="v">{fmt_int(collected)}</div></div>
+    <div class="card"><div class="k">Tasks</div><div class="v">{fmt_int(combined['total'])}</div></div>
+    <div class="card"><div class="k">PR retention</div><div class="v">{fmt_pct(pr_retention)}
+      <small>qualifying / scanned</small></div></div>
+    <div class="card"><div class="k">Task creation</div><div class="v">{fmt_pct(create_rate)}
+      <small>verified / attempted</small></div></div>
+  </div>
+  {funnel}
+  <div class="panel">
+    <h2>Task creation success <span>by language &mdash; verified / attempted</span></h2>
+    {render_rate_bars(rate_rows)}
+    <div class="mini">language is read from each task's task.toml, not its directory</div>
+  </div>
   {body}
   <div class="grid2" style="margin-top:14px;">
 {METHODOLOGY_HTML}
@@ -820,7 +868,7 @@ def render_html(
       <button class="nav-item active" data-page="overview">
         <span class="nav-icon">◧</span><span class="nav-label">Overview</span></button>
       <button class="nav-item" data-page="collection">
-        <span class="nav-icon">⚑</span><span class="nav-label">Collection</span>
+        <span class="nav-icon">⚑</span><span class="nav-label">PR Collection</span>
         <span class="nav-count">{fmt_int(prs.get('total_prs', 0))}</span></button>
       <button class="nav-item" data-page="tasks">
         <span class="nav-icon">☰</span><span class="nav-label">Task List</span>
@@ -856,7 +904,7 @@ def render_html(
 <script>
 var PAGE_META = {{
   overview: {{title: 'Overview', sub: {json.dumps(overview_sub)}}},
-  collection: {{title: 'Collection', sub: {json.dumps(collection_sub)}}},
+  collection: {{title: 'PR Collection', sub: {json.dumps(collection_sub)}}},
   tasks: {{title: 'Task List', sub: {json.dumps(tasks_sub)}}}
 }};
 
@@ -984,11 +1032,9 @@ def main():
                 print(f"  overlap              {len(shared):,} task ids shared between "
                       f"{a_['name']} and {b_['name']} (counted once in Overview)")
 
-    prs_dir = cfg["collected_prs_dir"]
-    prs = collect_pr_stats(prs_dir) if prs_dir else {
-        "exists": False, "dir": "", "languages": {}, "total_prs": 0, "total_repos": 0}
-    print(f"  PR collection          {prs.get('dir') or '(unset)'}"
-          f"{'' if prs.get('exists') else '  [NOT FOUND]'}")
+    prs = collect_pr_stats_multi(cfg["prs"])
+    for d in prs.get("dirs") or []:
+        print(f"  {d['name']:22s} {d['dir']}{'' if d['exists'] else '  [NOT FOUND]'}")
     print(f"  {'':22s} {prs.get('total_prs', 0):,} PRs · {prs.get('total_repos', 0):,} repos "
           f"· {len(prs.get('languages', {}))} languages")
 

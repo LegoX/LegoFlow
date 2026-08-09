@@ -180,3 +180,48 @@ def collect_pr_stats(collected_prs_dir: Path) -> dict[str, Any]:
         "report_generated_at": report["generated_at"],
         "has_report": bool(report["overall"] or report["languages"]),
     }
+
+
+def collect_pr_stats_multi(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Merge several collection directories into one view.
+
+    Each configured PR entry is a whole collection directory; its per-language
+    files are discovered inside, so one entry normally covers every language.
+    """
+    if not entries:
+        return {"dir": "", "dirs": [], "exists": False, "languages": {},
+                "total_prs": 0, "total_repos": 0, "malformed_lines": 0,
+                "overall": {}, "report_generated_at": None, "has_report": False}
+    parts = [(e["name"], collect_pr_stats(Path(e["path"]))) for e in entries]
+    if len(parts) == 1:
+        only = parts[0][1]
+        only["dirs"] = [{"name": parts[0][0], "dir": only["dir"], "exists": only["exists"]}]
+        return only
+
+    merged: dict[str, Any] = {
+        "dir": ", ".join(p[1]["dir"] for p in parts),
+        "dirs": [{"name": n, "dir": s_["dir"], "exists": s_["exists"]} for n, s_ in parts],
+        "exists": any(s_["exists"] for _, s_ in parts),
+        "languages": {}, "total_prs": 0, "total_repos": 0, "malformed_lines": 0,
+        "overall": Counter(), "report_generated_at": None, "has_report": False,
+    }
+    langs: dict[str, dict[str, Any]] = {}
+    for _, s_ in parts:
+        merged["total_prs"] += s_["total_prs"]
+        merged["total_repos"] += s_["total_repos"]
+        merged["malformed_lines"] += s_["malformed_lines"]
+        merged["overall"].update(s_["overall"])
+        merged["has_report"] = merged["has_report"] or s_["has_report"]
+        merged["report_generated_at"] = merged["report_generated_at"] or s_["report_generated_at"]
+        for name, e in s_["languages"].items():
+            cur = langs.setdefault(name, dict(e))
+            if cur is not e:
+                for k in ("prs", "repos"):
+                    cur[k] = (cur.get(k) or 0) + (e.get(k) or 0)
+                for k in ("repos_searched", "repos_candidate", "repos_qualifying",
+                          "prs_scanned", "prs_merged", "prs_qualifying"):
+                    if e.get(k) is not None:
+                        cur[k] = (cur.get(k) or 0) + e[k]
+    merged["languages"] = langs
+    merged["overall"] = dict(merged["overall"])
+    return merged

@@ -5,8 +5,8 @@ three views:
 
 | View | Shows |
 | --- | --- |
-| Overview | Every batch folded into one set of figures, de-duplicated by task id |
-| Collection | Repos and PRs collected, the drop reasons, and the PR → task → verified funnel |
+| Overview | Headline totals and rates, the repos → PRs → tasks funnel, and task-creation success by language |
+| PR Collection | Repos and PRs collected, per language, with the reasons rows were dropped |
 | Task List | One row per configured batch; click a row for that batch's full profile |
 
 ## Where the numbers come from
@@ -41,11 +41,17 @@ The large `{language}_prs.jsonl` payloads are deliberately not read.
 
 ```yaml
     dashboard:
-      datasets:
-        merged_swe_tasks: artifacts/merged_swe_tasks
-        swe_tasks: artifacts/swe_tasks
-      collected_prs_dir: ""
+      prs:
+        collected_prs: artifacts/collected_prs
+      tasks:
+        swe_tasks_py: artifacts/swe_tasks/py-cc
+        swe_tasks_go: artifacts/swe_tasks/go-cc
 ```
+
+`tasks` and `prs` are both `name: path`. A **task** path is any directory holding a
+list of harbor tasks — there is no requirement that it be `merged_swe_tasks`. A
+**PR** path is a whole collection directory; every language inside is discovered
+automatically, so one entry normally covers all of them.
 
 Each `name: path` entry is one **batch**, and must hold one harbor task per
 immediate child (`task.toml` + `instruction.md`). Paths are absolute or relative
@@ -81,6 +87,7 @@ guessed. Then add the batch with `external: true`:
 
 ```yaml
       datasets:
+      tasks:
         scale_swe: {path: artifacts/hf/scale_swe, external: true}
 ```
 

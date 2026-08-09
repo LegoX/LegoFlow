@@ -82,9 +82,16 @@ runtime_info:
     # The dashboard monitoring path, displaying the progress of PR collection and task creation.
     # name: path — each entry is one batch. Absolute, or relative to this file.
     dashboard:
-      datasets:
-        merged_swe_tasks: /absolute/path/to/curator/artifacts/merged_swe_tasks
-      collected_prs_dir: /absolute/path/to/curator/artifacts/collected_prs
+      prs:
+        collected_prs: /absolute/path/to/curator/artifacts/collected_prs
+      tasks:
+        swe_tasks_py: /absolute/path/to/curator/artifacts/swe_tasks/py-cc
+        swe_tasks_js: /absolute/path/to/curator/artifacts/swe_tasks/js-cc
+        swe_tasks_ts: /absolute/path/to/curator/artifacts/swe_tasks/ts-cc
+        swe_tasks_go: /absolute/path/to/curator/artifacts/swe_tasks/go-cc
+        swe_tasks_c: /absolute/path/to/curator/artifacts/swe_tasks/c-cc
+        swe_tasks_cpp: /absolute/path/to/curator/artifacts/swe_tasks/cpp-cc
+        swe_tasks_java: /absolute/path/to/curator/artifacts/swe_tasks/java-cc
 
   output:
     swe_tasks_dir:
