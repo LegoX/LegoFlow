@@ -101,9 +101,12 @@ def percentile(values: list[float], q: float) -> float:
     return ordered[low] * (1 - weight) + ordered[high] * weight
 
 
-def score_stats(values: list[float]) -> dict[str, float | int]:
+def score_stats(values: list[float]) -> dict[str, float | int | None]:
+    # No scores means "not available", not zero — a 0.00 mean beside real figures
+    # is indistinguishable from a measurement. fmt_* render None as an em dash.
     if not values:
-        return {"count": 0, "min": 0.0, "p25": 0.0, "median": 0.0, "mean": 0.0, "p75": 0.0, "max": 0.0}
+        return {"count": 0, "min": None, "p25": None, "median": None,
+                "mean": None, "p75": None, "max": None}
     return {
         "count": len(values),
         "min": min(values),
@@ -157,7 +160,11 @@ def aggregate_batch(name: str, path: Path, external: bool = False) -> dict[str, 
                 counter[meta[key]] += 1
 
     total = len(tasks)
-    verified = len(verified_ids & set(tasks)) if verified_ids else 0
+    matched = verified_ids & set(tasks)
+    verified = len(matched)
+    # ids listed as verified whose directory is gone (tasks removed after
+    # verification) — reported rather than silently dropped
+    stale_verified = len(verified_ids - set(tasks))
     return {
         "id": name,
         "name": name,
@@ -167,6 +174,8 @@ def aggregate_batch(name: str, path: Path, external: bool = False) -> dict[str, 
         "total": total,
         "tagged": tagged,
         "verified": verified,
+        "stale_verified": stale_verified,
+        "verified_ids": matched,
         "yield": (verified / total) if total else None,
         "tasks": tasks,
         "difficulty_scores": scores,
@@ -514,8 +523,7 @@ def combine_datasets(batches: list[dict[str, Any]]) -> dict[str, Any]:
     for batch in batches:
         for task_name, meta in batch.get("tasks", {}).items():
             seen.setdefault(task_name, meta)
-        vids = read_verified_ids(Path(batch["path"])) if batch.get("exists") else set()
-        verified |= vids & set(batch.get("tasks", {}))
+        verified |= batch.get("verified_ids") or set()
 
     labels: Counter[str] = Counter()
     langs: Counter[str] = Counter()
@@ -906,8 +914,10 @@ def main():
         state = "" if b["exists"] else "  [PATH NOT FOUND]"
         langs = ", ".join(f"{k}={v}" for k, v in list(b["languages"].items())[:6]) or "-"
         print(f"  {b['name']:22s} {b['path']}{state}")
+        stale = (f" · {b['stale_verified']:,} verified ids no longer on disk"
+                 if b.get("stale_verified") else "")
         print(f"  {'':22s} {b['total']:>7,} tasks · {b['verified']:>7,} verified · "
-              f"{b['tagged']:>7,} tagged")
+              f"{b['tagged']:>7,} tagged{stale}")
         print(f"  {'':22s} languages: {langs}")
 
     # overlap is expected (merged_swe_tasks is a filtered copy of swe_tasks);
