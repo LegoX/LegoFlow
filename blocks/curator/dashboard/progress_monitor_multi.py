@@ -1010,7 +1010,8 @@ def render_html(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LegoFlow-Curator</title>\n<link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
+<title>LegoFlow-Curator</title>
+<link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
 <style>{CSS}</style>
 </head>
 <body>
@@ -1169,12 +1170,12 @@ function escapeHtml(t) {{
 }}
 
 function highlightDiff(text) {{
-  return escapeHtml(text).split('\n').map(function (line) {{
+  return escapeHtml(text).split('\\n').map(function (line) {{
     if (line.charAt(0) === '+' && line.slice(0, 3) !== '+++') return '<span class="add">' + line + '</span>';
     if (line.charAt(0) === '-' && line.slice(0, 3) !== '---') return '<span class="del">' + line + '</span>';
     if (line.slice(0, 2) === '@@') return '<span class="hunk">' + line + '</span>';
     return line;
-  }}).join('\n');
+  }}).join('\\n');
 }}
 
 function renderSample(batch, sample) {{
