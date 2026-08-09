@@ -1,102 +1,103 @@
 ---
 name: dashboard
 description: >
-  Regenerate and publish Curator's dataset analytics databoard: per-task
-  difficulty scores and the four semantic tags [language, area, topic,
-  bug_class], compared across the curated datasets and published at
-  swe-databoard.pages.dev. Runs the canonical tagger
-  (repos/swegen/tools/tag_task_metadata.py) and the HTML generator
-  (dashboard/progress_monitor_multi.py). This is dataset analytics, NOT live
-  run-progress monitoring — for run status read the batch logs,
-  verifiable_tasks.txt, and artifacts/index.yaml. Triggers on phrases like
-  "curator dashboard", "regenerate the databoard", "difficulty and tags",
-  "update swe-databoard".
+  Regenerate and publish Curator's databoard from the live pipeline under
+  artifacts/. Reads the task pools named in config.yaml
+  (runtime_info.input.dashboard.datasets), taking language, difficulty and the
+  four semantic tags [language, area, topic, bug_class] from each task's own
+  task.toml, and reports PR/repo collection, per-batch progress, and
+  verification yield. Always presents the resolved paths and discovered batches
+  and waits for explicit confirmation before rendering. Triggers on phrases like
+  "curator dashboard", "regenerate the databoard", "update swe-databoard",
+  "how many tasks have we made", "collection progress".
 ---
 
 # /curator:dashboard
 
-Regenerate the **dataset analytics databoard** and, optionally, deploy it to
-Cloudflare Pages. The databoard scores each task's difficulty and assigns the
-four semantic tags `[language, area, topic, bug_class]`, then renders a
-single-page comparison across the curated datasets, published at
-`swe-databoard.pages.dev`.
+Render the **curator databoard** from the live pipeline and, only when asked,
+deploy it. Three views: **Overview** (global, de-duplicated), **Collection**
+(repos and PRs collected, and the PR → task → verified funnel), and **Task List**
+(one row per configured batch, click through to its full profile).
 
-This skill analyzes finished datasets. It does **not** report live run
-progress. For run status, read the batch logs under
-`artifacts/logs/swegen-create/`, the per-language `verifiable_tasks.txt`
-manifests, and `artifacts/index.yaml`; `/curator:check` diagnoses the
-environment.
+This skill never generates tasks and never calls an LLM. Difficulty and tags are
+written upstream into each task's `task.toml`; the dashboard only reads them.
 
 ## Step 0 - Orient
 
-Run from `blocks/curator/`. Validate that `config.yaml` has
-`meta_info.name == "curator"`. The databoard sources live under `dashboard/`;
-read `dashboard/README.md` for the dataset roster, export scripts, and endpoint
-configuration.
+Run from `blocks/curator/`. Confirm `config.yaml` has
+`meta_info.name == "curator"`.
 
-## Step 1 - Confirm the datasets
+## Step 1 - Resolve the sources
 
-Each dataset lives under `dashboard/datasets/<id>/`:
+Read `config.yaml -> runtime_info.input.dashboard`:
 
-| id | Display | Source |
-| --- | --- | --- |
-| `self_made` | LegoFlow-Instances | Curator `swegen-selfmade` export |
-| `swe_rebench` | SWE-rebench | `nebius/SWE-rebench` |
-| `openswe_filtered` | OpenSWE-filtered | `SWE-Lego/openswe_filtered_for_rl` |
-| `scale_swe` | Scale-SWE | `AweAI-Team/Scale-SWE` |
+- `datasets` — `name: path` entries. Each is one **batch** on the Task List.
+  Paths may be absolute or relative to the block root.
+- `collected_prs_dir` — empty falls back to `pr_collection.output_dir`.
 
-Each `<id>/` needs `tasks.jsonl` (unified records) before tagging. If a
-dataset's `tasks.jsonl` is missing, produce it with the matching exporter
-(`export_self_made.py`, `export_openswe_filtered.py`, …) or drop in the
-externally-prepared JSONL, per `dashboard/README.md`. Both files are
-git-ignored and large.
+If `datasets` is empty or absent, report that and stop; there is nothing to read.
 
-## Step 2 - Difficulty + tag generation
+Pools are allowed to overlap: `merged_swe_tasks` is a manifest-filtered copy of
+`swe_tasks`, so the same task id appears in both. Each is still listed as its own
+batch, and Overview de-duplicates by task id — never sum the per-batch totals to
+get a global figure.
 
-Run the **canonical** tagger from the swegen submodule so the databoard and the
-SWE-gen pipeline share one implementation. It scores difficulty (a 5-dimension
-weighted, log-scaled `1.0–10.0` value bucketed easy/medium/hard) and assigns
-the 4-tuple `[language, area, topic, bug_class]`, writing
-`dashboard/datasets/<id>/tags.jsonl`. Runs are resumable and idempotent.
+## Step 2 - Show the sources and confirm
+
+Scan read-only and print the report, then **wait for an explicit "yes"**:
 
 ```bash
-# from blocks/curator/dashboard/
-python3 ../repos/swegen/tools/tag_task_metadata.py \
-  --datasets-dir datasets --dataset all --jobs 64 --retries 3
+python3 dashboard/progress_monitor_multi.py --report-only
 ```
 
-## Step 3 - Render the HTML
+It prints the resolved absolute paths, per-batch task/verified/tagged counts and
+language mix, any path that does not exist, the overlap between batches, the PR
+collection totals, and the de-duplicated global figure:
 
-Build the single-page multi-dataset databoard from the tagged datasets:
+```text
+curator dashboard sources
+  <batch name>           <abs path>
+                          <N> tasks · <V> verified · <T> tagged
+                         languages: <lang>=<n>, ...
+  overlap                <K> task ids shared between <a> and <b> (counted once in Overview)
+  PR collection          <abs path>
+                         <P> PRs · <R> repos · <L> languages
+  global (de-duplicated) <U> unique tasks · <V> verified · <T> tagged
+```
+
+Present this to the user verbatim and ask whether to proceed. Never render
+without an explicit "yes". If a batch reports `[PATH NOT FOUND]` or zero tasks,
+say so plainly and ask whether to continue or fix the config first — do not
+silently render an empty board.
+
+## Step 3 - Render
 
 ```bash
-# from blocks/curator/dashboard/
-python3 progress_monitor_multi.py --output-html site/index.html
+python3 dashboard/progress_monitor_multi.py --output-html dashboard/site/index.html
 ```
 
-This reads each `datasets/<id>/tags.jsonl` and writes only
-`dashboard/site/index.html`. Preview it locally before any deploy.
+Writes only `dashboard/site/index.html`. Preview locally before any deploy.
 
 ## Step 4 - Deploy (only when the user asks)
-
-Publishing is a separate, explicit action. Deploy the rendered site to the
-`swe-databoard` Cloudflare Pages project:
 
 ```bash
 # from blocks/curator/dashboard/site/
 CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... \
-  npx wrangler@latest pages deploy . --project-name=swe-databoard --branch=main
+  npx wrangler@3 pages deploy . --project-name=swe-databoard --branch=main
 ```
 
 Never deploy unless the user explicitly requests it.
 
 ## Guardrails
 
-- The only writes this skill performs are the tagger's `tags.jsonl` outputs and
-  the rendered `dashboard/site/index.html`.
-- Never edit `config.yaml`, token files, generated task directories, or
-  submodule source.
-- Never launch `scripts/start.sh`, `swegen create`, or a Cloudflare deploy
-  unless the user explicitly asks for that separate action.
-- This skill does not report live run progress; redirect such requests to the
-  batch logs, `verifiable_tasks.txt`, and `artifacts/index.yaml`.
+- The only write is `dashboard/site/index.html`. Reading task pools is read-only.
+- Never edit `config.yaml`, token files, generated task directories, or submodule
+  source.
+- Never launch `scripts/start.sh`, `swegen create`, PR collection, or a deploy
+  unless the user asks for that separate action.
+- A missing value is reported as an em dash, never as `0` — `task.toml` carries no
+  patch statistics, and untagged tasks are counted as untagged rather than folded
+  into a tag bucket. Do not "fix" these by substituting zeros.
+- Collection filter thresholds (`pr_collection.filters`) are **configuration**, not
+  measured repo attributes; the collector persists only the flat PR id list, so
+  repo stars and merged-PR counts are not available per repo.

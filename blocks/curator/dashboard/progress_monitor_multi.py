@@ -1,38 +1,80 @@
 #!/usr/bin/env python3
-"""Multi-dataset dashboard generator.
+"""Curator databoard generator.
 
-Read LLM tagging results from each dataset's datasets/<id>/tags.jsonl
-(difficulty_score / difficulty_label / tags / bug_class),
-aggregate statistics and render a single-page HTML, supporting switching between 4 datasets:
+Reads the **live pipeline** under `artifacts/`, not an offline dataset export.
+Which task pools to read comes from `config.yaml ->
+runtime_info.input.dashboard.datasets` as `name: path` entries; each one is a
+batch on the Task List. Language, difficulty and the semantic tags
+`[language, area, topic, bug_class]` are read from every task's own `task.toml`
+(see task_toml.py), so a task is never classified by the directory holding it.
 
-  - self_made         LegoFlow-Instances
-  - swe_rebench        SWE-rebench (nebius/SWE-rebench)
-  - openswe_filtered   OpenSWE-filtered (SWE-Lego/openswe_filtered_for_rl)
-  - scale_swe          Scale-SWE (AweAI-Team/Scale-SWE)
-
-All datasets use the same LLM tagging scheme for comparability.
+Pools may overlap — `merged_swe_tasks` is a manifest-filtered copy of
+`swe_tasks` — so the global Overview de-duplicates by task id while each batch
+is still reported on its own.
 """
 from __future__ import annotations
 
 import html
 import json
 import math
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).parent))
+
+from collection_stats import collect_pr_stats  # noqa: E402
+from task_toml import collect_task_dim, read_verified_ids  # noqa: E402
+
 DASHBOARD_ROOT = Path(__file__).parent
-DATASETS_DIR = DASHBOARD_ROOT / "datasets"
+BLOCK_ROOT = DASHBOARD_ROOT.parent
+CONFIG_PATH = BLOCK_ROOT / "config.yaml"
 DEFAULT_OUTPUT = DASHBOARD_ROOT / "site" / "index.html"
 
-# (id, display name, description)
-DATASETS = [
-    ("self_made", "LegoFlow-Instances", "Curator self-made instances (swegen-selfmade non-top5k + top5k)"),
-    ("swe_rebench", "SWE-rebench", "Open-source dataset nebius/SWE-rebench"),
-    ("swe_rebench_v2", "SWE-rebench-V2", "Open-source dataset nebius/SWE-rebench-V2"),
-    ("openswe_filtered", "OpenSWE-filtered", "Open-source dataset SWE-Lego/openswe_filtered_for_rl"),
-    ("scale_swe", "Scale-SWE", "Open-source dataset AweAI-Team/Scale-SWE"),
-]
+
+def _resolve(path_str: str, base: Path) -> Path:
+    """Config paths may be absolute, or relative to the config file's own
+    directory — which for the block's real config.yaml is the block root."""
+    path = Path(str(path_str)).expanduser()
+    return path if path.is_absolute() else (base / path)
+
+
+def load_dashboard_config(config_path: Path = CONFIG_PATH) -> dict[str, Any]:
+    """Resolve the monitored batches and the PR-collection directory.
+
+    `collected_prs_dir` falls back to pr_collection.output_dir so the same path
+    is not configured twice.
+    """
+    try:
+        import yaml
+    except ModuleNotFoundError:
+        raise SystemExit("PyYAML is required: pip install pyyaml")
+    try:
+        cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except OSError as exc:
+        raise SystemExit(f"cannot read {config_path}: {exc}")
+
+    base = config_path.parent.resolve()
+    inp = ((cfg.get("runtime_info") or {}).get("input") or {})
+    dash = inp.get("dashboard") or {}
+    datasets = dash.get("datasets") or {}
+
+    batches = [
+        {"name": str(name), "path": _resolve(raw, base)}
+        for name, raw in datasets.items()
+        if str(raw or "").strip()
+    ]
+
+    prs_raw = str(dash.get("collected_prs_dir") or "").strip()
+    if not prs_raw:
+        prs_raw = str((inp.get("pr_collection") or {}).get("output_dir") or "").strip()
+    return {
+        "batches": batches,
+        "collected_prs_dir": _resolve(prs_raw, base) if prs_raw else None,
+        "pr_filters": (inp.get("pr_collection") or {}).get("filters") or {},
+    }
+
 
 def percentile(values: list[float], q: float) -> float:
     if not values:
@@ -79,101 +121,59 @@ def score_bins(values: list[float]) -> dict[str, int]:
     return bins
 
 
-def aggregate_dataset(dataset_id: str) -> dict[str, Any]:
-    """Aggregate one dataset's statistics from tags.jsonl."""
-    tags_file = DATASETS_DIR / dataset_id / "tags.jsonl"
-    tasks_file = DATASETS_DIR / dataset_id / "tasks.jsonl"
+def aggregate_batch(name: str, path: Path) -> dict[str, Any]:
+    """Aggregate one configured batch directly from its task.toml files."""
+    tasks = collect_task_dim(path)
+    verified_ids = read_verified_ids(path)
 
-    difficulty_scores: list[float] = []
-    difficulty_labels: Counter[str] = Counter()
-    topic_counts: Counter[str] = Counter()
-    area_counts: Counter[str] = Counter()
-    bug_classes: Counter[str] = Counter()
-    lang_counts: Counter[str] = Counter()
-    tasks_with_topic = 0
-    tasks_with_bug_class = 0
-    patch_lines = 0
-    patch_hunks = 0
-    patch_files = 0
-    patch_denom = 0
+    labels: Counter[str] = Counter()
+    langs: Counter[str] = Counter()
+    areas: Counter[str] = Counter()
+    topics: Counter[str] = Counter()
+    bugs: Counter[str] = Counter()
+    scores: list[float] = []
     tagged = 0
 
-    if tags_file.exists():
-        with tags_file.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except Exception:
-                    continue
-                tagged += 1
+    for meta in tasks.values():
+        langs[meta["language"]] += 1
+        if meta["difficulty"] and meta["difficulty"] != "unknown":
+            labels[meta["difficulty"]] += 1
+        if meta["score"] is not None:
+            scores.append(meta["score"])
+        if meta["tagged"]:
+            tagged += 1
+        for key, counter in (("area", areas), ("topic", topics), ("bug_class", bugs)):
+            if meta[key]:
+                counter[meta[key]] += 1
 
-                score = rec.get("difficulty_score")
-                if score is not None:
-                    difficulty_scores.append(float(score))
-                label = rec.get("difficulty_label")
-                if label:
-                    difficulty_labels[str(label)] += 1
-
-                # harbor 4-tag schema: [language, area, topic, bug_class]
-                raw_tags = [str(t).strip().lower() for t in rec.get("tags", []) if str(t).strip()]
-                if len(raw_tags) >= 1:
-                    lang_counts[raw_tags[0]] += 1
-                if len(raw_tags) >= 2:
-                    area_counts[raw_tags[1]] += 1
-                if len(raw_tags) >= 3 and raw_tags[2]:
-                    tasks_with_topic += 1
-                    topic_counts[raw_tags[2]] += 1
-
-                bug_class = rec.get("bug_class")
-                if bug_class:
-                    bug_class = str(bug_class).strip().lower()
-                    if bug_class:
-                        tasks_with_bug_class += 1
-                        bug_classes[bug_class] += 1
-
-                ps = rec.get("patch_stats") or {}
-                patch_denom += 1
-                patch_lines += int(ps.get("lines") or 0)
-                patch_hunks += int(ps.get("hunks") or 0)
-                patch_files += int(ps.get("files") or 0)
-
-    # Total dataset size (tasks.jsonl line count)
-    total = 0
-    if tasks_file.exists():
-        with tasks_file.open("r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    total += 1
-
-    denom = patch_denom or 1
+    total = len(tasks)
+    verified = len(verified_ids & set(tasks)) if verified_ids else 0
     return {
-        "id": dataset_id,
+        "id": name,
+        "name": name,
+        "path": str(path),
+        "exists": path.is_dir(),
         "total": total,
         "tagged": tagged,
-        "difficulty_scores": difficulty_scores,
-        "difficulty_stats": score_stats(difficulty_scores),
-        "difficulty_bins": score_bins(difficulty_scores),
-        "difficulty_labels": dict(difficulty_labels),
-        "topics": dict(topic_counts.most_common()),
-        "tasks_with_topic": tasks_with_topic,
-        "areas": dict(area_counts.most_common()),
-        "bug_classes": dict(bug_classes.most_common()),
-        "tasks_with_bug_class": tasks_with_bug_class,
-        "languages": dict(lang_counts.most_common()),
-        "patch": {
-            "avg_lines": patch_lines / denom,
-            "avg_hunks": patch_hunks / denom,
-            "avg_files": patch_files / denom,
-        },
+        "verified": verified,
+        "yield": (verified / total) if total else None,
+        "tasks": tasks,
+        "difficulty_scores": scores,
+        "difficulty_stats": score_stats(scores),
+        "difficulty_bins": score_bins(scores),
+        "difficulty_labels": dict(labels),
+        "languages": dict(langs.most_common()),
+        "areas": dict(areas.most_common()),
+        "topics": dict(topics.most_common()),
+        "bug_classes": dict(bugs.most_common()),
+        "tasks_with_topic": sum(topics.values()),
+        "tasks_with_bug_class": sum(bugs.values()),
+        # task.toml carries no patch statistics; showing 0 would read as a
+        # measurement, so these stay unavailable and render as em dashes.
+        "patch": {"avg_lines": None, "avg_hunks": None, "avg_files": None},
     }
 
 
-
-# None means "not available", and must never render as 0 — a zero beside real
-# figures is indistinguishable from a measurement.
 UNAVAILABLE = "&mdash;"
 
 
@@ -489,50 +489,63 @@ def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bo
 """
 
 
-def combine_datasets(datasets: list[dict[str, Any]]) -> dict[str, Any]:
-    """Fold every dataset into one aggregate in the same shape aggregate_dataset
-    returns, so render_panel can draw the global view unchanged."""
-    scores: list[float] = []
+def combine_datasets(batches: list[dict[str, Any]]) -> dict[str, Any]:
+    """Fold every batch into one global aggregate, in the shape render_panel
+    consumes.
+
+    De-duplicates by task id: merged_swe_tasks is a filtered copy of swe_tasks,
+    so configuring both must not count the same task twice. Every distribution
+    is recomputed from the de-duplicated task set rather than summed from the
+    per-batch counters.
+    """
+    seen: dict[str, dict[str, Any]] = {}
+    verified: set[str] = set()
+    for batch in batches:
+        for task_name, meta in batch.get("tasks", {}).items():
+            seen.setdefault(task_name, meta)
+        vids = read_verified_ids(Path(batch["path"])) if batch.get("exists") else set()
+        verified |= vids & set(batch.get("tasks", {}))
+
     labels: Counter[str] = Counter()
-    topics: Counter[str] = Counter()
-    areas: Counter[str] = Counter()
-    bugs: Counter[str] = Counter()
     langs: Counter[str] = Counter()
-    total = tagged = with_topic = with_bug = 0
-    lines = hunks = files = 0.0
+    areas: Counter[str] = Counter()
+    topics: Counter[str] = Counter()
+    bugs: Counter[str] = Counter()
+    scores: list[float] = []
+    tagged = 0
 
-    for d in datasets:
-        scores.extend(d["difficulty_scores"])
-        labels.update(d["difficulty_labels"])
-        topics.update(d["topics"])
-        areas.update(d["areas"])
-        bugs.update(d["bug_classes"])
-        langs.update(d["languages"])
-        total += d["total"]
-        tagged += d["tagged"]
-        with_topic += d["tasks_with_topic"]
-        with_bug += d["tasks_with_bug_class"]
-        # patch averages are per-tagged-task, so re-weight by each dataset's tagged count
-        lines += d["patch"]["avg_lines"] * d["tagged"]
-        hunks += d["patch"]["avg_hunks"] * d["tagged"]
-        files += d["patch"]["avg_files"] * d["tagged"]
+    for meta in seen.values():
+        langs[meta["language"]] += 1
+        if meta["difficulty"] and meta["difficulty"] != "unknown":
+            labels[meta["difficulty"]] += 1
+        if meta["score"] is not None:
+            scores.append(meta["score"])
+        if meta["tagged"]:
+            tagged += 1
+        for key, counter in (("area", areas), ("topic", topics), ("bug_class", bugs)):
+            if meta[key]:
+                counter[meta[key]] += 1
 
-    denom = tagged or 1
+    total = len(seen)
     return {
         "id": "all",
+        "name": "All batches",
         "total": total,
         "tagged": tagged,
+        "verified": len(verified),
+        "yield": (len(verified) / total) if total else None,
+        "tasks": seen,
         "difficulty_scores": scores,
         "difficulty_stats": score_stats(scores),
         "difficulty_bins": score_bins(scores),
         "difficulty_labels": dict(labels),
-        "topics": dict(topics.most_common()),
-        "tasks_with_topic": with_topic,
-        "areas": dict(areas.most_common()),
-        "bug_classes": dict(bugs.most_common()),
-        "tasks_with_bug_class": with_bug,
         "languages": dict(langs.most_common()),
-        "patch": {"avg_lines": lines / denom, "avg_hunks": hunks / denom, "avg_files": files / denom},
+        "areas": dict(areas.most_common()),
+        "topics": dict(topics.most_common()),
+        "bug_classes": dict(bugs.most_common()),
+        "tasks_with_topic": sum(topics.values()),
+        "tasks_with_bug_class": sum(bugs.values()),
+        "patch": {"avg_lines": None, "avg_hunks": None, "avg_files": None},
     }
 
 
@@ -556,33 +569,127 @@ def render_overview(combined: dict[str, Any], datasets: list[dict[str, Any]]) ->
 """
 
 
-def render_task_list(datasets: list[dict[str, Any]]) -> str:
-    """One row per dataset, tracer's Jobs-list shape: pick a row, get its detail."""
-    by_id = {d["id"]: d for d in datasets}
+def fmt_pct(v) -> str:
+    return UNAVAILABLE if v is None else f"{v * 100:.1f}%"
+
+
+def render_task_list(batches: list[dict[str, Any]]) -> str:
+    """One row per configured batch; clicking a row opens that batch's profile."""
     rows, details = [], []
-    for ds_id, display, desc in DATASETS:
-        d = by_id.get(ds_id)
-        if d is None:
-            continue
-        stats = d["difficulty_stats"]
+    for b in batches:
+        stats = b["difficulty_stats"]
+        missing = "" if b["exists"] else '<span class="desc">path not found</span>'
         rows.append(f"""
-      <button class="ds-row" data-ds="{ds_id}">
-        <span><span class="name">{html.escape(display)}</span>
-          <span class="desc">{html.escape(desc)}</span></span>
-        <span><span class="k">Tasks</span><span class="v">{fmt_int(d['total'])}</span></span>
-        <span><span class="k">Tagged</span><span class="v">{fmt_int(d['tagged'])}</span></span>
+      <button class="ds-row" data-ds="{html.escape(b['name'])}">
+        <span><span class="name">{html.escape(b['name'])}</span>
+          <span class="desc">{html.escape(b['path'])}</span>{missing}</span>
+        <span><span class="k">Tasks</span><span class="v">{fmt_int(b['total'])}</span></span>
+        <span><span class="k">Verified</span><span class="v">{fmt_int(b['verified'])}</span></span>
+        <span><span class="k">Yield</span><span class="v">{fmt_pct(b['yield'])}</span></span>
+        <span><span class="k">Tagged</span><span class="v">{fmt_int(b['tagged'])}</span></span>
         <span><span class="k">Mean diff.</span><span class="v">{fmt_float(stats['mean'], 2)}</span></span>
-        <span><span class="k">Median</span><span class="v">{fmt_float(stats['median'], 1)}</span></span>
-        <span><span class="k">Avg lines</span><span class="v">{fmt_float(d['patch']['avg_lines'], 0)}</span></span>
-        <span><span class="k">Easy / medium / hard</span>{render_label_bar(d)}</span>
+        <span><span class="k">Easy / medium / hard</span>{render_label_bar(b)}</span>
       </button>""")
-        details.append(render_panel((ds_id, display, desc), d, False))
+        details.append(render_panel((b["name"], b["name"], b["path"]), b, False))
+    body = ''.join(rows) or '<div class="empty-state">No batches configured — set runtime_info.input.dashboard.datasets in config.yaml.</div>'
     return f"""
 <div class="page" id="page-tasks">
-  <div class="ds-list">{''.join(rows)}</div>
+  <div class="ds-list">{body}</div>
   <div class="ds-detail" id="ds-detail" hidden>
-    <button class="back-link" id="ds-back">&larr; All datasets</button>
+    <button class="back-link" id="ds-back">&larr; All batches</button>
     {''.join(details)}
+  </div>
+</div>
+"""
+
+
+def render_collection(prs: dict[str, Any], filters: dict[str, Any],
+                      combined: dict[str, Any]) -> str:
+    """Repo/PR collection and the funnel through to verified tasks.
+
+    Funnel figures come from the collector's own filtering_report.md when present;
+    the surviving PR/repo counts come from the {lang}_pr_ids.txt lists.
+    """
+    if not prs.get("exists"):
+        where = html.escape(prs.get("dir") or "(unset)")
+        return (f'<div class="page" id="page-collection"><div class="empty-state">'
+                f'No PR collection directory at <code>{where}</code>.</div></div>')
+
+    o = prs.get("overall") or {}
+    langs = prs["languages"]
+    task_langs = combined.get("languages", {})
+
+    rows = []
+    for name, e in langs.items():
+        produced = task_langs.get(name, 0)
+        conv = (produced / e["prs"]) if e["prs"] else None
+        rows.append(
+            f"<tr><td><strong>{html.escape(name)}</strong></td>"
+            f"<td>{fmt_int(e['repos_searched'])}</td>"
+            f"<td>{fmt_int(e['repos_qualifying'])}</td>"
+            f"<td>{fmt_int(e['prs_scanned'])}</td>"
+            f"<td>{fmt_int(e['prs_qualifying'])}</td>"
+            f"<td>{fmt_int(e['prs'])}</td>"
+            f"<td>{fmt_int(e['repos'])}</td>"
+            f"<td>{fmt_int(produced)}</td><td>{fmt_pct(conv)}</td></tr>"
+        )
+
+    total_produced = sum(task_langs.values())
+    overall_conv = (total_produced / prs["total_prs"]) if prs["total_prs"] else None
+
+    drop_r: Counter[str] = Counter()
+    drop_p: Counter[str] = Counter()
+    for e in langs.values():
+        drop_r.update(e.get("repo_dropped") or {})
+        drop_p.update(e.get("pr_dropped") or {})
+
+    stamp = prs.get("report_generated_at")
+    provenance = (f'<div class="mini">funnel from filtering_report.md · generated {html.escape(str(stamp))}</div>'
+                  if stamp else
+                  '<div class="mini">no filtering_report.md — funnel columns unavailable</div>')
+
+    filter_rows = "".join(
+        f'<div class="tag-row"><span class="tag-name">{html.escape(str(k))}</span>'
+        f'<span class="tag-track"></span>'
+        f'<span class="tag-count">{html.escape(str(v))}</span></div>'
+        for k, v in (filters or {}).items()
+    ) or '<div class="muted">no filters configured</div>'
+
+    return f"""
+<div class="page" id="page-collection">
+  <div class="cards">
+    <div class="card"><div class="k">Repos searched</div><div class="v">{fmt_int(o.get('Repos Searched'))}</div></div>
+    <div class="card"><div class="k">Repos with qualifying PRs</div><div class="v">{fmt_int(o.get('Repos with Qualifying PRs'))}</div></div>
+    <div class="card"><div class="k">PRs scanned</div><div class="v">{fmt_int(o.get('PRs Scanned'))}</div></div>
+    <div class="card"><div class="k">PRs qualifying</div><div class="v">{fmt_int(o.get('PRs Qualifying'))}</div></div>
+    <div class="card"><div class="k">Tasks produced</div><div class="v">{fmt_int(total_produced)}</div></div>
+    <div class="card"><div class="k">PR &rarr; task</div><div class="v">{fmt_pct(overall_conv)}</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Collection funnel <span>by language</span></h2>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>Language</th><th>Repos searched</th><th>Repos kept</th><th>PRs scanned</th>
+            <th>PRs qualifying</th><th>PRs collected</th><th>Repos collected</th>
+            <th>Tasks produced</th><th>PR &rarr; task</th></tr>
+        {''.join(rows)}
+      </table>
+    </div>
+    {provenance}
+    <div class="mini">source: {html.escape(prs['dir'])}</div>
+  </div>
+
+  <div class="grid2">
+    <section class="tag-card"><h3>Repos dropped <span>by reason</span></h3>
+      {render_tags(dict(drop_r.most_common()), sum(drop_r.values()), limit=10)}
+    </section>
+    <section class="tag-card"><h3>PRs dropped <span>by reason</span></h3>
+      {render_tags(dict(drop_p.most_common()), sum(drop_p.values()), limit=10)}
+    </section>
+    <section class="tag-card wide-card"><h3>Collection filters <span>configuration, not measurements</span></h3>
+      {filter_rows}
+    </section>
   </div>
 </div>
 """
@@ -599,23 +706,21 @@ SUN_SVG = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
 
 
 def render_html(
-    datasets: list[dict[str, Any]],
+    batches: list[dict[str, Any]],
     output_path: Path,
-    manifest: dict[str, Any] | None = None,
-    combined: dict[str, Any] | None = None,
+    prs: dict[str, Any] | None = None,
+    filters: dict[str, Any] | None = None,
 ) -> str:
-    """`manifest` is accepted and ignored — kept so existing callers keep working.
-
-    `combined` lets a caller supply the global aggregate when it cannot be pooled
-    here — the frozen-snapshot path has per-dataset summaries but no raw scores."""
-    combined = combined or combine_datasets(datasets)
+    prs = prs or {"exists": False, "dir": "", "languages": {}, "total_prs": 0, "total_repos": 0}
+    combined = combine_datasets(batches)
     grand_total = combined["total"]
     grand_tagged = combined["tagged"]
     mean = combined["difficulty_stats"]["mean"]
-    n_ds = len([d for d in datasets if d.get("total") or d.get("tagged")]) or len(datasets)
+    n_ds = len(batches)
 
-    overview_sub = f"{n_ds} datasets · {fmt_int(grand_total)} tasks aggregated"
-    tasks_sub = "Per-dataset breakdown — pick a dataset for its full profile"
+    overview_sub = f"{n_ds} batches · {fmt_int(grand_total)} unique tasks · {fmt_int(combined['verified'])} verified"
+    tasks_sub = "Per-batch breakdown — pick a batch for its full profile"
+    collection_sub = f"{fmt_int(prs.get('total_prs', 0))} PRs from {fmt_int(prs.get('total_repos', 0))} repos"
 
     doc = f"""<!DOCTYPE html>
 <html lang="en">
@@ -637,14 +742,18 @@ def render_html(
       <div class="section-label">Views</div>
       <button class="nav-item active" data-page="overview">
         <span class="nav-icon">◧</span><span class="nav-label">Overview</span></button>
+      <button class="nav-item" data-page="collection">
+        <span class="nav-icon">⚑</span><span class="nav-label">Collection</span>
+        <span class="nav-count">{fmt_int(prs.get('total_prs', 0))}</span></button>
       <button class="nav-item" data-page="tasks">
         <span class="nav-icon">☰</span><span class="nav-label">Task List</span>
         <span class="nav-count">{n_ds}</span></button>
     </div>
     <div class="sidebar-section">
       <div class="section-label">Global</div>
-      <div class="sidebar-stat"><span class="l">Datasets</span><span class="v">{n_ds}</span></div>
-      <div class="sidebar-stat"><span class="l">Total tasks</span><span class="v">{fmt_int(grand_total)}</span></div>
+      <div class="sidebar-stat"><span class="l">Batches</span><span class="v">{n_ds}</span></div>
+      <div class="sidebar-stat"><span class="l">Unique tasks</span><span class="v">{fmt_int(grand_total)}</span></div>
+      <div class="sidebar-stat"><span class="l">Verified</span><span class="v">{fmt_int(combined['verified'])}</span></div>
       <div class="sidebar-stat"><span class="l">Tagged</span><span class="v">{fmt_int(grand_tagged)}</span></div>
       <div class="sidebar-stat"><span class="l">Mean difficulty</span><span class="v">{fmt_float(mean, 2)}</span></div>
     </div>
@@ -661,14 +770,16 @@ def render_html(
       </div>
     </div>
     <div class="content">
-      {render_overview(combined, datasets)}
-      {render_task_list(datasets)}
+      {render_overview(combined, batches)}
+      {render_collection(prs, filters or {}, combined)}
+      {render_task_list(batches)}
     </div>
   </div>
 </div>
 <script>
 var PAGE_META = {{
   overview: {{title: 'Overview', sub: {json.dumps(overview_sub)}}},
+  collection: {{title: 'Collection', sub: {json.dumps(collection_sub)}}},
   tasks: {{title: 'Task List', sub: {json.dumps(tasks_sub)}}}
 }};
 
@@ -688,7 +799,7 @@ document.getElementById('themeToggle').addEventListener('click', function () {{
 }});
 
 function showPage(name) {{
-  if (name !== 'tasks') {{ name = 'overview'; }}
+  if (!PAGE_META[name]) {{ name = 'overview'; }}
   document.querySelectorAll('.page').forEach(function (p) {{
     p.classList.toggle('active', p.id === 'page-' + name);
   }});
@@ -746,25 +857,64 @@ showPage((location.hash || '').slice(1));
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Generate multi-dataset dashboard")
+    parser = argparse.ArgumentParser(description="Generate the curator databoard")
     parser.add_argument("--output-html", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--config", type=Path, default=CONFIG_PATH,
+                        help="block config.yaml providing runtime_info.input.dashboard")
+    parser.add_argument("--report-only", action="store_true",
+                        help="print the source report and exit without rendering")
     args = parser.parse_args()
 
-    print(f"{'='*70}")
-    print("Generate multi-dataset dashboard")
-    print(f"{'='*70}")
+    cfg = load_dashboard_config(args.config)
+    if not cfg["batches"]:
+        raise SystemExit(
+            "no batches configured — set runtime_info.input.dashboard.datasets "
+            f"in {args.config}"
+        )
 
-    datasets = []
-    for ds_id, display, desc in DATASETS:
-        data = aggregate_dataset(ds_id)
-        datasets.append(data)
-        print(f"  {display:26s}: total={data['total']:>7,}  tagged={data['tagged']:>7,}  "
-              f"mean_diff={data['difficulty_stats']['mean']:.2f}")
+    print("=" * 70)
+    print("curator dashboard sources")
+    print("=" * 70)
 
-    render_html(datasets, args.output_html)
-    print(f"{'='*70}")
+    batches = []
+    for entry in cfg["batches"]:
+        b = aggregate_batch(entry["name"], entry["path"])
+        batches.append(b)
+        state = "" if b["exists"] else "  [PATH NOT FOUND]"
+        langs = ", ".join(f"{k}={v}" for k, v in list(b["languages"].items())[:6]) or "-"
+        print(f"  {b['name']:22s} {b['path']}{state}")
+        print(f"  {'':22s} {b['total']:>7,} tasks · {b['verified']:>7,} verified · "
+              f"{b['tagged']:>7,} tagged")
+        print(f"  {'':22s} languages: {langs}")
+
+    # overlap is expected (merged_swe_tasks is a filtered copy of swe_tasks);
+    # report it so the de-duplicated Overview totals are never a surprise
+    for i, a_ in enumerate(batches):
+        for b_ in batches[i + 1:]:
+            shared = set(a_["tasks"]) & set(b_["tasks"])
+            if shared:
+                print(f"  overlap              {len(shared):,} task ids shared between "
+                      f"{a_['name']} and {b_['name']} (counted once in Overview)")
+
+    prs_dir = cfg["collected_prs_dir"]
+    prs = collect_pr_stats(prs_dir) if prs_dir else {
+        "exists": False, "dir": "", "languages": {}, "total_prs": 0, "total_repos": 0}
+    print(f"  PR collection          {prs.get('dir') or '(unset)'}"
+          f"{'' if prs.get('exists') else '  [NOT FOUND]'}")
+    print(f"  {'':22s} {prs.get('total_prs', 0):,} PRs · {prs.get('total_repos', 0):,} repos "
+          f"· {len(prs.get('languages', {}))} languages")
+
+    combined = combine_datasets(batches)
+    print(f"  global (de-duplicated) {combined['total']:,} unique tasks · "
+          f"{combined['verified']:,} verified · {combined['tagged']:,} tagged")
+    print("=" * 70)
+
+    if args.report_only:
+        return
+
+    render_html(batches, args.output_html, prs, cfg["pr_filters"])
     print(f"✓ generated: {args.output_html}  ({args.output_html.stat().st_size/1024:.0f} KB)")
-    print(f"{'='*70}")
+    print("=" * 70)
 
 
 if __name__ == "__main__":
