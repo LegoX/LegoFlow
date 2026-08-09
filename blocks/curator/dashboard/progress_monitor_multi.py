@@ -323,8 +323,7 @@ code, pre, .mono { font-family: var(--font-mono); }
 .sidebar-logo { padding: 14px 16px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: 10px; }
 .logo-mark { width: 32px; height: 28px; border-radius: 7px; background: var(--c-accent);
   display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 13px; }
-.logo-title { font-size: 15px; font-weight: 650; }
-.logo-sub { font-size: 12px; color: var(--c-fg-mute); }
+.logo-title { font-size: 15px; font-weight: 650; line-height: 1.25; }
 
 .nav { padding: 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 2px; }
 .nav-item { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
@@ -358,34 +357,48 @@ code, pre, .mono { font-family: var(--font-mono); }
 :root[data-theme="dark"] .theme-toggle .theme-moon { display: none; }
 
 .content { flex: 1; overflow: auto; padding: 18px 24px 32px; }
-/* Modal — a centred dialog over a dimmed page, so what it says is the only thing
-   competing for attention. Replaces a top-right dropdown that was easy to miss. */
+/* Modal — a centred dialog over a dimmed page. Generous gutters, a quiet header
+   rule, and one clear column of content: the dialog should read like a page, not
+   a tooltip that grew. */
 .modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center;
-  justify-content: center; padding: 24px; background: rgba(17, 17, 17, .32); }
+  justify-content: center; padding: 32px 24px; background: rgba(17, 17, 17, .32); }
 :root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .5); }
 .modal[hidden] { display: none; }
-.modal-box { width: min(720px, 100%); max-height: min(78vh, 760px); display: flex;
+.modal-box { width: min(760px, 100%); max-height: min(80vh, 780px); display: flex;
   flex-direction: column; background: var(--c-panel); border: 1px solid var(--c-border);
-  border-radius: 14px; box-shadow: 0 24px 60px rgba(0, 0, 0, .28); overflow: hidden; }
-:root[data-theme="dark"] .modal-box { box-shadow: 0 24px 60px rgba(0, 0, 0, .65); }
-.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
-  padding: 16px 20px; border-bottom: 1px solid var(--c-border); }
-.modal-head h3 { margin: 0; font-size: 16px; font-weight: 650; }
-.modal-head .sub { color: var(--c-fg-mute); font-size: 12px; margin-top: 3px; }
+  border-radius: 16px; box-shadow: 0 24px 64px rgba(0, 0, 0, .18); overflow: hidden; }
+:root[data-theme="dark"] .modal-box { box-shadow: 0 24px 64px rgba(0, 0, 0, .6); }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 20px; padding: 22px 28px 18px; border-bottom: 1px solid var(--c-border); }
+.modal-head h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em;
+  line-height: 1.3; }
+.modal-head .sub { color: var(--c-fg-mute); font-size: 12.5px; margin-top: 5px;
+  line-height: 1.5; }
 .modal-close { background: transparent; border: 1px solid transparent; color: var(--c-fg-mute);
-  border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 18px; line-height: 1;
-  flex: 0 0 32px; }
-.modal-close:hover { color: var(--c-fg); border-color: var(--c-border); }
-.modal-body { padding: 16px 20px 20px; overflow: auto; }
+  border-radius: 9px; width: 30px; height: 30px; cursor: pointer; font-size: 19px;
+  line-height: 1; flex: 0 0 30px; }
+.modal-close:hover { color: var(--c-fg); border-color: var(--c-border);
+  background: var(--c-bg-2); }
+.modal-body { padding: 22px 28px 26px; overflow: auto; }
+
+/* Definition rows read better than a bordered grid for a handful of settings. */
 .modal-body table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.modal-body td { padding: 5px 7px; border-bottom: 1px solid var(--c-border); text-align: left; }
-.modal-body td.mono { font-family: var(--font-mono); font-size: 11.5px; word-break: break-all; }
-.modal-body .sub { color: var(--c-fg-mute); font-size: 11.5px; margin: 14px 0 5px;
-  text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+.modal-body td { padding: 8px 0; border-bottom: 1px solid var(--c-border);
+  vertical-align: top; text-align: left; line-height: 1.5; }
+.modal-body tr:last-child td { border-bottom: 0; }
+.modal-body td:first-child { color: var(--c-fg-mute); width: 34%; padding-right: 18px;
+  white-space: nowrap; }
+.modal-body td.mono { font-family: var(--font-mono); font-size: 11.5px; word-break: break-all;
+  color: var(--c-fg); }
+.modal-body .sub { color: var(--c-fg-faint); font-size: 11px; margin: 22px 0 6px;
+  text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
 .modal-body .sub:first-child { margin-top: 0; }
+.modal-body .mini { margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--c-border); line-height: 1.6; }
 .modal-body .method-card { background: transparent; border: 0; padding: 0; }
 .modal-body .method-card h3 { display: none; }
-.modal-body .method-body { font-size: 13px; line-height: 1.7; }
+.modal-body .method-body { font-size: 13px; line-height: 1.75; }
+.modal-body .method-body .mh { margin: 14px 0 4px; }
 .section-head { font-size: 12px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .07em; color: var(--c-fg-mute); margin: 22px 0 10px; }
 .section-head:first-child { margin-top: 4px; }
@@ -413,9 +426,11 @@ code, pre, .mono { font-family: var(--font-mono); }
 
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; }
-.card .k { font-size: 12px; color: var(--c-fg-mute); }
-.card .v { font-size: 22px; font-weight: 700; font-family: var(--font-mono); margin-top: 2px; }
-.card .v small { font-size: 12px; color: var(--c-fg-mute); font-weight: 500; }
+.card .k { font-size: 12px; color: var(--c-fg-mute); line-height: 1.35; }
+.card .v { font-size: 22px; font-weight: 700; font-family: var(--font-mono);
+  margin-top: 4px; line-height: 1.15; }
+.card .v small { display: block; font-size: 11px; color: var(--c-fg-mute);
+  font-weight: 500; margin-top: 3px; letter-spacing: .01em; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
 .panel h2 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
@@ -460,8 +475,11 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
 .samples-btn:disabled { opacity: .45; cursor: default; }
 .samples-btn .n { color: var(--c-fg-mute); font-weight: 500; margin-left: 5px; }
 .modal-wide { width: min(1040px, 100%); max-height: min(86vh, 900px); }
-.ds-row { display: grid; grid-template-columns: minmax(180px, 1.4fr) repeat(5, minmax(76px, 1fr)) minmax(130px, 1.2fr);
-  gap: 12px; align-items: center; width: 100%; text-align: left; cursor: pointer;
+/* Metric columns are sized to their own labels rather than sharing one fraction,
+   so "Easy / medium / hard" cannot squeeze "Mean diff." into two lines. */
+.ds-row { display: grid;
+  grid-template-columns: minmax(200px, 2fr) repeat(5, max-content) minmax(150px, 1fr);
+  gap: 10px 18px; align-items: center; width: 100%; text-align: left; cursor: pointer;
   background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
   padding: 12px 14px; color: var(--c-fg); font: inherit; font-size: 13px; }
 .ds-row:hover { border-color: var(--c-accent-border); }
@@ -476,9 +494,14 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
   text-overflow: ellipsis; white-space: nowrap; }
 .ds-row .desc { color: var(--c-fg-mute); font-size: 11.5px; margin-top: 2px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
-.ds-row .k { color: var(--c-fg-mute); font-size: 11px; text-transform: uppercase;
-  letter-spacing: .04em; white-space: nowrap; }
-.ds-row .v { font-family: var(--font-mono); font-weight: 650; font-size: 14px; margin-top: 2px; }
+.ds-row .k { color: var(--c-fg-mute); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .04em; white-space: nowrap; line-height: 1.3; }
+.ds-row .v { font-family: var(--font-mono); font-weight: 650; font-size: 14px;
+  margin-top: 3px; line-height: 1.2; white-space: nowrap; }
+@media (max-width: 1100px) {
+  .ds-row { grid-template-columns: minmax(160px, 1.6fr) repeat(auto-fit, minmax(84px, max-content)); }
+  .ds-line { flex-wrap: wrap; }
+}
 .ds-detail { margin-top: 14px; }
 .ds-panel { display: none; }
 .ds-panel.active { display: block; }
@@ -1088,8 +1111,7 @@ def render_html(
   <aside class="sidebar">
     <div class="sidebar-logo">
       <div class="logo-mark">SL</div>
-      <div><div class="logo-title">SWE Databoard</div>
-        <div class="logo-sub">multi-dataset · LLM-tagged</div></div>
+      <div class="logo-title">Curator Dashboard</div>
     </div>
     <div class="nav">
       <div class="section-label">Views</div>
