@@ -172,119 +172,14 @@ def aggregate_dataset(dataset_id: str) -> dict[str, Any]:
 
 
 
-# ── Task List data ────────────────────────────────────────────────────────────
-# The Task List page needs per-task rows, which neither aggregate_dataset() nor the
-# rendered HTML carries. Rows are joined from tasks.jsonl (identity: instance_id,
-# repo, language) and tags.jsonl (difficulty + the 4-tag schema), then written as
-# sharded JSON so a 100k+ row dataset never lands in the HTML. Cloudflare Pages is
-# static, so "paging" is the client fetching the shard it needs.
-
-TASK_COLUMNS = ["id", "ds", "repo", "lang", "score", "label", "area", "bug", "lines"]
-TASK_SHARD_ROWS = 2000
-
-
-def _record_id(rec: dict[str, Any]) -> str:
-    """tags.jsonl is written by the swegen tagger, whose id field we cannot confirm
-    from this checkout (repos/swegen is not initialised). Accept the plausible
-    spellings rather than silently dropping every row on a key mismatch."""
-    for key in ("instance_id", "task_id", "id"):
-        val = rec.get(key)
-        if val:
-            return str(val)
-    return ""
-
-
-def iter_task_rows(dataset_id: str) -> list[list[Any]]:
-    """Join one dataset's tasks.jsonl with its tags.jsonl into compact list rows."""
-    tasks_file = DATASETS_DIR / dataset_id / "tasks.jsonl"
-    tags_file = DATASETS_DIR / dataset_id / "tags.jsonl"
-    if not tasks_file.exists():
-        return []
-
-    tags: dict[str, dict[str, Any]] = {}
-    if tags_file.exists():
-        with tags_file.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except Exception:
-                    continue
-                rid = _record_id(rec)
-                if rid:
-                    tags[rid] = rec
-
-    rows: list[list[Any]] = []
-    with tasks_file.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                task = json.loads(line)
-            except Exception:
-                continue
-            tid = _record_id(task)
-            tag = tags.get(tid, {})
-            raw_tags = [str(t).strip().lower() for t in tag.get("tags", []) if str(t).strip()]
-            score = tag.get("difficulty_score")
-            rows.append([
-                tid,
-                dataset_id,
-                str(task.get("repo") or ""),
-                str(task.get("language") or (raw_tags[0] if raw_tags else "")).lower(),
-                round(float(score), 2) if score is not None else None,
-                str(tag.get("difficulty_label") or ""),
-                raw_tags[1] if len(raw_tags) >= 2 else "",
-                str(tag.get("bug_class") or "").strip().lower(),
-                int((tag.get("patch_stats") or {}).get("lines") or 0),
-            ])
-    return rows
-
-
-def export_task_shards(output_dir: Path) -> dict[str, Any]:
-    """Write data/tasks-<n>.json shards plus the manifest the Task List page reads.
-
-    Returns the manifest (also written to data/tasks-index.json)."""
-    data_dir = output_dir / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    for stale in data_dir.glob("tasks-*.json"):
-        stale.unlink()
-
-    all_rows: list[list[Any]] = []
-    per_dataset: dict[str, int] = {}
-    for ds_id, _display, _desc in DATASETS:
-        rows = iter_task_rows(ds_id)
-        per_dataset[ds_id] = len(rows)
-        all_rows.extend(rows)
-
-    shards = []
-    for i in range(0, len(all_rows), TASK_SHARD_ROWS):
-        chunk = all_rows[i : i + TASK_SHARD_ROWS]
-        name = f"tasks-{i // TASK_SHARD_ROWS:04d}.json"
-        (data_dir / name).write_text(json.dumps(chunk, ensure_ascii=False), encoding="utf-8")
-        shards.append(name)
-
-    li, ai, bi = TASK_COLUMNS.index("lang"), TASK_COLUMNS.index("area"), TASK_COLUMNS.index("bug")
-    manifest = {
-        "columns": TASK_COLUMNS,
-        "shard_rows": TASK_SHARD_ROWS,
-        "total": len(all_rows),
-        "per_dataset": per_dataset,
-        "shards": shards,
-        "languages": sorted({r[li] for r in all_rows if r[li]}),
-        "areas": sorted({r[ai] for r in all_rows if r[ai]}),
-        "bug_classes": sorted({r[bi] for r in all_rows if r[bi]}),
-    }
-    (data_dir / "tasks-index.json").write_text(
-        json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
-    )
-    return manifest
+# None means "not available", and must never render as 0 — a zero beside real
+# figures is indistinguishable from a measurement.
+UNAVAILABLE = "&mdash;"
 
 
 def fmt_int(v) -> str:
+    if v is None:
+        return UNAVAILABLE
     try:
         return f"{int(v):,}"
     except Exception:
@@ -292,6 +187,8 @@ def fmt_int(v) -> str:
 
 
 def fmt_float(v, digits: int = 2) -> str:
+    if v is None:
+        return UNAVAILABLE
     try:
         return f"{float(v):,.{digits}f}"
     except Exception:
@@ -334,7 +231,7 @@ def render_tags(tags: dict[str, int], denominator: int, limit: int = 20) -> str:
             f'<span class="tag-count">{count:,} ({percent:.1f}%)</span>'
             '</div>'
         )
-    return "\n".join(rows)
+    return '<div class="tag-rows">' + "\n".join(rows) + "</div>"
 
 
 def render_score_bins(bins: dict[str, int]) -> str:
@@ -355,26 +252,33 @@ def render_score_bins(bins: dict[str, int]) -> str:
             f'<span class="tag-count">{count:,} ({percent:.1f}%)</span>'
             '</div>'
         )
-    return "\n".join(rows)
+    return '<div class="tag-rows">' + "\n".join(rows) + "</div>"
 
 
 CSS = """
+/* Palette: .claude/plugins/root-plugin/resources/DASHBOARD_PALETTE.md.
+   Light is the default and dark is opt-in via :root[data-theme="dark"], matching
+   the tracer dashboard's theme model (and the docs site's own light-first look). */
 :root {
+  color-scheme: light;
   --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  --c-bg: #14110e; --c-bg-2: #1a171480; --c-panel: #1a1714; --c-border: #302a2499;
-  --c-fg: #f0ede7; --c-fg-dim: #a9a297; --c-fg-mute: #8a847a; --c-fg-faint: #6b665e;
-  --c-accent: #efa07c; --c-accent-soft: #efa07c33; --c-accent-border: #efa07c80;
-  --c-good: #4a9440; --c-bad: #d03b3b; --c-warn: #fab219; --c-violet: #9085e9;
-  --c-method-bg: #efa07c1f; --c-method-head: #f5c9b4;
-  font-size: 18px;
-}
-[data-theme="light"] {
   --c-bg: #fafaf7; --c-bg-2: #ffffff; --c-panel: #ffffff; --c-border: #e6e3da;
   --c-fg: #111111; --c-fg-dim: #4a453e; --c-fg-mute: #6b6b66; --c-fg-faint: #8c8c85;
   --c-accent: #b3431f; --c-accent-soft: #b3431f1f; --c-accent-border: #b3431f80;
   --c-good: #3f8f2f; --c-bad: #d03b3b; --c-warn: #c8860d; --c-violet: #4a3aa7;
+  --c-track: #e6e3da;
   --c-method-bg: #b3431f14; --c-method-head: #b3431f;
+  font-size: 15px;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --c-bg: #14110e; --c-bg-2: #1a171480; --c-panel: #1a1714; --c-border: #302a2499;
+  --c-fg: #f0ede7; --c-fg-dim: #c9c2b6; --c-fg-mute: #a9a297; --c-fg-faint: #8a847a;
+  --c-accent: #efa07c; --c-accent-soft: #efa07c33; --c-accent-border: #efa07c80;
+  --c-good: #4a9440; --c-bad: #d03b3b; --c-warn: #fab219; --c-violet: #9085e9;
+  --c-track: #302a24;
+  --c-method-bg: #efa07c1f; --c-method-head: #f5c9b4;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: var(--c-bg); color: var(--c-fg);
@@ -383,131 +287,114 @@ code, pre, .mono { font-family: var(--font-mono); }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb { background: var(--c-fg-faint); border-radius: 3px; }
 .layout { display: flex; height: 100vh; overflow: hidden; }
-.sidebar { width: 300px; flex-shrink: 0; border-right: 1px solid var(--c-border);
-  background: linear-gradient(180deg, #12100d 0%, var(--c-bg) 100%);
-  display: flex; flex-direction: column; overflow: hidden; }
-[data-theme="light"] .sidebar { background: var(--c-bg-2); }
-.sidebar-logo { padding: 16px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: 10px; }
-.logo-mark { width: 38px; height: 32px; border-radius: 8px; background: var(--c-accent);
-  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 16px; }
-.logo-title { font-size: 20px; font-weight: 600; }
-.logo-sub { font-size: 16px; color: var(--c-fg-mute); }
-/* Sidebar is functional navigation only — pages, never datasets. Datasets are an
-   in-page filter (.chip) on both pages, so the two share one selection. Mirrors
-   the tracer dashboard's .nav-item / data-page structure. */
-.nav { padding: 10px 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 3px; }
+.sidebar { width: 240px; flex-shrink: 0; border-right: 1px solid var(--c-border);
+  background: var(--c-panel); display: flex; flex-direction: column; overflow: hidden; }
+:root[data-theme="dark"] .sidebar { background: linear-gradient(180deg, #12100d 0%, var(--c-bg) 100%); }
+.sidebar-logo { padding: 14px 16px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: 10px; }
+.logo-mark { width: 32px; height: 28px; border-radius: 7px; background: var(--c-accent);
+  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 13px; }
+.logo-title { font-size: 15px; font-weight: 650; }
+.logo-sub { font-size: 12px; color: var(--c-fg-mute); }
+
+.nav { padding: 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 2px; }
 .nav-item { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
   background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
-  padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 19px; font-weight: 600; }
-.nav-item:hover { background: #302a2440; color: var(--c-fg); }
-.nav-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #f5c9b4; }
-[data-theme="light"] .nav-item.active { color: var(--c-accent); }
-.nav-icon { flex: 0 0 auto; width: 20px; text-align: center; opacity: .85; }
-.nav-count { margin-left: auto; font-family: var(--font-mono); font-size: 16px; color: var(--c-fg-mute); }
+  padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.nav-item:hover { background: var(--c-accent-soft); color: var(--c-fg); }
+.nav-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: var(--c-accent); }
+.nav-icon { flex: 0 0 auto; width: 18px; text-align: center; opacity: .85; }
+.nav-count { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--c-fg-mute); }
+.sidebar-section { padding: 10px 8px; flex: 1; overflow: auto; }
+.section-label { text-transform: uppercase; font-size: 11px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 700; }
+.sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 5px 8px; font-size: 13px; }
+.sidebar-stat .l { color: var(--c-fg-mute); }
+.sidebar-stat .v { font-weight: 650; font-family: var(--font-mono); }
 
-/* Legacy shell, kept for inject_v2.py only. That script performs surgery on the
-   frozen base_4ds.html snapshot -- which still carries the dataset-as-navigation
-   sidebar -- and swaps this whole stylesheet in wholesale, so dropping these rules
-   would leave its output unstyled. Nothing render_html() emits uses them; retire
-   them once inject_v2.py is replaced by a full regenerate. */
-.ds-nav { padding: 10px 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 3px; }
-.ds-item { background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
-  padding: 10px 12px; border-radius: 8px; text-align: left; cursor: pointer; font-size: 19px;
-  display: flex; flex-direction: column; gap: 2px; width: 100%; }
-.ds-item:hover { background: #302a2440; color: var(--c-fg); }
-.ds-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #f5c9b4; }
-[data-theme="light"] .ds-item.active { color: var(--c-accent); }
-.ds-item .ds-name { font-weight: 600; font-size: 19px; }
-.ds-item .ds-count { font-size: 17px; color: var(--c-fg-mute); }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { padding: 10px 24px; border-bottom: 1px solid var(--c-border); display: flex;
+  align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; }
+.topbar h1 { font-size: 17px; margin: 0; font-weight: 650; }
+.topbar .sub { font-size: 13px; color: var(--c-fg-mute); margin-top: 2px; }
+.topbar-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center;
+  justify-content: center; flex: 0 0 36px; background: var(--c-bg-2); border: 1px solid var(--c-border);
+  color: var(--c-fg-dim); border-radius: 8px; cursor: pointer; }
+.icon-btn:hover { color: var(--c-fg); border-color: var(--c-accent-border); }
+.icon { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme-toggle .theme-sun { display: none; }
+.theme-toggle .theme-moon { display: block; }
+:root[data-theme="dark"] .theme-toggle .theme-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .theme-moon { display: none; }
 
+.content { flex: 1; overflow: auto; padding: 18px 24px 32px; }
 .page { display: none; }
 .page.active { display: block; }
 
-/* Shared dataset filter */
-.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 20px; }
-.chip { background: var(--c-bg-2); border: 1px solid var(--c-border); color: var(--c-fg-dim);
-  border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 17px; }
-.chip:hover { color: var(--c-fg); border-color: var(--c-accent-border); }
-.chip.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: #f5c9b4; font-weight: 600; }
-[data-theme="light"] .chip.active { color: var(--c-accent); }
-.chip .n { color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 15px; margin-left: 6px; }
-.filter-sep { flex: 1 1 auto; }
-.filter-input, .filter-select { background: var(--c-bg-2); border: 1px solid var(--c-border);
-  color: var(--c-fg); border-radius: 8px; padding: 7px 12px; font-size: 17px; outline: none; }
-.filter-input:focus, .filter-select:focus { border-color: var(--c-accent); }
-.filter-input { min-width: 260px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; }
+.card .k { font-size: 12px; color: var(--c-fg-mute); }
+.card .v { font-size: 22px; font-weight: 700; font-family: var(--font-mono); margin-top: 2px; }
+.card .v small { font-size: 12px; color: var(--c-fg-mute); font-weight: 500; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.panel h2 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
+.panel h2 span { color: var(--c-fg-mute); font-weight: 400; font-size: 13px; margin-left: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--c-border); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.stacked { display: flex; height: 9px; border-radius: 5px; overflow: hidden; background: var(--c-track); min-width: 110px; }
+.stacked.empty { color: var(--c-fg-mute); font-size: 12px; background: transparent; }
+.seg.easy { background: var(--c-good); } .seg.medium { background: var(--c-warn); } .seg.hard { background: var(--c-bad); }
+.mini { font-size: 12px; color: var(--c-fg-mute); margin-top: 2px; font-family: var(--font-mono); }
 
-/* Task list */
-.tbl-wrap { overflow-x: auto; }
-table.tasks { font-size: 17px; }
-table.tasks td { white-space: nowrap; }
-table.tasks td.id { font-family: var(--font-mono); font-size: 16px; max-width: 420px;
-  overflow: hidden; text-overflow: ellipsis; }
-.pill { border-radius: 999px; padding: 2px 10px; font-size: 15px; border: 1px solid transparent; }
-.pill.easy { background: #4a944022; color: var(--c-good); border-color: #4a944055; }
-.pill.medium { background: #fab21922; color: var(--c-warn); border-color: #fab21955; }
-.pill.hard { background: #d03b3b22; color: var(--c-bad); border-color: #d03b3b55; }
-.pager { display: flex; align-items: center; gap: 12px; margin-top: 16px; font-size: 17px; }
-.pager button { background: var(--c-bg-2); border: 1px solid var(--c-border); color: var(--c-fg-dim);
-  border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 17px; }
-.pager button:hover:not(:disabled) { color: var(--c-fg); border-color: var(--c-accent-border); }
-.pager button:disabled { opacity: .4; cursor: default; }
-.pager .status { color: var(--c-fg-mute); font-family: var(--font-mono); }
-.empty-state { padding: 48px 24px; text-align: center; color: var(--c-fg-mute); font-size: 19px; }
-.sidebar-section { padding: 12px 8px 8px; flex: 1; overflow: auto; }
-.section-label { text-transform: uppercase; font-size: 16px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 600; }
-.sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 6px 8px; font-size: 19px; }
-.sidebar-stat .l { color: var(--c-fg-mute); }
-.sidebar-stat .v { font-weight: 600; font-family: var(--font-mono); }
-.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.topbar { padding: 14px 24px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; justify-content: space-between; }
-.topbar h1 { font-size: 20px; margin: 0; font-weight: 650; }
-.topbar .sub { font-size: 17px; color: var(--c-fg-mute); margin-top: 3px; }
-.theme-btn { background: var(--c-bg-2); border: 1px solid var(--c-border); color: var(--c-fg-dim);
-  border-radius: 8px; padding: 7px 14px; cursor: pointer; font-size: 17px; }
-.content { flex: 1; overflow: auto; padding: 24px; }
+/* Distribution bars. The old layout was a flex row with a fixed 230px label and a
+   fixed 150px count, which left a wide dead gutter on short labels; and every list
+   ran as one tall single column. Now each row is a 3-column grid sized to content,
+   and the list itself flows into as many columns as the card is wide. */
+.tag-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2px 22px; align-content: start; }
+.tag-row { display: grid; grid-template-columns: minmax(80px, 150px) minmax(90px, 1fr) 78px;
+  gap: 8px; align-items: center; padding: 2px 0; font-size: 12.5px; }
+.tag-name { font-family: var(--font-mono); font-size: 12px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.tag-track { height: 7px; background: var(--c-track); border-radius: 4px; overflow: hidden; }
+.tag-fill { display: block; height: 100%; background: var(--c-accent); }
+.tag-count { text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 11.5px; }
+.tag-card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; }
+.tag-card h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
+.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 12px; margin-left: 6px; }
+.muted { color: var(--c-fg-dim); font-size: 13px; }
+
+/* Task List: one row per dataset, tracer's Jobs list shape. */
+.ds-list { display: flex; flex-direction: column; gap: 8px; }
+.ds-row { display: grid; grid-template-columns: minmax(180px, 1.4fr) repeat(4, minmax(88px, 1fr)) minmax(130px, 1.2fr);
+  gap: 12px; align-items: center; width: 100%; text-align: left; cursor: pointer;
+  background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
+  padding: 12px 14px; color: var(--c-fg); font: inherit; font-size: 13px; }
+.ds-row:hover { border-color: var(--c-accent-border); }
+.ds-row.active { border-color: var(--c-accent-border); background: var(--c-accent-soft); }
+.ds-row .name { font-weight: 650; font-size: 14px; }
+.ds-row .desc { color: var(--c-fg-mute); font-size: 11.5px; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-row .k { color: var(--c-fg-mute); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.ds-row .v { font-family: var(--font-mono); font-weight: 650; font-size: 14px; margin-top: 2px; }
+.ds-detail { margin-top: 14px; }
 .ds-panel { display: none; }
 .ds-panel.active { display: block; }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 22px; }
-.card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px 18px; }
-.card .k { font-size: 18px; color: var(--c-fg-mute); }
-.card .v { font-size: 30px; font-weight: 700; font-family: var(--font-mono); margin-top: 4px; }
-.card .v small { font-size: 18px; color: var(--c-fg-mute); font-weight: 500; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
-.panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 18px 20px; margin-bottom: 18px; }
-.panel h2 { font-size: 21px; margin: 0 0 14px; font-weight: 600; letter-spacing: .01em; }
-.panel h2 span { color: var(--c-fg-mute); font-weight: 400; font-size: 18px; margin-left: 6px; }
-table { width: 100%; border-collapse: collapse; font-size: 19px; }
-th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--c-border); }
-th:first-child, td:first-child { text-align: left; }
-th { color: var(--c-fg-mute); font-weight: 600; font-size: 17px; text-transform: uppercase; letter-spacing: .04em; }
-td strong { font-weight: 600; }
-.stacked { display: flex; height: 11px; border-radius: 5px; overflow: hidden; background: #302a24; min-width: 120px; }
-.stacked.empty { color: var(--c-fg-mute); font-size: 16px; background: transparent; }
-.seg.easy { background: var(--c-good); } .seg.medium { background: var(--c-warn); } .seg.hard { background: var(--c-bad); }
-.mini { font-size: 16px; color: var(--c-fg-mute); margin-top: 3px; font-family: var(--font-mono); }
-.tag-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 18px; }
-.tag-name { flex: 0 0 230px; font-family: var(--font-mono); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag-track { flex: 1; height: 9px; background: #302a24; border-radius: 4px; overflow: hidden; }
-.tag-fill { display: block; height: 100%; background: var(--c-accent); }
-.tag-count { flex: 0 0 150px; text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 17px; }
-.tag-card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 12px; padding: 16px 18px; }
-.tag-card h3 { font-size: 20px; margin: 0 0 12px; font-weight: 600; }
-.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 17px; margin-left: 6px; }
-.muted { color: var(--c-fg-dim); font-size: 18px; }
-/* Prominent methodology card (difficulty & tagging) - stands out in both themes */
+.back-link { background: transparent; border: 0; color: var(--c-accent); cursor: pointer;
+  font: inherit; font-size: 13px; padding: 0 0 8px; }
+
 .method-card { grid-column: 1 / -1; background: var(--c-method-bg);
-  border: 1px solid var(--c-accent-border); border-radius: 12px; padding: 20px 24px; }
-.method-card h3 { font-size: 22px; margin: 0 0 14px; font-weight: 700; color: var(--c-method-head); }
-.method-card h3 span { color: var(--c-accent); font-weight: 500; font-size: 18px; margin-left: 6px; }
-.method-body { font-size: 19px; line-height: 1.85; color: var(--c-fg); }
+  border: 1px solid var(--c-accent-border); border-radius: 10px; padding: 14px 18px; }
+.method-card h3 { font-size: 15px; margin: 0 0 10px; font-weight: 700; color: var(--c-method-head); }
+.method-card h3 span { color: var(--c-accent); font-weight: 500; font-size: 13px; margin-left: 6px; }
+.method-body { font-size: 13px; line-height: 1.7; color: var(--c-fg); }
 .method-body strong { color: var(--c-fg); font-weight: 700; }
-.method-body .mh { display: inline-block; color: var(--c-method-head); font-weight: 800;
-  font-size: 20px; letter-spacing: .01em; margin: 4px 0 2px; }
+.method-body .mh { display: inline-block; color: var(--c-method-head); font-weight: 800; font-size: 13.5px; margin: 3px 0 1px; }
 .method-body .dim { color: var(--c-violet); font-weight: 700; }
-.method-body code { color: var(--c-accent); background: var(--c-accent-soft);
-  padding: 1px 6px; border-radius: 5px; font-size: 17px; }
-/* Full-width card: spans the whole grid row (e.g. Bug classes = Area/tier + Top topics width) */
+.method-body code { color: var(--c-accent); background: var(--c-accent-soft); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 .wide-card { grid-column: 1 / -1; }
 """
 
@@ -679,108 +566,86 @@ def render_comparison_table(datasets: list[dict[str, Any]]) -> str:
 """
 
 
-def render_overview(datasets: list[dict[str, Any]], combined: dict[str, Any]) -> str:
+def render_overview(combined: dict[str, Any], datasets: list[dict[str, Any]]) -> str:
+    """Overview is global only: every dataset folded into one set of numbers.
+    Per-dataset figures live on the Task List, so nothing is duplicated here."""
+    stats = combined["difficulty_stats"]
+    tagged = combined["tagged"]
+    body = render_panel(("all", "All datasets", ""), combined, True)
+    # render_panel emits a .ds-panel (a Task List detail shape); Overview is always on
+    body = body.replace('<div class="ds-panel active" data-ds="all">', "", 1).rstrip()
+    if body.endswith("</div>"):
+        body = body[: -len("</div>")]
+    return f"""
+<div class="page active" id="page-overview">
+  {render_comparison_table(datasets)}
+  {body}
+</div>
+"""
+
+
+def render_task_list(datasets: list[dict[str, Any]]) -> str:
+    """One row per dataset, tracer's Jobs-list shape: pick a row, get its detail."""
     by_id = {d["id"]: d for d in datasets}
-    chips = [
-        f'<button class="chip active" data-ds="all">All datasets'
-        f'<span class="n">{fmt_int(combined["total"])}</span></button>'
-    ]
-    panels = [render_panel(("all", "All datasets", ""), combined, True)]
+    rows, details = [], []
     for ds_id, display, desc in DATASETS:
         d = by_id.get(ds_id)
         if d is None:
             continue
-        chips.append(
-            f'<button class="chip" data-ds="{ds_id}">{html.escape(display)}'
-            f'<span class="n">{fmt_int(d["total"])}</span></button>'
-        )
-        panels.append(render_panel((ds_id, display, desc), d, False))
-
-    # the cross-dataset table only makes sense on the combined view
-    panels[0] = panels[0].replace(
-        '<div class="grid2">', render_comparison_table(datasets) + '<div class="grid2">', 1
-    )
-    return f"""
-<div class="page active" id="page-overview">
-  <div class="filters">{''.join(chips)}</div>
-  {''.join(panels)}
-</div>
-"""
-
-
-def render_tasks_page(manifest: dict[str, Any]) -> str:
-    per_ds = manifest.get("per_dataset", {})
-    chips = [
-        f'<button class="chip active" data-ds="all">All datasets'
-        f'<span class="n">{fmt_int(manifest.get("total", 0))}</span></button>'
-    ]
-    for ds_id, display, _desc in DATASETS:
-        chips.append(
-            f'<button class="chip" data-ds="{ds_id}">{html.escape(display)}'
-            f'<span class="n">{fmt_int(per_ds.get(ds_id, 0))}</span></button>'
-        )
-    langs = "".join(
-        f'<option value="{html.escape(v)}">{html.escape(v)}</option>'
-        for v in manifest.get("languages", [])
-    )
+        stats = d["difficulty_stats"]
+        rows.append(f"""
+      <button class="ds-row" data-ds="{ds_id}">
+        <span><span class="name">{html.escape(display)}</span>
+          <span class="desc">{html.escape(desc)}</span></span>
+        <span><span class="k">Tasks</span><span class="v">{fmt_int(d['total'])}</span></span>
+        <span><span class="k">Tagged</span><span class="v">{fmt_int(d['tagged'])}</span></span>
+        <span><span class="k">Mean diff.</span><span class="v">{fmt_float(stats['mean'], 2)}</span></span>
+        <span><span class="k">Avg lines</span><span class="v">{fmt_float(d['patch']['avg_lines'], 0)}</span></span>
+        <span><span class="k">Easy / medium / hard</span>{render_label_bar(d)}</span>
+      </button>""")
+        details.append(render_panel((ds_id, display, desc), d, False))
     return f"""
 <div class="page" id="page-tasks">
-  <div class="filters">{''.join(chips)}</div>
-  <div class="filters">
-    <select class="filter-select" id="f-label">
-      <option value="">All difficulty</option>
-      <option value="easy">easy</option><option value="medium">medium</option><option value="hard">hard</option>
-    </select>
-    <select class="filter-select" id="f-lang"><option value="">All languages</option>{langs}</select>
-    <input class="filter-input" id="f-q" type="search" placeholder="Search instance id or repo…">
-    <span class="filter-sep"></span>
-    <select class="filter-select" id="f-size">
-      <option value="50">50 / page</option><option value="100">100 / page</option><option value="200">200 / page</option>
-    </select>
-  </div>
-  <div class="panel">
-    <h2>Task list <span id="tasks-caption">—</span></h2>
-    <div class="tbl-wrap">
-      <table class="tasks">
-        <thead><tr><th>Instance</th><th>Dataset</th><th>Repo</th><th>Lang</th>
-          <th>Difficulty</th><th>Label</th><th>Area</th><th>Bug class</th><th>Patch lines</th></tr></thead>
-        <tbody id="tasks-body"></tbody>
-      </table>
-    </div>
-    <div id="tasks-empty" class="empty-state" hidden>No tasks match these filters.</div>
-    <div class="pager">
-      <button id="pg-prev">Prev</button>
-      <span class="status" id="pg-status">—</span>
-      <button id="pg-next">Next</button>
-    </div>
+  <div class="ds-list">{''.join(rows)}</div>
+  <div class="ds-detail" id="ds-detail" hidden>
+    <button class="back-link" id="ds-back">&larr; All datasets</button>
+    {''.join(details)}
   </div>
 </div>
 """
+
+
+MOON_SVG = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
+            '<path d="M20.5 14.5A8.7 8.7 0 0 1 9.5 3.5a7 7 0 1 0 11 11Z"></path></svg>')
+SUN_SVG = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
+           '<circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path>'
+           '<path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path>'
+           '<path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path>'
+           '<path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path>'
+           '<path d="m19.07 4.93-1.41 1.41"></path></svg>')
 
 
 def render_html(
     datasets: list[dict[str, Any]],
     output_path: Path,
     manifest: dict[str, Any] | None = None,
+    combined: dict[str, Any] | None = None,
 ) -> str:
-    manifest = manifest or {"total": 0, "per_dataset": {}, "shards": [], "languages": []}
-    combined = combine_datasets(datasets)
+    """`manifest` is accepted and ignored — kept so existing callers keep working.
+
+    `combined` lets a caller supply the global aggregate when it cannot be pooled
+    here — the frozen-snapshot path has per-dataset summaries but no raw scores."""
+    combined = combined or combine_datasets(datasets)
     grand_total = combined["total"]
     grand_tagged = combined["tagged"]
+    mean = combined["difficulty_stats"]["mean"]
+    n_ds = len([d for d in datasets if d.get("total") or d.get("tagged")]) or len(datasets)
 
-    overview = render_overview(datasets, combined)
-    tasks_page = render_tasks_page(manifest)
-
-    sidebar_stats = f"""
-      <div class="section-label">Global</div>
-      <div class="sidebar-stat"><span class="l">Datasets</span><span class="v">{len(datasets)}</span></div>
-      <div class="sidebar-stat"><span class="l">Total tasks</span><span class="v">{fmt_int(grand_total)}</span></div>
-      <div class="sidebar-stat"><span class="l">Tagged</span><span class="v">{fmt_int(grand_tagged)}</span></div>
-      <div class="sidebar-stat"><span class="l">Mean difficulty</span><span class="v">{fmt_float(combined['difficulty_stats']['mean'], 2)}</span></div>
-    """
+    overview_sub = f"{n_ds} datasets · {fmt_int(grand_total)} tasks aggregated"
+    tasks_sub = "Per-dataset breakdown — pick a dataset for its full profile"
 
     doc = f"""<!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -792,7 +657,8 @@ def render_html(
   <aside class="sidebar">
     <div class="sidebar-logo">
       <div class="logo-mark">SL</div>
-      <div><div class="logo-title">SWE Databoard</div></div>
+      <div><div class="logo-title">SWE Databoard</div>
+        <div class="logo-sub">multi-dataset · LLM-tagged</div></div>
     </div>
     <div class="nav">
       <div class="section-label">Views</div>
@@ -800,237 +666,102 @@ def render_html(
         <span class="nav-icon">◧</span><span class="nav-label">Overview</span></button>
       <button class="nav-item" data-page="tasks">
         <span class="nav-icon">☰</span><span class="nav-label">Task List</span>
-        <span class="nav-count">{fmt_int(manifest.get('total', 0))}</span></button>
+        <span class="nav-count">{n_ds}</span></button>
     </div>
-    <div class="sidebar-section">{sidebar_stats}</div>
+    <div class="sidebar-section">
+      <div class="section-label">Global</div>
+      <div class="sidebar-stat"><span class="l">Datasets</span><span class="v">{n_ds}</span></div>
+      <div class="sidebar-stat"><span class="l">Total tasks</span><span class="v">{fmt_int(grand_total)}</span></div>
+      <div class="sidebar-stat"><span class="l">Tagged</span><span class="v">{fmt_int(grand_tagged)}</span></div>
+      <div class="sidebar-stat"><span class="l">Mean difficulty</span><span class="v">{fmt_float(mean, 2)}</span></div>
+    </div>
   </aside>
   <div class="main">
     <div class="topbar">
       <div>
         <h1 id="page-title">Overview</h1>
-        <div class="sub" id="page-sub">{len(datasets)} datasets · {fmt_int(grand_total)} tasks</div>
+        <div class="sub" id="page-sub">{overview_sub}</div>
       </div>
-      <button class="theme-btn" onclick="toggleTheme()">Theme</button>
+      <div class="topbar-actions">
+        <button id="themeToggle" class="icon-btn theme-toggle" type="button"
+          aria-label="Toggle theme" title="Toggle theme"><span class="theme-moon">{MOON_SVG}</span><span class="theme-sun">{SUN_SVG}</span></button>
+      </div>
     </div>
     <div class="content">
-      {overview}
-      {tasks_page}
+      {render_overview(combined, datasets)}
+      {render_task_list(datasets)}
     </div>
   </div>
 </div>
 <script>
-var TASK_MANIFEST = {json.dumps(manifest, ensure_ascii=False)};
 var PAGE_META = {{
-  overview: {{title: 'Overview', sub: '{len(datasets)} datasets · {fmt_int(grand_total)} tasks'}},
-  tasks: {{title: 'Task List', sub: '{fmt_int(manifest.get("total", 0))} tasks · filter and page through every dataset'}}
+  overview: {{title: 'Overview', sub: {json.dumps(overview_sub)}}},
+  tasks: {{title: 'Task List', sub: {json.dumps(tasks_sub)}}}
 }};
 
+/* Light is the default; dark follows a saved choice, else the OS preference. */
+(function () {{
+  var saved = null;
+  try {{ saved = localStorage.getItem('curator-theme'); }} catch (e) {{}}
+  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = saved || (prefersDark ? 'dark' : 'light');
+}})();
+
+document.getElementById('themeToggle').addEventListener('click', function () {{
+  var el = document.documentElement;
+  var next = el.dataset.theme === 'dark' ? 'light' : 'dark';
+  el.dataset.theme = next;
+  try {{ localStorage.setItem('curator-theme', next); }} catch (e) {{}}
+}});
+
 function showPage(name) {{
+  if (name !== 'tasks') {{ name = 'overview'; }}
   document.querySelectorAll('.page').forEach(function (p) {{
     p.classList.toggle('active', p.id === 'page-' + name);
   }});
   document.querySelectorAll('.nav-item').forEach(function (b) {{
     b.classList.toggle('active', b.dataset.page === name);
   }});
-  var meta = PAGE_META[name] || PAGE_META.overview;
+  var meta = PAGE_META[name];
   document.getElementById('page-title').textContent = meta.title;
   document.getElementById('page-sub').textContent = meta.sub;
   location.hash = name;
-  if (name === 'tasks') {{ ensureTasksLoaded(); }}
-}}
-
-function toggleTheme() {{
-  var el = document.documentElement;
-  el.dataset.theme = el.dataset.theme === 'dark' ? 'light' : 'dark';
 }}
 
 document.querySelectorAll('.nav-item').forEach(function (b) {{
   b.addEventListener('click', function () {{ showPage(b.dataset.page); }});
 }});
 
-/* Overview: the dataset chips swap which aggregate panel is shown. */
-document.querySelectorAll('#page-overview .chip').forEach(function (c) {{
-  c.addEventListener('click', function () {{
-    var id = c.dataset.ds;
-    document.querySelectorAll('#page-overview .chip').forEach(function (o) {{
-      o.classList.toggle('active', o === c);
+/* Task List: a row opens that dataset's detail; Back returns to the list. */
+var detail = document.getElementById('ds-detail');
+var list = document.querySelector('#page-tasks .ds-list');
+
+document.querySelectorAll('.ds-row').forEach(function (row) {{
+  row.addEventListener('click', function () {{
+    var id = row.dataset.ds;
+    document.querySelectorAll('.ds-row').forEach(function (o) {{
+      o.classList.toggle('active', o === row);
     }});
-    document.querySelectorAll('#page-overview .ds-panel').forEach(function (p) {{
+    document.querySelectorAll('#ds-detail .ds-panel').forEach(function (p) {{
       p.classList.toggle('active', p.dataset.ds === id);
     }});
+    detail.hidden = false;
+    list.hidden = true;
+    document.getElementById('page-sub').textContent = row.querySelector('.name').textContent;
   }});
 }});
 
-/* ── Task List ──────────────────────────────────────────────────────────────
-   Pages is static, so paging means fetching the shard that holds the rows for
-   the requested page. Shards are cached once fetched. Filtering needs the whole
-   set, so any active filter pulls every shard once (bounded by shard count) and
-   then pages over the filtered result in memory. */
-var COLS = TASK_MANIFEST.columns || [];
-var IDX = {{}};
-COLS.forEach(function (c, i) {{ IDX[c] = i; }});
-
-var shardCache = {{}};
-var filtered = null;
-var page = 0;
-var loadedAll = false;
-var tasksInit = false;
-
-function pageSize() {{ return parseInt(document.getElementById('f-size').value, 10) || 50; }}
-function activeDs() {{
-  var el = document.querySelector('#page-tasks .chip.active');
-  return el ? el.dataset.ds : 'all';
-}}
-function filterState() {{
-  return {{
-    ds: activeDs(),
-    label: document.getElementById('f-label').value,
-    lang: document.getElementById('f-lang').value,
-    q: document.getElementById('f-q').value.trim().toLowerCase()
-  }};
-}}
-function hasFilter(f) {{ return f.ds !== 'all' || f.label || f.lang || f.q; }}
-
-function fetchShard(name) {{
-  if (shardCache[name]) {{ return Promise.resolve(shardCache[name]); }}
-  return fetch('data/' + name).then(function (r) {{
-    if (!r.ok) {{ throw new Error('shard ' + name + ': HTTP ' + r.status); }}
-    return r.json();
-  }}).then(function (rows) {{ shardCache[name] = rows; return rows; }});
-}}
-
-function fetchAllShards() {{
-  if (loadedAll) {{ return Promise.resolve(); }}
-  return Promise.all((TASK_MANIFEST.shards || []).map(fetchShard)).then(function () {{
-    loadedAll = true;
+var back = document.getElementById('ds-back');
+if (back) {{
+  back.addEventListener('click', function () {{
+    detail.hidden = true;
+    list.hidden = false;
+    document.querySelectorAll('.ds-row').forEach(function (o) {{ o.classList.remove('active'); }});
+    document.getElementById('page-sub').textContent = PAGE_META.tasks.sub;
   }});
 }}
 
-function matches(row, f) {{
-  if (f.ds !== 'all' && row[IDX.ds] !== f.ds) {{ return false; }}
-  if (f.label && row[IDX.label] !== f.label) {{ return false; }}
-  if (f.lang && row[IDX.lang] !== f.lang) {{ return false; }}
-  if (f.q) {{
-    var hay = (row[IDX.id] + ' ' + row[IDX.repo]).toLowerCase();
-    if (hay.indexOf(f.q) === -1) {{ return false; }}
-  }}
-  return true;
-}}
-
-function renderRows(rows, offset, total) {{
-  var body = document.getElementById('tasks-body');
-  var empty = document.getElementById('tasks-empty');
-  body.innerHTML = '';
-  empty.hidden = rows.length > 0;
-
-  rows.forEach(function (r) {{
-    var tr = document.createElement('tr');
-    function td(text, cls) {{
-      var c = document.createElement('td');
-      if (cls) {{ c.className = cls; }}
-      c.textContent = text === null || text === undefined || text === '' ? '—' : text;
-      return c;
-    }}
-    tr.appendChild(td(r[IDX.id], 'id'));
-    tr.appendChild(td(r[IDX.ds]));
-    tr.appendChild(td(r[IDX.repo]));
-    tr.appendChild(td(r[IDX.lang]));
-    tr.appendChild(td(r[IDX.score]));
-    var lc = document.createElement('td');
-    var lab = r[IDX.label];
-    if (lab) {{
-      var span = document.createElement('span');
-      span.className = 'pill ' + lab;
-      span.textContent = lab;
-      lc.appendChild(span);
-    }} else {{ lc.textContent = '—'; }}
-    tr.appendChild(lc);
-    tr.appendChild(td(r[IDX.area]));
-    tr.appendChild(td(r[IDX.bug]));
-    tr.appendChild(td(r[IDX.lines]));
-    body.appendChild(tr);
-  }});
-
-  var from = total === 0 ? 0 : offset + 1;
-  var to = offset + rows.length;
-  document.getElementById('pg-status').textContent =
-    from.toLocaleString() + '–' + to.toLocaleString() + ' of ' + total.toLocaleString();
-  document.getElementById('tasks-caption').textContent = total.toLocaleString() + ' matching';
-  document.getElementById('pg-prev').disabled = page === 0;
-  document.getElementById('pg-next').disabled = to >= total;
-}}
-
-function refreshTasks() {{
-  var f = filterState();
-  var size = pageSize();
-  var status = document.getElementById('pg-status');
-
-  if (!hasFilter(f)) {{
-    /* unfiltered: fetch only the shards this page spans */
-    filtered = null;
-    var total = TASK_MANIFEST.total || 0;
-    var shardRows = TASK_MANIFEST.shard_rows || 1;
-    var offset = page * size;
-    if (offset >= total) {{ page = 0; offset = 0; }}
-    var first = Math.floor(offset / shardRows);
-    var last = Math.floor(Math.max(offset + size - 1, offset) / shardRows);
-    var names = (TASK_MANIFEST.shards || []).slice(first, last + 1);
-    if (!names.length) {{ renderRows([], 0, total); return; }}
-    status.textContent = 'loading…';
-    Promise.all(names.map(fetchShard)).then(function (chunks) {{
-      var flat = [].concat.apply([], chunks);
-      var start = offset - first * shardRows;
-      renderRows(flat.slice(start, start + size), offset, total);
-    }}).catch(function (e) {{ status.textContent = String(e.message || e); }});
-    return;
-  }}
-
-  status.textContent = 'loading…';
-  fetchAllShards().then(function () {{
-    var all = [];
-    (TASK_MANIFEST.shards || []).forEach(function (n) {{
-      all = all.concat(shardCache[n] || []);
-    }});
-    filtered = all.filter(function (r) {{ return matches(r, f); }});
-    var offset = page * size;
-    if (offset >= filtered.length) {{ page = 0; offset = 0; }}
-    renderRows(filtered.slice(offset, offset + size), offset, filtered.length);
-  }}).catch(function (e) {{ status.textContent = String(e.message || e); }});
-}}
-
-function ensureTasksLoaded() {{
-  if (tasksInit) {{ return; }}
-  tasksInit = true;
-
-  document.querySelectorAll('#page-tasks .chip').forEach(function (c) {{
-    c.addEventListener('click', function () {{
-      document.querySelectorAll('#page-tasks .chip').forEach(function (o) {{
-        o.classList.toggle('active', o === c);
-      }});
-      page = 0;
-      refreshTasks();
-    }});
-  }});
-  ['f-label', 'f-lang', 'f-size'].forEach(function (id) {{
-    document.getElementById(id).addEventListener('change', function () {{ page = 0; refreshTasks(); }});
-  }});
-  var q = document.getElementById('f-q');
-  var t = null;
-  q.addEventListener('input', function () {{
-    clearTimeout(t);
-    t = setTimeout(function () {{ page = 0; refreshTasks(); }}, 250);
-  }});
-  document.getElementById('pg-prev').addEventListener('click', function () {{
-    if (page > 0) {{ page--; refreshTasks(); }}
-  }});
-  document.getElementById('pg-next').addEventListener('click', function () {{
-    page++; refreshTasks();
-  }});
-
-  refreshTasks();
-}}
-
-showPage((location.hash || '#overview').slice(1) === 'tasks' ? 'tasks' : 'overview');
+showPage((location.hash || '').slice(1));
 </script>
 </body>
 </html>
@@ -1057,13 +788,9 @@ def main():
         print(f"  {display:26s}: total={data['total']:>7,}  tagged={data['tagged']:>7,}  "
               f"mean_diff={data['difficulty_stats']['mean']:.2f}")
 
-    manifest = export_task_shards(args.output_html.parent)
-    print(f"  {'task shards':26s}: rows={manifest['total']:>7,}  shards={len(manifest['shards'])}")
-
-    render_html(datasets, args.output_html, manifest)
+    render_html(datasets, args.output_html)
     print(f"{'='*70}")
     print(f"✓ generated: {args.output_html}  ({args.output_html.stat().st_size/1024:.0f} KB)")
-    print(f"✓ task data: {args.output_html.parent / 'data'}  ({len(manifest['shards'])} shards)")
     print(f"{'='*70}")
 
 
