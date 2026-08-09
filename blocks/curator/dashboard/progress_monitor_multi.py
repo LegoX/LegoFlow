@@ -377,8 +377,8 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
   gap: 2px 22px; align-content: start; }
 .tag-row { display: grid; grid-template-columns: minmax(80px, 150px) minmax(90px, 1fr) 78px;
   gap: 8px; align-items: center; padding: 2px 0; font-size: 12.5px; }
-.tag-name { font-family: var(--font-mono); font-size: 12px; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; }
+.tag-name { font-family: var(--font-mono); font-size: 12px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag-track { height: 7px; background: var(--c-track); border-radius: 4px; overflow: hidden; }
 .tag-fill { display: block; height: 100%; background: var(--c-accent); }
 .tag-count { text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 11.5px; }
@@ -395,10 +395,18 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
   padding: 12px 14px; color: var(--c-fg); font: inherit; font-size: 13px; }
 .ds-row:hover { border-color: var(--c-accent-border); }
 .ds-row.active { border-color: var(--c-accent-border); background: var(--c-accent-soft); }
-.ds-row .name { font-weight: 650; font-size: 14px; }
+/* Each cell stacks a label over a value. The inner spans are not themselves grid
+   items, so they must be blockified explicitly — left inline they sit side by side,
+   margin-top does nothing, and ellipsis never engages, so a long path overflows
+   into the next column. min-width:0 lets a grid item shrink below its content. */
+.ds-row > span { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.ds-row .name, .ds-row .desc, .ds-row .k, .ds-row .v { display: block; }
+.ds-row .name { font-weight: 650; font-size: 14px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
 .ds-row .desc { color: var(--c-fg-mute); font-size: 11.5px; margin-top: 2px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ds-row .k { color: var(--c-fg-mute); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.ds-row .k { color: var(--c-fg-mute); font-size: 11px; text-transform: uppercase;
+  letter-spacing: .04em; white-space: nowrap; }
 .ds-row .v { font-family: var(--font-mono); font-weight: 650; font-size: 14px; margin-top: 2px; }
 .ds-detail { margin-top: 14px; }
 .ds-panel { display: none; }
@@ -568,18 +576,55 @@ def combine_datasets(batches: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def render_overview(combined: dict[str, Any], datasets: list[dict[str, Any]]) -> str:
-    """Overview is global only: every dataset folded into one set of numbers.
-    Per-dataset figures live on the Task List, so nothing is duplicated here."""
-    stats = combined["difficulty_stats"]
-    tagged = combined["tagged"]
-    body = render_panel(("all", "All datasets", ""), combined, True)
-    # render_panel emits a .ds-panel (a Task List detail shape); Overview is always on
+def render_overview(combined: dict[str, Any], batches: list[dict[str, Any]],
+                    prs: dict[str, Any]) -> str:
+    """Global only: every batch folded into one set of figures, plus the headline
+    collection rates. Per-batch detail lives on the Task List."""
+    body = render_panel(("all", "All batches", ""), combined, True)
     body = body.replace('<div class="ds-panel active" data-ds="all">', "", 1).rstrip()
     if body.endswith("</div>"):
         body = body[: -len("</div>")]
+
+    o = (prs or {}).get("overall") or {}
+    searched = o.get("Repos Searched")
+    kept = o.get("Repos with Qualifying PRs")
+    scanned = o.get("PRs Scanned")
+    merged = o.get("PRs Merged")
+    qualifying = o.get("PRs Qualifying")
+    # union, not sum: pipeline pools overlap, so adding their totals would
+    # double-count the tasks that appear in more than one
+    pipeline_ids: set[str] = set()
+    for b in batches:
+        if not b.get("external"):
+            pipeline_ids |= set(b.get("tasks", {}))
+    pipeline_tasks = len(pipeline_ids)
+
+    def rate(num, den):
+        return (num / den) if (num is not None and den) else None
+
+    collection = ""
+    if o:
+        collection = f"""
+  <div class="panel">
+    <h2>Collection &rarr; tasks <span>headline rates</span></h2>
+    <table>
+      <tr><th>Stage</th><th>Count</th><th>Rate</th></tr>
+      <tr><td>Repos searched</td><td>{fmt_int(searched)}</td><td>&mdash;</td></tr>
+      <tr><td>Repos with qualifying PRs</td><td>{fmt_int(kept)}</td><td>{fmt_pct(rate(kept, searched))}</td></tr>
+      <tr><td>PRs scanned</td><td>{fmt_int(scanned)}</td><td>&mdash;</td></tr>
+      <tr><td>PRs merged</td><td>{fmt_int(merged)}</td><td>{fmt_pct(rate(merged, scanned))}</td></tr>
+      <tr><td>PRs qualifying</td><td>{fmt_int(qualifying)}</td><td>{fmt_pct(rate(qualifying, scanned))}</td></tr>
+      <tr><td>Tasks generated</td><td>{fmt_int(pipeline_tasks)}</td><td>{fmt_pct(rate(pipeline_tasks, qualifying))}</td></tr>
+      <tr><td>Tasks verified</td><td>{fmt_int(combined['verified'])}</td><td>{fmt_pct(combined['yield'])}</td></tr>
+    </table>
+    <div class="mini">rates are against the previous stage; imported datasets are excluded
+      from "tasks generated" &mdash; they have no PR provenance</div>
+  </div>
+"""
+
     return f"""
 <div class="page active" id="page-overview">
+  {collection}
   {body}
   <div class="grid2" style="margin-top:14px;">
 {METHODOLOGY_HTML}
@@ -801,7 +846,7 @@ def render_html(
       </div>
     </div>
     <div class="content">
-      {render_overview(combined, batches)}
+      {render_overview(combined, batches, prs)}
       {render_collection(prs, filters or {}, combined, batches)}
       {render_task_list(batches)}
     </div>
