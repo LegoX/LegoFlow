@@ -24,6 +24,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from check_task_dir import check_task_dir, format_result  # noqa: E402
 from collection_stats import collect_pr_stats  # noqa: E402
 from task_toml import collect_task_dim, read_verified_ids  # noqa: E402
 
@@ -953,10 +954,19 @@ def main():
     print("=" * 70)
 
     batches = []
+    problems: list[str] = []
     for entry in cfg["batches"]:
+        # A mistyped path renders a board that reports zero, which reads as "no
+        # tasks" rather than "wrong directory". Classify the layout up front.
+        layout = check_task_dir(entry["path"])
+        if layout["status"] not in {"ok", "partial"}:
+            problems.append(f"{entry['name']}: {format_result(layout)}")
         b = aggregate_batch(entry["name"], entry["path"], entry.get("external", False))
+        b["layout"] = layout["status"]
         batches.append(b)
         state = "" if b["exists"] else "  [PATH NOT FOUND]"
+        if layout["status"] not in {"ok", "partial"}:
+            state = f"  [LAYOUT: {layout['status'].upper()}]"
         langs = ", ".join(f"{k}={v}" for k, v in list(b["languages"].items())[:6]) or "-"
         print(f"  {b['name']:22s} {b['path']}{state}")
         stale = (f" · {b['stale_verified']:,} verified ids no longer on disk"
@@ -985,16 +995,24 @@ def main():
     combined = combine_datasets(batches)
     print(f"  global (de-duplicated) {combined['total']:,} unique tasks · "
           f"{combined['verified']:,} verified · {combined['tagged']:,} tagged")
+    if problems:
+        print("-" * 70)
+        print("LAYOUT PROBLEMS — a batch must hold one harbor task per immediate child")
+        print("(each with task.toml + instruction.md):")
+        for line in problems:
+            print("  " + line.replace("\n", "\n  "))
+        print("  Fix the paths in config.yaml before trusting these numbers.")
     print("=" * 70)
 
     if args.report_only:
-        return
+        return 1 if problems else 0
 
     render_html(batches, args.output_html, prs, cfg["pr_filters"])
     print(f"✓ generated: {args.output_html}  ({args.output_html.stat().st_size/1024:.0f} KB)")
     print("=" * 70)
+    return 1 if problems else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
 

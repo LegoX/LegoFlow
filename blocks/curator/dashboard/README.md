@@ -47,9 +47,20 @@ The large `{language}_prs.jsonl` payloads are deliberately not read.
       collected_prs_dir: ""
 ```
 
-Each `name: path` entry is one **batch**. Paths are absolute or relative to
-`config.yaml`. Both directory layouts are handled: `<path>/<task_id>/` and
-`<path>/<lang>-cc/<task_id>/`.
+Each `name: path` entry is one **batch**, and must hold one harbor task per
+immediate child (`task.toml` + `instruction.md`). Paths are absolute or relative
+to `config.yaml`.
+
+Check a path before configuring it:
+
+```bash
+python3 dashboard/check_task_dir.py <path>
+```
+
+It reports `OK`, `NESTED` (tasks one level deeper, e.g. `swe_tasks/<lang>-cc/`),
+`EMPTY` or `MISSING`. The generator runs the same check and exits non-zero if any
+configured batch fails, so a mistyped path is reported rather than showing up as
+zero tasks.
 
 `collected_prs_dir` empty falls back to `pr_collection.output_dir`.
 
@@ -112,5 +123,6 @@ CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... \
 | `progress_monitor_multi.py` | Config loading, aggregation, HTML rendering |
 | `task_toml.py` | Reads `task.toml` across both layouts (ported from tracer's dashboard) |
 | `collection_stats.py` | Parses `filtering_report.md` and the PR id lists |
+| `check_task_dir.py` | Verifies a directory is a list of harbor tasks |
 | `import_hf_dataset.py` | Converts a public HF dataset into task directories |
 | `site/index.html` | Rendered output |

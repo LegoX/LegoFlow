@@ -79,13 +79,12 @@ runtime_info:
       java: { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
       rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16, max_verified_tasks: 128 } }
 
-    # name: path — each entry is one batch on the dashboard. Absolute, or relative
-    # to this file. Overlapping pools are fine; Overview de-duplicates by task id.
+    # The dashboard monitoring path, displaying the progress of PR collection and task creation.
+    # name: path — each entry is one batch. Absolute, or relative to this file.
     dashboard:
       datasets:
-        merged_swe_tasks: artifacts/merged_swe_tasks
-        swe_tasks: artifacts/swe_tasks
-      collected_prs_dir: ""
+        merged_swe_tasks: /absolute/path/to/curator/artifacts/merged_swe_tasks
+      collected_prs_dir: /absolute/path/to/curator/artifacts/collected_prs
 
   output:
     swe_tasks_dir:

@@ -66,9 +66,38 @@ curator dashboard sources
 ```
 
 Present this to the user verbatim and ask whether to proceed. Never render
-without an explicit "yes". If a batch reports `[PATH NOT FOUND]` or zero tasks,
-say so plainly and ask whether to continue or fix the config first — do not
-silently render an empty board.
+without an explicit "yes".
+
+### Every configured path must be a list of harbor tasks
+
+A batch directory holds **one harbor task per immediate child**, each with
+`task.toml` and `instruction.md`:
+
+```text
+<batch>/<task_id>/task.toml
+<batch>/<task_id>/instruction.md
+```
+
+The report checks this and exits non-zero when any path fails. A wrong path still
+renders — it just reports zero — which reads as "we have no tasks" instead of
+"you pointed me at the wrong directory", so **never pass a layout problem along
+silently**. Show the user the flagged block and what it says:
+
+| Status | Meaning | What to tell the user |
+| --- | --- | --- |
+| `MISSING` | path does not exist | the path is wrong, or the artifacts live on another host |
+| `NESTED` | tasks are one level deeper, e.g. `swe_tasks/<lang>-cc/<task>/` | name the specific subdirectory, or use the flattened pool instead |
+| `EMPTY` | directory exists, no `task.toml` at either depth | not a task pool — check what was intended |
+| `PARTIAL` | some children are tasks, some are not | say which children are being ignored |
+
+Any path can also be checked on its own before editing the config:
+
+```bash
+python3 dashboard/check_task_dir.py <path> [<path> ...]
+```
+
+Stop and ask the user to fix `config.yaml` when a batch is `MISSING`, `NESTED` or
+`EMPTY`. Only continue past a warning if they say so knowing what it means.
 
 ## Optional - add an open-source dataset
 
