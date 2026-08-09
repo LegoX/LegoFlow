@@ -508,36 +508,63 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
 .back-link { background: transparent; border: 0; color: var(--c-accent); cursor: pointer;
   font: inherit; font-size: 13px; padding: 0 0 8px; }
 
-/* Sample task viewer */
-.sample-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px; }
-.sample-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
-  background: var(--c-bg-2); border: 1px solid var(--c-border); border-radius: 8px;
-  padding: 8px 10px; cursor: pointer; font: inherit; font-size: 12.5px; color: var(--c-fg);
-  text-align: left; min-width: 0; }
-.sample-row:hover { border-color: var(--c-accent-border); }
+/* Sample task viewer — a fixed-size two-pane dialog: the ten samples on the left,
+   the selected task's files on the right. Fixed rather than content-sized so the
+   dialog does not jump between a 600-byte instruction and a 24 KB patch. */
+.samples-box { width: min(1160px, 95vw); height: min(760px, 88vh); max-height: none; }
+.samples-body { padding: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 0; flex: 1; overflow: hidden; }
+.samples-side { border-right: 1px solid var(--c-border); overflow-y: auto;
+  padding: 12px; background: var(--c-bg-2); min-height: 0; }
+.samples-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+.sample-list { display: flex; flex-direction: column; gap: 5px; }
+.sample-row { display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  background: transparent; border: 1px solid transparent; border-radius: 8px;
+  padding: 8px 10px; cursor: pointer; font: inherit; font-size: 12px; color: var(--c-fg);
+  text-align: left; width: 100%; min-width: 0; }
+.sample-row:hover { border-color: var(--c-border); background: var(--c-panel); }
 .sample-row.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); }
-.sample-row .sid { font-family: var(--font-mono); font-size: 11.5px; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.sample-row .smeta { color: var(--c-fg-mute); font-size: 11px; white-space: nowrap; }
-.sample-view { margin-top: 14px; border: 1px solid var(--c-border); border-radius: 10px;
-  background: var(--c-bg-2); overflow: hidden; }
-.sample-head { padding: 10px 14px; border-bottom: 1px solid var(--c-border); }
-.sample-head .t { font-family: var(--font-mono); font-size: 13px; font-weight: 650; word-break: break-all; }
-.sample-head .m { color: var(--c-fg-mute); font-size: 11.5px; margin-top: 3px; }
-.tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px 0; }
-.tab { background: transparent; border: 1px solid transparent; border-bottom: none;
-  color: var(--c-fg-dim); border-radius: 7px 7px 0 0; padding: 5px 12px; cursor: pointer;
-  font: inherit; font-size: 12px; }
+.sample-row .sid { font-family: var(--font-mono); font-size: 11.5px; width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sample-row .smeta { color: var(--c-fg-mute); font-size: 10.5px; }
+
+.sample-head { padding: 14px 20px 12px; border-bottom: 1px solid var(--c-border); }
+.sample-head .t { font-family: var(--font-mono); font-size: 13px; font-weight: 650;
+  word-break: break-all; line-height: 1.4; }
+.sample-head .m { color: var(--c-fg-mute); font-size: 11.5px; margin-top: 4px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 20px 0; }
+.tab { background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
+  border-radius: 8px 8px 0 0; padding: 6px 12px; cursor: pointer; font: inherit;
+  font-size: 12px; white-space: nowrap; }
 .tab:hover { color: var(--c-fg); }
-.tab.active { background: var(--c-panel); border-color: var(--c-border); color: var(--c-accent); font-weight: 650; }
-.tab .sz { color: var(--c-fg-mute); font-size: 10.5px; margin-left: 5px; }
-.sample-body { background: var(--c-panel); border-top: 1px solid var(--c-border); }
-.sample-pre { margin: 0; padding: 12px 14px; max-height: 460px; overflow: auto;
-  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5;
-  white-space: pre-wrap; overflow-wrap: anywhere; }
-.sample-pre .add { color: var(--c-good); }
-.sample-pre .del { color: var(--c-bad); }
-.sample-pre .hunk { color: var(--c-accent); }
+.tab.active { background: var(--code-bg); border-color: var(--code-border);
+  border-bottom-color: var(--code-bg); color: var(--code-fg); font-weight: 650; }
+.tab .sz { color: var(--c-fg-faint); font-size: 10.5px; margin-left: 6px; }
+
+/* The file pane is an editor, not a page: its own dark surface in both themes,
+   a line-number gutter, and syntax colour. */
+:root { --code-bg: #1b1815; --code-border: #2b2621; --code-fg: #e8e2d8;
+  --code-gutter: #6a6058; --code-comment: #8a7f72; --code-str: #c9a26a;
+  --code-kw: #e0a06f; --code-var: #9ec7c2; --code-meta: #b48ead; }
+.sample-body { flex: 1; min-height: 0; margin: 0 20px 20px; border: 1px solid var(--code-border);
+  border-radius: 0 10px 10px 10px; background: var(--code-bg); overflow: hidden;
+  display: flex; }
+.sample-pre { margin: 0; padding: 14px 16px 14px 0; overflow: auto; flex: 1;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--code-fg);
+  white-space: pre; tab-size: 4; }
+.sample-pre code { display: block; min-width: max-content; }
+.sample-pre .ln { display: inline-block; width: 3.2em; padding-right: 1em; margin-right: .9em;
+  text-align: right; color: var(--code-gutter); border-right: 1px solid var(--code-border);
+  user-select: none; }
+.sample-pre .cm { color: var(--code-comment); font-style: italic; }
+.sample-pre .st { color: var(--code-str); }
+.sample-pre .kw { color: var(--code-kw); font-weight: 600; }
+.sample-pre .va { color: var(--code-var); }
+.sample-pre .mt { color: var(--code-meta); }
+.sample-pre .add { color: #86b87a; }
+.sample-pre .del { color: #d98080; }
+.sample-pre .hunk { color: #7fa6c9; }
 .method-card { grid-column: 1 / -1; background: var(--c-method-bg);
   border: 1px solid var(--c-accent-border); border-radius: 10px; padding: 14px 18px; }
 .method-card h3 { font-size: 15px; margin: 0 0 10px; font-weight: 700; color: var(--c-method-head); }
@@ -913,15 +940,15 @@ def render_task_list(batches: list[dict[str, Any]],
 </div>
 
 <div class="modal" id="samplesPanel" role="dialog" aria-modal="true" hidden>
-  <div class="modal-box modal-wide">
+  <div class="modal-box samples-box">
     <div class="modal-head">
       <div><h3 id="samplesTitle">Sample tasks</h3>
         <div class="sub" id="samplesSub">pick one to see what a task contains</div></div>
       <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
     </div>
-    <div class="modal-body">
-      <div class="sample-list" id="samplesList"></div>
-      <div class="sample-view" id="samplesView" hidden></div>
+    <div class="samples-body">
+      <div class="samples-side"><div class="sample-list" id="samplesList"></div></div>
+      <div class="samples-main" id="samplesView"></div>
     </div>
   </div>
 </div>
@@ -1278,12 +1305,71 @@ function escapeHtml(t) {{
   }});
 }}
 
+/* Highlighting tokenises the RAW text and escapes inside the callback, so a rule
+   can never match markup an earlier rule inserted. Each character is consumed once. */
+var RULES = {{
+  sh: [
+    ['cm', /#[^\\n]*/],
+    ['st', /"(?:\\\\.|[^"\\\\])*"|'(?:[^'])*'/],
+    ['va', /\\$\\{{[^}}]*\\}}|\\$[A-Za-z_][A-Za-z0-9_]*/],
+    ['kw', /\\b(?:if|then|elif|else|fi|for|while|do|done|case|esac|function|return|export|source|local|set|cd|echo|exit|test)\\b/]
+  ],
+  docker: [
+    ['cm', /#[^\\n]*/],
+    ['st', /"(?:\\\\.|[^"\\\\])*"/],
+    ['kw', /^[ \\t]*(?:FROM|RUN|CMD|LABEL|COPY|ADD|ENV|ARG|WORKDIR|ENTRYPOINT|USER|EXPOSE|VOLUME|SHELL|HEALTHCHECK)\\b/m],
+    ['va', /\\$\\{{[^}}]*\\}}|\\$[A-Za-z_][A-Za-z0-9_]*/]
+  ],
+  md: [
+    ['mt', /^#{{1,6}} [^\\n]*/m],
+    ['st', /`[^`\\n]*`/],
+    ['kw', /\\*\\*[^*\\n]+\\*\\*/]
+  ]
+}};
+
+function kindOf(file) {{
+  if (/\\.patch$/.test(file)) return 'diff';
+  if (/Dockerfile$/i.test(file)) return 'docker';
+  if (/\\.sh$/.test(file)) return 'sh';
+  if (/\\.md$/.test(file)) return 'md';
+  return 'plain';
+}}
+
 function highlightDiff(text) {{
-  return escapeHtml(text).split('\\n').map(function (line) {{
-    if (line.charAt(0) === '+' && line.slice(0, 3) !== '+++') return '<span class="add">' + line + '</span>';
-    if (line.charAt(0) === '-' && line.slice(0, 3) !== '---') return '<span class="del">' + line + '</span>';
-    if (line.slice(0, 2) === '@@') return '<span class="hunk">' + line + '</span>';
-    return line;
+  return text.split('\\n').map(function (line) {{
+    var e = escapeHtml(line);
+    if (line.charAt(0) === '+' && line.slice(0, 3) !== '+++') return '<span class="add">' + e + '</span>';
+    if (line.charAt(0) === '-' && line.slice(0, 3) !== '---') return '<span class="del">' + e + '</span>';
+    if (line.slice(0, 2) === '@@') return '<span class="hunk">' + e + '</span>';
+    return e;
+  }}).join('\\n');
+}}
+
+function highlightCode(text, rules) {{
+  var parts = rules.map(function (r) {{ return '(' + r[1].source + ')'; }});
+  var flags = 'g' + (rules.some(function (r) {{ return r[1].flags.indexOf('m') >= 0; }}) ? 'm' : '');
+  var re = new RegExp(parts.join('|'), flags);
+  var out = '', last = 0, m;
+  while ((m = re.exec(text)) !== null) {{
+    if (m.index > last) {{ out += escapeHtml(text.slice(last, m.index)); }}
+    var cls = 'cm';
+    for (var i = 1; i < m.length; i++) {{
+      if (m[i] !== undefined) {{ cls = rules[i - 1][0]; break; }}
+    }}
+    out += '<span class="' + cls + '">' + escapeHtml(m[0]) + '</span>';
+    last = m.index + m[0].length;
+    if (m[0].length === 0) {{ re.lastIndex++; }}
+  }}
+  return out + escapeHtml(text.slice(last));
+}}
+
+function renderCode(text, file) {{
+  var kind = kindOf(file);
+  var body = kind === 'diff' ? highlightDiff(text)
+           : RULES[kind] ? highlightCode(text, RULES[kind])
+           : escapeHtml(text);
+  return body.split('\\n').map(function (line, i) {{
+    return '<span class="ln">' + (i + 1) + '</span>' + line;
   }}).join('\\n');
 }}
 
@@ -1297,18 +1383,17 @@ function showSample(sample) {{
       escapeHtml(p.label) + '<span class="sz">' + kb + '</span></button>';
   }}).join('');
 
-  view.hidden = false;
   view.innerHTML =
     '<div class="sample-head"><div class="t">' + escapeHtml(sample.task_name) + '</div>' +
     '<div class="m">' + escapeHtml(sample.repo || '') +
     (meta ? ' &nbsp;|&nbsp; ' + escapeHtml(meta) : '') + '</div></div>' +
     '<div class="tabs">' + tabs + '</div>' +
-    '<div class="sample-body"><pre class="sample-pre" id="samplesPre"></pre></div>';
+    '<div class="sample-body"><pre class="sample-pre"><code id="samplesPre"></code></pre></div>';
 
   function show(i) {{
     var part = sample.parts[i];
     var pre = document.getElementById('samplesPre');
-    pre.innerHTML = /\\.patch$/.test(part.file) ? highlightDiff(part.text) : escapeHtml(part.text);
+    pre.innerHTML = renderCode(part.text, part.file);
     view.querySelectorAll('.tab').forEach(function (t) {{
       t.classList.toggle('active', t.dataset.i === String(i));
     }});
@@ -1325,13 +1410,12 @@ function openSamples(batch) {{
   var list = document.getElementById('samplesList');
   var view = document.getElementById('samplesView');
   document.getElementById('samplesTitle').textContent = 'Sample tasks — ' + batch;
-  view.hidden = true;
   view.innerHTML = '';
   closeModals();
   samplesModal.hidden = false;
 
   if (!info) {{
-    list.innerHTML = '<div class="empty-state">no samples cached for this batch</div>';
+    view.innerHTML = '<div class="empty-state">no samples cached for this batch</div>';
     return;
   }}
   document.getElementById('samplesSub').textContent =
@@ -1357,15 +1441,14 @@ function openSamples(batch) {{
   }});
 
   if (sampleCache[batch]) {{ return; }}
-  view.hidden = false;
   view.innerHTML = '<div class="empty-state">loading…</div>';
   fetch(info.file).then(function (r) {{
     if (!r.ok) {{ throw new Error('HTTP ' + r.status); }}
     return r.json();
   }}).then(function (data) {{
     sampleCache[batch] = data;
-    view.hidden = true;
-    view.innerHTML = '';
+    var first = list.querySelector('.sample-row');
+    if (first) {{ first.click(); }} else {{ view.innerHTML = ''; }}
   }}).catch(function (e) {{
     view.innerHTML = '<div class="empty-state">could not load samples: ' +
       escapeHtml(e.message) + '</div>';
