@@ -7,7 +7,7 @@ three views:
 | --- | --- |
 | Overview | Headline totals and rates, the repos → PRs → tasks funnel, and task-creation success by language |
 | PR Collection | Repos and PRs collected, per language, with the reasons rows were dropped |
-| Task List | One row per configured batch; click a row for that batch's full profile |
+| Task List | One row per configured batch; click a row for its full profile and 10 sample tasks |
 
 ## Where the numbers come from
 
@@ -131,5 +131,14 @@ CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... \
 | `task_toml.py` | Reads `task.toml` across both layouts (ported from tracer's dashboard) |
 | `collection_stats.py` | Parses `filtering_report.md` and the PR id lists |
 | `check_task_dir.py` | Verifies a directory is a list of harbor tasks |
+| `sample_tasks.py` | Caches 10 whole tasks per batch for the sample viewer |
 | `import_hf_dataset.py` | Converts a public HF dataset into task directories |
 | `site/index.html` | Rendered output |
+
+## Sample tasks
+
+Counts never show what a task actually *is*. Each batch caches its first ten tasks
+to `site/data/samples-<batch>.json` — problem statement, verifier, reference fix,
+bug patch and Dockerfile, each capped at 24 KB — and the Task List fetches one
+only when a reader opens it. The JSON files are the cache; they are rewritten on
+every render.

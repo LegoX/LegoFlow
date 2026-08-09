@@ -17,6 +17,7 @@ from __future__ import annotations
 import html
 import json
 import math
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -26,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from check_task_dir import check_task_dir, format_result  # noqa: E402
 from collection_stats import collect_pr_stats_multi  # noqa: E402
+from sample_tasks import write_samples  # noqa: E402
 from task_toml import collect_task_dim, read_verified_ids  # noqa: E402
 
 DASHBOARD_ROOT = Path(__file__).parent
@@ -351,6 +353,9 @@ code, pre, .mono { font-family: var(--font-mono); }
 :root[data-theme="dark"] .theme-toggle .theme-moon { display: none; }
 
 .content { flex: 1; overflow: auto; padding: 18px 24px 32px; }
+.section-head { font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--c-fg-mute); margin: 22px 0 10px; }
+.section-head:first-child { margin-top: 4px; }
 .page { display: none; }
 .page.active { display: block; }
 
@@ -417,6 +422,36 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
 .back-link { background: transparent; border: 0; color: var(--c-accent); cursor: pointer;
   font: inherit; font-size: 13px; padding: 0 0 8px; }
 
+/* Sample task viewer */
+.sample-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px; }
+.sample-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+  background: var(--c-bg-2); border: 1px solid var(--c-border); border-radius: 8px;
+  padding: 8px 10px; cursor: pointer; font: inherit; font-size: 12.5px; color: var(--c-fg);
+  text-align: left; min-width: 0; }
+.sample-row:hover { border-color: var(--c-accent-border); }
+.sample-row.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); }
+.sample-row .sid { font-family: var(--font-mono); font-size: 11.5px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sample-row .smeta { color: var(--c-fg-mute); font-size: 11px; white-space: nowrap; }
+.sample-view { margin-top: 12px; border: 1px solid var(--c-border); border-radius: 10px;
+  background: var(--c-bg-2); overflow: hidden; }
+.sample-head { padding: 10px 14px; border-bottom: 1px solid var(--c-border); }
+.sample-head .t { font-family: var(--font-mono); font-size: 13px; font-weight: 650; word-break: break-all; }
+.sample-head .m { color: var(--c-fg-mute); font-size: 11.5px; margin-top: 3px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px 0; }
+.tab { background: transparent; border: 1px solid transparent; border-bottom: none;
+  color: var(--c-fg-dim); border-radius: 7px 7px 0 0; padding: 5px 12px; cursor: pointer;
+  font: inherit; font-size: 12px; }
+.tab:hover { color: var(--c-fg); }
+.tab.active { background: var(--c-panel); border-color: var(--c-border); color: var(--c-accent); font-weight: 650; }
+.tab .sz { color: var(--c-fg-mute); font-size: 10.5px; margin-left: 5px; }
+.sample-body { background: var(--c-panel); border-top: 1px solid var(--c-border); }
+.sample-pre { margin: 0; padding: 12px 14px; max-height: 460px; overflow: auto;
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere; }
+.sample-pre .add { color: var(--c-good); }
+.sample-pre .del { color: var(--c-bad); }
+.sample-pre .hunk { color: var(--c-accent); }
 .method-card { grid-column: 1 / -1; background: var(--c-method-bg);
   border: 1px solid var(--c-accent-border); border-radius: 10px; padding: 14px 18px; }
 .method-card h3 { font-size: 15px; margin: 0 0 10px; font-weight: 700; color: var(--c-method-head); }
@@ -454,7 +489,8 @@ METHODOLOGY_HTML = """    <section class="tag-card method-card"><h3>Methodology 
     </section>"""
 
 
-def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bool) -> str:
+def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bool,
+                 show_cards: bool = True) -> str:
     ds_id, display, desc = ds_meta
     stats = data["difficulty_stats"]
     tagged = data["tagged"]
@@ -467,15 +503,16 @@ def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bo
     bug_rows = render_tags(data["bug_classes"], data["tasks_with_bug_class"], limit=20)
     bin_rows = render_score_bins(data["difficulty_bins"])
 
-    return f"""
-<div class="ds-panel{' active' if active else ''}" data-ds="{ds_id}">
-  <div class="cards">
+    cards_block = ("" if not show_cards else f"""<div class="cards">
     <div class="card"><div class="k">Total tasks</div><div class="v">{fmt_int(total)}</div></div>
     <div class="card"><div class="k">Mean difficulty</div><div class="v">{fmt_float(stats['mean'], 2)}</div></div>
     <div class="card"><div class="k">Median difficulty</div><div class="v">{fmt_float(stats['median'], 1)}</div></div>
     <div class="card"><div class="k">Avg patch lines</div><div class="v">{fmt_float(data['patch']['avg_lines'], 1)}</div></div>
     <div class="card"><div class="k">Avg patch files</div><div class="v">{fmt_float(data['patch']['avg_files'], 2)}</div></div>
-  </div>
+  </div>""")
+    return f"""
+<div class="ds-panel{' active' if active else ''}" data-ds="{ds_id}">
+  {cards_block}
 
   <div class="panel">
     <h2>Difficulty distribution <span>{display}</span></h2>
@@ -605,7 +642,7 @@ def render_overview(combined: dict[str, Any], batches: list[dict[str, Any]],
                     prs: dict[str, Any]) -> str:
     """Headline figures first, then the stage-by-stage funnel, then per-language
     task-creation success. Per-batch detail lives on the Task List."""
-    body = render_panel(("all", "All batches", ""), combined, True)
+    body = render_panel(("all", "All batches", ""), combined, True, show_cards=False)
     body = body.replace('<div class="ds-panel active" data-ds="all">', "", 1).rstrip()
     if body.endswith("</div>"):
         body = body[: -len("</div>")]
@@ -657,25 +694,38 @@ def render_overview(combined: dict[str, Any], batches: list[dict[str, Any]],
     lang_ok = combined.get("languages_verified", {})
     rate_rows = [(name, lang_ok.get(name, 0), n) for name, n in lang_total.items()]
 
+    stats = combined["difficulty_stats"]
+
     return f"""
 <div class="page active" id="page-overview">
+  <div class="section-head">Statistics</div>
   <div class="cards">
     <div class="card"><div class="k">Repos</div><div class="v">{fmt_int(repos)}</div></div>
     <div class="card"><div class="k">PRs collected</div><div class="v">{fmt_int(collected)}</div></div>
     <div class="card"><div class="k">Tasks</div><div class="v">{fmt_int(combined['total'])}</div></div>
+    <div class="card"><div class="k">Verified</div><div class="v">{fmt_int(verified)}</div></div>
     <div class="card"><div class="k">PR retention</div><div class="v">{fmt_pct(pr_retention)}
       <small>qualifying / scanned</small></div></div>
     <div class="card"><div class="k">Task creation</div><div class="v">{fmt_pct(create_rate)}
       <small>verified / attempted</small></div></div>
+    <div class="card"><div class="k">Mean difficulty</div><div class="v">{fmt_float(stats['mean'], 2)}</div></div>
+    <div class="card"><div class="k">Median difficulty</div><div class="v">{fmt_float(stats['median'], 1)}</div></div>
+    <div class="card"><div class="k">Tagged</div><div class="v">{fmt_int(combined['tagged'])}</div></div>
   </div>
+
+  <div class="section-head">Pipeline funnel</div>
   {funnel}
   <div class="panel">
     <h2>Task creation success <span>by language &mdash; verified / attempted</span></h2>
     {render_rate_bars(rate_rows)}
     <div class="mini">language is read from each task's task.toml, not its directory</div>
   </div>
+
+  <div class="section-head">Task composition</div>
   {body}
-  <div class="grid2" style="margin-top:14px;">
+
+  <div class="section-head">Method</div>
+  <div class="grid2">
 {METHODOLOGY_HTML}
   </div>
 </div>
@@ -686,7 +736,8 @@ def fmt_pct(v) -> str:
     return UNAVAILABLE if v is None else f"{v * 100:.1f}%"
 
 
-def render_task_list(batches: list[dict[str, Any]]) -> str:
+def render_task_list(batches: list[dict[str, Any]],
+                     samples: dict[str, Any] | None = None) -> str:
     """One row per configured batch; clicking a row opens that batch's profile."""
     rows, details = [], []
     for b in batches:
@@ -704,7 +755,25 @@ def render_task_list(batches: list[dict[str, Any]]) -> str:
         <span><span class="k">Mean diff.</span><span class="v">{fmt_float(stats['mean'], 2)}</span></span>
         <span><span class="k">Easy / medium / hard</span>{render_label_bar(b)}</span>
       </button>""")
-        details.append(render_panel((b["name"], b["name"], b["path"]), b, False))
+        panel = render_panel((b["name"], b["name"], b["path"]), b, False)
+        idx = (samples or {}).get(b["name"])
+        if idx:
+            sample_rows = "".join(
+                f'<button class="sample-row" data-batch="{html.escape(b["name"])}" '
+                f'data-task="{html.escape(t["task_name"])}">'
+                f'<span class="sid">{html.escape(t["task_name"])}</span>'
+                f'<span class="smeta">{html.escape(str(t.get("language") or ""))}'
+                f' · {html.escape(str(t.get("difficulty") or ""))}</span></button>'
+                for t in idx["tasks"]
+            )
+            block = (
+                f'<div class="panel"><h2>Sample tasks '
+                f'<span>{idx["count"]} of {b["total"]:,} &mdash; open one to see what a task contains</span></h2>'
+                f'<div class="sample-list">{sample_rows}</div>'
+                f'<div class="sample-view" id="sv-{html.escape(b["name"])}" hidden></div></div>'
+            )
+            panel = panel.replace('<div class="cards">', block + '<div class="cards">', 1)
+        details.append(panel)
     body = ''.join(rows) or '<div class="empty-state">No batches configured — set runtime_info.input.dashboard.datasets in config.yaml.</div>'
     return f"""
 <div class="page" id="page-tasks">
@@ -772,12 +841,26 @@ def render_collection(prs: dict[str, Any], filters: dict[str, Any],
                   if stamp else
                   '<div class="mini">no filtering_report.md — funnel columns unavailable</div>')
 
+    # Filters are settings, not measurements — a table states that plainly, where a
+    # bar invites reading them as quantities on the same scale as everything else.
     filter_rows = "".join(
-        f'<div class="tag-row"><span class="tag-name">{html.escape(str(k))}</span>'
-        f'<span class="tag-track"></span>'
-        f'<span class="tag-count">{html.escape(str(v))}</span></div>'
+        f"<tr><td>{html.escape(str(k))}</td><td class='mono'>{html.escape(str(v))}</td></tr>"
         for k, v in (filters or {}).items()
-    ) or '<div class="muted">no filters configured</div>'
+    )
+    filter_table = (
+        f'<table><tr><th>Setting</th><th>Value</th></tr>{filter_rows}</table>'
+        if filter_rows else '<div class="muted">no filters configured</div>'
+    )
+
+    top_repos: Counter[str] = Counter()
+    for e in langs.values():
+        top_repos.update(e.get("top_repos") or {})
+    repo_rows = "".join(
+        f"<tr><td class='mono'>{html.escape(r)}</td><td>{n:,}</td></tr>"
+        for r, n in top_repos.most_common(12)
+    )
+    repo_table = (f'<table><tr><th>Repository</th><th>PRs</th></tr>{repo_rows}</table>'
+                  if repo_rows else '<div class="muted">no repositories collected</div>')
 
     return f"""
 <div class="page" id="page-collection">
@@ -812,8 +895,11 @@ def render_collection(prs: dict[str, Any], filters: dict[str, Any],
     <section class="tag-card"><h3>PRs dropped <span>by reason</span></h3>
       {render_tags(dict(drop_p.most_common()), sum(drop_p.values()), limit=10)}
     </section>
-    <section class="tag-card wide-card"><h3>Collection filters <span>configuration, not measurements</span></h3>
-      {filter_rows}
+    <section class="tag-card"><h3>Most-collected repositories <span>top 12 by PR count</span></h3>
+      {repo_table}
+    </section>
+    <section class="tag-card"><h3>Collection filters <span>configuration, not measurements</span></h3>
+      {filter_table}
     </section>
   </div>
 </div>
@@ -835,6 +921,7 @@ def render_html(
     output_path: Path,
     prs: dict[str, Any] | None = None,
     filters: dict[str, Any] | None = None,
+    samples: dict[str, Any] | None = None,
 ) -> str:
     prs = prs or {"exists": False, "dir": "", "languages": {}, "total_prs": 0, "total_repos": 0}
     combined = combine_datasets(batches)
@@ -897,11 +984,12 @@ def render_html(
     <div class="content">
       {render_overview(combined, batches, prs)}
       {render_collection(prs, filters or {}, combined, batches)}
-      {render_task_list(batches)}
+      {render_task_list(batches, samples)}
     </div>
   </div>
 </div>
 <script>
+var SAMPLE_INDEX = {json.dumps(samples or {}, ensure_ascii=False)};
 var PAGE_META = {{
   overview: {{title: 'Overview', sub: {json.dumps(overview_sub)}}},
   collection: {{title: 'PR Collection', sub: {json.dumps(collection_sub)}}},
@@ -957,6 +1045,87 @@ document.querySelectorAll('.ds-row').forEach(function (row) {{
     detail.hidden = false;
     list.hidden = true;
     document.getElementById('page-sub').textContent = row.querySelector('.name').textContent;
+  }});
+}});
+
+/* Sample viewer: fetch a batch's cached samples once, then render tabs. */
+var sampleCache = {{}};
+
+function escapeHtml(t) {{
+  return String(t).replace(/[&<>]/g, function (c) {{
+    return {{'&': '&amp;', '<': '&lt;', '>': '&gt;'}}[c];
+  }});
+}}
+
+function highlightDiff(text) {{
+  return escapeHtml(text).split('\n').map(function (line) {{
+    if (line.charAt(0) === '+' && line.slice(0, 3) !== '+++') return '<span class="add">' + line + '</span>';
+    if (line.charAt(0) === '-' && line.slice(0, 3) !== '---') return '<span class="del">' + line + '</span>';
+    if (line.slice(0, 2) === '@@') return '<span class="hunk">' + line + '</span>';
+    return line;
+  }}).join('\n');
+}}
+
+function renderSample(batch, sample) {{
+  var view = document.getElementById('sv-' + batch);
+  if (!view) {{ return; }}
+  var meta = [sample.language, sample.difficulty, sample.area, sample.topic, sample.bug_class]
+    .filter(Boolean).join(' · ');
+  var tabs = sample.parts.map(function (p, i) {{
+    var kb = p.bytes >= 1024 ? (p.bytes / 1024).toFixed(1) + ' KB' : p.bytes + ' B';
+    return '<button class="tab' + (i === 0 ? ' active' : '') + '" data-i="' + i + '">' +
+      escapeHtml(p.label) + '<span class="sz">' + kb + '</span></button>';
+  }}).join('');
+
+  view.hidden = false;
+  view.innerHTML =
+    '<div class="sample-head"><div class="t">' + escapeHtml(sample.task_name) + '</div>' +
+    '<div class="m">' + escapeHtml(sample.repo || '') + (meta ? ' &nbsp;|&nbsp; ' + escapeHtml(meta) : '') + '</div></div>' +
+    '<div class="tabs">' + tabs + '</div>' +
+    '<div class="sample-body"><pre class="sample-pre" id="sp-' + batch + '"></pre></div>';
+
+  function show(i) {{
+    var part = sample.parts[i];
+    var pre = document.getElementById('sp-' + batch);
+    pre.innerHTML = /\\.patch$/.test(part.file) ? highlightDiff(part.text) : escapeHtml(part.text);
+    view.querySelectorAll('.tab').forEach(function (t) {{
+      t.classList.toggle('active', t.dataset.i === String(i));
+    }});
+  }}
+  view.querySelectorAll('.tab').forEach(function (t) {{
+    t.addEventListener('click', function () {{ show(parseInt(t.dataset.i, 10)); }});
+  }});
+  if (sample.parts.length) {{ show(0); }}
+  else {{ view.innerHTML += '<div class="empty-state">no readable files in this task</div>'; }}
+}}
+
+document.querySelectorAll('.sample-row').forEach(function (row) {{
+  row.addEventListener('click', function () {{
+    var batch = row.dataset.batch, task = row.dataset.task;
+    document.querySelectorAll('.sample-row[data-batch="' + batch + '"]').forEach(function (o) {{
+      o.classList.toggle('active', o === row);
+    }});
+    var view = document.getElementById('sv-' + batch);
+    view.hidden = false;
+    view.innerHTML = '<div class="empty-state">loading…</div>';
+
+    var pick = function (list) {{
+      var s = list.filter(function (x) {{ return x.task_name === task; }})[0];
+      if (s) {{ renderSample(batch, s); }}
+      else {{ view.innerHTML = '<div class="empty-state">sample not found</div>'; }}
+    }};
+    if (sampleCache[batch]) {{ pick(sampleCache[batch]); return; }}
+    var info = SAMPLE_INDEX[batch];
+    if (!info) {{ view.innerHTML = '<div class="empty-state">no samples cached</div>'; return; }}
+    fetch(info.file).then(function (r) {{
+      if (!r.ok) {{ throw new Error('HTTP ' + r.status); }}
+      return r.json();
+    }}).then(function (list) {{
+      sampleCache[batch] = list;
+      pick(list);
+    }}).catch(function (e) {{
+      view.innerHTML = '<div class="empty-state">could not load samples: ' + escapeHtml(e.message) + '</div>';
+    }});
   }});
 }});
 
@@ -1053,7 +1222,10 @@ def main():
     if args.report_only:
         return 1 if problems else 0
 
-    render_html(batches, args.output_html, prs, cfg["pr_filters"])
+    samples = write_samples(batches, args.output_html.parent)
+    print(f"  samples                {sum(v['count'] for v in samples.values())} task(s) cached "
+          f"across {len(samples)} batch(es)")
+    render_html(batches, args.output_html, prs, cfg["pr_filters"], samples)
     print(f"✓ generated: {args.output_html}  ({args.output_html.stat().st_size/1024:.0f} KB)")
     print("=" * 70)
     return 1 if problems else 0
