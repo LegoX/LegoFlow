@@ -53,6 +53,30 @@ Each `name: path` entry is one **batch**. Paths are absolute or relative to
 
 `collected_prs_dir` empty falls back to `pr_collection.output_dir`.
 
+## Open-source datasets
+
+Public HF datasets go on the board the same way: convert them to task directories,
+then list them as a batch. `import_hf_dataset.py` knows `scale_swe`,
+`openswe_filtered` and `swe_rebench_v2`.
+
+```bash
+python3 dashboard/import_hf_dataset.py scale_swe --out artifacts/hf/scale_swe
+python3 ../repos/swegen/tools/tag_task_metadata.py --tasks-dir artifacts/hf/scale_swe --jobs 64
+```
+
+The import writes `tags = [language]` only; the tagger fills area, topic, bug_class,
+category and scoring. Until it runs, those tasks show as untagged rather than
+guessed. Then add the batch with `external: true`:
+
+```yaml
+      datasets:
+        scale_swe: {path: artifacts/hf/scale_swe, external: true}
+```
+
+`external` keeps them out of the PR → task funnel on Collection — they have no PR
+provenance, so counting them there would understate the pipeline's conversion rate.
+They still appear on the Task List and in the Overview totals.
+
 ### Overlapping batches are expected
 
 `merged_swe_tasks` is produced by copying verified tasks out of `swe_tasks`, so most
@@ -88,4 +112,5 @@ CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... \
 | `progress_monitor_multi.py` | Config loading, aggregation, HTML rendering |
 | `task_toml.py` | Reads `task.toml` across both layouts (ported from tracer's dashboard) |
 | `collection_stats.py` | Parses `filtering_report.md` and the PR id lists |
+| `import_hf_dataset.py` | Converts a public HF dataset into task directories |
 | `site/index.html` | Rendered output |

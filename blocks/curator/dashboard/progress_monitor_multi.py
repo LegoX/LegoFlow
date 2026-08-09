@@ -60,11 +60,21 @@ def load_dashboard_config(config_path: Path = CONFIG_PATH) -> dict[str, Any]:
     dash = inp.get("dashboard") or {}
     datasets = dash.get("datasets") or {}
 
-    batches = [
-        {"name": str(name), "path": _resolve(raw, base)}
-        for name, raw in datasets.items()
-        if str(raw or "").strip()
-    ]
+    batches = []
+    for name, raw in datasets.items():
+        # `name: path`, or `name: {path: ..., external: true}` for imported
+        # datasets that have no PR provenance.
+        if isinstance(raw, dict):
+            path_str, external = str(raw.get("path") or ""), bool(raw.get("external"))
+        else:
+            path_str, external = str(raw or ""), False
+        if not path_str.strip():
+            continue
+        batches.append({
+            "name": str(name),
+            "path": _resolve(path_str, base),
+            "external": external,
+        })
 
     prs_raw = str(dash.get("collected_prs_dir") or "").strip()
     if not prs_raw:
@@ -121,7 +131,7 @@ def score_bins(values: list[float]) -> dict[str, int]:
     return bins
 
 
-def aggregate_batch(name: str, path: Path) -> dict[str, Any]:
+def aggregate_batch(name: str, path: Path, external: bool = False) -> dict[str, Any]:
     """Aggregate one configured batch directly from its task.toml files."""
     tasks = collect_task_dim(path)
     verified_ids = read_verified_ids(path)
@@ -152,6 +162,7 @@ def aggregate_batch(name: str, path: Path) -> dict[str, Any]:
         "id": name,
         "name": name,
         "path": str(path),
+        "external": external,
         "exists": path.is_dir(),
         "total": total,
         "tagged": tagged,
@@ -579,10 +590,11 @@ def render_task_list(batches: list[dict[str, Any]]) -> str:
     for b in batches:
         stats = b["difficulty_stats"]
         missing = "" if b["exists"] else '<span class="desc">path not found</span>'
+        origin = '<span class="desc">imported dataset</span>' if b.get("external") else ""
         rows.append(f"""
       <button class="ds-row" data-ds="{html.escape(b['name'])}">
         <span><span class="name">{html.escape(b['name'])}</span>
-          <span class="desc">{html.escape(b['path'])}</span>{missing}</span>
+          <span class="desc">{html.escape(b['path'])}</span>{origin}{missing}</span>
         <span><span class="k">Tasks</span><span class="v">{fmt_int(b['total'])}</span></span>
         <span><span class="k">Verified</span><span class="v">{fmt_int(b['verified'])}</span></span>
         <span><span class="k">Yield</span><span class="v">{fmt_pct(b['yield'])}</span></span>
@@ -604,7 +616,7 @@ def render_task_list(batches: list[dict[str, Any]]) -> str:
 
 
 def render_collection(prs: dict[str, Any], filters: dict[str, Any],
-                      combined: dict[str, Any]) -> str:
+                      combined: dict[str, Any], batches: list[dict[str, Any]]) -> str:
     """Repo/PR collection and the funnel through to verified tasks.
 
     Funnel figures come from the collector's own filtering_report.md when present;
@@ -617,7 +629,17 @@ def render_collection(prs: dict[str, Any], filters: dict[str, Any],
 
     o = prs.get("overall") or {}
     langs = prs["languages"]
-    task_langs = combined.get("languages", {})
+    # Imported datasets have no PR provenance, so counting them here would
+    # inflate the PR -> task rate with tasks the collector never sourced.
+    pipeline = [b for b in batches if not b.get("external")]
+    seen: dict[str, dict[str, Any]] = {}
+    for b in pipeline:
+        for task_name, meta in b.get("tasks", {}).items():
+            seen.setdefault(task_name, meta)
+    task_langs: dict[str, int] = {}
+    for meta in seen.values():
+        task_langs[meta["language"]] = task_langs.get(meta["language"], 0) + 1
+    external_n = sum(1 for b in batches if b.get("external"))
 
     rows = []
     for name, e in langs.items():
@@ -678,6 +700,7 @@ def render_collection(prs: dict[str, Any], filters: dict[str, Any],
     </div>
     {provenance}
     <div class="mini">source: {html.escape(prs['dir'])}</div>
+    {f'<div class="mini">{external_n} imported batch(es) excluded — no PR provenance</div>' if external_n else ''}
   </div>
 
   <div class="grid2">
@@ -771,7 +794,7 @@ def render_html(
     </div>
     <div class="content">
       {render_overview(combined, batches)}
-      {render_collection(prs, filters or {}, combined)}
+      {render_collection(prs, filters or {}, combined, batches)}
       {render_task_list(batches)}
     </div>
   </div>
@@ -878,7 +901,7 @@ def main():
 
     batches = []
     for entry in cfg["batches"]:
-        b = aggregate_batch(entry["name"], entry["path"])
+        b = aggregate_batch(entry["name"], entry["path"], entry.get("external", False))
         batches.append(b)
         state = "" if b["exists"] else "  [PATH NOT FOUND]"
         langs = ", ".join(f"{k}={v}" for k, v in list(b["languages"].items())[:6]) or "-"

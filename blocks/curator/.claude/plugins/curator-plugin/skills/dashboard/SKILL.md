@@ -70,6 +70,21 @@ without an explicit "yes". If a batch reports `[PATH NOT FOUND]` or zero tasks,
 say so plainly and ask whether to continue or fix the config first — do not
 silently render an empty board.
 
+## Optional - add an open-source dataset
+
+Public HF datasets are shown as ordinary batches. Convert, tag, then register:
+
+```bash
+python3 dashboard/import_hf_dataset.py <scale_swe|openswe_filtered|swe_rebench_v2> \
+  --out artifacts/hf/<name>
+python3 repos/swegen/tools/tag_task_metadata.py --tasks-dir artifacts/hf/<name> --jobs 64
+```
+
+Then add `<name>: {path: artifacts/hf/<name>, external: true}` under
+`dashboard.datasets`. `external` keeps them out of the PR → task funnel, which only
+describes tasks the collector sourced. Importing downloads from HuggingFace and
+tagging spends LLM tokens — treat both as separate actions the user must ask for.
+
 ## Step 3 - Render
 
 ```bash
@@ -98,6 +113,9 @@ Never deploy unless the user explicitly requests it.
 - A missing value is reported as an em dash, never as `0` — `task.toml` carries no
   patch statistics, and untagged tasks are counted as untagged rather than folded
   into a tag bucket. Do not "fix" these by substituting zeros.
-- Collection filter thresholds (`pr_collection.filters`) are **configuration**, not
-  measured repo attributes; the collector persists only the flat PR id list, so
-  repo stars and merged-PR counts are not available per repo.
+- The Collection funnel is read from the collector's own
+  `collected_prs/filtering_report.md`. Where it is absent, those columns report as
+  em dashes — do not reconstruct them from the id lists, which only carry survivors.
+- `pr_collection.filters` are **configuration**, shown as such. Per-repo stars and
+  merged-PR counts are not recorded anywhere; never present a threshold as a
+  measurement.
