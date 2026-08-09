@@ -15,6 +15,22 @@ to use, how many jobs to launch, and whether to convert trajectories for SFT.
 | `runtime_info.input.agent.*` | Switch coding agent scaffold or runtime image. |
 | `runtime_info.input.sft_conversion.*` | Enable and configure post-rollout conversion. |
 
+## Agent Version Presets
+
+The agent fields move as a set. Pick one row and keep `agent.name`,
+`agent.version`, `agent.runtime_image`, `agent.runtime_host_path`, and
+`sft_conversion.scaffold` aligned.
+
+| Scaffold | `agent.name` | `agent.version` | `agent.runtime_image` | `agent.runtime_host_path` | `sft_conversion.scaffold` |
+| --- | --- | --- | --- | --- | --- |
+| Claude Code | `custom-claude-code` | `2.1.118` | `docker.io/jierun/c-cc-2.1.118:v0.1` | `artifacts/agent-runtime/claude-code` | `claude_code` or `auto` |
+| OpenCode | `custom-opencode` | `1.18.7` | `docker.io/jierun/c-oc-1.18.7:v0.1` | `artifacts/agent-runtime/opencode` | `open_code` or `auto` |
+| OpenHands SDK | `custom-openhands-sdk` | `1.33.0` | `docker.io/jierun/c-oh-sdk-1.33.0:v0.1` | `artifacts/agent-runtime/openhands-sdk` | `openhands_sdk` or `auto` |
+
+Use `auto` for a fresh run that uses the same `agent.name` in the current
+config. Use an explicit scaffold key when reconverting an older job whose
+scaffold may differ from the current config.
+
 ## Complete config.yaml
 
 <ConfigFile file="blocks/tracer/config.yaml" />
@@ -40,9 +56,9 @@ to use, how many jobs to launch, and whether to convert trajectories for SFT.
 | `runtime_info.input.harbor_job.n_tasks` | Number of tasks to run; `null` means all. | Use small values for smoke runs. | `5`, `40`, `null` all. |
 | `runtime_info.input.harbor_job.max_retries` | Per-task retry cap. | Raise only for unstable environments. | `0`, `2`, `3`. |
 | `runtime_info.input.harbor_job.timeout_multiplier` | Scales task timeout. | Raise for slow agents or tasks. | `2400`, `3200`, `3600` seconds. |
-| `runtime_info.input.agent.*` | Agent scaffold, version, runtime image/path, turns, and temperature. | Change fields together when switching scaffold. | `custom-claude-code`, `custom-opencode`, `custom-openhands-sdk`. |
+| `runtime_info.input.agent.*` | Agent scaffold, version, runtime image/path, turns, and temperature. | Change fields together when switching scaffold. | `custom-claude-code` + `2.1.118`; `custom-opencode` + `1.18.7`; `custom-openhands-sdk` + `1.33.0`. |
 | `runtime_info.input.sft_conversion.enabled` | Whether to convert rollouts after the job. | Enable when producing Trainer input. | `true` for Trainer handoff, `false` to skip. |
-| `runtime_info.input.sft_conversion.scaffold` | Conversion scaffold mapping. | Keep `auto` unless conversion needs an explicit scaffold. | `auto`, `claude_code`, `open_code`, `openhands_sdk`. |
+| `runtime_info.input.sft_conversion.scaffold` | Conversion scaffold mapping. | Keep aligned with the selected agent. | `auto`, `claude_code`, `open_code`, `openhands_sdk`. |
 | `runtime_info.input.sft_conversion.tokenizer_name` | Tokenizer used for conversion. | Align with Trainer base model. | `Qwen/Qwen3.5-35B-A3B-Base`. |
 | `runtime_info.input.sft_conversion.out_dir` | Converted SFT output directory. | Usually keep default. | `artifacts/sft_data`. |
 | `runtime_info.input.sft_conversion.max_instances` | Optional conversion cap. | Use for quick checks. | `null` all, `100` smoke, `0` all for Trainer. |
