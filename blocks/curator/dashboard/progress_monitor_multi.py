@@ -783,6 +783,13 @@ def render_info(batches: list[dict[str, Any]], prs: dict[str, Any],
         f"<table>{task_rows}</table>"
         "<div class='sub'>PR collection</div>"
         f"<table>{pr_rows}</table>"
+        f"<div class='mini'>Collected PR and repo counts are read from the id lists on "
+        f"every render. The funnel above them — repos searched, PRs scanned, and the "
+        f"drop reasons — counts rows the collector discarded and never wrote down, so "
+        f"it can only come from its own report"
+        + (f", generated {html.escape(str(prs.get('report_generated_at')))}."
+           if prs.get('report_generated_at') else " (none found).")
+        + "</div>"
         "<div class='sub'>Collection filters</div>"
         f"<table>{filter_rows}</table>"
         "<div class='mini'>language, difficulty and tags come from each task's "
@@ -1005,10 +1012,10 @@ def render_collection(prs: dict[str, Any], filters: dict[str, Any],
         drop_r.update(e.get("repo_dropped") or {})
         drop_p.update(e.get("pr_dropped") or {})
 
+    # Provenance and paths belong in the Info modal, not on the page itself.
     stamp = prs.get("report_generated_at")
-    provenance = (f'<div class="mini">funnel from filtering_report.md · generated {html.escape(str(stamp))}</div>'
-                  if stamp else
-                  '<div class="mini">no filtering_report.md — funnel columns unavailable</div>')
+    provenance = ("" if stamp else
+                  '<div class="mini">no collection report — funnel columns unavailable</div>')
 
     # Filters are settings, not measurements — a table states that plainly, where a
     # bar invites reading them as quantities on the same scale as everything else.
@@ -1053,7 +1060,6 @@ def render_collection(prs: dict[str, Any], filters: dict[str, Any],
       </table>
     </div>
     {provenance}
-    <div class="mini">source: {html.escape(prs['dir'])}</div>
     {f'<div class="mini">{external_n} imported batch(es) excluded — no PR provenance</div>' if external_n else ''}
   </div>
 
