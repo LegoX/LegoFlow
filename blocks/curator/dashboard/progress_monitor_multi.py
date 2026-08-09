@@ -369,7 +369,7 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
 
 /* Task List: one row per dataset, tracer's Jobs list shape. */
 .ds-list { display: flex; flex-direction: column; gap: 8px; }
-.ds-row { display: grid; grid-template-columns: minmax(180px, 1.4fr) repeat(4, minmax(88px, 1fr)) minmax(130px, 1.2fr);
+.ds-row { display: grid; grid-template-columns: minmax(180px, 1.4fr) repeat(5, minmax(76px, 1fr)) minmax(130px, 1.2fr);
   gap: 12px; align-items: center; width: 100%; text-align: left; cursor: pointer;
   background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
   padding: 12px 14px; color: var(--c-fg); font: inherit; font-size: 13px; }
@@ -485,9 +485,6 @@ def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bo
     <section class="tag-card wide-card"><h3>Bug classes</h3>{bug_rows}</section>
   </div>
 
-  <div class="grid2" style="margin-top:18px;">
-{METHODOLOGY_HTML}
-  </div>
 </div>
 """
 
@@ -539,33 +536,6 @@ def combine_datasets(datasets: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def render_comparison_table(datasets: list[dict[str, Any]]) -> str:
-    by_id = {d["id"]: d for d in datasets}
-    rows = []
-    for ds_id, display, _desc in DATASETS:
-        d = by_id.get(ds_id)
-        if d is None:
-            continue
-        s = d["difficulty_stats"]
-        rows.append(
-            f"<tr><td><strong>{html.escape(display)}</strong></td>"
-            f"<td>{fmt_int(d['total'])}</td><td>{fmt_int(d['tagged'])}</td>"
-            f"<td>{fmt_float(s['mean'], 2)}</td><td>{fmt_float(s['median'], 1)}</td>"
-            f"<td>{fmt_float(d['patch']['avg_lines'], 1)}</td>"
-            f"<td>{render_label_bar(d)}</td></tr>"
-        )
-    return f"""
-  <div class="panel">
-    <h2>Datasets <span>side by side</span></h2>
-    <table>
-      <tr><th>Dataset</th><th>Tasks</th><th>Tagged</th><th>Mean diff.</th><th>Median</th>
-          <th>Avg patch lines</th><th>Easy / medium / hard</th></tr>
-      {''.join(rows)}
-    </table>
-  </div>
-"""
-
-
 def render_overview(combined: dict[str, Any], datasets: list[dict[str, Any]]) -> str:
     """Overview is global only: every dataset folded into one set of numbers.
     Per-dataset figures live on the Task List, so nothing is duplicated here."""
@@ -578,8 +548,10 @@ def render_overview(combined: dict[str, Any], datasets: list[dict[str, Any]]) ->
         body = body[: -len("</div>")]
     return f"""
 <div class="page active" id="page-overview">
-  {render_comparison_table(datasets)}
   {body}
+  <div class="grid2" style="margin-top:14px;">
+{METHODOLOGY_HTML}
+  </div>
 </div>
 """
 
@@ -600,6 +572,7 @@ def render_task_list(datasets: list[dict[str, Any]]) -> str:
         <span><span class="k">Tasks</span><span class="v">{fmt_int(d['total'])}</span></span>
         <span><span class="k">Tagged</span><span class="v">{fmt_int(d['tagged'])}</span></span>
         <span><span class="k">Mean diff.</span><span class="v">{fmt_float(stats['mean'], 2)}</span></span>
+        <span><span class="k">Median</span><span class="v">{fmt_float(stats['median'], 1)}</span></span>
         <span><span class="k">Avg lines</span><span class="v">{fmt_float(d['patch']['avg_lines'], 0)}</span></span>
         <span><span class="k">Easy / medium / hard</span>{render_label_bar(d)}</span>
       </button>""")
