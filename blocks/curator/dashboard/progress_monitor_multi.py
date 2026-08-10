@@ -2,9 +2,11 @@
 """Curator databoard generator.
 
 Reads the **live pipeline** under `artifacts/`, not an offline dataset export.
-Which task pools to read comes from `config.yaml ->
-runtime_info.input.dashboard.tasks` as `name: path` entries; each one is a
-batch on the Task List. Language, difficulty and the semantic tags
+Sources are fixed, not configured: `artifacts/collected_prs/` for PR collection,
+and every immediate subdirectory of `artifacts/swe_tasks/` as one batch on the
+Task List, named after that directory. A symlink there is followed, which is how
+a dataset this pipeline did not generate joins the board. Language, difficulty
+and the semantic tags
 `[language, area, topic, bug_class]` are read from every task's own `task.toml`
 (see task_toml.py), so a task is never classified by the directory holding it.
 
@@ -63,14 +65,23 @@ def discover_sources(block_dir: Path = BLOCK_DIR) -> dict[str, Any]:
     batches: list[dict[str, Any]] = []
     if tasks_root.is_dir():
         for child in sorted(tasks_root.iterdir(), key=lambda c: c.name):
-            # is_dir() follows symlinks, which is what makes a linked-in dataset
-            # indistinguishable from a locally generated pool.
+            # is_dir() follows symlinks, so a linked-in pool is walked exactly
+            # like a local one. Whether it counts as third-party is decided below,
+            # by where the link lands — not by the fact that it is a link.
             if not child.is_dir() or child.name.startswith("."):
                 continue
+            target = child.resolve()
+            # "Third-party" means no PR provenance, which is what keeps a batch
+            # out of the PR -> task funnel. A symlink alone does not imply that:
+            # operators routinely link this pipeline's own pools in from another
+            # checkout. What distinguishes them is where the link lands — inside
+            # some `swe_tasks/` it is still this pipeline's output; anywhere else
+            # it is a dataset we did not source from PRs.
+            external = child.is_symlink() and target.parent.name != "swe_tasks"
             batches.append({
                 "name": child.name,
-                "path": child.resolve(),
-                "external": child.is_symlink(),
+                "path": target,
+                "external": external,
             })
 
     prs = [{"name": "collected_prs", "path": artifacts / "collected_prs", "external": False}]
@@ -612,7 +623,7 @@ th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform:
 # Single source of truth for the difficulty & tagging methodology card, shared by
 # render_panel() (full regenerate) and inject_v2.py (surgical injection) so every
 # panel shows identical, prominent, English-only copy. Weights/thresholds here
-# mirror the dashboard tagger repos/swegen/tools/tag_task_metadata.py.
+# mirror the dashboard tagger repos/legoflow-curator/tools/tag_task_metadata.py.
 METHODOLOGY_HTML = """    <section class="tag-card method-card"><h3>Methodology <span>unified difficulty &amp; tagging</span></h3>
       <div class="method-body">
       <span class="mh">Difficulty Scoring (1&ndash;10 scale)</span><br>
@@ -968,8 +979,8 @@ def render_task_list(batches: list[dict[str, Any]],
         details.append(render_panel((b["name"], b["name"], b["path"]), b, False))
 
     body = "".join(lines) or (
-        '<div class="empty-state">No batches configured &mdash; set '
-        'runtime_info.input.dashboard.tasks in config.yaml.</div>'
+        '<div class="empty-state">No batches found &mdash; each subdirectory of '
+        'artifacts/swe_tasks/ is one batch. Symlink a dataset in to add it.</div>'
     )
     return f"""
 <div class="page" id="page-tasks">

@@ -103,8 +103,8 @@ def infer_language(task_name: str, metadata: dict[str, Any]) -> str:
 
 
 def infer_difficulty(data: dict[str, Any], metadata: dict[str, Any]) -> tuple[str, float | None]:
-    """Return (label, raw score). swegen scores difficulty inline during
-    `swegen create`, so a numeric `[scoring] difficulty_score` may be present —
+    """Return (label, raw score). legoflow-curator scores difficulty inline during
+    `legoflow-curator create`, so a numeric `[scoring] difficulty_score` may be present —
     when it is, pooled order statistics become computable."""
     scoring = data.get("scoring") if isinstance(data.get("scoring"), dict) else {}
     score: float | None = None

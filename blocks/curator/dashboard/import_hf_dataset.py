@@ -18,7 +18,7 @@ Two stages, matching how the evaluator prepares benchmark datasets
   2. TAG     — run the canonical tagger over the output to fill in
      `[language, area, topic, bug_class]`, category and scoring:
 
-         python3 ../repos/swegen/tools/tag_task_metadata.py \\
+         python3 ../repos/legoflow-curator/tools/tag_task_metadata.py \\
            --tasks-dir <out> --jobs 64 --retries 3
 
      Resumable: already-tagged tasks are skipped. Until it runs, the board shows
