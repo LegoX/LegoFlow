@@ -18,7 +18,7 @@
 # callers must treat "unset" as "feature disabled", not as an error.
 #
 # Exports:
-#   CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN CLOUDFLARE_PAGES_PROJECT_PREFIX
+#   CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN
 #   DOCKER_REGISTRY DOCKER_USERNAME DOCKER_PASSWORD DOCKER_MIRROR DOCKER_HOST
 #   SHARED_CLOUDFLARE_SOURCE SHARED_DOCKER_SOURCE   (env|root-config|legacy-file|unset)
 #   SHARED_ROOT_CONFIG                              (path actually used, or "")
@@ -108,12 +108,8 @@ load_shared_credentials() {
       [[ -n "$v" ]] && { CLOUDFLARE_API_TOKEN="$v"; [[ "$cf_src" == "unset" ]] && cf_src="legacy-file"; }
     fi
   fi
-  if [[ -z "${CLOUDFLARE_PAGES_PROJECT_PREFIX:-}" ]]; then
-    CLOUDFLARE_PAGES_PROJECT_PREFIX="$(_shared_cfg_get "$cfg" "cloudflare.pages_project_prefix")"
-  fi
   export CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
   export CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
-  export CLOUDFLARE_PAGES_PROJECT_PREFIX="${CLOUDFLARE_PAGES_PROJECT_PREFIX:-}"
   export SHARED_CLOUDFLARE_SOURCE="$cf_src"
 
   # ── Docker registry ───────────────────────────────────────────────────────

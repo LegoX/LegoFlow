@@ -5,7 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOME_DIR="${HARBOR_HOME:-$HOME}"
 ENV_FILE="${ENV_FILE:-$HOME_DIR/.config/harbor_webui_cloudflare.env}"
 
-PROJECT_NAME="${PROJECT_NAME:-harbor-dashboard}"
+# The Pages project is `legoflow-<block>`, decided by scripts/publish_dashboard.sh.
+# It is an account-local identifier, not the URL: the URL is read back after the
+# deploy, because Cloudflare suffixes a name whose subdomain is already taken.
 BRANCH_NAME="${BRANCH_NAME:-harbor-webui}"
 LOOP_SECONDS="${LOOP_SECONDS:-3600}"
 PORT="${PORT:-8093}"
@@ -44,6 +46,11 @@ fi
 # Fall back to the tree-wide shared credentials (root config.yaml ->
 # runtime_info.input.cloudflare) for anything $ENV_FILE did not provide. Values
 # exported above win, so a per-block env file still overrides the shared config.
+PUBLISH_LIB="$SCRIPT_DIR/../../../scripts/publish_dashboard.sh"
+if [[ -f "$PUBLISH_LIB" ]]; then
+  # shellcheck disable=SC1090
+  source "$PUBLISH_LIB"
+fi
 SHARED_CREDS="$SCRIPT_DIR/../../../scripts/shared_credentials.sh"
 if [[ -f "$SHARED_CREDS" ]]; then
   CF_LEGACY_ENV_FILE="$ENV_FILE"
@@ -144,19 +151,10 @@ while true; do
     log "trajectories are embedded in the Pages export; R2 upload skipped"
   fi
 
-  if [[ "$PROJECT_READY" -eq 0 ]]; then
-    log "ensuring Cloudflare Pages project $PROJECT_NAME exists"
-    npx --yes wrangler pages project create "$PROJECT_NAME" \
-      --production-branch "$BRANCH_NAME" >/tmp/harbor_webui_pages_project_create.log 2>&1 || true
-    PROJECT_READY=1
-  fi
-
-  log "deploying Harbor dashboard to Cloudflare Pages project $PROJECT_NAME"
-  (cd "$SCRIPT_DIR" && npx --yes wrangler pages deploy "$PUBLIC_DIR" \
-    --project-name "$PROJECT_NAME" \
-    --branch "$BRANCH_NAME" \
-    --commit-dirty=true \
-    --commit-message "Update Harbor dashboard $(date -u '+%Y-%m-%dT%H:%M:%SZ')")
+  # Publishes to Cloudflare Pages when credentials resolve, or over a temporary
+  # cloudflared tunnel when they do not, and reports the address either way.
+  publish_dashboard evaluator "$PUBLIC_DIR" "${PORT:-8792}" || \
+    log "publish failed; retrying on the next pass"
 
   log "sleeping $LOOP_SECONDS seconds before next refresh"
   sleep "$LOOP_SECONDS"

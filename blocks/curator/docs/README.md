@@ -10,7 +10,7 @@ https://legoflow-curator-docs.pages.dev
 The live progress databoard is a separate Pages project:
 
 ```text
-https://swe-databoard.pages.dev/
+the URL printed by the publish step (Pages project `legoflow-curator`)
 ```
 
 ## Develop locally

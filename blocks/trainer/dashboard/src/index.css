@@ -2,41 +2,86 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Palette: .claude/plugins/root-plugin/resources/DASHBOARD_PALETTE.md — shared with
+   the docs site and the other blocks' dashboards.
+
+   The `slate` ramp keeps its name (it is what every component already spells) but
+   now carries the warm paper neutrals. It runs ink→surface in dark mode and is
+   inverted for light, so `slate-950` is always the page plane and `slate-50`
+   always the brightest ink. The accent/status vars back the Tailwind families
+   remapped in tailwind.config.js. */
 @layer base {
   :root {
-    --c-slate-50: 248 250 252;
-    --c-slate-100: 241 245 249;
-    --c-slate-200: 226 232 240;
-    --c-slate-300: 203 213 225;
-    --c-slate-400: 148 163 184;
-    --c-slate-500: 100 116 139;
-    --c-slate-600: 71 85 105;
-    --c-slate-700: 51 65 85;
-    --c-slate-800: 30 41 59;
-    --c-slate-900: 15 23 42;
-    --c-slate-950: 2 6 23;
+    --c-slate-50: 250 248 244;
+    --c-slate-100: 240 237 231;
+    --c-slate-200: 224 219 209;
+    --c-slate-300: 201 194 182;
+    --c-slate-400: 169 162 151;
+    --c-slate-500: 138 132 122;
+    --c-slate-600: 107 102 94;
+    --c-slate-700: 74 69 62;
+    --c-slate-800: 48 42 36;
+    --c-slate-900: 26 23 20;
+    --c-slate-950: 20 17 14;
 
-    --chart-grid: #1e293b;
-    --chart-axis: #475569;
-    --chart-tick: #64748b;
+    --c-accent-200: 247 214 198;
+    --c-accent-300: 245 201 180;
+    --c-accent-400: 239 160 124;
+    --c-accent-500: 217 102 58;
+    --c-good: 74 148 64;
+    --c-warn: 250 178 25;
+    --c-serious: 236 131 90;
+    --c-bad: 208 59 59;
+
+    --chart-grid: #302a24;
+    --chart-axis: #4a423a;
+    --chart-tick: #a9a297;
+
+    /* categorical series — fixed order, never cycled; 3-series cap on all-pairs forms */
+    --c-series-1: #d95926;
+    --c-series-2: #199e70;
+    --c-series-3: #3987e5;
+    --c-series-4: #c98500;
+    --c-series-5: #d55181;
+    --c-series-6: #008300;
+    --c-series-7: #9085e9;
+    --c-series-8: #e66767;
   }
 
   [data-theme="light"] {
-    --c-slate-50: 2 6 23;
-    --c-slate-100: 15 23 42;
-    --c-slate-200: 30 41 59;
-    --c-slate-300: 51 65 85;
-    --c-slate-400: 100 116 139;
-    --c-slate-500: 148 163 184;
-    --c-slate-600: 179 189 204;
-    --c-slate-700: 203 213 225;
-    --c-slate-800: 226 232 240;
-    --c-slate-900: 241 245 249;
-    --c-slate-950: 255 255 255;
+    --c-slate-50: 17 17 17;
+    --c-slate-100: 26 23 20;
+    --c-slate-200: 48 42 36;
+    --c-slate-300: 74 69 62;
+    --c-slate-400: 107 102 94;
+    --c-slate-500: 138 132 122;
+    --c-slate-600: 169 162 151;
+    --c-slate-700: 201 194 182;
+    --c-slate-800: 224 219 209;
+    --c-slate-900: 241 239 233;
+    --c-slate-950: 250 250 247;
 
-    --chart-grid: #e2e8f0;
-    --chart-axis: #94a3b8;
-    --chart-tick: #64748b;
+    --c-accent-200: 122 45 21;
+    --c-accent-300: 140 52 24;
+    --c-accent-400: 163 60 28;
+    --c-accent-500: 179 67 31;
+    --c-good: 63 143 47;
+    --c-warn: 200 134 13;
+    --c-serious: 201 106 46;
+    --c-bad: 208 59 59;
+
+    --chart-grid: #e6e3da;
+    --chart-axis: #c9c3b6;
+    --chart-tick: #6b6b66;
+
+    --c-series-1: #eb6834;
+    --c-series-2: #1baf7a;
+    --c-series-3: #2a78d6;
+    --c-series-4: #eda100;
+    --c-series-5: #e87ba4;
+    --c-series-6: #008300;
+    --c-series-7: #4a3aa7;
+    --c-series-8: #e34948;
   }
 
   ::-webkit-scrollbar {

@@ -155,7 +155,7 @@ task is missing, report that `/curator:setup` must initialize the submodule.
 `dryrun.sh` also reports the two tree-wide optional credentials, resolved by
 `<repo_root>/scripts/shared_credentials.sh` in the order **env > root
 `config.yaml` → `runtime_info.input.{cloudflare,docker}` > this block's legacy
-`~/.config/swegen_progress_cloudflare.env`**. The reported source tells the user
+`~/.config/legoflow-curator_progress_cloudflare.env`**. The reported source tells the user
 which of the three won, so say it in the report rather than just "configured".
 
 - **Cloudflare Pages** — needs an `npx`/node toolchain on `PATH` plus

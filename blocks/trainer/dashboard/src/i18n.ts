@@ -16,8 +16,8 @@ export function saveLang(lang: Lang) {
 
 const dict: Record<string, Record<Lang, string>> = {
   // App — sidebar / header
-  "app.title": { en: "LegoFlow-Trainer", zh: "LegoFlow-Trainer" },
-  "app.subtitle": { en: "Training Dashboard", zh: "训练看板" },
+  "app.title": { en: "Trainer Dashboard", zh: "Trainer Dashboard" },
+  "app.updated": { en: "Updated", zh: "更新于" },
   "app.runs": { en: "Runs", zh: "运行记录" },
   "app.refresh": { en: "Refresh", zh: "刷新频率" },
   "app.noRuns": { en: "No runs found", zh: "暂无运行记录" },
@@ -27,6 +27,7 @@ const dict: Record<string, Record<Lang, string>> = {
   "app.lightMode": { en: "Switch to light mode", zh: "切换亮色模式" },
   "app.darkMode": { en: "Switch to dark mode", zh: "切换暗色模式" },
   "app.langToggle": { en: "切换中文", zh: "Switch to EN" },
+  "app.info": { en: "What this board is reading", zh: "当前看板读取的内容" },
 
   // Nav panels
   "nav.overview": { en: "Overview", zh: "总览" },

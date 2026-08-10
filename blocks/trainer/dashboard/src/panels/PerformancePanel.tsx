@@ -17,7 +17,7 @@ function fmtRuntime(sec: number): string {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+    <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
       <span className="text-xs text-slate-400 font-medium">{label}</span>
       <div className="text-2xl font-semibold text-slate-100 font-mono mt-2 truncate">{value}</div>
     </div>
@@ -57,9 +57,9 @@ export default function PerformancePanel({ data, runId }: Props) {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartPanel title={t("perf.stepTimeChart")} data={data} keys={["step_time_sec"]} colors={["#f59e0b"]} yAxisLabel="seconds" showArea />
-        <ChartPanel title={t("perf.elapsedChart")} data={data} keys={["elapsed_sec"]} colors={["#6366f1"]} />
-        <ChartPanel title={t("perf.etaChart")} data={data} keys={["remaining_sec"]} colors={["#06b6d4"]} />
+        <ChartPanel title={t("perf.stepTimeChart")} data={data} keys={["step_time_sec"]} colors={["#fab219"]} yAxisLabel="seconds" showArea />
+        <ChartPanel title={t("perf.elapsedChart")} data={data} keys={["elapsed_sec"]} colors={["#efa07c"]} />
+        <ChartPanel title={t("perf.etaChart")} data={data} keys={["remaining_sec"]} colors={["#199e70"]} />
       </div>
     </div>
   );

@@ -212,7 +212,7 @@ export default function LogsPanel({ runId, refreshInterval }: Props) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto rounded-xl bg-slate-950 border border-slate-800/60 font-mono text-xs leading-5"
+        className="flex-1 min-h-0 overflow-y-auto rounded-[10px] bg-slate-950 border border-slate-800/60 font-mono text-xs leading-5"
         style={{ maxHeight: "calc(100vh - 200px)" }}
       >
         {loading && lines.length === 0 ? (

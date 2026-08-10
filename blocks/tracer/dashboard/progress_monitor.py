@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import base64 as _b64
 import json
 import os
 import re
@@ -161,15 +162,53 @@ SUBSCORE_LABELS = {
     "fec_score": "fec file-edit concentration",
     "dpi_score": "dpi dirty-pattern penalty",
 }
+def render_rubric_html() -> str:
+    """The trajectory-quality rubric, rendered from the same weights the score
+    itself uses so the card can never drift from the arithmetic."""
+    rows = []
+    for key in WEIGHTED_SUBSCORE_KEYS:
+        weight = TQS_WEIGHTS[key]
+        label = SUBSCORE_LABELS.get(key, key)
+        # labels are stored as "<code> <name>"; split so each lands in its own column
+        code, _, name = label.partition(" ")
+        rows.append(
+            '<div class="rubric-row">'
+            f'<span class="rk">{html.escape(code)}</span>'
+            f'<span class="rn">{html.escape(name or label)}</span>'
+            f'<span class="rw">{weight:.2f}</span>'
+            f'<span class="rb"><i style="width:{weight / max(TQS_WEIGHTS.values()) * 100:.1f}%"></i></span>'
+            "</div>"
+        )
+    diagnostic = [k for k in SUBSCORE_KEYS if TQS_WEIGHTS.get(k, 0) == 0]
+    return (
+        '<section class="method-card"><h3>Trajectory Quality Score '
+        "<span>rule-based, no LLM judge</span></h3>"
+        '<div class="method-body">'
+        '<span class="mh">Composite</span>'
+        "<code>TQS = &Sigma; w&middot;s</code> over the weighted dimensions below "
+        f"(&Sigma;w = {sum(TQS_WEIGHTS.values()):.2f}); each <code>s</code> is a rule score in "
+        "<code>[0, 1]</code>."
+        '<span class="mh">Weighted dimensions</span>'
+        f'<div class="rubric">{"".join(rows)}</div>'
+        '<span class="mh">Diagnostic dimensions</span>'
+        f'<div class="method-note">Carried for inspection at weight 0, so they never move the score: '
+        f'<code>{html.escape(", ".join(k.removesuffix("_score") for k in diagnostic))}</code>.</div>'
+        '<div class="method-note">Scores come from the exported SFT quality facts '
+        "(<code>swe_data_process</code> rule_score); a trajectory with no facts is counted as "
+        "unscored, never as zero.</div>"
+        "</div></section>"
+    )
+
+
 IDENTITY_COLORS = [
     "#2563eb",
-    "#059669",
-    "#dc2626",
-    "#7c3aed",
-    "#0891b2",
-    "#d97706",
+    "#3f8f2f",
+    "#d03b3b",
+    "#4a3aa7",
+    "#199e70",
+    "#c8860d",
     "#be185d",
-    "#4f46e5",
+    "#b3431f",
     "#16a34a",
     "#ea580c",
     "#0d9488",
@@ -2149,121 +2188,221 @@ def build_coverage_summary(
 # HTML rendering
 # ---------------------------------------------------------------------------
 
+FAVICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+    '<rect width="64" height="64" rx="14" fill="#b3431f"/>'
+    '<text x="32" y="42" text-anchor="middle" font-family="Georgia,serif" '
+    'font-weight="700" font-size="30" fill="#fafaf7">LF</text></svg>'
+)
+FAVICON_DATA_URI = "data:image/svg+xml;base64," + _b64.b64encode(
+    FAVICON_SVG.encode("utf-8")
+).decode("ascii")
+
+ICON_INFO = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
+             '<circle cx="12" cy="12" r="9"></circle><path d="M12 16v-5"></path>'
+             '<path d="M12 8h.01"></path></svg>')
+
+CARET_SVG = ('<svg class="caret icon" viewBox="0 0 24 24" aria-hidden="true" '
+             'style="width:14px;height:14px"><path d="M9 6l6 6-6 6"></path></svg>')
+
+ICON_METRICS = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
+                '<path d="M4 19h16"></path><path d="M7 19v-7"></path>'
+                '<path d="M12 19V5"></path><path d="M17 19v-10"></path></svg>')
+
 CSS = """
 :root {
   color-scheme: light;
-  --bg: #f8fafc;
+  --bg: #fafaf7;
   --panel: #fff;
-  --panel-soft: #f8fafc;
-  --panel-softer: #f1f5f9;
-  --text: #0f172a;
-  --muted: #64748b;
-  --line: #e2e8f0;
-  --soft: #f1f5f9;
-  --ink: #4f46e5;
+  --panel-soft: #fafaf7;
+  --panel-softer: #f1efe9;
+  --text: #111111;
+  --fg-dim: #4a453e;
+  --muted: #6b6b66;
+  --fg-faint: #8c8c85;
+  --method-bg: #b3431f0a;
+  --method-line: #b3431f33;
+  --method-head: #b3431f;
+  --line: #e6e3da;
+  --soft: #f1efe9;
+  --ink: #b3431f;
   --ink-contrast: #fff;
-  --accent-soft: #6366f122;
-  --accent-border: #6366f1;
-  --active-text: #4f46e5;
+  --accent-soft: #b3431f1f;
+  --accent-border: #b3431f80;
+  --active-text: #b3431f;
   --button-bg: #fff;
-  --button-hover: #f1f5f9;
-  --bar-bg: #e2e8f0;
-  --bar-text: #0f172a;
-  --active-row: #f1f5f9;
-  --warn-bg: #fbbf2422;
-  --warn-line: #fbbf2455;
-  --warn-text: #92400e;
-  --blue: #4f46e5;
-  --green: #059669;
-  --amber: #d97706;
-  --red: #dc2626;
-  --purple: #7c3aed;
-  --cyan: #0891b2;
-  --badge-running-bg: #fbbf2422;
-  --badge-running-text: #b45309;
-  --badge-done-bg: #10b98122;
-  --badge-done-text: #047857;
-  --badge-missing-bg: #ef444422;
-  --badge-missing-text: #b91c1c;
-  --badge-scaffold-bg: #6366f122;
-  --badge-scaffold-text: #4f46e5;
+  --button-hover: #f1efe9;
+  --bar-bg: #e6e3da;
+  /* bar fills repeat dozens of times per page; a softened tint of the accent
+     keeps the page calm without changing the brand colour */
+  --accent-fill: #c96a45;
+  --bar-text: #111111;
+  --active-row: #f1efe9;
+  --warn-bg: #fab21922;
+  --warn-line: #fab21955;
+  --warn-text: #8a5a10;
+  --blue: #b3431f;
+  --green: #3f8f2f;
+  --amber: #c8860d;
+  --red: #d03b3b;
+  --purple: #4a3aa7;
+  --cyan: #199e70;
+  --badge-running-bg: #fab21922;
+  --badge-running-text: #8a5a10;
+  --badge-done-bg: #4a944022;
+  --badge-done-text: #3f8f2f;
+  --badge-missing-bg: #d03b3b22;
+  --badge-missing-text: #d03b3b;
+  --badge-scaffold-bg: #efa07c22;
+  --badge-scaffold-text: #b3431f;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #020617;
-  --panel: #0b1226;
-  --panel-soft: #0f172a;
-  --panel-softer: #111a2e;
-  --text: #e2e8f0;
-  --muted: #94a3b8;
-  --line: #1e293b99;
-  --soft: #0f172a;
-  --ink: #6366f1;
+  --bg: #14110e;
+  --panel: #1a1714;
+  --panel-soft: #1a1714;
+  --panel-softer: #211d19;
+  --text: #f0ede7;
+  --fg-dim: #c9c2b6;
+  --muted: #a9a297;
+  --fg-faint: #8a847a;
+  --method-bg: #efa07c12;
+  --method-line: #efa07c33;
+  --method-head: #f5c9b4;
+  --line: #302a2499;
+  --soft: #1a1714;
+  --ink: #efa07c;
   --ink-contrast: #fff;
-  --accent-soft: #6366f133;
-  --accent-border: #6366f180;
-  --active-text: #c7d2fe;
-  --button-bg: #0f172a80;
-  --button-hover: #1e293b40;
-  --bar-bg: #1e293b66;
-  --bar-text: #e2e8f0;
-  --active-row: #1e293b40;
-  --warn-bg: #fbbf2422;
-  --warn-line: #fbbf2455;
-  --warn-text: #fbbf24;
-  --blue: #6366f1;
-  --green: #34d399;
-  --amber: #fbbf24;
-  --red: #f87171;
-  --purple: #a78bfa;
-  --cyan: #22d3ee;
-  --badge-running-bg: #fbbf2422;
-  --badge-running-text: #fbbf24;
-  --badge-done-bg: #10b98122;
-  --badge-done-text: #34d399;
-  --badge-missing-bg: #ef444422;
-  --badge-missing-text: #f87171;
-  --badge-scaffold-bg: #6366f133;
-  --badge-scaffold-text: #c7d2fe;
+  --accent-soft: #efa07c33;
+  --accent-border: #efa07c80;
+  --active-text: #f5c9b4;
+  --button-bg: #1a171480;
+  --button-hover: #302a2440;
+  --bar-bg: #302a2466;
+  --accent-fill: #c9805f;
+  --bar-text: #f0ede7;
+  --active-row: #302a2440;
+  --warn-bg: #fab21922;
+  --warn-line: #fab21955;
+  --warn-text: #fab219;
+  --blue: #efa07c;
+  --green: #4a9440;
+  --amber: #fab219;
+  --red: #d03b3b;
+  --purple: #9085e9;
+  --cyan: #199e70;
+  --badge-running-bg: #fab21922;
+  --badge-running-text: #fab219;
+  --badge-done-bg: #4a944022;
+  --badge-done-text: #4a9440;
+  --badge-missing-bg: #d03b3b22;
+  --badge-missing-text: #d03b3b;
+  --badge-scaffold-bg: #efa07c33;
+  --badge-scaffold-text: #f5c9b4;
 }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-       background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.45; }
+/* Shell metrics (type scale, sidebar width, topbar and content padding) are
+   shared with every other block's board — change them there too. */
+:root { font-size: 15px; }
+body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+       background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.45;
+       -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--fg-faint); border-radius: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
 header { padding: 24px 32px 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .header-top { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 header h1 { margin: 0 0 6px; font-size: 26px; font-weight: 720; letter-spacing: 0; }
 header p { margin: 4px 0; color: var(--muted); }
 header code, code { background: var(--soft); padding: 2px 6px; border-radius: 5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 main { padding: 22px 32px 48px; max-width: 1760px; margin: 0 auto; }
-.app-shell { min-height: 100vh; display: grid; grid-template-columns: 248px minmax(0, 1fr); }
-.sidebar { position: sticky; top: 0; height: 100vh; padding: 20px 14px; border-right: 1px solid var(--line); background: linear-gradient(180deg, #0a1226 0%, var(--bg) 100%); overflow-y: auto; }
+.app-shell { min-height: 100vh; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+.sidebar { position: sticky; top: 0; height: 100vh; padding: 0; border-right: 1px solid var(--line); background: linear-gradient(180deg, #12100d 0%, var(--bg) 100%); overflow-y: auto; }
 :root:not([data-theme="dark"]) .sidebar { background: var(--panel); }
-.brand { padding: 2px 8px 16px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.brand { padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .brand-lockup { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 32px; flex: 0 0 38px; border-radius: 8px; background: var(--ink); color: var(--ink-contrast); font-size: 11px; font-weight: 800; letter-spacing: -0.02em; }
+.brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; flex: 0 0 32px; border-radius: 7px; background: var(--ink); color: var(--ink-contrast); font-size: 13px; font-weight: 800; letter-spacing: -0.02em; }
 .brand-title { min-width: 0; }
-.brand h1 { margin: 0; font-size: 24px; letter-spacing: 0; }
+.brand h1 { margin: 0; font-size: 15px; font-weight: 650; line-height: 1.25; letter-spacing: 0; }
 .brand p { margin: 4px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.side-nav { display: grid; gap: 6px; }
-.nav-item { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border-color: transparent; background: transparent; color: var(--muted); border-radius: 8px; font-weight: 650; padding: 8px 10px; }
+.side-nav { display: grid; gap: 2px; padding: 8px; }
+.nav-item { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid transparent; background: transparent; color: var(--fg-dim); border-radius: 8px; font-size: 14px; font-weight: 600; padding: 8px 10px; }
 .nav-item:hover { background: var(--button-hover); color: var(--text); border-color: transparent; }
 .nav-item.active { background: var(--accent-soft); color: var(--active-text); border-color: var(--accent-border); }
 .nav-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: 0 0 20px; }
 .nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-meta { margin-top: 18px; padding: 12px 8px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.side-meta p { margin: 0 0 8px; }
 .main-shell { min-width: 0; }
-.topbar { display: flex; justify-content: space-between; gap: 16px; align-items: center; min-height: 48px; padding: 10px 28px; border-bottom: 1px solid var(--line); background: var(--bg); }
-.topbar h2 { margin: 0; font-size: 18px; }
-.topbar p { margin: 4px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.topbar { display: flex; justify-content: space-between; gap: 16px; align-items: center; min-height: 48px; padding: 10px 24px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.topbar h2 { margin: 0; font-size: 17px; font-weight: 650; }
+.topbar p { margin: 2px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .topbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .update-status { color: var(--muted); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.content { padding: 22px 28px 48px; max-width: 1760px; margin: 0 auto; }
+.content { padding: 18px 24px 32px; }
 button, input, select { font: inherit; }
 button { border: 1px solid var(--line); background: var(--button-bg); color: var(--text); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
 button:hover { border-color: var(--accent-border); background: var(--button-hover); color: var(--text); }
 .icon { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; }
+/* Modal — same dialog spec on every block's board: centred over a dimmed page,
+   generous gutters, one quiet header rule. */
+.modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center;
+  justify-content: center; padding: 32px 24px; background: rgba(17, 17, 17, .32); }
+:root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .5); }
+.modal[hidden] { display: none; }
+.modal-box { width: min(920px, 94vw); max-height: min(80vh, 780px); display: flex;
+  flex-direction: column; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: 0 24px 64px rgba(0, 0, 0, .18); overflow: hidden; text-align: left; }
+:root[data-theme="dark"] .modal-box { box-shadow: 0 24px 64px rgba(0, 0, 0, .6); }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+  padding: 22px 28px 18px; border-bottom: 1px solid var(--line); }
+.modal-head h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em;
+  line-height: 1.3; }
+.modal-head .sub { color: var(--muted); font-size: 12.5px; margin-top: 5px; line-height: 1.5; }
+.modal-close { background: transparent; border: 1px solid transparent; color: var(--muted);
+  border-radius: 9px; width: 30px; height: 30px; cursor: pointer; font-size: 19px;
+  line-height: 1; flex: 0 0 30px; }
+.modal-close:hover { color: var(--text); border-color: var(--line); background: var(--button-bg); }
+.modal-body { padding: 22px 28px 26px; overflow: auto; }
+.modal-body table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.modal-body td { padding: 5px 7px; border-bottom: 1px solid var(--line); text-align: left; }
+.modal-body td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; word-break: break-all; }
+.modal-body .sub { color: var(--muted); font-size: 11.5px; margin: 14px 0 5px;
+  text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+.modal-body .sub:first-child { margin-top: 0; }
+/* Scoring rubric card — mirrors curator's methodology card. Every dimension is
+   one unwrapped row: a fixed code column, an elastic name, then the weight and
+   its bar, so the weights line up as a column you can read down. */
+.method-card { background: var(--method-bg); border: 1px solid var(--method-line);
+  border-radius: 10px; padding: 14px 18px; }
+.method-card h3 { font-size: 15px; margin: 0 0 4px; font-weight: 700; color: var(--method-head); }
+.method-card h3 span { color: var(--ink); font-weight: 500; font-size: 13px; margin-left: 6px; }
+.method-body { font-size: 13px; line-height: 1.7; color: var(--text); }
+.method-body .mh { display: block; color: var(--method-head); font-weight: 800;
+  font-size: 13.5px; margin: 10px 0 4px; }
+.method-body .mh:first-child { margin-top: 0; }
+.method-body code { color: var(--ink); background: var(--accent-soft); padding: 1px 5px;
+  border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.method-note { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 8px; }
+.rubric { display: grid; gap: 4px; margin-top: 2px; }
+.rubric-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) 52px 132px;
+  gap: 12px; align-items: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rubric-row .rk { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  font-weight: 700; color: var(--ink); }
+.rubric-row .rn { overflow: hidden; text-overflow: ellipsis; }
+.rubric-row .rw { text-align: right; font-weight: 700; }
+.rubric-row .rb { height: 8px; border-radius: 999px; background: var(--bar-bg); overflow: hidden; }
+.rubric-row .rb i { display: block; height: 100%; background: var(--accent-fill); border-radius: inherit; }
+@media (max-width: 700px) {
+  .rubric-row { grid-template-columns: 52px minmax(0, 1fr) 52px; }
+  .rubric-row .rb { display: none; }
+}
+/* Shared chrome with the other blocks' boards: 36px square, 8px radius, muted
+   ink that firms up on hover. Keep in step with curator/trainer/evaluator. */
+.icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center;
+  justify-content: center; flex: 0 0 36px; background: var(--button-bg);
+  border: 1px solid var(--line); color: var(--fg-dim); border-radius: 8px; cursor: pointer; }
+.icon-btn:hover { color: var(--text); border-color: var(--accent-border); }
+.topbar-actions .copy-btn { height: 36px; padding: 0 12px; border-radius: 8px; font-size: 12px; }
 .theme-toggle { min-width: 0; white-space: nowrap; }
 .theme-toggle .theme-sun { display: none; }
 .theme-toggle .theme-moon { display: block; }
@@ -2272,12 +2411,14 @@ button:hover { border-color: var(--accent-border); background: var(--button-hove
 .refresh-btn.refreshing .icon { animation: spin .75s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .grid { display: grid; gap: 12px; }
-.kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 18px 0; }
+.kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 0 12px; }
 .card, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-.card { padding: 14px 16px; min-height: 104px; }
-.card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-.card .value { font-size: 28px; font-weight: 720; margin-top: 8px; font-variant-numeric: tabular-nums; }
-.card .sub { color: var(--muted); margin-top: 4px; font-size: 12px; }
+/* Stat tiles sit at the same weight as every other board's: the number leads,
+   the label and caption stay quiet, and nothing is padded out to a fixed height. */
+.card { padding: 12px 14px; }
+.card .label { color: var(--muted); font-size: 12px; line-height: 1.35; text-transform: uppercase; letter-spacing: .04em; }
+.card .value { font-size: 22px; font-weight: 700; margin-top: 4px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.card .sub { color: var(--muted); margin-top: 3px; font-size: 11px; line-height: 1.35; }
 .panel { padding: 18px; margin-top: 18px; overflow: hidden; }
 .panel-head { display: flex; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .panel h2 { margin: 0; font-size: 18px; }
@@ -2291,14 +2432,30 @@ button:hover { border-color: var(--accent-border); background: var(--button-hove
 .toolbar input, .toolbar select { border: 1px solid var(--line); border-radius: 6px; background: var(--button-bg); color: var(--text); padding: 7px 9px; min-width: 190px; }
 .segment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 18px; }
 .segment-grid .panel { margin-top: 0; height: 100%; }
+/* Folds — same affordance as curator's board: a quiet uppercase bar that turns
+   its caret when open. Breakdowns start closed so the Jobs page opens on the
+   job table alone rather than on eight stacked tables. */
+.fold { margin: 0; }
+.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
+  gap: 8px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel); font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--muted); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary:hover { color: var(--text); border-color: var(--accent-border); }
+.fold > summary .caret { transition: transform .15s ease; flex: 0 0 auto; }
+.fold[open] > summary .caret { transform: rotate(90deg); }
+.fold[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; color: var(--text); }
+.fold > summary .hint { margin-left: auto; text-transform: none; letter-spacing: 0;
+  font-weight: 500; font-size: 11.5px; color: var(--fg-faint); margin-bottom: 0; }
+.fold-body { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 10px 10px; padding: 14px; }
 .segment-panel h2 { font-size: 16px; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); }
 th { text-align: left; color: var(--muted); font-weight: 650; background: color-mix(in srgb, var(--panel-soft) 78%, transparent); white-space: nowrap; }
 th.sortable { cursor: pointer; }
-th.sortable::after { content: " ↕"; color: #98a2b3; font-size: 11px; }
+th.sortable::after { content: " ↕"; color: #a9a297; font-size: 11px; }
 th.segment-sort { cursor: pointer; user-select: none; }
-th.segment-sort::after { content: " ↕"; color: #98a2b3; font-size: 11px; }
+th.segment-sort::after { content: " ↕"; color: #a9a297; font-size: 11px; }
 th.segment-sort.active.asc::after { content: " ↑"; color: var(--blue); }
 th.segment-sort.active.desc::after { content: " ↓"; color: var(--blue); }
 th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -2314,7 +2471,7 @@ td.job { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:
 .badge.missing { background: var(--badge-missing-bg); color: var(--badge-missing-text); }
 .badge.scaffold { background: var(--badge-scaffold-bg); color: var(--badge-scaffold-text); }
 .bar { position: relative; height: 18px; min-width: 140px; background: var(--bar-bg); border-radius: 999px; overflow: hidden; }
-.bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--blue); border-radius: inherit; }
+.bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--accent-fill); border-radius: inherit; }
 .bar span { position: relative; z-index: 1; display: block; line-height: 18px; text-align: center; font-size: 12px; color: var(--bar-text); font-weight: 650; }
 .muted { color: var(--muted); }
 .difficulty-warning { color: var(--amber); font-size: 12px; margin-top: 2px; }
@@ -2351,7 +2508,7 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .mini-bar-row { display: grid; grid-template-columns: minmax(110px, 220px) minmax(120px, 1fr) 80px; gap: 10px; align-items: center; }
 .mini-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
 .mini-bar-track { height: 10px; border-radius: 999px; background: var(--bar-bg); overflow: hidden; }
-.mini-bar-fill { height: 100%; background: var(--ink); border-radius: inherit; }
+.mini-bar-fill { height: 100%; background: var(--accent-fill); border-radius: inherit; }
 .mini-bar-value { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .split-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, .72fr); gap: 14px; align-items: start; }
 .source-link { border: 0; background: transparent; color: inherit; padding: 0; text-align: left; font: inherit; max-width: 100%; }
@@ -2359,9 +2516,9 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .source-name { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
 .source-sub { color: var(--muted); font-size: 12px; margin-top: 3px; overflow-wrap: anywhere; }
 .metric-pill { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-soft); font-variant-numeric: tabular-nums; }
-.metric-pill.good { background: #10b98122; color: var(--green); border-color: #10b98155; }
-.metric-pill.warn { background: #fbbf2422; color: var(--amber); border-color: #fbbf2455; }
-.metric-pill.bad { background: #ef444422; color: var(--red); border-color: #ef444455; }
+.metric-pill.good { background: #4a944022; color: var(--green); border-color: #4a944055; }
+.metric-pill.warn { background: #fab21922; color: var(--amber); border-color: #fab21955; }
+.metric-pill.bad { background: #d03b3b22; color: var(--red); border-color: #d03b3b55; }
 .subscore-matrix-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .subscore-matrix-table th, .subscore-matrix-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .subscore-matrix-table th { position: sticky; top: 0; background: var(--panel); z-index: 1; font-size: 12px; }
@@ -2370,7 +2527,19 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .subscore-matrix-table td.num { text-align: right; }
 .subscore-matrix-table th.score-sep, .subscore-matrix-table td.score-sep { border-right: 2px solid var(--line); }
 .subscore-matrix-table th.segment-sort { cursor: pointer; }
-.traj-layout { display: grid; grid-template-columns: minmax(300px, 460px) minmax(0, 1fr); gap: 14px; align-items: start; }
+/* The sampled list owns the page; the detail opens in a dialog, the way
+   curator's task samples do, so the panel is not permanently half-empty. */
+.traj-layout { display: block; }
+.traj-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+.traj-row:last-child { border-bottom: 0; }
+.traj-row .traj-card { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
+.traj-open { flex: 0 0 auto; align-self: stretch; border: 0; border-left: 1px solid var(--line);
+  border-radius: 0; background: var(--panel); color: var(--muted); padding: 0 14px;
+  font-size: 12px; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.traj-open:hover { color: var(--ink); background: var(--button-hover); border-color: var(--line); }
+.traj-box { width: min(1160px, 95vw); height: min(760px, 88vh); max-height: none; }
+.traj-body { padding: 0; min-height: 0; flex: 1; overflow: auto; }
+.traj-body .traj-view { border: 0; border-radius: 0; min-height: 0; padding: 22px 28px 26px; }
 .traj-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; max-height: 760px; overflow-y: auto; background: var(--panel); }
 .traj-card { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 11px 12px; background: var(--panel); }
 .traj-card.active { background: var(--active-row); }
@@ -2384,9 +2553,9 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .step-row .desc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .step-badges { display: flex; gap: 5px; flex-wrap: wrap; }
 .step-badge { display: inline-flex; align-items: center; min-height: 20px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; font-size: 10.5px; color: var(--muted); background: var(--panel-soft); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.step-badge.good { background: #10b98122; color: var(--green); border-color: #10b98155; }
-.step-badge.bad { background: #ef444422; color: var(--red); border-color: #ef444455; }
-.step-badge.warn { background: #fbbf2422; color: var(--amber); border-color: #fbbf2455; }
+.step-badge.good { background: #4a944022; color: var(--green); border-color: #4a944055; }
+.step-badge.bad { background: #d03b3b22; color: var(--red); border-color: #d03b3b55; }
+.step-badge.warn { background: #fab21922; color: var(--amber); border-color: #fab21955; }
 .step-badge.accent { background: var(--accent-soft); color: var(--active-text); border-color: var(--accent-border); }
 .trace-header { margin-bottom: 12px; }
 .trace-header-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -2402,14 +2571,14 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .turn-spacer { flex: 1; }
 .turn-body { display: flex; flex-direction: column; gap: 10px; padding: 0 12px 12px; border-top: 1px solid var(--line); }
 .trace-block { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--panel-soft); }
-.trace-block.thought { border-color: #3b82f655; background: #3b82f60a; }
-.trace-block.action { border-color: #f59e0b55; background: #f59e0b0a; }
-.trace-block.observation { border-color: #10b98155; background: #10b9810a; }
-.trace-block.error { border-color: #ef444455; background: #ef44440d; }
+.trace-block.thought { border-color: #3987e555; background: #3987e50a; }
+.trace-block.action { border-color: #fab21955; background: #fab2190a; }
+.trace-block.observation { border-color: #4a944055; background: #4a94400a; }
+.trace-block.error { border-color: #d03b3b55; background: #d03b3b0d; }
 .block-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
 .block-label { color: var(--muted); font-size: 10.5px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
-.block-tool-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--amber); background: #fbbf2422; padding: 1px 7px; border-radius: 4px; }
-.block-pre, .preface-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; background: #0f172a; color: #e2e8f0; border: 1px solid #1e293b; border-radius: 6px; padding: 10px; max-height: 420px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.45; }
+.block-tool-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--amber); background: #fab21922; padding: 1px 7px; border-radius: 4px; }
+.block-pre, .preface-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; background: #1a1714; color: #f0ede7; border: 1px solid #302a24; border-radius: 6px; padding: 10px; max-height: 420px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.45; }
 .preface-card { margin-top: 8px; }
 .preface-card > summary { cursor: pointer; padding: 10px 12px; display: flex; gap: 8px; align-items: center; }
 .preface-card[open] > summary { border-bottom: 1px solid var(--line); }
@@ -2431,7 +2600,6 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
   .update-status { white-space: normal; flex-basis: 100%; }
   .content { padding: 16px; }
   .header-top { display: block; }
-  .theme-toggle { margin-top: 10px; }
   .kpis, .status-grid, .samples-layout, .split-layout, .traj-layout { grid-template-columns: 1fr; }
   .panel-head { display: block; }
   .mini-bar-row { grid-template-columns: 1fr; gap: 4px; }
@@ -2649,6 +2817,33 @@ def render_html(
     sft_sorted = sorted(sft, key=lambda s: s["job"])
     now_str = now_bjt().strftime("%Y-%m-%d %H:%M:%S BJT")
 
+    # What this board read, so a surprising number can be traced to a path
+    # without leaving the page.
+    _sources = [
+        ("Harbor jobs", jobs_dir, len(jobs)),
+        ("SFT data", sft_dir, len(sft)),
+        ("Harbor job dir", harbor_jobs_dir, None),
+        ("Run index", index_path, None),
+    ]
+    rubric_html = render_rubric_html()
+    info_html = (
+        "<div class='sub'>Sources</div><table>"
+        + "".join(
+            f"<tr><td>{html.escape(name)}</td>"
+            f"<td class='mono'>{html.escape(str(path))}</td>"
+            f"<td>{'' if n is None else f'{n:,} found'}"
+            f"{'' if Path(path).exists() else '<em>not found</em>'}</td></tr>"
+            for name, path, n in _sources
+        )
+        + "</table>"
+        f"<div class='sub'>Refresh</div><table><tr><td>interval</td>"
+        f"<td class='mono'>{refresh_seconds}s</td><td></td></tr></table>"
+        "<div class='sub'>Exports</div><table><tr><td>summary JSON</td>"
+        "<td class='mono'>data/summary.json</td>"
+        "<td><button class='copy-btn' data-copy='data/summary.json'>Copy</button></td>"
+        "</tr></table>"
+    )
+
     missing_jobs = sum(1 for j in jobs_sorted if not j.get("source_exists", True))
     if sft_sorted:
         sft_rows = "".join(render_sft_row(s) for s in sft_sorted)
@@ -2722,7 +2917,7 @@ def render_html(
         "<th class='sortable'>Job</th><th class='sortable'>Scaffold</th><th class='sortable'>Status</th><th>Progress</th>"
         "<th class='num sortable'>Instances</th><th class='num sortable'>Passed</th><th class='num sortable'>Errors</th>"
         f"<th class='num sortable'>Pass Rate</th><th class='num sortable' title='{difficulty_title}'>Task Difficulty</th>"
-        "<th class='num sortable'>Valid Trajs</th><th class='num sortable'>Tokens</th>"
+        "<th class='num sortable'>Valid Trajectories</th><th class='num sortable'>Tokens</th>"
         "</tr></thead>"
         f"<tbody>{job_segment_rows or '<tr><td colspan=\"11\" class=\"empty\">No job segments available.</td></tr>'}</tbody>"
         "</table></div></section>"
@@ -2735,7 +2930,7 @@ def render_html(
         '<th class="num segment-sort" data-segment-sort="errors">Errors</th>'
         '<th class="num segment-sort" data-segment-sort="pass_rate">Pass Rate</th>'
         f'<th class="num segment-sort" data-segment-sort="task_difficulty_avg" title="{difficulty_title}">Task Difficulty</th>'
-        '<th class="num segment-sort" data-segment-sort="quality_records">Valid Trajs</th>'
+        '<th class="num segment-sort" data-segment-sort="quality_records">Valid Trajectories</th>'
         '<th class="num segment-sort" data-segment-sort="avg_quality_tokens">Tokens</th>'
         '</tr></thead>'
     )
@@ -2744,12 +2939,14 @@ def render_html(
         "",
     )
     segment_panels = job_segment_panel + "".join(
-        '<section class="panel segment-panel">'
-        f'<div class="panel-head"><div><h2>{html.escape(SEGMENT_LABELS.get(dim, dim))}</h2>'
-        f'<p class="hint">Segmented by {html.escape(SEGMENT_LABELS.get(dim, dim))}.</p></div></div>'
+        '<details class="fold segment-fold">'
+        f'<summary>{CARET_SVG}{html.escape(SEGMENT_LABELS.get(dim, dim))}'
+        f'<span class="hint">pass rate, difficulty and token totals per '
+        f'{html.escape(SEGMENT_LABELS.get(dim, dim).lower())}</span></summary>'
+        '<div class="fold-body">'
         f'<div class="table-wrap"><table class="segment-table" data-segment-dim="{html.escape(dim)}">'
         f'{difficulty_segment_header if dim == "difficulty" else segment_header}<tbody data-segment-rows="{html.escape(dim)}"></tbody></table></div>'
-        '</section>'
+        "</div></details>"
         for dim in segment_dims if dim != "job"
     )
     status_error = status.get("_error")
@@ -2789,12 +2986,12 @@ def render_html(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="{refresh_seconds}">
-<title>tracer</title>
+<title>LegoFlow-Tracer</title>
+<link rel="icon" type="image/svg+xml" href="{FAVICON_DATA_URI}">
 <script>
 (() => {{
   const saved = localStorage.getItem('tracer-theme');
-  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  document.documentElement.dataset.theme = saved || (prefersDark ? 'dark' : 'light');
+  document.documentElement.dataset.theme = saved === 'dark' ? 'dark' : 'light';
 }})();
 </script>
 <style>{CSS}</style>
@@ -2804,9 +3001,9 @@ def render_html(
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-lockup">
-        <div class="brand-mark" aria-hidden="true">SWE</div>
+        <div class="brand-mark" aria-hidden="true">LF</div>
         <div class="brand-title">
-          <h1>tracer</h1>
+          <h1>Tracer Dashboard</h1>
         </div>
       </div>
     </div>
@@ -2816,11 +3013,6 @@ def render_html(
       <button class="nav-item" data-page="trajectories"><span class="nav-icon">{icon_trajectories}</span><span class="nav-label">Trajectories</span></button>
       <button class="nav-item" data-page="operations"><span class="nav-icon">{icon_operations}</span><span class="nav-label">Operations</span></button>
     </nav>
-    <div class="side-meta">
-      <p><strong>Jobs</strong><br><code>{html.escape(str(jobs_dir))}</code></p>
-      <p><strong>SFT</strong><br><code>{html.escape(str(sft_dir))}</code></p>
-      <p><strong>Harbor</strong><br><code>{html.escape(str(harbor_jobs_dir))}</code></p>
-    </div>
   </aside>
   <div class="main-shell">
     <div class="topbar">
@@ -2830,15 +3022,48 @@ def render_html(
       </div>
       <div class="topbar-actions">
         <span class="update-status">Updated {html.escape(now_str)} &middot; refresh {refresh_seconds}s</span>
-        <button class="copy-btn" data-copy="data/summary.json">Copy summary</button>
+        <button id="metricsToggle" class="icon-btn" type="button" aria-label="Trajectory scoring rubric" title="How the trajectory quality score is computed">{ICON_METRICS}</button>
+        <button id="infoToggle" class="icon-btn" type="button" aria-label="Dashboard info" title="What this board is reading">{ICON_INFO}</button>
         <button id="refreshNow" class="icon-btn refresh-btn" type="button" aria-label="Refresh dashboard" title="Refresh dashboard">{icon_refresh}</button>
         <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="Toggle black and white theme" title="Toggle theme"><span class="theme-moon">{icon_moon}</span><span class="theme-sun">{icon_sun}</span></button>
       </div>
     </div>
+<div class="modal" id="trajPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box traj-box">
+    <div class="modal-head">
+      <div><h3 id="trajPanelTitle">Trajectory</h3>
+        <div class="sub">metrics, preview and the full turn-by-turn trace when available</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body traj-body">
+      <div id="trajView" class="traj-view empty">Select a trajectory to inspect.</div>
+    </div>
+  </div>
+</div>
+<div class="modal" id="metricsPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3>Trajectory scoring rubric</h3>
+        <div class="sub">how the quality score on this board is computed</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">{rubric_html}</div>
+  </div>
+</div>
+<div class="modal" id="infoPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3>What this board is reading</h3>
+        <div class="sub">resolved at render time</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">{info_html}</div>
+  </div>
+</div>
 <main class="content">
   <section id="overview" class="section active" data-title="Overview" data-subtitle="Monitor generation health, pass rate, quality score, and data coverage.">
     <div class="grid kpis">
-    <div class="card"><div class="label">Valid Trajs</div>
+    <div class="card"><div class="label">Valid Trajectories</div>
       <div class="value">{fmt_num(coverage.get('valid_trajs'))}</div>
       <div class="sub">for SFT in LF format</div></div>
     <div class="card"><div class="label">Valid Tokens</div>
@@ -2941,11 +3166,8 @@ def render_html(
         </select>
       </div>
       <div class="traj-layout">
-        <div>
-          <div class="card-title">Sampled Trajectories <span id="trajSampleInfo" class="hint"></span></div>
-          <div id="trajList" class="traj-list step-list"></div>
-        </div>
-        <div id="trajView" class="traj-view empty">Select a trajectory card to inspect metrics, preview text, and full turn-by-turn trace when embedded or available through R2.</div>
+        <div class="card-title">Sampled Trajectories <span id="trajSampleInfo" class="hint"></span></div>
+        <div id="trajList" class="traj-list step-list"></div>
       </div>
     </section>
   </section>
@@ -3544,11 +3766,16 @@ function renderTrajectoryList() {{
   if (info) info.textContent = `${{cards.length}} / ${{total}} shown`;
   if (!cards.length) {{
     list.innerHTML = '<div class="empty">No trajectory cards match the current filters.</div>';
-    $('#trajView').innerHTML = 'No trajectory selected.';
+    const view = $('#trajView');
+    if (view) view.innerHTML = 'No trajectory selected.';
     currentTraj = null;
     return;
   }}
+  // A <button> cannot legally contain another <button>, so the row is a wrapper
+  // holding the card and its Inspect control side by side — same shape curator
+  // uses for its Samples rows.
   list.innerHTML = cards.map((card, idx) => `
+    <div class="traj-row">
     <button class="step-row traj-card ${{idx === 0 ? 'active' : ''}}" data-id="${{escapeHtml(card.id)}}">
       <span class="id">#${{idx + 1}}</span>
       <span class="step-row-body">
@@ -3564,9 +3791,25 @@ function renderTrajectoryList() {{
         <span class="traj-card-meta">${{escapeHtml(trajSourceName(card))}} · ${{escapeHtml(card.language || 'unknown')}} · ${{escapeHtml(card.model || '-')}}</span>
       </span>
     </button>
+    <button class="traj-open" type="button" title="Inspect this trajectory">Inspect</button>
+    </div>
   `).join('');
-  $$('.traj-card', list).forEach((btn, idx) => btn.addEventListener('click', () => selectTrajectory(cards[idx], btn)));
+  $$('.traj-card', list).forEach((btn, idx) => btn.addEventListener('click', () => openTrajectory(cards[idx], btn)));
+  $$('.traj-open', list).forEach((btn, idx) => btn.addEventListener('click', () => {{
+    openTrajectory(cards[idx], $$('.traj-card', list)[idx]);
+  }}));
+  // Prime the detail without opening the dialog, so the first Inspect is instant.
   selectTrajectory(cards[0], $('.traj-card', list));
+}}
+
+// Selecting renders; opening also raises the dialog. Keeping them apart lets the
+// list preselect a card on every re-render without popping a dialog open.
+function openTrajectory(card, button) {{
+  selectTrajectory(card, button);
+  const panel = document.getElementById('trajPanel');
+  const title = document.getElementById('trajPanelTitle');
+  if (title) title.textContent = card.instance_id || card.task_name || card.id || 'Trajectory';
+  if (panel) panel.hidden = false;
 }}
 
 function scoreBreakdown(card) {{
@@ -4025,7 +4268,40 @@ function selectSample(sample, button) {{
   `;
 }}
 
+document.addEventListener('keydown', event => {{
+  if (event.key !== 'Escape') return;
+  for (const id of ['infoPanel', 'metricsPanel', 'trajPanel']) {{
+    const panel = document.getElementById(id);
+    if (panel) panel.hidden = true;
+  }}
+}});
+
 document.addEventListener('click', event => {{
+  // Every dialog behaves the same: its button toggles it, and the backdrop or the
+  // close control dismisses it. Dismissal resolves against the dialog the click
+  // actually happened in — matching on data-close alone would close whichever
+  // dialog this loop happened to reach first.
+  const PANELS = [['infoPanel', 'infoToggle'], ['metricsPanel', 'metricsToggle'], ['trajPanel', null]];
+  for (const [panelId, buttonId] of PANELS) {{
+    const panel = document.getElementById(panelId);
+    const button = buttonId && document.getElementById(buttonId);
+    if (!panel || !button) continue;
+    if (button.contains(event.target)) {{
+      const opening = panel.hidden;
+      for (const [otherId] of PANELS) {{
+        const other = document.getElementById(otherId);
+        if (other) other.hidden = true;
+      }}
+      panel.hidden = !opening;
+      return;
+    }}
+  }}
+  const owner = event.target.closest ? event.target.closest('.modal') : null;
+  if (owner && (event.target === owner
+                || (event.target.hasAttribute && event.target.hasAttribute('data-close')))) {{
+    owner.hidden = true;
+    return;
+  }}
   const nav = event.target.closest('.nav-item');
   if (nav) setPage(nav.dataset.page);
   const copy = event.target.closest('[data-copy]');

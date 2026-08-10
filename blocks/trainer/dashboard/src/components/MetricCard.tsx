@@ -71,7 +71,7 @@ export default function MetricCard({
   metricKey,
   data,
   format = "number",
-  color = "#6366f1",
+  color = "#efa07c",
   icon,
 }: Props) {
   const values = data
@@ -87,7 +87,7 @@ export default function MetricCard({
   const sparkData = values.slice(-30);
 
   return (
-    <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4 hover:border-slate-700/60 transition-colors">
+    <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4 hover:border-slate-700/60 transition-colors">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-slate-400 font-medium truncate">
           {icon && <span className="mr-1.5 inline-block align-middle">{icon}</span>}

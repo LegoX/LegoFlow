@@ -20,6 +20,33 @@ quality before handing the dataset to Tracer.
 This dashboard is not a live generation monitor. While Curator is still
 creating tasks, watch the logs, `verifiable_tasks.txt`, and `artifacts/index.yaml`.
 
+## Where It Reads From
+
+There is nothing to configure. The board always reads two fixed locations:
+
+| What | Where |
+| --- | --- |
+| PR collection | `artifacts/collected_prs/` |
+| Task batches | `artifacts/swe_tasks/*` — each immediate subdirectory is one batch |
+
+A batch is **named after its directory** — `py-cc`, `go-cc`, and so on. Each must
+hold one Harbor task per immediate child (`task.toml` + `instruction.md`).
+
+To show a dataset Curator did not generate, symlink it in; the link's own name
+becomes the batch name:
+
+```bash
+python3 dashboard/check_task_dir.py /path/to/dataset    # confirm the shape first
+ln -s /path/to/dataset artifacts/swe_tasks/<name>
+```
+
+Symlinked batches are marked as such and kept out of the PR → task funnel, which
+only describes tasks the collector sourced.
+
+Large batches cost real time to scan: every task's `task.toml` is read on each
+render, so a pool of tens of thousands of tasks takes minutes. Link those in only
+when you want them on the board.
+
 ## Local Mode
 
 Use local mode when you are developing or reviewing private datasets:
@@ -43,12 +70,22 @@ Use Cloudflare mode when you want a public dashboard URL for sharing:
 /curator:dashboard publish to Cloudflare
 ```
 
-Before using public mode, configure Cloudflare credentials outside tracked
-source files:
+Publishing goes through `scripts/publish_dashboard.sh`, which picks the mode for
+you:
+
+- **With credentials** — deploys to the Pages project `legoflow-curator`. The
+  project name is fixed; the **URL is read back from the Cloudflare API** after
+  the deploy and printed. Never assemble the address yourself: a `*.pages.dev`
+  subdomain that is already taken is silently given a suffix, so
+  `https://<project>.pages.dev` can be a link that 404s.
+- **Without credentials** — opens a temporary `*.trycloudflare.com` quick tunnel
+  over a local server, so a public link needs no Cloudflare account at all. It is
+  a fresh address each run and lives only as long as the command does.
+
+Supply credentials outside tracked source files:
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
-- the target Pages project, for example `swe-databoard`
 
 The API token needs permission to edit Cloudflare Pages for the account. Do not
 publish private task content unless the dataset is intended to be public.

@@ -252,12 +252,16 @@ are produced by the **single canonical tagger**,
 `repos/legoflow-curator/tools/tag_task_metadata.py`, over unified JSONL datasets:
 
 ```bash
-# from blocks/curator/dashboard/ (datasets exported to datasets/<id>/tasks.jsonl)
-python3 ../repos/legoflow-curator/tools/tag_task_metadata.py \
-  --datasets-dir datasets --dataset all --jobs 64 --retries 3
+# from blocks/curator/ — tag a task pool in place; the board reads task.toml
+python3 repos/legoflow-curator/tools/tag_task_metadata.py \
+  --tasks-dir artifacts/swe_tasks/py-cc --jobs 64 --retries 3
 ```
 
-See `dashboard/README.md` for dataset export and endpoint configuration.
+The board reads each task's own `task.toml`, so tagging is done over the task
+directories themselves. The `dashboard/datasets/*.jsonl` export this used to
+describe is gone, along with the static-dataset board it fed.
+
+See `dashboard/README.md` for what the board reads and how to publish it.
 
 ### Step 5: Extract Verified Tasks
 

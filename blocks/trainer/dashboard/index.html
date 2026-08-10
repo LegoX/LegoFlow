@@ -4,9 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LegoFlow-Trainer Training Dashboard</title>
+    <title>LegoFlow-Trainer</title>
+    <!-- Resolve the theme before first paint: the reader's saved choice, else
+         light. This board opens light regardless of the OS preference. -->
+    <script>
+      (() => {
+        let saved = null;
+        try { saved = localStorage.getItem("trainer-theme"); } catch (e) {}
+        document.documentElement.dataset.theme = saved === "dark" ? "dark" : "light";
+      })();
+    </script>
   </head>
-  <body class="bg-slate-950 text-slate-200 antialiased" data-theme="dark">
+  <body class="bg-slate-950 text-slate-200 antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

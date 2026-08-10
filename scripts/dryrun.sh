@@ -127,8 +127,7 @@ if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
   # Availability, not just presence: verify the token against the Cloudflare API.
   CF_PROBE="$(shared_cloudflare_probe)" && ok "cloudflare: $CF_PROBE" \
     || warn "cloudflare: $CF_PROBE — deploys will fail until the token is fixed"
-  [[ -n "${CLOUDFLARE_PAGES_PROJECT_PREFIX:-}" ]] && \
-    info "cloudflare: Pages project prefix '${CLOUDFLARE_PAGES_PROJECT_PREFIX}'"
+  info "cloudflare: dashboards publish to Pages project legoflow-<block>"
 elif [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" || -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
   warn "cloudflare: only one of account_id/api_token is set (from ${SHARED_CLOUDFLARE_SOURCE}) — both are required; deploys will fail"
 else

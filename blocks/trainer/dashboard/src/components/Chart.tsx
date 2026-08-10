@@ -15,15 +15,20 @@ import { Image, FileSpreadsheet } from "lucide-react";
 import type { MetricPoint } from "../types";
 import { downloadSvgAsPng, downloadCsv } from "../utils/chartExport";
 
+// Categorical slots from DASHBOARD_PALETTE.md, in their fixed order — assigned in
+// sequence, never cycled. Kept as var() so the theme toggle swaps them; the PNG
+// export resolves them through getComputedStyle (see utils/chartExport.ts).
+// The brand accent and the status colors are deliberately absent: neither may
+// stand in for a series.
 const COLORS = [
-  "#6366f1",
-  "#10b981",
-  "#f59e0b",
-  "#f43f5e",
-  "#8b5cf6",
-  "#06b6d4",
-  "#ec4899",
-  "#84cc16",
+  "var(--c-series-1)",
+  "var(--c-series-2)",
+  "var(--c-series-3)",
+  "var(--c-series-4)",
+  "var(--c-series-5)",
+  "var(--c-series-6)",
+  "var(--c-series-7)",
+  "var(--c-series-8)",
 ];
 
 interface ChartPanelProps {
@@ -257,7 +262,7 @@ export default function ChartPanel({
 
   if (available.length === 0) {
     return (
-      <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+      <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
         <h3 className="text-sm font-medium text-slate-300 mb-2">{title}</h3>
         <div className="flex items-center justify-center text-slate-500 text-sm" style={{ height }}>
           No data yet
@@ -270,7 +275,7 @@ export default function ChartPanel({
   const ChartComponent = useComposed ? ComposedChart : LineChart;
 
   return (
-    <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+    <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-slate-300">{title}</h3>
         <div className="flex items-center gap-3">
@@ -310,7 +315,7 @@ export default function ChartPanel({
           <Tooltip content={<CustomTooltip />} />
           {available.length > 1 && (
             <Legend
-              wrapperStyle={{ fontSize: 11, color: "#94a3b8" }}
+              wrapperStyle={{ fontSize: 11, color: "#a9a297" }}
               iconType="plainline"
             />
           )}
@@ -384,7 +389,7 @@ export function MinMaxChart({
   meanKey,
   maxKey,
   minKey,
-  color = "#6366f1",
+  color = "#efa07c",
   height = 260,
 }: MultiStatChartProps) {
   const [yMode, setYMode] = useState<YAxisMode>("auto");
@@ -426,7 +431,7 @@ export function MinMaxChart({
 
   if (available.length === 0) {
     return (
-      <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+      <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
         <h3 className="text-sm font-medium text-slate-300 mb-2">{title}</h3>
         <div className="flex items-center justify-center text-slate-500 text-sm" style={{ height }}>
           No data yet
@@ -436,7 +441,7 @@ export function MinMaxChart({
   }
 
   return (
-    <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+    <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-sm font-medium text-slate-300">{title}</h3>
         <div className="flex items-center gap-3">
@@ -497,7 +502,7 @@ export function MinMaxChart({
             />
           )}
           <Legend
-            wrapperStyle={{ fontSize: 11, color: "#94a3b8" }}
+            wrapperStyle={{ fontSize: 11, color: "#a9a297" }}
             iconType="plainline"
           />
         </ComposedChart>

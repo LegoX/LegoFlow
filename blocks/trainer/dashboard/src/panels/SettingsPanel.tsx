@@ -114,7 +114,7 @@ export default function SettingsPanel() {
         {profiles.map((p) => (
           <div
             key={p.id}
-            className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-colors cursor-pointer ${
+            className={`flex items-center justify-between px-4 py-3 rounded-[10px] border transition-colors cursor-pointer ${
               activeId === p.id
                 ? "bg-indigo-500/10 border-indigo-500/30"
                 : "bg-slate-900/80 border-slate-800/60 hover:border-slate-700/60"
@@ -173,7 +173,7 @@ export default function SettingsPanel() {
 
       {/* Edit form */}
       {editing && (
-        <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4 space-y-4">
+        <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4 space-y-4">
           <h3 className="text-sm font-medium text-slate-200">
             {profiles.find((p) => p.id === editing.id) ? t("settings.editProfile") : t("settings.newProfile")}
           </h3>

@@ -19,10 +19,11 @@ export function baseOptions(): BaseLayoutProps {
         active: "nested-url",
       },
       {
-        url: "https://swe-databoard.pages.dev/",
+        // Deliberately not a deployment URL: every operator publishes to their
+        // own Cloudflare account, and the address is only known after a deploy.
+        url: "/docs/dashboard",
         text: "dashboard",
-        active: "none",
-        external: true,
+        active: "nested-url",
       },
     ],
     themeSwitch: {

@@ -143,7 +143,7 @@ function ReportBody({ content }: { content: string }) {
     <div className="border-t border-slate-800/60">
       {/* Highlighted recommendations box */}
       {recommendations && (
-        <div className="mx-4 mt-4 rounded-xl border border-indigo-500/30 bg-indigo-500/[0.04] overflow-hidden">
+        <div className="mx-4 mt-4 rounded-[10px] border border-indigo-500/30 bg-indigo-500/[0.04] overflow-hidden">
           <div className="flex items-center gap-2 px-5 pt-4 pb-2">
             <Lightbulb size={15} className="text-indigo-400" />
             <span className="text-sm font-semibold text-indigo-300">
@@ -163,7 +163,7 @@ function ReportBody({ content }: { content: string }) {
 
       {/* User-directed analysis box */}
       {userDirected && (
-        <div className="mx-4 mt-3 rounded-xl border border-teal-500/30 bg-teal-500/[0.04] overflow-hidden">
+        <div className="mx-4 mt-3 rounded-[10px] border border-teal-500/30 bg-teal-500/[0.04] overflow-hidden">
           <div className="flex items-center gap-2 px-5 pt-4 pb-2">
             <Compass size={15} className="text-teal-400" />
             <span className="text-sm font-semibold text-teal-300">
@@ -289,7 +289,7 @@ export default function AnalysisPanel({ runId }: Props) {
     return (
       <div
         key={report.id}
-        className="rounded-xl bg-slate-900/80 border border-slate-800/60 overflow-hidden"
+        className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 overflow-hidden"
       >
         <button
           onClick={() => setExpandedId(expanded ? null : report.id)}
@@ -436,7 +436,7 @@ export default function AnalysisPanel({ runId }: Props) {
 
       {/* Status/warnings */}
       {!profile && (
-        <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-4 mb-4 flex items-start gap-2">
+        <div className="rounded-[10px] bg-amber-500/10 border border-amber-500/20 p-4 mb-4 flex items-start gap-2">
           <AlertCircle
             size={14}
             className="text-amber-400 mt-0.5 flex-shrink-0"
@@ -448,13 +448,13 @@ export default function AnalysisPanel({ runId }: Props) {
       )}
 
       {!runId && !allReports.length && (
-        <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-8 text-center text-sm text-slate-500 mb-4">
+        <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-8 text-center text-sm text-slate-500 mb-4">
           {t("analysis.selectRun")}
         </div>
       )}
 
       {profile && runId && (
-        <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-3 mb-4 flex items-center justify-between">
+        <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-3 mb-4 flex items-center justify-between">
           <div className="text-xs text-slate-400">
             <span className="text-slate-500">Profile:</span>{" "}
             <span className="text-slate-300">{profile.name}</span>
@@ -472,14 +472,14 @@ export default function AnalysisPanel({ runId }: Props) {
       )}
 
       {generating && (
-        <div className="rounded-xl bg-indigo-500/5 border border-indigo-500/20 p-4 mb-4 flex items-center gap-3">
+        <div className="rounded-[10px] bg-indigo-500/5 border border-indigo-500/20 p-4 mb-4 flex items-center gap-3">
           <Loader2 size={16} className="text-indigo-400 animate-spin" />
           <span className="text-sm text-indigo-300">{progress}</span>
         </div>
       )}
 
       {error && (
-        <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 mb-4">
+        <div className="rounded-[10px] bg-rose-500/10 border border-rose-500/20 p-4 mb-4">
           <div className="text-xs text-rose-400 font-medium mb-1">
             {t("analysis.failed")}
           </div>
@@ -518,7 +518,7 @@ export default function AnalysisPanel({ runId }: Props) {
         )}
 
         {allReports.length === 0 && !generating && (
-          <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center">
+          <div className="rounded-[10px] border border-dashed border-slate-700 p-8 text-center">
             <Sparkles size={24} className="mx-auto text-slate-600 mb-2" />
             <p className="text-sm text-slate-500">
               {t("analysis.noReports")}

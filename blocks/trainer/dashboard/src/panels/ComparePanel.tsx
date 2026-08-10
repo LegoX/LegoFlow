@@ -20,9 +20,9 @@ interface Props {
 }
 
 const RUN_COLORS = [
-  "#6366f1", "#10b981", "#f59e0b", "#f43f5e",
-  "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16",
-  "#fb923c", "#a78bfa", "#2dd4bf", "#fbbf24",
+  "#efa07c", "#4a9440", "#fab219", "#e66767",
+  "#9085e9", "#199e70", "#d55181", "#c98500",
+  "#ec835a", "#9085e9", "#199e70", "#fab219",
 ];
 
 const DEFAULT_METRICS = [
@@ -128,7 +128,7 @@ function CompareChart({
   if (merged.length === 0) return null;
 
   return (
-    <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+    <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-slate-300 font-mono">
           {metricKey}
@@ -170,15 +170,15 @@ function CompareChart({
             />
             <Tooltip
               contentStyle={{
-                background: "#1e293b",
-                border: "1px solid #334155",
+                background: "#302a24",
+                border: "1px solid #4a453e",
                 borderRadius: 8,
                 fontSize: 12,
               }}
               formatter={(v: number) => formatValue(v)}
             />
             <Legend
-              wrapperStyle={{ fontSize: 11, color: "#94a3b8" }}
+              wrapperStyle={{ fontSize: 11, color: "#a9a297" }}
               iconType="plainline"
             />
             {selectedRuns.map((id, i) => (
@@ -295,7 +295,7 @@ export default function ComparePanel({ runs }: Props) {
       </div>
 
       {/* Run selector */}
-      <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-3 mb-4">
+      <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-3 mb-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">
             {t("compare.selectRuns")}
@@ -353,7 +353,7 @@ export default function ComparePanel({ runs }: Props) {
 
       {/* Metric selector */}
       {selectedRuns.length >= 2 && allKeys.length > 0 && (
-        <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-3 mb-4">
+        <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-3 mb-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">
               {t("compare.selectMetrics")} ({selectedMetrics.length})
@@ -395,7 +395,7 @@ export default function ComparePanel({ runs }: Props) {
 
       {/* Loading indicator */}
       {anyLoading && (
-        <div className="rounded-xl bg-indigo-500/5 border border-indigo-500/20 p-4 mb-4 flex items-center gap-3">
+        <div className="rounded-[10px] bg-indigo-500/5 border border-indigo-500/20 p-4 mb-4 flex items-center gap-3">
           <Loader2 size={16} className="text-indigo-400 animate-spin" />
           <span className="text-sm text-indigo-300">{t("compare.loading")}</span>
         </div>
@@ -403,7 +403,7 @@ export default function ComparePanel({ runs }: Props) {
 
       {/* Placeholder */}
       {selectedRuns.length < 2 && (
-        <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-8 text-center text-sm text-slate-500">
+        <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-8 text-center text-sm text-slate-500">
           {t("compare.noRuns")}
         </div>
       )}
@@ -420,7 +420,7 @@ export default function ComparePanel({ runs }: Props) {
             />
           ))}
           {activeMetrics.length === 0 && (
-            <div className="col-span-2 rounded-xl bg-slate-900/80 border border-slate-800/60 p-8 text-center text-sm text-slate-500">
+            <div className="col-span-2 rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-8 text-center text-sm text-slate-500">
               No matching metrics found across selected runs.
             </div>
           )}
