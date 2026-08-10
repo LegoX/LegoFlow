@@ -10,7 +10,7 @@ https://swe-swegen-docs.pages.dev
 The live progress databoard is a separate Pages project:
 
 ```text
-https://swe-databoard.pages.dev/
+https://swe-databoard-ems.pages.dev/
 ```
 
 ## Develop locally

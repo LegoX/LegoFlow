@@ -3,7 +3,7 @@ name: dashboard
 description: >
   Regenerate and publish Curator's databoard from the live pipeline under
   artifacts/. Reads the task pools named in config.yaml
-  (runtime_info.input.dashboard.datasets), taking language, difficulty and the
+  (runtime_info.input.dashboard.tasks), taking language, difficulty and the
   four semantic tags [language, area, topic, bug_class] from each task's own
   task.toml, and reports PR/repo collection, per-batch progress, and
   verification yield. Always presents the resolved paths and discovered batches
@@ -31,11 +31,13 @@ Run from `blocks/curator/`. Confirm `config.yaml` has
 
 Read `config.yaml -> runtime_info.input.dashboard`:
 
-- `datasets` — `name: path` entries. Each is one **batch** on the Task List.
+- `tasks` — `name: path` entries. Each is one **batch** on the Task List.
   Paths may be absolute or relative to the block root.
-- `collected_prs_dir` — empty falls back to `pr_collection.output_dir`.
+- `prs` — `name: path` entries, each a whole collection directory whose
+  per-language files are discovered inside. Empty falls back to
+  `pr_collection.output_dir`.
 
-If `datasets` is empty or absent, report that and stop; there is nothing to read.
+If `tasks` is empty or absent, report that and stop; there is nothing to read.
 
 Pools are allowed to overlap: `merged_swe_tasks` is a manifest-filtered copy of
 `swe_tasks`, so the same task id appears in both. Each is still listed as its own
@@ -110,7 +112,7 @@ python3 repos/swegen/tools/tag_task_metadata.py --tasks-dir artifacts/hf/<name> 
 ```
 
 Then add `<name>: {path: artifacts/hf/<name>, external: true}` under
-`dashboard.datasets`. `external` keeps them out of the PR → task funnel, which only
+`dashboard.tasks`. `external` keeps them out of the PR → task funnel, which only
 describes tasks the collector sourced. Importing downloads from HuggingFace and
 tagging spends LLM tokens — treat both as separate actions the user must ask for.
 

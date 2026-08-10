@@ -3,7 +3,7 @@
 
 Reads the **live pipeline** under `artifacts/`, not an offline dataset export.
 Which task pools to read comes from `config.yaml ->
-runtime_info.input.dashboard.datasets` as `name: path` entries; each one is a
+runtime_info.input.dashboard.tasks` as `name: path` entries; each one is a
 batch on the Task List. Language, difficulty and the semantic tags
 `[language, area, topic, bug_class]` are read from every task's own `task.toml`
 (see task_toml.py), so a task is never classified by the directory holding it.
@@ -1608,7 +1608,7 @@ def main():
     cfg = load_dashboard_config(args.config)
     if not cfg["batches"]:
         raise SystemExit(
-            "no batches configured — set runtime_info.input.dashboard.datasets "
+            "no batches configured — set runtime_info.input.dashboard.tasks "
             f"in {args.config}"
         )
 

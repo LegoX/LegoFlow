@@ -4,7 +4,7 @@
 The dashboard reads `task.toml`, so the way to put an open-source dataset on the
 board is to give it the same on-disk shape as a generated one — not a second data
 path. After importing, add the output directory to
-`config.yaml -> runtime_info.input.dashboard.datasets` and it becomes another batch
+`config.yaml -> runtime_info.input.dashboard.tasks` and it becomes another batch
 alongside the pipeline's own.
 
     <out>/<instance_id>/task.toml        [metadata] tags / difficulty / category
@@ -160,7 +160,7 @@ def main() -> None:
     print(f"wrote {written:,} tasks to {args.out} (skipped {skipped:,} without id/patch)")
     print("next: run the tagger over this directory to fill tags/category/scoring,")
     print(f"      then add `{args.dataset}: {args.out}` under "
-          "runtime_info.input.dashboard.datasets with external: true")
+          "runtime_info.input.dashboard.tasks with external: true")
 
 
 if __name__ == "__main__":

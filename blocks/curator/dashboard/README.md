@@ -68,7 +68,7 @@ It reports `OK`, `NESTED` (tasks one level deeper, e.g. `swe_tasks/<lang>-cc/`),
 configured batch fails, so a mistyped path is reported rather than showing up as
 zero tasks.
 
-`collected_prs_dir` empty falls back to `pr_collection.output_dir`.
+An empty `prs` falls back to `pr_collection.output_dir`.
 
 ## Open-source datasets
 

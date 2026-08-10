@@ -2,7 +2,7 @@
 """Check that a directory really holds a list of Harbor tasks.
 
 A wrong path is the easy mistake to make in
-`config.yaml -> runtime_info.input.dashboard.datasets`, and its symptom is a board
+`config.yaml -> runtime_info.input.dashboard.tasks`, and its symptom is a board
 that renders fine but reports zero — which looks like "we have no tasks" rather
 than "you pointed me at the wrong place". This tells the two apart.
 
