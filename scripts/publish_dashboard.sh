@@ -38,8 +38,8 @@ _publish_wrangler() {
 
 # The canonical hostname Cloudflare assigned this project. Never build it from the
 # project name: `*.pages.dev` subdomains are globally unique, so a taken name is
-# silently given a suffix (project `swe-databoard` answers on
-# `swe-databoard-ems.pages.dev`). Guessing prints an address that 404s.
+# silently given a suffix (a project named `foo` can answer on `foo-ems.pages.dev`
+# — we have hit this). Guessing prints an address that 404s.
 _publish_pages_url() {
   local project="$1" response
   response="$(curl -sS --max-time 25 \

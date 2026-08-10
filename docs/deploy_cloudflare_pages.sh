@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the LegoFlow root docs (fumadocs/Next.js static export) and deploy
 # to a dedicated Cloudflare Pages project. Independent of the per-block docs
-# projects (e.g. swe-tracer-docs); this one defaults to legoflow-docs.
+# projects (e.g. legoflow-tracer-docs); this one defaults to legoflow-docs.
 #
 # Reuses the same Cloudflare credentials pattern as the tracer dashboard sync:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the trainer docs (fumadocs/Next.js static export) and deploy to a dedicated
-# Cloudflare Pages project (defaults to swe-trainer-docs).
+# Cloudflare Pages project (defaults to legoflow-trainer-docs).
 #
 # The training-progress webui under ../dashboard is a live React + server.py app
 # served locally (optionally via a Cloudflare quick tunnel); it is NOT a Pages
@@ -15,7 +15,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PROJECT_NAME="${PROJECT_NAME:-swe-trainer-docs}"
+PROJECT_NAME="${PROJECT_NAME:-legoflow-trainer-docs}"
 BRANCH_NAME="${BRANCH_NAME:-sft}"
 OUT_DIR="${OUT_DIR:-out}"
 # Node 22 supports current wrangler; the dashboard pins v3 only for system Node 18.

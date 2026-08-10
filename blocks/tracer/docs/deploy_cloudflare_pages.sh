@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the tracer docs (fumadocs/Next.js static export) and deploy to a
 # dedicated Cloudflare Pages project. Independent of the dashboard project
-# (swe-tracer-databoard); this one defaults to swe-tracer-docs.
+# (legoflow-tracer); this one defaults to legoflow-tracer-docs.
 #
 # Reuses the same Cloudflare credentials as the dashboard sync:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
@@ -12,7 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PROJECT_NAME="${PROJECT_NAME:-swe-tracer-docs}"
+PROJECT_NAME="${PROJECT_NAME:-legoflow-tracer-docs}"
 BRANCH_NAME="${BRANCH_NAME:-tracer}"
 OUT_DIR="${OUT_DIR:-out}"
 # Node 22 supports current wrangler; the dashboard pins v3 only for system Node 18.
@@ -41,7 +41,7 @@ log "Using node $(node -v), npm $(npm -v)"
 # The shared env file (e.g. .env.cf) sets PROJECT_NAME/BRANCH_NAME for the
 # DASHBOARD project, so we ignore those here. Capture the docs targets first,
 # then prefer the file's DOCS_PROJECT_NAME / DOCS_BRANCH_NAME if present —
-# otherwise the docs would deploy over swe-tracer-databoard.
+# otherwise the docs would deploy over legoflow-tracer.
 WANT_PROJECT="$PROJECT_NAME"
 WANT_BRANCH="$BRANCH_NAME"
 if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" || -f "$ENV_FILE" ]]; then

@@ -19,7 +19,7 @@ export function baseOptions(): BaseLayoutProps {
         active: "nested-url",
       },
       {
-        url: "https://swe-tracer-databoard.pages.dev/",
+        url: "https://legoflow-tracer.pages.dev/",
         text: "dashboard",
         active: "none",
         external: true,

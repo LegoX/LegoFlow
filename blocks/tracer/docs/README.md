@@ -4,7 +4,8 @@ User-facing documentation for the [tracer](../README.md) block, built as a
 [fumadocs](https://fumadocs.dev/) (Next.js) site and deployed to Cloudflare
 Pages as a static export.
 
-Live site: **<https://swe-tracer-docs.pages.dev>**
+Not currently deployed. `bash deploy_cloudflare_pages.sh` publishes it to the
+Pages project `legoflow-tracer-docs` and prints the URL Cloudflare assigned.
 
 The prose lives in `content/docs/`; everything else is the minimal app shell
 needed to render and deploy it.
@@ -45,9 +46,8 @@ npx serve out      # preview the exported site
 bash deploy_cloudflare_pages.sh
 ```
 
-Builds and deploys `out/` to the `swe-tracer-docs` Cloudflare Pages project
-(published at <https://swe-tracer-docs.pages.dev>, separate from the
-dashboard's `swe-tracer-databoard`). It activates Node 22
+Builds and deploys `out/` to the `legoflow-tracer-docs` Cloudflare Pages project
+(separate from the dashboard's `legoflow-tracer`). It activates Node 22
 via nvm, asserts Node >= 20, and reuses the dashboard's Cloudflare credentials
 (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or
 `~/.config/trajgen_progress_cloudflare.env`). Override the project with

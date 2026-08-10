@@ -9,7 +9,7 @@ Live site: **<https://legoflow-docs.pages.dev>**
 The prose lives in `content/docs/`; everything else is the minimal app shell
 needed to render and deploy it. This site documents the *root* block (pipeline,
 block system, getting started). Each block has its own docs site, e.g.
-tracer at <https://swe-tracer-docs.pages.dev>.
+tracer's `legoflow-tracer-docs` project (`blocks/tracer/docs/`).
 
 ## Requirements
 
