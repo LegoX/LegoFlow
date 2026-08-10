@@ -14,26 +14,26 @@ meta_info:
     to: {}
 
   repos:
-    swegen:
-      name: swegen
+    legoflow-curator:
+      name: legoflow-curator
       commit_id: null
 
   environment:
-    venv_name: swegen-env
-    venv_path: artifacts/envs/swegen-env
+    venv_name: legoflow-curator-env
+    venv_path: artifacts/envs/legoflow-curator-env
 
   resources:
     ip: local
-    user: root
+    user: null
     pwd: null
-    directory: /gpufs/haoli/code/
+    directory: null
 
 runtime_info:
   input:
     # OpenAI-only endpoint via a local LiteLLM CC proxy (started by
     # .github/scripts/smoke_run.sh on cc_proxy_port). native-anthropic mode was
     # abandoned: it was flaky, needed a committed real key, and several models
-    # returned empty for swegen's verdict-shaped prompt.
+    # returned empty for legoflow-curator's verdict-shaped prompt.
     llm_api:
       api_key: ""
       api_base_url: ""
@@ -44,7 +44,7 @@ runtime_info:
       cc_proxy_port: 4010
 
     # py only; other languages and production's adaptive `global`/`status`
-    # blocks are dropped — `swegen create` does not read them.
+    # blocks are dropped — `legoflow-curator create` does not read them.
     languages:
       py:
         enabled: true
@@ -69,8 +69,8 @@ runtime_info:
       # Output subdir, appended to runtime_info.output.swe_tasks_dir.path.
       # Result: artifacts/swe_tasks/py-cc-smoke (full path used by verify.sh).
       output_subdir: py-cc-smoke
-      state_subdir: .swegen-smoke-py
-      # PR list the smoke iterates. swegen stops after `max_pr` successfully
+      state_subdir: .legoflow-curator-smoke-py
+      # PR list the smoke iterates. legoflow-curator stops after `max_pr` successfully
       # verified tasks (1 by default). Keep multiple PRs as fallbacks if an
       # upstream Dockerfile drifts and one fails to build.
       #

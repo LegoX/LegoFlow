@@ -1,7 +1,7 @@
 .env
-swegen-env/
-.swegen/
-.swegen-*/
+legoflow-curator-env/
+.legoflow-curator/
+.legoflow-curator-*/
 logs/
 artifacts/collected_prs/
 artifacts/swe_tasks/

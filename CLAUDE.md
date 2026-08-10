@@ -76,7 +76,7 @@ The root block consumes no external **pipeline** inputs — those are filled int
 - `cloudflare.{account_id, api_token, pages_project_prefix}`: used by every block's dashboard publishing (`dashboard/run_cloudflare_pages_sync.sh`, `docs/deploy_cloudflare_pages.sh`)
 - `docker.{registry, username, password, mirror}`: registry login used by `scripts/docker_login.sh` to lift the anonymous 100-pulls-per-6h-per-IP cap that otherwise breaks image pulls mid-job in curator/tracer/evaluator
 
-Every block reads these through `scripts/shared_credentials.sh`, which resolves each field as **env > root `config.yaml` > that block's legacy env file** (`~/.config/{swegen,trajgen,harbor_webui}_*_cloudflare.env`, still supported). `config.yaml` is git-tracked, so keep `api_token` / `password` empty there and supply them via `$CLOUDFLARE_API_TOKEN` / `$DOCKER_PASSWORD`. Missing credentials are always a WARN, never a FAIL — nothing in the core pipeline depends on them.
+Every block reads these through `scripts/shared_credentials.sh`, which resolves each field as **env > root `config.yaml` > that block's legacy env file** (`~/.config/{legoflow-curator,trajgen,harbor_webui}_*_cloudflare.env`, still supported). `config.yaml` is git-tracked, so keep `api_token` / `password` empty there and supply them via `$CLOUDFLARE_API_TOKEN` / `$DOCKER_PASSWORD`. Missing credentials are always a WARN, never a FAIL — nothing in the core pipeline depends on them.
 
 Required external values per block:
 
@@ -119,7 +119,7 @@ All blocks run **locally** by default (`meta_info.resources.ip: local`). Overrid
 
 | Block | Execution | Key tool | Status |
 |---|---|---|---|
-| `blocks/curator/` | Local (CPU + Docker) | `swegen` CLI + GitHub API | Adaptive per-language task generation |
+| `blocks/curator/` | Local (CPU + Docker) | `legoflow-curator` CLI + GitHub API | Adaptive per-language task generation |
 | `blocks/tracer/` | Local (CPU + Docker) | Harbor + LiteLLM proxy | Trajectory generation from SWE instances |
 | `blocks/trainer/` | Local (needs 8× GPU) | LLaMA-Factory + DeepSpeed ZeRO-3 | SFT on Qwen3-8B |
 

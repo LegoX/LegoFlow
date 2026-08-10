@@ -8,7 +8,7 @@
 
 Verify the full `inputs.yaml`-driven adaptive tuning flow:
 1. `read_params.py` reads params from `inputs.yaml`
-2. `swegen create` uses those params to build SWE tasks
+2. `legoflow-curator create` uses those params to build SWE tasks
 3. Monitoring cycle: collect status, compute success rate, update `inputs.yaml`
 4. Adaptive decision: adjust params based on success rate
 5. PR pool check: decide whether PRs need replenishing
@@ -21,11 +21,11 @@ Verify the full `inputs.yaml`-driven adaptive tuning flow:
 ## Environment
 
 - Date: 2026-04-22
-- Machine: hk01dgx060
+- Machine: generic Linux validation host
 - Python: 3.12.2
 - Docker: 29.0.0
-- swegen CLI: installed (`/home/ywxzml3j/ywxzml3juser23/miniconda3/bin/swegen`)
-- Models: OPENAI_MODEL=glm-5-urg, ANTHROPIC_MODEL=claude-sonnet-4-6
+- legoflow-curator CLI: installed and available on `PATH`
+- Models: supplied through the documented provider environment variables
 
 ## Step 1: Verify read_params.py integration
 
@@ -37,12 +37,12 @@ TIMEOUT=3200 CC_TIMEOUT=2400 N_CONCURRENT=16
 
 Result: params read correctly from `inputs.yaml`.
 
-## Step 2: Run swegen create (using inputs.yaml params)
+## Step 2: Run legoflow-curator create (using inputs.yaml params)
 
 ### Attempt 1: tox-dev/tox PR #3814
 
 ```bash
-$ swegen create --repo tox-dev/tox --pr 3814 \
+$ legoflow-curator create --repo tox-dev/tox --pr 3814 \
     --output artifacts/swe_tasks/py-cc \
     --timeout "${TIMEOUT}" --cc-timeout "${CC_TIMEOUT}" \
     --no-require-issue --min-source-files 3 --max-source-files 10
@@ -54,7 +54,7 @@ Result: **Skipped (Trivial PR)** — only 2 source files, below the
 ### Attempt 2: AnswerDotAI/RAGatouille PR #157
 
 ```bash
-$ swegen create --repo AnswerDotAI/RAGatouille --pr 157 \
+$ legoflow-curator create --repo AnswerDotAI/RAGatouille --pr 157 \
     --output artifacts/swe_tasks/py-cc \
     --timeout "${TIMEOUT}" --cc-timeout "${CC_TIMEOUT}" \
     --no-require-issue --min-source-files 2 --max-source-files 10
@@ -66,7 +66,7 @@ Neither NOP nor Oracle passed. A model-level failure.
 ### Attempt 3: electricitymaps/electricitymaps-contrib PR #8113 (success)
 
 ```bash
-$ swegen create --repo electricitymaps/electricitymaps-contrib --pr 8113 \
+$ legoflow-curator create --repo electricitymaps/electricitymaps-contrib --pr 8113 \
     --output artifacts/swe_tasks/py-cc \
     --timeout "${TIMEOUT}" --cc-timeout "${CC_TIMEOUT}" \
     --no-require-issue --min-source-files 2 --max-source-files 10
@@ -136,7 +136,7 @@ TIMEOUT=3200 CC_TIMEOUT=2400 N_CONCURRENT=20
 | Stage | Status | Notes |
 |------|------|------|
 | read_params.py read | OK | shell variables emitted correctly |
-| swegen create uses params | OK | timeout/cc_timeout passed in from inputs.yaml |
+| legoflow-curator create uses params | OK | timeout/cc_timeout passed in from inputs.yaml |
 | Task generation + validation | OK | 1/3 PRs passed NOP+Oracle |
 | Status collection | OK | inputs.yaml status fields updated |
 | Adaptive decision | OK | n_concurrent adjusted per the rules |

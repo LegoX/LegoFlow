@@ -109,11 +109,11 @@ if [[ "$CASES" == "1" ]]; then
   echo ">> pytest/test_root_block.py"
   echo "================================================================="
   # Prefer python3 -m pytest: a bare `pytest` on PATH may belong to python2.
-  if python3 -m pytest --version >/dev/null 2>&1; then
-    set +e; python3 -m pytest "$ROOT_DIR/tests/test_root_block.py" -q; rc=$?; set -e
+  if PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest --version >/dev/null 2>&1; then
+    set +e; PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest "$ROOT_DIR/tests/test_root_block.py" -q; rc=$?; set -e
     tally "$rc" "pytest/test_root_block.py"
   elif command -v pytest >/dev/null 2>&1; then
-    set +e; pytest "$ROOT_DIR/tests/test_root_block.py" -q; rc=$?; set -e
+    set +e; PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest "$ROOT_DIR/tests/test_root_block.py" -q; rc=$?; set -e
     tally "$rc" "pytest/test_root_block.py"
   else
     skip=$((skip+1)); echo "[SKIP] pytest not installed"

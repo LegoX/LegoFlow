@@ -27,14 +27,14 @@ Per-test exit codes: `0` pass · `77` skip · anything else fail.
 | # | Test | What it asserts | Time |
 |---|---|---|---|
 | 01 | config schema | every required key in `config.yaml` is set and `meta_info.name == "curator"` | <1 s |
-| 02 | repo pin + venv | `repos/swegen` is at the pinned commit and `swegen` imports inside the venv | <1 s |
+| 02 | repo pin + venv | `repos/legoflow-curator` is at the pinned commit and `legoflow-curator` imports inside the venv | <1 s |
 | 03 | GitHub tokens | every entry in the hydrated `GITHUB_TOKENS` list returns 200 from `/rate_limit` | ~1 s/token |
 | 04 | LLM endpoint | cross-provider hydration succeeds and a real `chat.completions.create` returns content | ~20 s |
 | 05 | Docker | daemon reachable via configured `DOCKER_HOST` | <1 s |
 | 06 | Harbor smoke | known verified task `tox-dev__tox-3813` still produces NOP=0, Oracle=1 (SKIPs if fixture absent) | ~2–5 min |
 | 07 | create-tasks command surface | canonical skill, compatibility adapter, and plugin manifest stay wired correctly | <1 s |
 | 08 | create-tasks public docs | public Curator docs use the canonical command and the production Pages target | <1 s |
-| 10 | **10-PR demo** *(smoke)* | `swegen create --max-pr 1` over the 10-PR quick-verify fixture produces ≥1 verified task within 60 min | up to 60 min |
+| 10 | **10-PR demo** *(smoke)* | `legoflow-curator create --max-pr 1` over the 10-PR quick-verify fixture produces ≥1 verified task within 60 min | up to 60 min |
 
 The 10-PR demo runs only with `--with-smoke` and is gated to `push` events on
 `dev`/`main` and manual `workflow_dispatch` runs (`run_smoke=true`) in CI —
@@ -47,14 +47,14 @@ never to PRs, so PR builds don't burn LLM tokens.
 | You see | Most likely cause | What to do |
 |---|---|---|
 | 02: `.git missing` | `/curator:setup` never ran on this machine | run `/curator:setup` |
-| 02: `HEAD does not match commit_id` | someone fetched a different commit into `repos/swegen` | `git -C repos/swegen checkout <pin>` |
-| 02: `swegen not importable` | venv exists but editable install was never done | `pip install -e repos/swegen/` inside `artifacts/envs/swegen-env` |
+| 02: `HEAD does not match commit_id` | someone fetched a different commit into `repos/legoflow-curator` | `git -C repos/legoflow-curator checkout <pin>` |
+| 02: `legoflow-curator not importable` | venv exists but editable install was never done | `pip install -e repos/legoflow-curator/` inside `artifacts/envs/legoflow-curator-env` |
 | 03: HTTP 401 on a token | PAT expired or was revoked | regenerate the PAT, replace the line in `gh_token.txt` |
 | 04: `chat.completions … raised` | `OPENAI_MODEL` / `ANTHROPIC_MODEL` resolve to different providers | check `config.yaml` `runtime_info.input.llm_api` — both should match the same backend |
-| 04: 401 from Claude shell only | sandboxed-shell artifact, not a real cred bug (memo `project-swegen-llm-endpoint`) | re-probe from a non-sandboxed shell |
+| 04: 401 from Claude shell only | sandboxed-shell artifact, not a real cred bug (memo `project-legoflow-curator-llm-endpoint`) | re-probe from a non-sandboxed shell |
 | 05: `docker info failed` | daemon down or `DOCKER_HOST` stale | `export DOCKER_HOST=unix:///var/run/docker.sock` |
 | 06: SKIPped | the `tox-dev__tox-3813` fixture isn't on disk at `artifacts/swe_tasks/py-cc/` | not a failure; copy the bundled verified fixture into that dataset path or ignore the optional check |
-| 10: budget hit, no verified task | LLM/Docker stall, or the candidate PRs got harder | tail `artifacts/swe_tasks/.swegen-smoke-py.log` — usually identifies the slow step |
+| 10: budget hit, no verified task | LLM/Docker stall, or the candidate PRs got harder | tail `artifacts/swe_tasks/.legoflow-curator-smoke-py.log` — usually identifies the slow step |
 
 ---
 
@@ -87,7 +87,7 @@ Skip this section unless you're debugging a specific case or about to change one
 
 Parses `config.yaml` with PyYAML and asserts every key the runtime contract
 depends on is present and non-empty: `meta_info.name == "curator"`,
-`meta_info.environment.{venv_path, requirements}`, `meta_info.repos.swegen`,
+`meta_info.environment.{venv_path, requirements}`, `meta_info.repos.legoflow-curator`,
 `runtime_info.input.llm_api.{api_key, api_base_url, pr_model, task_model}`,
 `runtime_info.output.swe_tasks_dir.path`. Also asserts
 `runtime_info.input.github_token == ""` — that field must never hold a real
@@ -97,10 +97,10 @@ token in tracked config.yaml. Pure-Python check, no I/O.
 <details>
 <summary><code>cases/02_repo_pin.sh</code> — submodule pin + venv editable install</summary>
 
-Three checks: (1) `repos/swegen/.git` exists (file or directory); (2) if
-`meta_info.repos.swegen.commit_id` is non-null, `git rev-parse HEAD` matches
+Three checks: (1) `repos/legoflow-curator/.git` exists (file or directory); (2) if
+`meta_info.repos.legoflow-curator.commit_id` is non-null, `git rev-parse HEAD` matches
 the pin (a `null` pin is treated as "track latest"); (3)
-`artifacts/envs/swegen-env/bin/python -c "import swegen"` succeeds.
+`artifacts/envs/legoflow-curator-env/bin/python -c "import legoflow_curator"` succeeds.
 </details>
 
 <details>
@@ -111,14 +111,14 @@ Sources `scripts/load_runtime_env.sh`, then checks only the comma-separated
 the list is absent, searches the block, home, and Harbor token files. A lone
 `GITHUB_TOKEN` is accepted by the collector but is not copied into
 `GITHUB_TOKENS` by this test path. The collector separately reads
-`repos/swegen/gh_token.txt` and merges both environment variables. The test
+`repos/legoflow-curator/gh_token.txt` and merges both environment variables. The test
 reports the last six characters of any failing PAT.
 </details>
 
 <details>
 <summary><code>cases/04_llm_endpoint.sh</code> — chat completion succeeds</summary>
 
-Runs inside `artifacts/envs/swegen-env` with `PYTHONPATH=repos/swegen/src`.
+Runs inside `artifacts/envs/legoflow-curator-env` with `PYTHONPATH=repos/legoflow-curator/src`.
 Calls `hydrate_cross_provider_env()` then `get_openai_compatible_config()`,
 then `client.chat.completions.create(model=…, max_tokens=16)`. Catches the
 failure mode where `/models` would pass but the actual chat call doesn't —
@@ -137,7 +137,7 @@ the result doesn't depend on the runner shell's env).
 <summary><code>cases/06_harbor_smoke.sh</code> — known verified task still works</summary>
 
 If `artifacts/swe_tasks/py-cc/tox-dev__tox-3813/` exists, runs
-`swegen validate … --task tox-dev__tox-3813 --env docker` and asserts the
+`legoflow-curator validate … --task tox-dev__tox-3813 --env docker` and asserts the
 output contains both `NOP reward=0` and `Oracle reward=1`. Otherwise SKIPs.
 </details>
 
@@ -154,16 +154,16 @@ metadata advertises the canonical command.
 <summary><code>cases/08_create_tasks_docs.sh</code> — public-documentation contract</summary>
 
 Checks that public Curator guidance recommends `/curator:create-tasks` and that
-the maintained docs deploy to `swe-swegen-docs`.
+the maintained docs deploy to `legoflow-curator-docs`.
 </details>
 
 <details>
 <summary><code>smoke/10_pr_demo.sh</code> — end-to-end 10-PR demo</summary>
 
-Runs `swegen create --max-pr 1 --no-require-issue --min-source-files 1`
+Runs `legoflow-curator create --max-pr 1 --no-require-issue --min-source-files 1`
 against the 10 Python PRs in `fixtures/python_pr_ids.txt` (the quick-verify
 set with `tox-dev/tox:pr-3813` first). Wrapped in `timeout --foreground 3600`
 for a 60-minute hard budget. Passes when
 `artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt` has ≥1 task ID. On
-failure, tails the last 40 lines of `artifacts/swe_tasks/.swegen-smoke-py.log`.
+failure, tails the last 40 lines of `artifacts/swe_tasks/.legoflow-curator-smoke-py.log`.
 </details>

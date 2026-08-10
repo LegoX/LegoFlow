@@ -30,7 +30,7 @@ R_IP="$(cfg meta_info.resources.ip)"; R_USER="$(cfg meta_info.resources.user)"
 R_KEY="$(cfg meta_info.resources.key)"; R_PORT="$(cfg meta_info.resources.port)"
 R_DIR="$(cfg meta_info.resources.directory)"; OUT="$(cfg runtime_info.input.training.output_dir)"
 REMOTE_SFT="$R_DIR/blocks/trainer"
-# #3 fix: the pod SSH login is root, but the shared FS is owned by uid 1000 (the
+# The remote SSH login is root, but the shared FS is owned by uid 1000 (the
 # SAME uid as the runner's user, just named differently per host). If training
 # runs as root it writes config.yaml runtime_info.output back as root:root 0600,
 # which the runner (uid 1000) then cannot read — every later step dies on
@@ -38,8 +38,8 @@ REMOTE_SFT="$R_DIR/blocks/trainer"
 # HOME/HF_HOME/uv pointed at shared-FS (uid-1000) locations, so all writes come
 # out owned by the runner's user. No post-hoc chown needed.
 
-# This pod drops individual connections under load ("Connection closed by ...
-# port 30977") while staying up. Every remote call therefore retries: a single
+# The remote host may drop individual connections under load while staying up.
+# Every remote call therefore retries: a single
 # refusal has already been mistaken for an unreachable host (probe), a failed
 # training run (poll), and an unstageable config (scp). Retry here rather than
 # at each call site so no future caller has to remember.
@@ -74,11 +74,9 @@ if [[ "$DRY" == 1 ]]; then
   exit 0
 fi
 
-# Probe SSH first — SKIP cleanly if the pod is unreachable. Retry: this pod
-# refuses individual handshakes under load ("Connection closed by ... port
-# 30977") while remaining perfectly reachable seconds later, so a single failed
-# attempt is not evidence the host is down. Observed 2026-07-27: probe failed,
-# a manual ssh with identical arguments succeeded immediately after.
+# Probe SSH first and skip cleanly if the remote host is unreachable. A single
+# failed handshake is not evidence that the host is down, so transport failures
+# are retried before the stage is skipped.
 # SSH() already retries transport failures, so one call is enough here.
 if ! SSH 'echo ok' >/dev/null 2>&1; then
   echo "SKIP: trainer pod $R_IP unreachable over SSH after 5 attempts — cannot run remote training"
@@ -121,7 +119,7 @@ SSH "rm -rf '$REMOTE_SFT/artifacts/model/$OUT'; \
 # which is why this worked in CI and not here.
 # SFT_REMOTE_RUNTIME_DIR lives in the private env file the CI runner already
 # uses, outside the repo — same source .github/scripts/sft_smoke_run.sh reads.
-for _envf in "${SFT_REMOTE_ENV:-}" /gpufs/haoli/cicd/shared/sft-remote.env; do
+for _envf in "${SFT_REMOTE_ENV:-}" "${LEGOFLOW_CI_SHARED:+${LEGOFLOW_CI_SHARED%/}/sft-remote.env}"; do
   [[ -n "$_envf" && -f "$_envf" ]] && { set -a; . "$_envf"; set +a; break; }
 done
 RUNTIME_DIR="${SFT_REMOTE_RUNTIME_DIR:-}"
@@ -160,7 +158,7 @@ cat > "$FB/artifacts/.remote-launch.sh" <<EOF
 #!/usr/bin/env bash
 set -e
 cd "$REMOTE_SFT" || exit 9
-# HOME/caches on the running user's LOCAL disk, NOT the shared cpfs: with
+# HOME/caches on the running user's local disk, not the shared filesystem: with
 # enable_liger_kernel the 8 ranks JIT-compile Triton kernels into ~/.triton/cache;
 # on a fuse-mounted shared FS those concurrent .so writes/loads race and one rank
 # dies with ImportError. Training OUTPUTS still land on the shared FS (uid-owned)

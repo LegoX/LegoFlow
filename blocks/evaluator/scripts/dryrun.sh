@@ -701,7 +701,7 @@ echo "--- 10. Cloudflare Pages / registry credentials (optional) ---"
 # Credentials resolve through scripts/shared_credentials.sh: env > root
 # config.yaml (runtime_info.input.cloudflare/docker) > this block's legacy env
 # file, which stays supported so existing setups keep working untouched.
-CF_ENV_FILE="${ENV_FILE:-${SWEGEN_HOME:-$HOME}/.config/harbor_webui_cloudflare.env}"
+CF_ENV_FILE="${ENV_FILE:-${LEGOFLOW_CURATOR_HOME:-$HOME}/.config/harbor_webui_cloudflare.env}"
 SHARED_CREDS="$BLOCK_DIR/../../scripts/shared_credentials.sh"
 if [[ -f "$SHARED_CREDS" ]]; then
   CF_LEGACY_ENV_FILE="$CF_ENV_FILE"

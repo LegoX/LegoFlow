@@ -61,14 +61,13 @@ fi
 
 SFT_UV="$BLOCK_DIR/$(cfg meta_info.environment.sft_uv 2>/dev/null || echo artifacts/env/lf)"
 # The block env can be a symlink into a shared runtime that only one side of a
-# two-mount setup can resolve (the pod sees /mnt/public/..., this host sees
-# /gpufs/...), so it is often dangling here. Falling straight back to a bare
-# python3 then fails on `import datasets`. Try the shared runtime directly
-# before giving up on a real env.
+# two-mount setup can resolve, so it is often dangling here. Falling straight
+# back to a bare python3 then fails on `import datasets`. Try the configured
+# shared runtime directly before giving up on a real env.
 _py_has_datasets() { [[ -x "$1" ]] && "$1" -c 'import datasets' >/dev/null 2>&1; }
 PY_BIN=""
 for _cand in "$SFT_UV/bin/python" \
-             "${SHARED_RUNTIME:-/gpufs/haoli/cicd/shared/runtime}/sft/artifacts/env/lf/bin/python" \
+             "${SHARED_RUNTIME:+${SHARED_RUNTIME%/}/sft/artifacts/env/lf/bin/python}" \
              "python3"; do
   if _py_has_datasets "$_cand" || command -v "$_cand" >/dev/null 2>&1 && _py_has_datasets "$(command -v "$_cand")"; then
     PY_BIN="$_cand"; break

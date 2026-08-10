@@ -23,19 +23,19 @@ meta_info:
         when: {tracer.input.task_source.provider: local}
 
   repos:
-    swegen:
-      name: swegen
+    legoflow-curator:
+      name: legoflow-curator
       commit_id: null
 
   environment:
-    venv_name: swegen-env
-    venv_path: artifacts/envs/swegen-env
+    venv_name: legoflow-curator-env
+    venv_path: artifacts/envs/legoflow-curator-env
 
   resources:
     ip: local
     user: root
     pwd: null
-    directory: /gpufs/haoli/code/
+    directory: null
 
 runtime_info:
   input:
@@ -76,16 +76,16 @@ runtime_info:
       # Verified tasks land here (appended to runtime_info.output.swe_tasks_dir.path).
       # Result: artifacts/swe_tasks/py-cc-root-smoke — the dir tracer consumes.
       output_subdir: py-cc-root-smoke
-      state_subdir: .swegen-root-smoke-py
+      state_subdir: .legoflow-curator-root-smoke-py
 
       # Collect ~200 PRs from scratch (design step 1). run_pipeline.sh runs
-      # repos/swegen/tools/collect_prs_wo_image.py with these params, then feeds
-      # the resulting <lang>_pr_ids.txt into `swegen create`.
+      # repos/legoflow-curator/tools/collect_prs_wo_image.py with these params, then feeds
+      # the resulting <lang>_pr_ids.txt into `legoflow-curator create`.
       collect:
         enabled: true
         languages: python
         # Genuinely pull ~200 PRs from scratch (design step 1). The collector
-        # (repos/swegen/tools/collect_prs_wo_image.py) stops once it has
+        # (repos/legoflow-curator/tools/collect_prs_wo_image.py) stops once it has
         # `repo_num` QUALIFYING repos, each contributing up to `max_prs_per_repo`
         # PRs, so repo_num*max_prs_per_repo is the upper bound on the pool; the
         # orchestrator then head-caps to `target_prs`. time_budget_s is a
@@ -98,7 +98,7 @@ runtime_info:
         target_prs: 200
         time_budget_s: 7200       # generous backstop for a real ~200-PR pull
         min_ids: 8                # emergency-only fallback floor
-        # Known-good PRs (shared with the block swegen smoke) — the safety net
+        # Known-good PRs (shared with the block legoflow-curator smoke) — the safety net
         # so the chain never stalls on collection flakiness. Real PRs, real
         # create/verify downstream.
         fallback_prs:

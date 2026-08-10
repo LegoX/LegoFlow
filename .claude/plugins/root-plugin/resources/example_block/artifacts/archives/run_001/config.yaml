@@ -14,11 +14,11 @@ meta_info:
     requirements: repos/trl/requirements.txt
 
   resources:
-    ip: 192.168.1.10
+    ip: runner.example.com
     pwd: null
     apikey: null
     model: null
-    public_storage: /mnt/shared/sft_training/
+    public_storage: artifacts/shared/sft_training/
 
 runtime_info:
   # Only external inputs (API keys, human decisions, external paths).

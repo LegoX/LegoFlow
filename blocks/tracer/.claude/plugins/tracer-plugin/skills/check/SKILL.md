@@ -92,9 +92,9 @@ Re-run `/tracer:check`.
   `<your-production-endpoint>` (or similar CF-gated production endpoint),
   `dummy-key` is the real production key and the 401 is a network
   artifact specific to Claude Code's sandboxed shell — see memory
-  `project-swegen-llm-endpoint`. Dryrun downgrades 401/403 to WARN for
+  `project-legoflow-curator-llm-endpoint`. Dryrun downgrades 401/403 to WARN for
   this reason. If the user is targeting that endpoint, suggest probing
-  from a non-sandboxed shell on the same host (`ssh haoli@<host>` then
+  from a non-sandboxed shell on the same host (`ssh <user>@<host>` then
   `curl …`) to confirm.
 
 - **HF dataset 401/403**: real auth failure. Either the user needs to

@@ -59,9 +59,9 @@ if stale_pages_project:
 
 deploy = (block / "docs/deploy_cloudflare_pages.sh").read_text(encoding="utf-8")
 readme = (block / "docs/README.md").read_text(encoding="utf-8")
-if 'PROJECT_NAME="${PROJECT_NAME:-swe-swegen-docs}"' not in deploy:
-    raise SystemExit("FAIL: deploy target is not swe-swegen-docs")
-if "https://swe-swegen-docs.pages.dev" not in readme:
+if 'PROJECT_NAME="${PROJECT_NAME:-legoflow-curator-docs}"' not in deploy:
+    raise SystemExit("FAIL: deploy target is not legoflow-curator-docs")
+if "https://legoflow-curator-docs.pages.dev" not in readme:
     raise SystemExit("FAIL: docs README does not name the production site")
 
 print("PASS: curator create-tasks documentation")

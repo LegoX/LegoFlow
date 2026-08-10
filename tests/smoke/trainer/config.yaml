@@ -29,8 +29,8 @@ meta_info:
     user: root
     pwd: null
     key: ""
-    port: 30977
-    directory: /mnt/public/storage/haoli/code/SWE-Lego-Live
+    port: ""
+    directory: ""
 
   repositories:
     llama_factory:
@@ -41,7 +41,7 @@ meta_info:
       readonly: true
     swe_data_process:
       url: https://github.com/SWE-Lego/swe_data_process.git
-      branch: swe-lego-live
+      branch: main
       commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
       path: repos/swe_data_process
       readonly: true

@@ -7,14 +7,12 @@ name: CI (from-scratch rebuild)
 # pyproject.toml, a submodule commit bump, or a pulled Docker image), and
 # you want CI to validate the PR against a freshly built environment.
 #
-# Triggers: workflow_dispatch only.
-#   Run from: https://github.com/SWE-Lego/SWE-Lego-Live/actions/workflows/ci-from-scratch.yml
+# Trigger: run this workflow manually from the repository's Actions tab.
 #
 # What it does, per block:
 #   - Source-only checkout of the PR's branch (no canonical symlinks).
-#   - Clones the private submodule(s) using a PAT from
-#     /gpufs/haoli/cicd/shared/gh_token.txt (HOME isolated to per-job temp
-#     so ~/.gitconfig is never mutated).
+#   - Clones private submodules using a PAT from the operator-configured
+#     shared CI directory (HOME is isolated so ~/.gitconfig is never mutated).
 #   - Builds the venv / uv envs from scratch using shared pip + uv caches.
 #   - Pulls the agent runtime image.
 #   - Initializes the processed-tasks ledger if missing.
@@ -45,16 +43,16 @@ permissions:
   contents: read
 
 env:
-  CICD_SHARED: /gpufs/haoli/cicd/shared
+  CICD_SHARED: ${{ vars.LEGOFLOW_CI_SHARED || '/opt/legoflow-ci/shared' }}
 
 jobs:
   # ===========================================================================
-  # curator — fresh venv + repos/swegen submodule
+  # curator — fresh venv + repos/legoflow-curator submodule
   # ===========================================================================
   curator:
     name: curator (from-scratch)
     if: ${{ inputs.block == 'curator' || inputs.block == 'all' }}
-    runs-on: [self-hosted, swe-lego-ci]
+    runs-on: [self-hosted, legoflow-ci]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -73,8 +71,8 @@ jobs:
           # shell). Without this, every CI run pollutes the host gitconfig.
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
-          HOME="$CI_HOME" git config --global user.email "ci@swe-lego.local"
-          HOME="$CI_HOME" git config --global user.name "swe-lego-ci"
+          HOME="$CI_HOME" git config --global user.email "ci@legoflow.local"
+          HOME="$CI_HOME" git config --global user.name "legoflow-ci"
           HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
           HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
           # actions/checkout sets a per-repo extraheader with the workflow's
@@ -88,18 +86,18 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=$CICD_SHARED/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Init curator submodule
-        run: git submodule update --init --depth 1 blocks/curator/repos/swegen
+        run: git submodule update --init --depth 1 blocks/curator/repos/legoflow-curator
       - name: Build curator venv from scratch
         working-directory: blocks/curator
         run: |
           set -euo pipefail
-          rm -rf artifacts/envs/swegen-env
-          python3 -m venv artifacts/envs/swegen-env
-          artifacts/envs/swegen-env/bin/pip install --upgrade pip
-          artifacts/envs/swegen-env/bin/pip install -e repos/swegen/
+          rm -rf artifacts/envs/legoflow-curator-env
+          python3 -m venv artifacts/envs/legoflow-curator-env
+          artifacts/envs/legoflow-curator-env/bin/pip install --upgrade pip
+          artifacts/envs/legoflow-curator-env/bin/pip install -e repos/legoflow-curator/
       - name: Stage gh_token.txt
         run: cp "$CICD_SHARED/gh_token.txt" blocks/curator/gh_token.txt
       - name: Run curator test cases
@@ -119,7 +117,7 @@ jobs:
         with:
           name: curator-from-scratch-logs-${{ github.run_id }}
           path: |
-            blocks/curator/artifacts/swe_tasks/.swegen-smoke-py.log
+            blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py.log
             blocks/curator/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
             blocks/curator/artifacts/logs/
           if-no-files-found: ignore
@@ -131,7 +129,7 @@ jobs:
   tracer:
     name: tracer (from-scratch)
     if: ${{ inputs.block == 'tracer' || inputs.block == 'all' }}
-    runs-on: [self-hosted, swe-lego-ci]
+    runs-on: [self-hosted, legoflow-ci]
     timeout-minutes: 90
     env:
       RUNTIME_IMAGE: docker.io/jierun/c-cc-2.1.118:v0.1
@@ -149,8 +147,8 @@ jobs:
           [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
-          HOME="$CI_HOME" git config --global user.email "ci@swe-lego.local"
-          HOME="$CI_HOME" git config --global user.name "swe-lego-ci"
+          HOME="$CI_HOME" git config --global user.email "ci@legoflow.local"
+          HOME="$CI_HOME" git config --global user.name "legoflow-ci"
           HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
           HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
           git -C "$GITHUB_WORKSPACE" config --local --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
@@ -161,7 +159,7 @@ jobs:
             echo "HF_HOME=$HF_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=$CICD_SHARED/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Clone harbor + swe_data_process via config-managed URLs
         working-directory: blocks/tracer
@@ -247,7 +245,7 @@ jobs:
   evaluator:
     name: evaluator (from-scratch)
     if: ${{ inputs.block == 'evaluator' || inputs.block == 'all' }}
-    runs-on: [self-hosted, swe-lego-ci]
+    runs-on: [self-hosted, legoflow-ci]
     timeout-minutes: 75
     env:
       RUNTIME_IMAGE: docker.io/jierun/c-oh-sdk-1.14.0:v0.1
@@ -267,8 +265,8 @@ jobs:
           [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
-          HOME="$CI_HOME" git config --global user.email "ci@swe-lego.local"
-          HOME="$CI_HOME" git config --global user.name "swe-lego-ci"
+          HOME="$CI_HOME" git config --global user.email "ci@legoflow.local"
+          HOME="$CI_HOME" git config --global user.name "legoflow-ci"
           HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
           HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
           git -C "$GITHUB_WORKSPACE" config --local --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
@@ -276,7 +274,7 @@ jobs:
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=$CICD_SHARED/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
       - name: Init harbor submodule
         run: git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 blocks/evaluator/repos/harbor
@@ -340,7 +338,7 @@ jobs:
   trainer:
     name: trainer (from-scratch)
     if: ${{ inputs.block == 'trainer' || inputs.block == 'all' }}
-    runs-on: [self-hosted, swe-lego-ci]
+    runs-on: [self-hosted, legoflow-ci]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -356,8 +354,8 @@ jobs:
           [ -n "$PAT" ] || { echo "ERROR: no PAT in $CICD_SHARED/gh_token.txt"; exit 1; }
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
-          HOME="$CI_HOME" git config --global user.email "ci@swe-lego.local"
-          HOME="$CI_HOME" git config --global user.name "swe-lego-ci"
+          HOME="$CI_HOME" git config --global user.email "ci@legoflow.local"
+          HOME="$CI_HOME" git config --global user.name "legoflow-ci"
           HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
           HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
           git -C "$GITHUB_WORKSPACE" config --local --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
@@ -365,7 +363,7 @@ jobs:
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
-            echo "PATH=/gpufs/haoli/cicd/shared/uv/bin:$PATH"
+            echo "PATH=$CICD_SHARED/uv/bin:$PATH"
             # HF creds + shared cache so the optional smoke's prepare_smoke_data.sh
             # (load_dataset) can pull SWE-Lego/samples_for_llama_factory_sft even
             # if it's gated/uncached — matches the other from-scratch jobs.

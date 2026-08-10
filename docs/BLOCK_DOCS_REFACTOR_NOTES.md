@@ -117,9 +117,9 @@ For Curator:
 - `artifacts/collected_prs/`: PR pools from collection.
 - `artifacts/swe_tasks/<lang>-cc/`: per-language Harbor tasks.
 - `verifiable_tasks.txt`: the trusted manifest.
-- `.swegen-create-batch/`: resume and batch state.
+- `.legoflow-curator-create-batch/`: resume and batch state.
 - `artifacts/merged_swe_tasks/`: optional flat verified task root for Tracer.
-- `artifacts/logs/swegen-create/`: create-task logs.
+- `artifacts/logs/legoflow-curator-create/`: create-task logs.
 - `artifacts/index.yaml`: run history.
 
 Use a callout for downstream handoff. For Curator, emphasize that Tracer should
@@ -156,7 +156,7 @@ Before finishing a block docs refactor:
 ```bash
 rg -n "@codex|\\[xxx\\]|TODO" docs blocks/*/docs -g '*.mdx' -g '*.md' -g '*.json'
 cd docs
-/Users/haoli/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node node_modules/next/dist/bin/next build --webpack
+npm run build
 ```
 
 The docs should build cleanly, and the block sidebar should show the intended

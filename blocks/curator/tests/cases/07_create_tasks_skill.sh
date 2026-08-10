@@ -35,7 +35,7 @@ if not re.search(r"^name:\s*run\s*$", compat_text, re.MULTILINE):
     raise SystemExit("FAIL: compatibility skill frontmatter is not run")
 if "/curator:create-tasks" not in compat_text:
     raise SystemExit("FAIL: run compatibility skill does not delegate")
-if "scripts/start_with_" in compat_text or "swegen create" in compat_text:
+if "scripts/start_with_" in compat_text or "legoflow-curator create" in compat_text:
     raise SystemExit("FAIL: run compatibility skill duplicates implementation")
 if "uniform-interface compatibility adapter" not in compat_text:
     raise SystemExit("FAIL: run skill does not explain its uniform-layout purpose")

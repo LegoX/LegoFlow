@@ -23,7 +23,7 @@ ARTIFACTS_DIR="$BLOCK_DIR/artifacts"
 #                      verifiable_tasks.txt is the downstream contract
 #   merged_swe_tasks — extract_verified_tasks.py output, consumed by tracer
 #   claude-config    — CLAUDE_CONFIG_DIR prepared by setup
-#   state            — swegen's per-language --state-dir; it is what lets a run
+#   state            — legoflow-curator's per-language --state-dir; it is what lets a run
 #                      resume instead of re-processing every PR from scratch
 KEEP_DEFAULT=(env envs index.yaml archives
               collected_prs swe_tasks merged_swe_tasks claude-config state)
@@ -81,7 +81,7 @@ if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     echo "  collected PR ids (~1.4 GB, days of GitHub API collection),"
     echo "  every generated and verified SWE task, and all run archives."
     echo ""
-    echo "  Make sure no swegen create/collect job is running."
+    echo "  Make sure no legoflow-curator create/collect job is running."
     echo "############################################################"
     if [[ ! -t 0 ]]; then
         echo "ERROR: --all needs an interactive terminal (or pass --yes)." >&2

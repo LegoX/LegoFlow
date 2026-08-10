@@ -4,31 +4,20 @@ load_runtime_env() {
     local block_root
     block_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-    local exported=""
-    local exported_global=""
-    exported="$(
-        bash -ic '
-            export -p | grep -E "declare -x (GITHUB_TOKEN|GITHUB_TOKENS|OPENAI_API_KEY|OPENAI_API_BASE|OPENAI_API_BASE_URL|ANTHROPIC_API_KEY|ANTHROPIC_BASE_URL|CLAUDE_CODE_OAUTH_TOKEN|HF_HOME|HF_TOKEN|WANDB_API_KEY|SWEBENCH_API_KEY|PATH|LD_LIBRARY_PATH|CUDA_HOME)="
-        ' 2>/dev/null || true
-    )"
-    if [ -n "$exported" ]; then
-        # Inside a function, `declare -x` becomes local; rewrite to global `export`.
-        exported_global="$(printf '%s\n' "$exported" | sed 's/^declare -x /export /')"
-        eval "$exported_global"
-    fi
-
-    # Source local .env AFTER interactive shell inheritance so .env values win over
-    # stale shell values (e.g. old ANTHROPIC_BASE_URL from a previous session).
+    # The invoking process already supplies its exported environment. Do not
+    # start an interactive shell here: shell startup files can contain stale
+    # credentials/endpoints and must never override explicit per-run values.
+    # A block-local ignored .env remains the only intentional override layer.
     if [[ -f "${block_root}/.env" ]]; then
         source "${block_root}/.env"
     fi
 
     # Last-resort hydration from config.yaml.runtime_info.input.llm_api:
-    # only fills exported vars still unset after interactive-shell import and
+    # only fills exported vars still unset after the caller environment and
     # the subsequently sourced .env.
     local hydrate_py=""
-    if [[ -x "${block_root}/artifacts/envs/swegen-env/bin/python" ]]; then
-        hydrate_py="${block_root}/artifacts/envs/swegen-env/bin/python"
+    if [[ -x "${block_root}/artifacts/envs/legoflow-curator-env/bin/python" ]]; then
+        hydrate_py="${block_root}/artifacts/envs/legoflow-curator-env/bin/python"
     elif command -v python3 >/dev/null 2>&1; then
         hydrate_py="python3"
     fi
@@ -60,8 +49,8 @@ mapping = {
     # local LiteLLM proxy URL; for native it is the provider's Anthropic endpoint.
     "ANTHROPIC_BASE_URL":   llm.get("anthropic_base_url"),
     # Informational: surfaced so dryrun/skills can warn when the proxy is required.
-    "SWEGEN_CC_PROVIDER_MODE": llm.get("cc_provider_mode"),
-    "SWEGEN_CC_PROXY_PORT":    llm.get("cc_proxy_port"),
+    "LEGOFLOW_CURATOR_CC_PROVIDER_MODE": llm.get("cc_provider_mode"),
+    "LEGOFLOW_CURATOR_CC_PROXY_PORT":    llm.get("cc_proxy_port"),
 }
 for k, v in mapping.items():
     if v and not os.environ.get(k):
@@ -73,7 +62,7 @@ PY
         fi
 
         # PR-collection knobs from config.yaml.runtime_info.input.pr_collection.
-        # Exported as SWEGEN_PR_* / COLLECT_* / SWEGEN_COLLECT_* so
+        # Exported as LEGOFLOW_CURATOR_PR_* / COLLECT_* / LEGOFLOW_CURATOR_COLLECT_* so
         # tools/collect_prs_wo_image.py and scripts/collect_all_bg.sh pick them
         # up. Same priority rule: only fills vars still unset after env + .env.
         local pr_exports
@@ -95,27 +84,27 @@ if not pc:
 out = {}
 langs = pc.get("languages")
 if isinstance(langs, list) and langs:
-    out["SWEGEN_COLLECT_LANGUAGES"] = ",".join(str(x) for x in langs)
+    out["LEGOFLOW_CURATOR_COLLECT_LANGUAGES"] = ",".join(str(x) for x in langs)
 elif isinstance(langs, str) and langs.strip():
-    out["SWEGEN_COLLECT_LANGUAGES"] = langs.strip()
+    out["LEGOFLOW_CURATOR_COLLECT_LANGUAGES"] = langs.strip()
 if pc.get("repo_num") is not None:
-    out["SWEGEN_COLLECT_REPO_NUM"] = str(pc["repo_num"])
+    out["LEGOFLOW_CURATOR_COLLECT_REPO_NUM"] = str(pc["repo_num"])
 if pc.get("max_prs_per_repo") is not None:
-    out["SWEGEN_COLLECT_MAX_PRS_PER_REPO"] = str(pc["max_prs_per_repo"])
+    out["LEGOFLOW_CURATOR_COLLECT_MAX_PRS_PER_REPO"] = str(pc["max_prs_per_repo"])
 if pc.get("output_dir"):
-    out["SWEGEN_COLLECT_OUTPUT_DIR"] = str(pc["output_dir"])
+    out["LEGOFLOW_CURATOR_COLLECT_OUTPUT_DIR"] = str(pc["output_dir"])
 if pc.get("token_limit") is not None:
     out["COLLECT_TOKEN_LIMIT"] = str(pc["token_limit"])
 filt = pc.get("filters") or {}
 fmap = {
-    "min_stars":               "SWEGEN_PR_MIN_STARS",
-    "min_merged_prs":          "SWEGEN_PR_MIN_MERGED_PRS",
-    "min_language_percentage": "SWEGEN_PR_MIN_LANGUAGE_PERCENTAGE",
-    "max_days_since_push":     "SWEGEN_PR_MAX_DAYS_SINCE_PUSH",
-    "min_issue_body_length":   "SWEGEN_PR_MIN_ISSUE_BODY_LENGTH",
-    "min_files_changed":       "SWEGEN_PR_MIN_FILES_CHANGED",
-    "max_files_changed":       "SWEGEN_PR_MAX_FILES_CHANGED",
-    "max_lines_changed":       "SWEGEN_PR_MAX_LINES_CHANGED",
+    "min_stars":               "LEGOFLOW_CURATOR_PR_MIN_STARS",
+    "min_merged_prs":          "LEGOFLOW_CURATOR_PR_MIN_MERGED_PRS",
+    "min_language_percentage": "LEGOFLOW_CURATOR_PR_MIN_LANGUAGE_PERCENTAGE",
+    "max_days_since_push":     "LEGOFLOW_CURATOR_PR_MAX_DAYS_SINCE_PUSH",
+    "min_issue_body_length":   "LEGOFLOW_CURATOR_PR_MIN_ISSUE_BODY_LENGTH",
+    "min_files_changed":       "LEGOFLOW_CURATOR_PR_MIN_FILES_CHANGED",
+    "max_files_changed":       "LEGOFLOW_CURATOR_PR_MAX_FILES_CHANGED",
+    "max_lines_changed":       "LEGOFLOW_CURATOR_PR_MAX_LINES_CHANGED",
 }
 for k, env_name in fmap.items():
     v = filt.get(k)

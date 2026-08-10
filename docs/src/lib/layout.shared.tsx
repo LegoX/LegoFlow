@@ -21,7 +21,7 @@ export function baseOptions(): BaseLayoutProps {
     githubUrl: "https://github.com/SWE-Lego/SWE-Lego-Live",
     links: [
       {
-        url: "https://swe-lego-live.pages.dev",
+        url: "https://legoflow.pages.dev",
         text: "home",
         active: "none",
         external: true,

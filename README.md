@@ -69,7 +69,7 @@ Run the pipeline block by block in order: **curator → tracer → trainer**, th
 
 - **All blocks**: Claude Code with this repo's block plugin loaded (`/reload-plugins` shows `1 plugin · 3 skills`); `git submodule update --init --recursive` after clone
 - **curator**: GitHub token(s) with `repo` read scope; OpenAI-compatible LLM API; Docker on the run host
-- **tracer**: OpenAI-compatible LLM API; Docker; verified tasks from swegen (wired via `meta_info.dependencies`)
+- **tracer**: OpenAI-compatible LLM API; Docker; verified tasks from legoflow-curator (wired via `meta_info.dependencies`)
 - **trainer**: Multi-GPU node (typically 8× GPU); conda env and model paths per `blocks/trainer/CLAUDE.md`; trajectory source (from tracer or an existing job dir)
 
 Root `scripts/start.sh` only automates the **data** stage (curator + tracer on the configured remote node). **trainer** and **evaluator** are started from their own directories via `/root:run` or `scripts/start.sh`.
@@ -126,7 +126,7 @@ Edit each `config.yaml` flagged in step 2, setting only keys under `runtime_info
 | Block | What to fill (see that block's `CLAUDE.md` for the full list) |
 |-------|------------------------------------------------------------------|
 | **curator** | Provide PR-collection tokens via `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored token file (never in config.yaml); fill `llm_api` (api_key, api_base_url, pr_model, task_model) |
-| **tracer** | `llm_api` (api_key, api_base_url, model); task source comes from swegen dependency |
+| **tracer** | `llm_api` (api_key, api_base_url, model); task source comes from legoflow-curator dependency |
 | **trainer** | `source` (provider, scaffold, job_dir / trajs_dir); `conversion`; `model`; `training`; `infrastructure`; `credentials` (WandB if online) |
 
 Re-run `/root:check` until it prints `All blocks healthy — safe to /root:run.`

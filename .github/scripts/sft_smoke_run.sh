@@ -32,9 +32,10 @@ fi
 prepare_smoke_config() {  # prepare_smoke_config <block_dir> -> echoes the run copy
   local bd="$1"
   local run_cfg="$bd/artifacts/.config.smoke-run.yaml"
+  local env_file="${LEGOFLOW_CI_ENV_FILE:-${LEGOFLOW_CI_SHARED:+${LEGOFLOW_CI_SHARED%/}/.env}}"
   mkdir -p "$bd/artifacts"
   cp "$bd/tests/smoke/config.yaml" "$run_cfg"
-  [[ -f /gpufs/haoli/cicd/shared/.env ]] && source /gpufs/haoli/cicd/shared/.env
+  [[ -n "$env_file" && -f "$env_file" ]] && source "$env_file"
   python3 "$bd/../../scripts/inject_smoke_secrets.py" "$run_cfg" >&2
   echo "$run_cfg"
 }

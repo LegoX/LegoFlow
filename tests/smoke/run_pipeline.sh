@@ -39,6 +39,10 @@ BUDGET_OVERRIDE=""
 KEEP_SERVING=0
 DRY_RUN=0
 CLAUDE_SDK="${CLAUDE_SDK:-1}"
+CI_ENV_FILE="${LEGOFLOW_CI_ENV_FILE:-}"
+if [[ -z "$CI_ENV_FILE" && -n "${LEGOFLOW_CI_SHARED:-}" ]]; then
+  CI_ENV_FILE="${LEGOFLOW_CI_SHARED%/}/.env"
+fi
 
 # Per-stage default budgets (seconds). curator gets 4h: a genuine ~200-PR
 # from-scratch collection + create-to-verified is slow. tracer/evaluator use
@@ -90,13 +94,13 @@ overlay() {  # overlay <block>
   _BACKUPS+=("$prod")
   cp "$smoke" "$prod"
   # The smoke template carries structure only — endpoints, keys and remote hosts
-  # come from the shared env file at run time. Inject into the COPY; the
+  # come from an operator-managed env file at run time. Inject into the COPY; the
   # template itself is tracked and must stay value-free.
-  [[ -f /gpufs/haoli/cicd/shared/.env ]] && source /gpufs/haoli/cicd/shared/.env
+  [[ -n "$CI_ENV_FILE" && -f "$CI_ENV_FILE" ]] && source "$CI_ENV_FILE"
   python3 "$ROOT_DIR/scripts/inject_smoke_secrets.py" "$prod" || {
     echo "FAIL: could not inject smoke secrets into $prod"; exit 1; }
   sync
-  # The shared filesystem (aliyun-alinas-efc) can lag: the cp returns before the
+  # A shared filesystem can lag: the copy may return before the
   # new bytes are consistent for a fresh open(), so the cfg reads right after
   # overlay see a half-written/empty file and ALL collect.* params come back
   # blank (-> 0 PRs -> SKIP). Block until the copy reads back as this block.
@@ -105,7 +109,7 @@ overlay() {  # overlay <block>
     [[ "$(cfg "$prod" meta_info.name)" == "$b" ]] && { _ok=1; break; }
     sleep 1
   done
-  [[ "$_ok" == 1 ]] || { echo "FAIL: overlaid $prod not consistent after copy (efc lag)"; exit 1; }
+  [[ "$_ok" == 1 ]] || { echo "FAIL: overlaid $prod not consistent after copy (filesystem propagation lag)"; exit 1; }
   log "overlaid tests/smoke/$b/config.yaml -> blocks/$b/config.yaml"
 }
 restore_all() {
@@ -127,7 +131,7 @@ claude_launch() {  # claude_launch <block> <setup_cmd> <preflight_cmd> <run_cmd>
     return 0
   fi
   if [[ "$CLAUDE_SDK" == 1 ]] && command -v claude >/dev/null 2>&1; then
-    HOME="${HOME:-/home/haoli}" timeout 900 claude -p \
+    HOME="${LEGOFLOW_CLI_HOME:-$HOME}" timeout 900 claude -p \
 "Root-smoke stage for ${label}. The smoke config is overlaid at blocks/${block}/config.yaml. cwd is blocks/${block}.
 
 Run 3 gated phases via the Bash tool. STOP and reply FAILED <phase> with the last 20 lines if any phase exits non-zero. Do NOT proceed past a failure.
@@ -283,7 +287,7 @@ if want curator; then
   else
     mkdir -p "$SB/$C_OUT" "$SB/$BASE/$SUB" "$SB/$BASE/$STATE"
     log "from-scratch PR collection ($C_LANG), best-effort budget ${C_BUDGET}s"
-    # The collector imports the swegen package and combines its token file with
+    # The collector imports the legoflow-curator package and combines its token file with
     # GITHUB_TOKENS / GITHUB_TOKEN. It can futex-stall at init (0 sockets,
     # wchan=futex_wait_queue) — PYTHONUNBUFFERED=1 is the documented fix. It
     # writes pr_ids incrementally but resumes only per-QUALIFYING-REPO (not the
@@ -293,9 +297,9 @@ if want curator; then
     ( cd "$SB" \
         && source scripts/load_runtime_env.sh \
         && load_runtime_env >/dev/null 2>&1 \
-        && source artifacts/envs/swegen-env/bin/activate \
+        && source artifacts/envs/legoflow-curator-env/bin/activate \
         && PYTHONUNBUFFERED=1 COLLECT_GITHUB_TOKEN_FILE="$SB/gh_token.txt" \
-           timeout --kill-after=30s "$C_BUDGET" python3 repos/swegen/tools/collect_prs_wo_image.py \
+           timeout --kill-after=30s "$C_BUDGET" python3 repos/legoflow-curator/tools/collect_prs_wo_image.py \
              --languages "$C_LANG" --repo_num "$C_REPON" --max_prs_per_repo "$C_MAXPR" \
              --output_dir "$C_OUT" ) \
       || log "WARN: from-scratch collection ended non-zero/timed out — keeping what it wrote + fallback"
@@ -326,13 +330,13 @@ PY
   fi
 
   if [[ "$DRY_RUN" != 1 && ! -s "$IDS_FILE" ]]; then
-    echo "SKIP: no PR ids collected — cannot run swegen create"; CHAIN_RC=77
+    echo "SKIP: no PR ids collected — cannot run legoflow-curator create"; CHAIN_RC=77
   else
     # curator's CC verification path (the half that writes verifiable_tasks.txt)
     # uses cc_provider_mode: openai_proxy, so it needs a local LiteLLM proxy on
     # cc_proxy_port translating Anthropic -> the upstream OpenAI endpoint. Unlike
     # the per-block smoke (10_pr_demo.sh), this orchestrator builds its own
-    # swegen-create, so it must start the proxy itself — otherwise dryrun.sh's
+    # legoflow-curator-create, so it must start the proxy itself — otherwise dryrun.sh's
     # /health check fails and verification SILENTLY banks 0 tasks (the failure
     # that sank the first root run). No-op when cc_provider_mode != openai_proxy;
     # Start from nothing. A smoke must prove THIS run produced tasks, so its own
@@ -363,10 +367,10 @@ PY
     source "$SB/scripts/cc_proxy_lib.sh"
     [[ "$DRY_RUN" == 1 ]] || cc_proxy_start "$SB" "$CFG" \
       || log "WARN: CC LiteLLM proxy did not start — curator dryrun/verification will fail"
-    RUN="source scripts/load_runtime_env.sh && load_runtime_env >/dev/null 2>&1 ; source artifacts/envs/swegen-env/bin/activate ; nohup swegen create --input-ids-file ${IDS_FILE#$SB/} --max-pr ${MAXPR} --n-concurrent ${NCONC} --output ${BASE}/${SUB} --state-dir ${BASE}/${STATE} --timeout ${TO_} --cc-timeout ${CCTO} --no-require-issue --min-source-files ${MINSF} --max-source-files ${MAXSF} --docker-prune-batch ${DPB} --verbose >> artifacts/logs/root-smoke-swegen.log 2>&1 &"
+    RUN="source scripts/load_runtime_env.sh && load_runtime_env >/dev/null 2>&1 ; source artifacts/envs/legoflow-curator-env/bin/activate ; nohup legoflow-curator create --input-ids-file ${IDS_FILE#$SB/} --max-pr ${MAXPR} --n-concurrent ${NCONC} --output ${BASE}/${SUB} --state-dir ${BASE}/${STATE} --timeout ${TO_} --cc-timeout ${CCTO} --no-require-issue --min-source-files ${MINSF} --max-source-files ${MAXSF} --docker-prune-batch ${DPB} --verbose >> artifacts/logs/root-smoke-legoflow-curator.log 2>&1 &"
     ( cd "$SB" && mkdir -p artifacts/logs && claude_launch curator \
         '( test -d artifacts/envs || test -d artifacts/env ) && test -d repos && echo setup-ok' \
-        'bash scripts/dryrun.sh' "$RUN" 'swegen create --input-ids-file' 'curator' )
+        'bash scripts/dryrun.sh' "$RUN" 'legoflow-curator create --input-ids-file' 'curator' )
     # Wait until curator banks up to max_pr verified tasks (not just the first) so
     # tracer gets a diverse pool — one hard/unsolvable task shouldn't sink the
     # reward==1 gate. Break early once `create` finishes (PRs exhausted or it hit
@@ -377,12 +381,12 @@ PY
     while (( $(date +%s) < swdl )); do
       nver=$([[ -f "$MAN" ]] && grep -c . "$MAN" 2>/dev/null || echo 0)
       if (( nver >= MAXPR )); then log "  curator banked $nver verified task(s) (>= max_pr=$MAXPR)"; break; fi
-      if ! pgrep -f 'swegen create --input-ids-file' >/dev/null 2>&1; then
-        log "  swegen create finished — $nver verified task(s) banked"; break
+      if ! pgrep -f 'legoflow-curator create --input-ids-file' >/dev/null 2>&1; then
+        log "  legoflow-curator create finished — $nver verified task(s) banked"; break
       fi
       sleep 30
     done
-    # The nohup'd `swegen create` is NOT bounded by this wait loop — once we've
+    # The nohup'd `legoflow-curator create` is NOT bounded by this wait loop — once we've
     # banked enough (or hit the stage budget) it keeps grinding the remaining PRs
     # in the background. Left detached, its continuous Docker/disk writeback makes
     # the NEXT stage's overlay() `sync` block in wb_wait_for_completion and wedge
@@ -537,7 +541,7 @@ if want trainer && [[ "$CHAIN_RC" == 0 ]]; then
   # WIRE: merge fixture + every tracer lf.json into one combined LF, then lower
   # source.type to the trainer block's native local_lf. For a remote pod this merge
   # is staged onto the pod (where train.sh reads it); for local it stays here.
-  # Write under artifacts/data/ (haoli-owned) NOT artifacts/data/examples/ —
+  # Write under artifacts/data/ (runner-owned), not artifacts/data/examples/ —
   # that dir is often root:root residue from CI/remote runs (lf_512.json lives
   # there readable, but the dir isn't writable by us).
   MERGED_REL="artifacts/data/root_smoke_combined.json"
@@ -551,7 +555,7 @@ if want trainer && [[ "$CHAIN_RC" == 0 ]]; then
       # The dataset repo is private, so staging needs HF_TOKEN from the shared
       # env — without it the download fails with "Invalid username or password"
       # and the merge silently proceeds with tracer output alone.
-      ( [[ -f /gpufs/haoli/cicd/shared/.env ]] && { set -a; . /gpufs/haoli/cicd/shared/.env; set +a; }
+      ( [[ -n "$CI_ENV_FILE" && -f "$CI_ENV_FILE" ]] && { set -a; . "$CI_ENV_FILE"; set +a; }
         bash "$FB/tests/smoke/prepare_smoke_data.sh" "$FB/$FIXTURE" ) \
         || log "WARN: could not stage the fixture dataset"
     fi

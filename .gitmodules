@@ -1,7 +1,7 @@
-[submodule "blocks/curator/repos/swegen"]
-	path = blocks/curator/repos/swegen
-	url = https://github.com/SWE-Lego/SWE-Lego-Live-SWEgen.git
-	branch = swegen-pr-collection-config
+[submodule "blocks/curator/repos/legoflow-curator"]
+	path = blocks/curator/repos/legoflow-curator
+	url = https://github.com/SWE-Lego/LegoFlow-SWE-Curator.git
+	branch = main
 [submodule "blocks/trainer/repos/swe_data_process"]
 	path = blocks/trainer/repos/swe_data_process
 	url = https://github.com/SWE-Lego/swe_data_process.git

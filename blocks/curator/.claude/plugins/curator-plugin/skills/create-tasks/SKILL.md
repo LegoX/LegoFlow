@@ -2,7 +2,7 @@
 name: create-tasks
 description: >
   Launch Curator task generation from existing per-language PR ID files after
-  preflight passes. This skill does not collect PRs. It runs `swegen create`,
+  preflight passes. This skill does not collect PRs. It runs `legoflow-curator create`,
   performs NOP/Oracle verification, and appends verified task IDs to
   `verifiable_tasks.txt`. Per-language launches use
   `bash scripts/create_<lang>.sh` (tuned `--timeout`, `--cc-timeout`,
@@ -38,7 +38,7 @@ Validate:
 2. `config.yaml` has `meta_info.name == "curator"`.
 3. `scripts/start.sh` and the required `scripts/create_<lang>.sh` files
    exist.
-4. `repos/swegen/` is initialized and installable.
+4. `repos/legoflow-curator/` is initialized and installable.
 
 Read `config.yaml`, `CLAUDE.md`, and `memory/quick-verify.md` before choosing a
 mode.
@@ -47,16 +47,16 @@ mode.
 
 Before launching, check for existing Curator work owned by this block. Scope
 the match to the current block path or this block's artifact paths so older
-jobs in a separate checkout such as `$HOME/SWE-gen` do not block this run:
+jobs in a separate checkout such as `$HOME/LegoFlow Curator` do not block this run:
 
 ```bash
 BLOCK_DIR="$(pwd -P)"
-pgrep -af 'swegen create|scripts/create_.*\\.sh|scripts/create_all_bg\\.sh' \
+pgrep -af 'legoflow-curator create|scripts/create_.*\\.sh|scripts/create_all_bg\\.sh' \
   | grep -F "$BLOCK_DIR" || true
 ```
 
 If a run is alive, refuse to start another. Report the PID, elapsed time,
-and likely log path under `artifacts/logs/swegen-create/`. Tell the user
+and likely log path under `artifacts/logs/legoflow-curator-create/`. Tell the user
 to let it finish or stop it before retrying.
 
 ## Step 2 - Choose the run mode
@@ -65,7 +65,7 @@ Resolve the user's natural-language request into one mode:
 
 | Mode | Use when | Command shape |
 | --- | --- | --- |
-| `smoke` | First run, "quick verify", "smoke", "one task", or "10 PRs". | `swegen create` against the submodule sample PR file, with `--max-pr 1`, `--n-concurrent 1`, `--min-source-files 1`, and output under `artifacts/experiments/quick-verify/`. |
+| `smoke` | First run, "quick verify", "smoke", "one task", or "10 PRs". | `legoflow-curator create` against the submodule sample PR file, with `--max-pr 1`, `--n-concurrent 1`, `--min-source-files 1`, and output under `artifacts/experiments/quick-verify/`. |
 | `single-language` | The user names one language: `py`, `js`, `ts`, `go`, `c`, `cpp`, `java`, or `rust`. | `bash scripts/create_<lang>.sh` after confirming tuned params from `scripts/read_params.py`. |
 | `full` | The user says all languages, pipeline, or gives no narrower scope. | Pick by `llm_api.cc_provider_mode` in `config.yaml`: `bash scripts/start_with_anthropic_api.sh` for `native` (real Claude / Anthropic-format gateway, no proxy), `bash scripts/start_with_openai_api.sh` for `openai_proxy` (starts the local LiteLLM proxy first, then runs `start.sh`). Both delegate to `scripts/start.sh -> scripts/create_all_bg.sh`, which starts one worker per language whose `enabled` is `true`. |
 
@@ -87,11 +87,18 @@ failure:
 - `scripts/dryrun.sh` failed
 - requested smoke validation failed
 
-The LLM completion ping is mandatory; never proceed to `swegen create`
+The LLM completion ping is mandatory; never proceed to `legoflow-curator create`
 after only `scripts/dryrun.sh`. If the LLM ping returns `401 Invalid token`,
 ask for a replacement API key, mirror it to `OPENAI_API_KEY` and
 `ANTHROPIC_API_KEY` only in the current shell, and rerun preflight before
 launch. Do not edit inputs to make preflight pass.
+
+For `openai_proxy`, run `bash scripts/setup_cc_proxy_env.sh` once and use
+`scripts/cc_proxy_lib.sh` (the smoke drivers do this automatically). If the
+configured port belongs to another process, choose a free
+`LEGOFLOW_CURATOR_CC_PROXY_PORT`; never reuse a merely live but unrelated proxy.
+Claude Code runs with an isolated ignored HOME so user-level plugins and stale
+credentials cannot override the explicit gateway.
 
 ## Step 4 - Show run configuration and confirm
 
@@ -108,7 +115,7 @@ curator create-tasks configuration
   cc_timeout        : <per-language cc timeout>
   concurrency       : <per-language n_concurrent>
   validation        : NOP + Oracle via Harbor
-  logs              : artifacts/logs/swegen-create/
+  logs              : artifacts/logs/legoflow-curator-create/
   archive           : full only; none for smoke/single-language
 ```
 
@@ -124,8 +131,8 @@ Use the fixed sample PR list carried by the submodule, but write outputs
 to this block's experiment directory:
 
 ```bash
-swegen create \
-  --input-ids-file repos/swegen/artifacts/collected_prs/python_pr_ids.txt \
+legoflow-curator create \
+  --input-ids-file repos/legoflow-curator/artifacts/collected_prs/python_pr_ids.txt \
   --max-pr 1 \
   --n-concurrent 1 \
   --output artifacts/experiments/quick-verify/swe_tasks/py-cc \
@@ -147,7 +154,7 @@ Smoke is small but not instant: Claude Code task generation plus Harbor
 validation can take several minutes. Use a long foreground timeout or launch
 it in the background with a log if the user does not want the session held.
 If interrupted, inspect `artifacts/experiments/quick-verify/state/` and
-`artifacts/experiments/quick-verify/swe_tasks/py-cc/.swegen-create-batch/`
+`artifacts/experiments/quick-verify/swe_tasks/py-cc/.legoflow-curator-create-batch/`
 before deciding whether to resume or clean up.
 
 ### Single language
@@ -160,7 +167,7 @@ bash scripts/create_<lang>.sh
 
 The script writes to `artifacts/swe_tasks/<lang>-cc/`, appends verified
 task ids to `verifiable_tasks.txt`, and logs under
-`artifacts/logs/swegen-create/`.
+`artifacts/logs/legoflow-curator-create/`.
 
 ### Full run
 
@@ -208,6 +215,6 @@ started, then hand off to `/curator:dashboard`.
 
 - Do not run multiple Curator generation jobs concurrently in the same block.
 - Do not write secrets to repository files.
-- Do not modify `repos/swegen/` source while running data generation.
+- Do not modify `repos/legoflow-curator/` source while running data generation.
 - Do not delete generated tasks, state dirs, or logs unless the user asks
   for cleanup.

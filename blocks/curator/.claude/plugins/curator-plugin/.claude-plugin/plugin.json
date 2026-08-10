@@ -2,5 +2,5 @@
   "name": "curator",
   "description": "curator block skills — env/venv bootstrap, preflight, separate PR collection, task creation + verification, dashboard, and a uniform-interface compatibility adapter. Provides /curator:setup, /curator:check, /curator:collect-prs, /curator:create-tasks, /curator:dashboard; /curator:run is compatibility-only.",
   "version": "0.1.0",
-  "author": { "name": "haoli" }
+  "author": { "name": "SWE-Lego" }
 }
