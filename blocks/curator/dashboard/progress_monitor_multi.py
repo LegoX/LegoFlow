@@ -1236,7 +1236,7 @@ def render_html(
 <div class="layout">
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-mark">SL</div>
+      <div class="logo-mark">LF</div>
       <div class="logo-title">Curator Dashboard</div>
     </div>
     <div class="nav">

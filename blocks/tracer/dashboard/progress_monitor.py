@@ -2991,8 +2991,7 @@ def render_html(
 <script>
 (() => {{
   const saved = localStorage.getItem('tracer-theme');
-  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  document.documentElement.dataset.theme = saved || (prefersDark ? 'dark' : 'light');
+  document.documentElement.dataset.theme = saved === 'dark' ? 'dark' : 'light';
 }})();
 </script>
 <style>{CSS}</style>
