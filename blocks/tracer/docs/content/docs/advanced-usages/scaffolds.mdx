@@ -9,12 +9,12 @@ schema before scoring and LF export.
 
 ## Supported Scaffolds
 
-| Scaffold | Config / converter key | Converter module |
-| --- | --- | --- |
-| Claude Code | `claude_code` | `swe_data_process.claudecode_opencode.convert_cc_to_im` |
-| OpenCode | `open_code` | `swe_data_process.claudecode_opencode.convert_oc_to_im` |
-| OpenHands SDK | `openhands_sdk` | `swe_data_process.openhands.convert_openhands_sdk_to_im` |
-| Terminus-2 | `terminus2` | `swe_data_process.terminus2.convert_terminus2_to_im` |
+| Scaffold | Current pinned version | Agent name | Config / converter key | Converter module |
+| --- | --- | --- | --- | --- |
+| Claude Code | `2.1.118` | `custom-claude-code` | `claude_code` | `swe_data_process.claudecode_opencode.convert_cc_to_im` |
+| OpenCode | `1.18.7` | `custom-opencode` | `open_code` | `swe_data_process.claudecode_opencode.convert_oc_to_im` |
+| OpenHands SDK | `1.33.0` | `custom-openhands-sdk` | `openhands_sdk` | `swe_data_process.openhands.convert_openhands_sdk_to_im` |
+| Terminus-2 | converter only | `terminus2` | `terminus2` | `swe_data_process.terminus2.convert_terminus2_to_im` |
 
 The mapping is encoded in `scripts/convert_trajectories.sh`, so the block's
 conversion path and docs use the same scaffold keys.
@@ -27,8 +27,8 @@ When `sft_conversion.scaffold: auto`, Tracer derives the converter from
 | Agent name | Scaffold key |
 | --- | --- |
 | `custom-claude-code`, `claude-code`, `claude_code` | `claude_code` |
-| `open-code`, `opencode`, `open_code` | `open_code` |
-| `openhands-sdk`, `openhands_sdk`, `openhands` | `openhands_sdk` |
+| `custom-opencode`, `open-code`, `opencode`, `open_code` | `open_code` |
+| `custom-openhands-sdk`, `openhands-sdk`, `openhands_sdk`, `openhands` | `openhands_sdk` |
 | `terminus2`, `terminus-2` | `terminus2` |
 
 This is convenient for new jobs, but be careful with old jobs. A historical job

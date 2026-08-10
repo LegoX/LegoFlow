@@ -81,6 +81,12 @@ token per line in a local text file, for example:
 {"runtime_info:\n  input:\n    github_token: repos/legoflow-curator/gh_token.txt      # one GitHub token per line"}
 </ConfigSnippet>
 
+<Callout title="Tip" type="info">
+If you want PR collection to move faster, prepare multiple GitHub tokens. Curator
+can rotate through them during metadata collection, which helps avoid rate-limit
+bottlenecks on larger runs.
+</Callout>
+
 Now run setup:
 
 ```text
