@@ -57,9 +57,10 @@ actually reads. The `meta_info.dependencies.from` entry explains where that
 value comes from in the block graph, so root-level checks can catch a broken
 Curator -> Tracer connection before rollout starts.
 
-During `/tracer:run`, Tracer copies this source into its own
-`artifacts/tasks/<dataset>/` area before Harbor starts. If
-`verifiable_tasks.txt` exists, only those verified task IDs are staged.
+During `/tracer:run`, Tracer stages this source into its own
+`artifacts/tasks/<dataset>/` area before Harbor starts, by symlinking one entry
+per task rather than copying. If `verifiable_tasks.txt` exists, only those
+verified task IDs are staged.
 
 ### Rollout Config
 
@@ -147,8 +148,8 @@ converts SFT data, and archives the run.
 
 Task preparation happens as part of the run path. For local Curator output,
 Tracer trusts `verifiable_tasks.txt` when it exists and stages only verified
-tasks. Hugging Face sources are downloaded and unpacked into the same
-`artifacts/tasks/<dataset>/` layout. Tracer also skips tasks already recorded in
+tasks, as symlinks into the pool. Hugging Face sources are downloaded and
+unpacked into the same `artifacts/tasks/<dataset>/` layout. Tracer also skips tasks already recorded in
 `artifacts/processed_tasks.yaml` or manually listed in `excluded_tasks.txt`, so
 ordinary follow-up runs continue from the remaining work.
 

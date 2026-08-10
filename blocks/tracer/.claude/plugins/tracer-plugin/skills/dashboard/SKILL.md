@@ -1,18 +1,20 @@
 ---
 name: dashboard
 description: >
-  Drive the tracer progress dashboard. Generate or serve the local
-  self-contained HTML board (dashboard/progress_monitor.py, scans
-  config.yaml status, artifacts/jobs/*/result.json,
-  artifacts/sft_data/*/lf.stats.json, local Harbor trial results, SFT quality
-  score metadata, and bounded trajectory previews), or run /
-  restart the Cloudflare Pages sync loop (dashboard/run_cloudflare_pages_sync.sh,
-  tmux session tracer-cf) that publishes it online. Also covers manually
-  refreshing one job's SFT data/stats with scripts/convert_trajectories.sh.
-  Use when asked to "show tracer progress", "open the dashboard",
-  "start/restart the cloudflare sync", "convert trajectories to SFT data",
-  "make the LF dataset", "refresh SFT stats", or "why does dashboard/.cache
-  keep coming back". Triggers on "/tracer:dashboard".
+  Drive the tracer progress dashboard. Sources are fixed, not configured: the
+  board always reads artifacts/tasks/ (one batch per subdirectory),
+  artifacts/jobs/ (one Harbor job per subdirectory), the optional
+  artifacts/sft_data/, and artifacts/index.yaml. Always presents the resolved
+  paths and discovered batches and waits for explicit confirmation before
+  rendering. Generate or serve the local self-contained HTML board
+  (dashboard/progress_monitor.py), or run / restart the Cloudflare Pages sync
+  loop (dashboard/run_cloudflare_pages_sync.sh, tmux session tracer-cf) that
+  publishes it online. Also covers manually refreshing one job's SFT data/stats
+  with scripts/convert_trajectories.sh. Use when asked to "show tracer
+  progress", "open the dashboard", "start/restart the cloudflare sync",
+  "convert trajectories to SFT data", "make the LF dataset", "refresh SFT
+  stats", or "why does dashboard/.cache keep coming back". Triggers on
+  "/tracer:dashboard".
 ---
 
 # /tracer:dashboard
@@ -22,8 +24,74 @@ root `blocks/tracer/`. The generator is stdlib-only via `uv run` (PEP 723
 inline metadata + uv-run shebang) — no env to maintain; `uv` must be on `PATH`.
 Full flag reference: `docs/content/docs/dashboard.mdx`.
 
+## Step 1 - The sources are fixed
+
+There is nothing to configure. `config.yaml` does not name what the board reads,
+and must never be edited to change it. The board always reads:
+
+| What | Where |
+| --- | --- |
+| Task batches | `artifacts/tasks/` — **each immediate subdirectory is one batch** |
+| Harbor jobs | `artifacts/jobs/` — **each immediate subdirectory is one job** |
+| SFT data | `artifacts/sft_data/` — each immediate subdirectory is one converted dataset. **Optional** |
+| Run state | `artifacts/index.yaml` — newest archived run |
+
+**A batch's name on the board is its directory name.** There is no place to
+rename it. To change what the board shows, change what is under `artifacts/`.
+
+Staged task batches are **directories of symlinks** pointing back at the source
+pool (`scripts/prepare_tasks.sh` links rather than copies), so a batch's contents
+can live anywhere on disk. The report prints the link destination — show it, do
+not assume a batch is local just because it is listed.
+
+### SFT data is optional
+
+`artifacts/sft_data/` is the only optional source. Without it the board drops
+every trajectory-score surface — the score distribution, the score matrix, and
+the scoring rubric — rather than rendering them empty. That absence is correct
+and is **not** a defect to report or work around: it means nothing has been
+scored, not that trajectories scored zero. Jobs, trials, pass rate and task
+coverage all still render. Never run `convert_trajectories.sh` just to populate
+those surfaces; conversion is a separate action the user must ask for.
+
+## Step 2 - Show the sources and confirm
+
+Scan read-only and print the report, then **wait for an explicit "yes"**:
+
+```bash
+./dashboard/progress_monitor.py --report-only
+```
+
+It writes nothing, parses no trajectories, and prints the resolved absolute
+paths plus what was found under each:
+
+```text
+tracer dashboard sources
+  task batches           <abs path>
+    <batch name>           <N> task(s)
+  harbor jobs            <abs path>
+    <job name>             <N> trial dir(s)
+  sft data               <abs path>
+    <dataset name>         lf.json, lf.stats.json, im.jsonl
+  run index              <abs path>
+```
+
+Present this to the user verbatim and ask whether to proceed. Never render
+without an explicit "yes". Raise anything the report flags rather than folding it
+into the totals:
+
+| What the report says | What to tell the user |
+| --- | --- |
+| `none staged` under task batches | nothing has been staged yet; `prepare_tasks.sh` links tasks in at launch |
+| `N non-task dir(s) ignored` | name them — a batch is meant to hold only harbor tasks |
+| `no result.json` on a job | that job is still running or was aborted; its trial counts are partial |
+| `no converted files` on an SFT dataset | conversion produced nothing for that job |
+| `-> <path>` under a batch | the batch is a symlink; that path is where the tasks really live |
+
+## Step 3 - Render
+
 The generated page has `Overview`, `Instances`, `Trajectories`, and
-`Operations` sidebar sections. `Operations` reads `config.yaml -> status` and
+`Operations` sidebar sections. `Operations` reads `artifacts/index.yaml` and
 exposes searchable Harbor/SFT tables; `Instances` slices quality score and
 pass-rate metrics by programming language/domain/category/difficulty/source/
 model/scaffold/job; `Trajectories` shows concrete trial/SFT cards with bounded
@@ -38,7 +106,7 @@ This skill also owns SFT stats refresh. The dashboard reads
 `artifacts/sft_data/<job>/lf.stats.json`, and the Cloudflare sync loop can keep
 those stats fresh by running `scripts/convert_trajectories.sh --skip-unchanged`.
 
-## Local preview
+### Local preview
 
 ```bash
 ./dashboard/progress_monitor.py                              # one-shot generate
@@ -58,8 +126,9 @@ Both `dashboard/site/` and `dashboard/.cache/` are gitignored and wiped by
 Trajectory previews are bounded by `--sample-limit`, `--sample-preview-chars`,
 and `--sample-message-limit`. Defaults are good for local inspection; reduce
 them or use `--no-include-samples` before publishing sensitive or very large data.
-Instances/Trajectories default to `/storage/jierun/code/harbor/jobs` for trial-level facts;
-override with `--harbor-jobs-dir`. Use `--max-trials-per-job` and
+Instances/Trajectories read trial-level facts from `artifacts/jobs/` like everything
+else; `--harbor-jobs-dir` can point at a Harbor jobs directory outside the block,
+but that is an escape hatch, not the normal path. Use `--max-trials-per-job` and
 `--max-quality-records-per-dataset` for faster smoke tests or lighter public
 pages.
 
@@ -86,7 +155,7 @@ Public payload controls:
 | `DASHBOARD_SAMPLE_PREVIEW_CHARS` | `1200` | Max characters per message preview. |
 | `DASHBOARD_SAMPLE_MESSAGE_LIMIT` | `12` | Max messages per sample preview. |
 | `DASHBOARD_LOCAL_MODE` | `public` | `full` includes bounded analysis text previews. |
-| `DASHBOARD_HARBOR_JOBS_DIR` | `/storage/jierun/code/harbor/jobs` | Local Harbor trial source. |
+| `DASHBOARD_HARBOR_JOBS_DIR` | `artifacts/jobs` | Local Harbor trial source. |
 | `DASHBOARD_MAX_TRIALS_PER_JOB` | `0` | Max trial facts per Harbor job; 0 = all. |
 | `DASHBOARD_MAX_QUALITY_RECORDS_PER_DATASET` | `0` | Max quality facts per SFT dataset; 0 = all. |
 | `TRACER_R2_UPLOAD` | `0` | Upload full local Harbor `trajectory.json` objects to R2. |
@@ -156,3 +225,19 @@ Outputs are written under `<out_dir>/<job>/` (default
 If `runtime_info.input.sft_conversion.enabled: true`, `scripts/start.sh` calls
 `scripts/convert_trajectories.sh --job "$JOB_NAME"` after Harbor exits; no
 manual step is needed.
+
+## Guardrails
+
+- The board has **no configuration**. Never edit `config.yaml` to change what it
+  reads — the sources are fixed under `artifacts/`. To change what it shows,
+  change what is under `artifacts/`.
+- Never render before showing the `--report-only` output and getting an explicit
+  "yes".
+- The only writes are `dashboard/site/` and `dashboard/.cache/`. Reading jobs,
+  tasks and SFT data is read-only. Both write targets are gitignored and wiped by
+  `scripts/clean.sh`.
+- A missing SFT dataset is a normal state, not a fault: the board simply carries
+  no trajectory-score surfaces. Do not substitute zeros, and do not run a
+  conversion to fill them in unless the user asks for that separate action.
+- Never launch `scripts/start.sh`, `prepare_tasks.sh`, a Harbor job, or a deploy
+  unless the user asks for that separate action.

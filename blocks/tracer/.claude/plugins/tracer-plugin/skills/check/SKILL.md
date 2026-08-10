@@ -5,8 +5,9 @@ description: >
   Harbor / swe_data_process pinned commits match (and accepts tracked
   submodule status, not just gitignore); confirms the three uv/venv
   environments exist with the expected editable installs; live-probes
-  the configured LLM endpoint with `GET /models` and (when
-  `task_source.provider: huggingface`) probes HF dataset reachability;
+  the configured LLM endpoint with `GET /models`; probes the task source
+  (local dir exists, or HF dataset reachable) without requiring that
+  tasks have been staged yet — staging happens at launch, not here;
   confirms LiteLLM proxy port is free or held by current user; verifies
   the agent runtime_image is present on the local Docker daemon; sanity-
   checks `artifacts/processed_tasks.yaml` and cross-checks every
@@ -28,9 +29,11 @@ escalating).
 1. Execute `bash scripts/dryrun.sh` from the block root. The script is
    the single source of truth for what "tracer is ready" means — it
    covers schema, repos/commits, all three envs, LLM endpoint live
-   probe, HF dataset auth probe, port-4001 ownership, Docker image
+   probe, task-source reachability, port-4001 ownership, Docker image
    presence, ledger validity, and how many task ids
-   `HARBOR_EXCLUDE_TASKS` resolves to.
+   `HARBOR_EXCLUDE_TASKS` resolves to. It deliberately does **not** gate
+   on tasks being staged: an unstaged block is the normal state of one
+   that has not run yet, so staging is reported, never failed on.
 2. Fold every `dryrun.sh` line into the Step 3 report below — never
    re-run a probe or overrule an `OK`.
 
@@ -52,6 +55,8 @@ inapplicable rows.
 | det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim dryrun line> |
 | det  | llm endpoint          | <✓/⚠/✗> | <GET /models 2xx \| CF-gated 401 (WARN) \| unreachable> |
 | det  | hf dataset auth       | <✓/⚠/✗/·> | <reachable \| 401/403 \| skipped (not a huggingface source)> |
+| det  | local task source     | <✓/⚠/·> | <exists \| not found, curator may not have produced it \| skipped (not a local source)> |
+| det  | task staging          | ·       | <N task dirs already staged \| none yet — prepare_tasks.sh links them in at launch; never a failure> |
 | det  | litellm port 4001     | <✓/✗>   | <free \| held by pid <P>> |
 | det  | agent runtime_image   | <✓/⚠>   | <present \| not pulled locally> |
 | det  | processed-tasks ledger    | <✓/✗>   | <parses, <n> entries, <m> resolve to exclusions> |

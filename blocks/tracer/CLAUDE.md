@@ -36,7 +36,7 @@ Write to `config.yaml` → `runtime_info.output` after running:
 ## Task consumption contract
 
 Tracer **only** runs tasks listed in curator's `verifiable_tasks.txt`, and never re-runs one it already processed:
-1. `prepare_tasks.sh` copies only manifest-listed task IDs into `artifacts/tasks/<dataset>/`.
+1. `prepare_tasks.sh` stages only manifest-listed task IDs into `artifacts/tasks/<dataset>/`, as one symlink per task id back to the source pool — the directory is real, its entries are links, and nothing is duplicated on disk.
 2. `artifacts/processed_tasks.yaml` is the source of truth for processed task IDs (`pending | running | done | failed | skipped`).
 3. `start.sh` resolves `HARBOR_EXCLUDE_TASKS` through that ledger, so recording a task there is what makes Harbor skip it next time. Retire a task permanently by appending its id to the git-tracked `excluded_tasks.txt` — the ledger lives under gitignored `artifacts/`.
 
@@ -57,7 +57,7 @@ Generic lifecycle via the repo-wide `root` plugin: `/root:check tracer` to prefl
 |---|---|---|
 | `/tracer:setup` | `update_repos.sh`, `setup_harbor_env.sh`, `setup_swe_data_process_env.sh`, `dryrun.sh` | Clone/update repos, build uv envs |
 | `/tracer:check` | `dryrun.sh` | Read-only preflight |
-| `/tracer:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh`, `convert_trajectories.sh` | Interactive HTML board (Analyze quality/pass slices, status/artifacts/SFT samples) / Cloudflare online sync / SFT stats refresh |
+| `/tracer:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh`, `convert_trajectories.sh` | Interactive HTML board (Analyze quality/pass slices, status/artifacts/SFT samples) / Cloudflare online sync / SFT stats refresh. Sources are fixed under `artifacts/` (`tasks/`, `jobs/`, optional `sft_data/`, `index.yaml`) — never configured in `config.yaml`; the skill shows them and waits for confirmation before rendering |
 | `/tracer:run` | `dryrun.sh`, `start.sh` | Full pipeline: prepare_tasks → Harbor → optional convert + post-run bookkeeping |
 
 `scripts/clean.sh` (no flags) removes only a run's temporary output — LiteLLM state, logs, launch logs, `dashboard/site/`, `dashboard/.cache/`. It keeps the uv env, `jobs/`, `tasks/`, `sft_data/`, `agent-runtime/` and `processed_tasks.yaml`. `--all` wipes `artifacts/` entirely except git-tracked files and confirms twice. Tracer scripts need PyYAML in the runtime Python; on `ERROR: PyYAML is required`, `pip install pyyaml`.

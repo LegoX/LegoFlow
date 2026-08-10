@@ -277,7 +277,7 @@ Downstream agents consume verified SWE tasks for trajectory inference. The **aut
 
 - `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` — newline-delimited list of task IDs that passed NOP/Oracle validation.
 
-Consumers MUST filter by this manifest, not by scanning `artifacts/swe_tasks/{lang}-cc/` directly — the latter also contains in-progress and failed skeletons. The tracer block does this via `prepare_tasks.sh` (manifest-filtered copy).
+Consumers MUST filter by this manifest, not by scanning `artifacts/swe_tasks/{lang}-cc/` directly — the latter also contains in-progress and failed skeletons. The tracer block does this via `prepare_tasks.sh`, which stages a manifest-filtered directory of symlinks back into this pool — so tasks are read here in place, never duplicated.
 
 Two interfaces are supported:
 

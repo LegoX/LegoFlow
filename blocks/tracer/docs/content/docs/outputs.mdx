@@ -47,7 +47,9 @@ Before rollout, Tracer stages compatible task directories into:
 artifacts/tasks/<dataset>/
 ```
 
-These tasks come from Curator output or a Hugging Face source. The processed
+These tasks come from Curator output or a Hugging Face source. A Curator source
+is staged as symlinks back into its pool, so this directory lists the tasks in
+play without holding a second copy of them. The processed
 task ledger is stored at:
 
 ```text

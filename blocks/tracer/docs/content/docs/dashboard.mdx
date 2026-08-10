@@ -14,16 +14,49 @@ optional SFT conversion outputs.
 | **Harbor jobs** | Job-level task counts, reward summaries, retries, and errors. |
 | **Task coverage** | Which tasks were attempted, completed, skipped, failed, or already processed. |
 | **Agent trajectories** | Per-task messages, tool calls, observations, bounded previews, and failure traces. |
-| **SFT conversion** | Whether successful rollouts were converted into LF data for Trainer. |
-| **Quality signals** | Score distributions, low-score examples, tool-error rates, and segment comparisons. |
+| **SFT conversion** | Whether successful rollouts were converted into LF data for Trainer. *(only with SFT data)* |
+| **Quality signals** | Score distributions, low-score examples, tool-error rates, and segment comparisons. *(only with SFT data)* |
 
 The dashboard helps you see whether rollout is healthy, which task slices fail,
 and whether the generated trajectories are ready for training.
 
-Behind the scenes it reads `artifacts/index.yaml`, `artifacts/jobs/<job>/`,
-`artifacts/processed_tasks.yaml`, and optional `artifacts/sft_data/<job>/`
-outputs. Those files are the same surfaces you can inspect manually when a run
-needs closer debugging.
+## Where It Reads From
+
+The sources are **fixed, not configured**. `config.yaml` does not name them, and
+editing it will not change what the board shows — change what is under
+`artifacts/` instead:
+
+| Source | Meaning |
+| --- | --- |
+| `artifacts/tasks/` | each immediate subdirectory is one task batch |
+| `artifacts/jobs/` | each immediate subdirectory is one Harbor job |
+| `artifacts/sft_data/` | each immediate subdirectory is one converted dataset — **optional** |
+| `artifacts/index.yaml` | newest archived run, for the status panel |
+| `artifacts/processed_tasks.yaml` | the consumption ledger |
+
+Those files are the same surfaces you can inspect manually when a run needs
+closer debugging. To see exactly what the board resolved, without rendering
+anything:
+
+```bash
+./dashboard/progress_monitor.py --report-only
+```
+
+It prints the absolute path of every source and the batches found under each.
+`/tracer:dashboard` runs it and asks you to confirm before it renders.
+
+Task batches are staged as directories of symlinks pointing back at the source
+pool, so a batch's contents may live outside the block; the report names the
+link destination.
+
+### SFT data is optional
+
+Trajectory scores are computed during SFT conversion, so a block that has not
+converted anything has no scores. In that case the board **omits** the score
+surfaces — the score distribution, the score matrix, and the scoring rubric —
+rather than drawing them empty. Jobs, trials, pass rate and task coverage all
+still render. An absent score panel means nothing was scored, not that
+trajectories scored zero.
 
 ## Local Mode
 

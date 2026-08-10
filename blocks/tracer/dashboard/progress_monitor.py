@@ -2825,7 +2825,16 @@ def render_html(
         ("Harbor job dir", harbor_jobs_dir, None),
         ("Run index", index_path, None),
     ]
-    rubric_html = render_rubric_html()
+    # Trajectory scores come only from converted SFT data, which is optional.
+    # With none, every score surface would render as an empty axis or a dash —
+    # which reads as "these trajectories scored nothing" rather than "nothing was
+    # scored". Drop those surfaces instead of showing hollow ones.
+    has_quality = bool((analysis.get("summary") or {}).get("quality_count"))
+    rubric_html = render_rubric_html() if has_quality else ""
+    quality_gate_css = (
+        "" if has_quality else
+        "<style>[data-requires-quality]{display:none !important}</style>"
+    )
     info_html = (
         "<div class='sub'>Sources</div><table>"
         + "".join(
@@ -2995,6 +3004,7 @@ def render_html(
 }})();
 </script>
 <style>{CSS}</style>
+{quality_gate_css}
 </head>
 <body>
 <div class="app-shell">
@@ -3022,7 +3032,7 @@ def render_html(
       </div>
       <div class="topbar-actions">
         <span class="update-status">Updated {html.escape(now_str)} &middot; refresh {refresh_seconds}s</span>
-        <button id="metricsToggle" class="icon-btn" type="button" aria-label="Trajectory scoring rubric" title="How the trajectory quality score is computed">{ICON_METRICS}</button>
+        <button id="metricsToggle" class="icon-btn" type="button" data-requires-quality aria-label="Trajectory scoring rubric" title="How the trajectory quality score is computed">{ICON_METRICS}</button>
         <button id="infoToggle" class="icon-btn" type="button" aria-label="Dashboard info" title="What this board is reading">{ICON_INFO}</button>
         <button id="refreshNow" class="icon-btn refresh-btn" type="button" aria-label="Refresh dashboard" title="Refresh dashboard">{icon_refresh}</button>
         <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="Toggle black and white theme" title="Toggle theme"><span class="theme-moon">{icon_moon}</span><span class="theme-sun">{icon_sun}</span></button>
@@ -3040,7 +3050,7 @@ def render_html(
     </div>
   </div>
 </div>
-<div class="modal" id="metricsPanel" role="dialog" aria-modal="true" hidden>
+<div class="modal" id="metricsPanel" role="dialog" aria-modal="true" data-requires-quality hidden>
   <div class="modal-box">
     <div class="modal-head">
       <div><h3>Trajectory scoring rubric</h3>
@@ -3097,7 +3107,7 @@ def render_html(
           <p class="hint">Based on valid SFT/LF trajectories with task language labels.</p></div></div>
         <div id="languageBars" class="mini-bars"></div>
       </section>
-      <section class="panel">
+      <section class="panel" data-requires-quality>
         <div class="panel-head"><div><h2>Trajectory Quality Score Distribution</h2>
           <p class="hint">Score histogram from exported SFT quality facts.</p></div></div>
         <div id="scoreHistogram" class="mini-bars"></div>
@@ -3133,7 +3143,7 @@ def render_html(
         </table>
       </div>
     </section>
-    <section class="panel">
+    <section class="panel" data-requires-quality>
       <div class="panel-head"><div><h2>Trajectory Quality Score Matrix</h2>
         <p class="hint">Click column headers to sort. Only non-zero trajectory-score weights (Σw=1.00).</p></div></div>
       <div class="table-wrap">
@@ -4385,8 +4395,123 @@ renderSegments();
 # CLI
 # ---------------------------------------------------------------------------
 
+def _batch_note(child: Path) -> str:
+    """Say where a batch really lives when the name does not.
+
+    Staged task pools are symlinks (see scripts/prepare_tasks.sh), so a batch's
+    contents can sit anywhere on disk. An operator confirming sources needs to
+    see the destination, not just the link name.
+    """
+    if not child.is_symlink():
+        return ""
+    return f"-> {child.resolve()}"
+
+
+def discover_sources(block_dir: Path = BLOCK_DIR) -> dict[str, Any]:
+    """Resolve what the board reads. Fixed locations under artifacts/, never
+    configured.
+
+    * Tasks — every immediate child of `artifacts/tasks/` is one batch, holding
+      one harbor task per child of its own (a real dir of symlinks, as staged).
+    * Jobs  — every immediate child of `artifacts/jobs/` is one Harbor job.
+    * SFT   — every immediate child of `artifacts/sft_data/` is one converted
+      dataset. Optional: with none, the board simply carries no score surfaces.
+    """
+    artifacts = block_dir / "artifacts"
+
+    def children(root: Path) -> list[Path]:
+        if not root.is_dir():
+            return []
+        return sorted(
+            (c for c in root.iterdir() if c.is_dir() and not c.name.startswith(".")),
+            key=lambda c: c.name,
+        )
+
+    tasks_root = artifacts / "tasks"
+    task_batches = []
+    for child in children(tasks_root):
+        n_tasks = sum(1 for t in child.iterdir() if (t / "task.toml").is_file())
+        n_other = sum(1 for t in child.iterdir() if t.is_dir() and not (t / "task.toml").is_file())
+        task_batches.append({
+            "name": child.name, "path": child, "tasks": n_tasks,
+            "ignored": n_other, "note": _batch_note(child),
+        })
+
+    jobs_root = artifacts / "jobs"
+    jobs = []
+    for child in children(jobs_root):
+        trials = sum(1 for t in child.iterdir() if t.is_dir() and not t.name.startswith("."))
+        jobs.append({
+            "name": child.name, "path": child, "trials": trials,
+            "summarized": (child / "result.json").is_file(), "note": _batch_note(child),
+        })
+
+    sft_root = artifacts / "sft_data"
+    sft = []
+    for child in children(sft_root):
+        present = [n for n in ("lf.json", "lf.stats.json", "im.jsonl") if (child / n).is_file()]
+        sft.append({"name": child.name, "path": child, "files": present,
+                    "note": _batch_note(child)})
+
+    return {
+        "tasks_root": tasks_root, "task_batches": task_batches,
+        "jobs_root": jobs_root, "jobs": jobs,
+        "sft_root": sft_root, "sft": sft,
+        "index_file": artifacts / "index.yaml",
+    }
+
+
+def print_source_report(sources: dict[str, Any]) -> int:
+    """Print the resolved sources for an operator to confirm before rendering.
+
+    Read-only, and deliberately cheap: it opens no trajectories and parses no
+    trajectory JSON, so it can be run before every render.
+    """
+    line = "=" * 70
+    out = [line, "tracer dashboard sources", line]
+
+    def section(label: str, root: Path, rows: list[str], empty: str) -> None:
+        out.append(f"  {label:<22} {root}")
+        out.extend(rows or [f"    {empty}"])
+
+    section(
+        "task batches", sources["tasks_root"],
+        [
+            f"    {b['name']:<38} {b['tasks']} task(s)"
+            + (f" · {b['ignored']} non-task dir(s) ignored" if b["ignored"] else "")
+            + (f"\n      {b['note']}" if b["note"] else "")
+            for b in sources["task_batches"]
+        ],
+        "none staged — prepare_tasks.sh links them in at launch",
+    )
+    section(
+        "harbor jobs", sources["jobs_root"],
+        [
+            f"    {j['name']:<38} {j['trials']} trial dir(s)"
+            + ("" if j["summarized"] else " · no result.json (still running or aborted)")
+            for j in sources["jobs"]
+        ],
+        "no jobs yet",
+    )
+    section(
+        "sft data", sources["sft_root"],
+        [f"    {s['name']:<38} {', '.join(s['files']) or 'no converted files'}"
+         for s in sources["sft"]],
+        "none — optional; the board omits trajectory-score surfaces without it",
+    )
+
+    idx = sources["index_file"]
+    out.append(f"  {'run index':<22} {idx}" + ("" if idx.is_file() else "  (absent)"))
+    out.append(line)
+    print("\n".join(out))
+    return 0
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--report-only", action="store_true",
+                   help="Print the resolved sources and the batches found under each, then exit. "
+                        "Writes nothing; run this and confirm before rendering.")
     p.add_argument("--output-html", type=Path, default=DEFAULT_HTML)
     p.add_argument("--cache-file", type=Path, default=DEFAULT_CACHE)
     p.add_argument("--index-file", type=Path, default=DEFAULT_INDEX,
@@ -4541,6 +4666,8 @@ def maybe_open_browser(path: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
+    if args.report_only:
+        return print_source_report(discover_sources())
     interval = int(args.loop) if args.loop is not None else args.refresh
     server: ThreadingHTTPServer | None = None
     if args.serve:

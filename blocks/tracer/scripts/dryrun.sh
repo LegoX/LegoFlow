@@ -716,14 +716,29 @@ case "$HARBOR_DATASET_PATH" in
     ;;
 esac
 HARBOR_DATASET_PATH_ABS="$(abspath "$HARBOR_DATASET_PATH")"
+# Staging is not a precondition for checking. `scripts/prepare_tasks.sh` links the
+# pool into place at launch, so an unstaged block is the normal state of a block
+# that simply has not run yet — report what is there, never fail on its absence.
 if TASK_COUNT="$(validate_task_root "$HARBOR_DATASET_PATH_ABS" 2>/dev/null)"; then
-  ok "Harbor task directory is ready ($TASK_COUNT task dirs)"
+  info "Harbor tasks already staged at $HARBOR_DATASET_PATH ($TASK_COUNT task dirs)"
 else
-  fail "Harbor tasks are not prepared at $HARBOR_DATASET_PATH; run bash scripts/prepare_tasks.sh"
-  # When the source is huggingface, do a cheap auth/reachability probe so users
-  # don't discover gated-repo failures inside prepare_tasks.sh's snapshot_download.
-  TASK_PROVIDER="$(cfg runtime_info.input.task_source.provider)"
-  if [[ "$TASK_PROVIDER" == "huggingface" ]]; then
+  info "no tasks staged at $HARBOR_DATASET_PATH yet — prepare_tasks.sh links them in at launch"
+fi
+
+# What is worth checking here is the *source*, which staging cannot conjure.
+TASK_PROVIDER="$(cfg runtime_info.input.task_source.provider)"
+case "$TASK_PROVIDER" in
+  local)
+    TASK_SOURCE_ABS="$(abspath "$TASK_SOURCE_DATASET_NAME")"
+    if [[ -d "$TASK_SOURCE_ABS" ]]; then
+      ok "local task source exists: $TASK_SOURCE_DATASET_NAME"
+    else
+      warn "local task source not found: $TASK_SOURCE_DATASET_NAME (upstream curator may not have produced it yet)"
+    fi
+    ;;
+  huggingface)
+    # Cheap auth/reachability probe so gated-repo failures surface here rather
+    # than inside prepare_tasks.sh's snapshot_download.
     HF_TOKEN_PATH="${HF_HOME:-$HOME/.cache/huggingface}/token"
     HF_PROBE="$(HF_DATASET_ID="$TASK_SOURCE_DATASET_NAME" HF_TOKEN_FILE="$HF_TOKEN_PATH" python3 - <<'PY' 2>&1
 import os, urllib.request, urllib.error
@@ -748,8 +763,8 @@ PY
       HTTP:*) fail "HF dataset probe failed: $HF_PROBE" ;;
       NET:*) warn "HF dataset network error: $HF_PROBE (may be transient)" ;;
     esac
-  fi
-fi
+    ;;
+esac
 case "$RUN_JOB_DIR" in
   artifacts/jobs|artifacts/jobs/*|/*/artifacts/jobs|/*/artifacts/jobs/*)
     ok "job_dir is under block artifacts"
