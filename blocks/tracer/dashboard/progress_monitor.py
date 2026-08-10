@@ -162,6 +162,44 @@ SUBSCORE_LABELS = {
     "fec_score": "fec file-edit concentration",
     "dpi_score": "dpi dirty-pattern penalty",
 }
+def render_rubric_html() -> str:
+    """The trajectory-quality rubric, rendered from the same weights the score
+    itself uses so the card can never drift from the arithmetic."""
+    rows = []
+    for key in WEIGHTED_SUBSCORE_KEYS:
+        weight = TQS_WEIGHTS[key]
+        label = SUBSCORE_LABELS.get(key, key)
+        # labels are stored as "<code> <name>"; split so each lands in its own column
+        code, _, name = label.partition(" ")
+        rows.append(
+            '<div class="rubric-row">'
+            f'<span class="rk">{html.escape(code)}</span>'
+            f'<span class="rn">{html.escape(name or label)}</span>'
+            f'<span class="rw">{weight:.2f}</span>'
+            f'<span class="rb"><i style="width:{weight / max(TQS_WEIGHTS.values()) * 100:.1f}%"></i></span>'
+            "</div>"
+        )
+    diagnostic = [k for k in SUBSCORE_KEYS if TQS_WEIGHTS.get(k, 0) == 0]
+    return (
+        '<section class="method-card"><h3>Trajectory Quality Score '
+        "<span>rule-based, no LLM judge</span></h3>"
+        '<div class="method-body">'
+        '<span class="mh">Composite</span>'
+        "<code>TQS = &Sigma; w&middot;s</code> over the weighted dimensions below "
+        f"(&Sigma;w = {sum(TQS_WEIGHTS.values()):.2f}); each <code>s</code> is a rule score in "
+        "<code>[0, 1]</code>."
+        '<span class="mh">Weighted dimensions</span>'
+        f'<div class="rubric">{"".join(rows)}</div>'
+        '<span class="mh">Diagnostic dimensions</span>'
+        f'<div class="method-note">Carried for inspection at weight 0, so they never move the score: '
+        f'<code>{html.escape(", ".join(k.removesuffix("_score") for k in diagnostic))}</code>.</div>'
+        '<div class="method-note">Scores come from the exported SFT quality facts '
+        "(<code>swe_data_process</code> rule_score); a trajectory with no facts is counted as "
+        "unscored, never as zero.</div>"
+        "</div></section>"
+    )
+
+
 IDENTITY_COLORS = [
     "#2563eb",
     "#3f8f2f",
@@ -2164,6 +2202,13 @@ ICON_INFO = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
              '<circle cx="12" cy="12" r="9"></circle><path d="M12 16v-5"></path>'
              '<path d="M12 8h.01"></path></svg>')
 
+CARET_SVG = ('<svg class="caret icon" viewBox="0 0 24 24" aria-hidden="true" '
+             'style="width:14px;height:14px"><path d="M9 6l6 6-6 6"></path></svg>')
+
+ICON_METRICS = ('<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">'
+                '<path d="M4 19h16"></path><path d="M7 19v-7"></path>'
+                '<path d="M12 19V5"></path><path d="M17 19v-10"></path></svg>')
+
 CSS = """
 :root {
   color-scheme: light;
@@ -2172,7 +2217,12 @@ CSS = """
   --panel-soft: #fafaf7;
   --panel-softer: #f1efe9;
   --text: #111111;
+  --fg-dim: #4a453e;
   --muted: #6b6b66;
+  --fg-faint: #8c8c85;
+  --method-bg: #b3431f0a;
+  --method-line: #b3431f33;
+  --method-head: #b3431f;
   --line: #e6e3da;
   --soft: #f1efe9;
   --ink: #b3431f;
@@ -2213,7 +2263,12 @@ CSS = """
   --panel-soft: #1a1714;
   --panel-softer: #211d19;
   --text: #f0ede7;
+  --fg-dim: #c9c2b6;
   --muted: #a9a297;
+  --fg-faint: #8a847a;
+  --method-bg: #efa07c12;
+  --method-line: #efa07c33;
+  --method-head: #f5c9b4;
   --line: #302a2499;
   --soft: #1a1714;
   --ink: #efa07c;
@@ -2246,58 +2301,67 @@ CSS = """
   --badge-scaffold-text: #f5c9b4;
 }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-       background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.45; }
+/* Shell metrics (type scale, sidebar width, topbar and content padding) are
+   shared with every other block's board — change them there too. */
+:root { font-size: 15px; }
+body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+       background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.45;
+       -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--fg-faint); border-radius: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
 header { padding: 24px 32px 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .header-top { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 header h1 { margin: 0 0 6px; font-size: 26px; font-weight: 720; letter-spacing: 0; }
 header p { margin: 4px 0; color: var(--muted); }
 header code, code { background: var(--soft); padding: 2px 6px; border-radius: 5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 main { padding: 22px 32px 48px; max-width: 1760px; margin: 0 auto; }
-.app-shell { min-height: 100vh; display: grid; grid-template-columns: 248px minmax(0, 1fr); }
-.sidebar { position: sticky; top: 0; height: 100vh; padding: 20px 14px; border-right: 1px solid var(--line); background: linear-gradient(180deg, #12100d 0%, var(--bg) 100%); overflow-y: auto; }
+.app-shell { min-height: 100vh; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+.sidebar { position: sticky; top: 0; height: 100vh; padding: 0; border-right: 1px solid var(--line); background: linear-gradient(180deg, #12100d 0%, var(--bg) 100%); overflow-y: auto; }
 :root:not([data-theme="dark"]) .sidebar { background: var(--panel); }
-.brand { padding: 2px 8px 16px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.brand { padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .brand-lockup { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 32px; flex: 0 0 38px; border-radius: 8px; background: var(--ink); color: var(--ink-contrast); font-size: 11px; font-weight: 800; letter-spacing: -0.02em; }
+.brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 28px; flex: 0 0 32px; border-radius: 7px; background: var(--ink); color: var(--ink-contrast); font-size: 13px; font-weight: 800; letter-spacing: -0.02em; }
 .brand-title { min-width: 0; }
-.brand h1 { margin: 0; font-size: 24px; letter-spacing: 0; }
+.brand h1 { margin: 0; font-size: 15px; font-weight: 650; line-height: 1.25; letter-spacing: 0; }
 .brand p { margin: 4px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.side-nav { display: grid; gap: 6px; }
-.nav-item { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border-color: transparent; background: transparent; color: var(--muted); border-radius: 8px; font-weight: 650; padding: 8px 10px; }
+.side-nav { display: grid; gap: 2px; padding: 8px; }
+.nav-item { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid transparent; background: transparent; color: var(--fg-dim); border-radius: 8px; font-size: 14px; font-weight: 600; padding: 8px 10px; }
 .nav-item:hover { background: var(--button-hover); color: var(--text); border-color: transparent; }
 .nav-item.active { background: var(--accent-soft); color: var(--active-text); border-color: var(--accent-border); }
 .nav-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: 0 0 20px; }
 .nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-meta { margin-top: 18px; padding: 12px 8px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.side-meta p { margin: 0 0 8px; }
 .main-shell { min-width: 0; }
-.topbar { display: flex; justify-content: space-between; gap: 16px; align-items: center; min-height: 48px; padding: 10px 28px; border-bottom: 1px solid var(--line); background: var(--bg); }
-.topbar h2 { margin: 0; font-size: 18px; }
-.topbar p { margin: 4px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.topbar { display: flex; justify-content: space-between; gap: 16px; align-items: center; min-height: 48px; padding: 10px 24px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.topbar h2 { margin: 0; font-size: 17px; font-weight: 650; }
+.topbar p { margin: 2px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .topbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .update-status { color: var(--muted); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.content { padding: 22px 28px 48px; max-width: 1760px; margin: 0 auto; }
+.content { padding: 18px 24px 32px; }
 button, input, select { font: inherit; }
 button { border: 1px solid var(--line); background: var(--button-bg); color: var(--text); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
 button:hover { border-color: var(--accent-border); background: var(--button-hover); color: var(--text); }
 .icon { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Modal — same dialog spec on every block's board: centred over a dimmed page,
+   generous gutters, one quiet header rule. */
 .modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center;
-  justify-content: center; padding: 24px; background: rgba(17, 17, 17, .32); }
+  justify-content: center; padding: 32px 24px; background: rgba(17, 17, 17, .32); }
 :root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .5); }
 .modal[hidden] { display: none; }
-.modal-box { width: min(720px, 100%); max-height: min(78vh, 760px); display: flex;
+.modal-box { width: min(920px, 94vw); max-height: min(80vh, 780px); display: flex;
   flex-direction: column; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 14px; box-shadow: 0 24px 60px rgba(0,0,0,.28); overflow: hidden; text-align: left; }
-:root[data-theme="dark"] .modal-box { box-shadow: 0 24px 60px rgba(0,0,0,.65); }
-.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
-  padding: 16px 20px; border-bottom: 1px solid var(--line); }
-.modal-head h3 { margin: 0; font-size: 16px; font-weight: 650; }
-.modal-head .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  border-radius: 16px; box-shadow: 0 24px 64px rgba(0, 0, 0, .18); overflow: hidden; text-align: left; }
+:root[data-theme="dark"] .modal-box { box-shadow: 0 24px 64px rgba(0, 0, 0, .6); }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+  padding: 22px 28px 18px; border-bottom: 1px solid var(--line); }
+.modal-head h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em;
+  line-height: 1.3; }
+.modal-head .sub { color: var(--muted); font-size: 12.5px; margin-top: 5px; line-height: 1.5; }
 .modal-close { background: transparent; border: 1px solid transparent; color: var(--muted);
-  border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 18px; line-height: 1; flex: 0 0 32px; }
-.modal-close:hover { color: var(--text); border-color: var(--line); }
-.modal-body { padding: 16px 20px 20px; overflow: auto; }
+  border-radius: 9px; width: 30px; height: 30px; cursor: pointer; font-size: 19px;
+  line-height: 1; flex: 0 0 30px; }
+.modal-close:hover { color: var(--text); border-color: var(--line); background: var(--button-bg); }
+.modal-body { padding: 22px 28px 26px; overflow: auto; }
 .modal-body table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .modal-body td { padding: 5px 7px; border-bottom: 1px solid var(--line); text-align: left; }
 .modal-body td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -2305,7 +2369,40 @@ button:hover { border-color: var(--accent-border); background: var(--button-hove
 .modal-body .sub { color: var(--muted); font-size: 11.5px; margin: 14px 0 5px;
   text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
 .modal-body .sub:first-child { margin-top: 0; }
-.icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; }
+/* Scoring rubric card — mirrors curator's methodology card. Every dimension is
+   one unwrapped row: a fixed code column, an elastic name, then the weight and
+   its bar, so the weights line up as a column you can read down. */
+.method-card { background: var(--method-bg); border: 1px solid var(--method-line);
+  border-radius: 10px; padding: 14px 18px; }
+.method-card h3 { font-size: 15px; margin: 0 0 4px; font-weight: 700; color: var(--method-head); }
+.method-card h3 span { color: var(--ink); font-weight: 500; font-size: 13px; margin-left: 6px; }
+.method-body { font-size: 13px; line-height: 1.7; color: var(--text); }
+.method-body .mh { display: block; color: var(--method-head); font-weight: 800;
+  font-size: 13.5px; margin: 10px 0 4px; }
+.method-body .mh:first-child { margin-top: 0; }
+.method-body code { color: var(--ink); background: var(--accent-soft); padding: 1px 5px;
+  border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.method-note { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 8px; }
+.rubric { display: grid; gap: 4px; margin-top: 2px; }
+.rubric-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) 52px 132px;
+  gap: 12px; align-items: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rubric-row .rk { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  font-weight: 700; color: var(--ink); }
+.rubric-row .rn { overflow: hidden; text-overflow: ellipsis; }
+.rubric-row .rw { text-align: right; font-weight: 700; }
+.rubric-row .rb { height: 8px; border-radius: 999px; background: var(--bar-bg); overflow: hidden; }
+.rubric-row .rb i { display: block; height: 100%; background: var(--accent-fill); border-radius: inherit; }
+@media (max-width: 700px) {
+  .rubric-row { grid-template-columns: 52px minmax(0, 1fr) 52px; }
+  .rubric-row .rb { display: none; }
+}
+/* Shared chrome with the other blocks' boards: 36px square, 8px radius, muted
+   ink that firms up on hover. Keep in step with curator/trainer/evaluator. */
+.icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center;
+  justify-content: center; flex: 0 0 36px; background: var(--button-bg);
+  border: 1px solid var(--line); color: var(--fg-dim); border-radius: 8px; cursor: pointer; }
+.icon-btn:hover { color: var(--text); border-color: var(--accent-border); }
+.topbar-actions .copy-btn { height: 36px; padding: 0 12px; border-radius: 8px; font-size: 12px; }
 .theme-toggle { min-width: 0; white-space: nowrap; }
 .theme-toggle .theme-sun { display: none; }
 .theme-toggle .theme-moon { display: block; }
@@ -2314,12 +2411,14 @@ button:hover { border-color: var(--accent-border); background: var(--button-hove
 .refresh-btn.refreshing .icon { animation: spin .75s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .grid { display: grid; gap: 12px; }
-.kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 18px 0; }
+.kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 0 12px; }
 .card, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-.card { padding: 14px 16px; min-height: 104px; }
-.card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-.card .value { font-size: 28px; font-weight: 720; margin-top: 8px; font-variant-numeric: tabular-nums; }
-.card .sub { color: var(--muted); margin-top: 4px; font-size: 12px; }
+/* Stat tiles sit at the same weight as every other board's: the number leads,
+   the label and caption stay quiet, and nothing is padded out to a fixed height. */
+.card { padding: 12px 14px; }
+.card .label { color: var(--muted); font-size: 12px; line-height: 1.35; text-transform: uppercase; letter-spacing: .04em; }
+.card .value { font-size: 22px; font-weight: 700; margin-top: 4px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.card .sub { color: var(--muted); margin-top: 3px; font-size: 11px; line-height: 1.35; }
 .panel { padding: 18px; margin-top: 18px; overflow: hidden; }
 .panel-head { display: flex; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .panel h2 { margin: 0; font-size: 18px; }
@@ -2333,6 +2432,22 @@ button:hover { border-color: var(--accent-border); background: var(--button-hove
 .toolbar input, .toolbar select { border: 1px solid var(--line); border-radius: 6px; background: var(--button-bg); color: var(--text); padding: 7px 9px; min-width: 190px; }
 .segment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 18px; }
 .segment-grid .panel { margin-top: 0; height: 100%; }
+/* Folds — same affordance as curator's board: a quiet uppercase bar that turns
+   its caret when open. Breakdowns start closed so the Jobs page opens on the
+   job table alone rather than on eight stacked tables. */
+.fold { margin: 0; }
+.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
+  gap: 8px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel); font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--muted); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary:hover { color: var(--text); border-color: var(--accent-border); }
+.fold > summary .caret { transition: transform .15s ease; flex: 0 0 auto; }
+.fold[open] > summary .caret { transform: rotate(90deg); }
+.fold[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; color: var(--text); }
+.fold > summary .hint { margin-left: auto; text-transform: none; letter-spacing: 0;
+  font-weight: 500; font-size: 11.5px; color: var(--fg-faint); margin-bottom: 0; }
+.fold-body { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 10px 10px; padding: 14px; }
 .segment-panel h2 { font-size: 16px; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); }
@@ -2412,7 +2527,19 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .subscore-matrix-table td.num { text-align: right; }
 .subscore-matrix-table th.score-sep, .subscore-matrix-table td.score-sep { border-right: 2px solid var(--line); }
 .subscore-matrix-table th.segment-sort { cursor: pointer; }
-.traj-layout { display: grid; grid-template-columns: minmax(300px, 460px) minmax(0, 1fr); gap: 14px; align-items: start; }
+/* The sampled list owns the page; the detail opens in a dialog, the way
+   curator's task samples do, so the panel is not permanently half-empty. */
+.traj-layout { display: block; }
+.traj-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+.traj-row:last-child { border-bottom: 0; }
+.traj-row .traj-card { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
+.traj-open { flex: 0 0 auto; align-self: stretch; border: 0; border-left: 1px solid var(--line);
+  border-radius: 0; background: var(--panel); color: var(--muted); padding: 0 14px;
+  font-size: 12px; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.traj-open:hover { color: var(--ink); background: var(--button-hover); border-color: var(--line); }
+.traj-box { width: min(1160px, 95vw); height: min(760px, 88vh); max-height: none; }
+.traj-body { padding: 0; min-height: 0; flex: 1; overflow: auto; }
+.traj-body .traj-view { border: 0; border-radius: 0; min-height: 0; padding: 22px 28px 26px; }
 .traj-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; max-height: 760px; overflow-y: auto; background: var(--panel); }
 .traj-card { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 11px 12px; background: var(--panel); }
 .traj-card.active { background: var(--active-row); }
@@ -2473,7 +2600,6 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
   .update-status { white-space: normal; flex-basis: 100%; }
   .content { padding: 16px; }
   .header-top { display: block; }
-  .theme-toggle { margin-top: 10px; }
   .kpis, .status-grid, .samples-layout, .split-layout, .traj-layout { grid-template-columns: 1fr; }
   .panel-head { display: block; }
   .mini-bar-row { grid-template-columns: 1fr; gap: 4px; }
@@ -2699,6 +2825,7 @@ def render_html(
         ("Harbor job dir", harbor_jobs_dir, None),
         ("Run index", index_path, None),
     ]
+    rubric_html = render_rubric_html()
     info_html = (
         "<div class='sub'>Sources</div><table>"
         + "".join(
@@ -2711,6 +2838,10 @@ def render_html(
         + "</table>"
         f"<div class='sub'>Refresh</div><table><tr><td>interval</td>"
         f"<td class='mono'>{refresh_seconds}s</td><td></td></tr></table>"
+        "<div class='sub'>Exports</div><table><tr><td>summary JSON</td>"
+        "<td class='mono'>data/summary.json</td>"
+        "<td><button class='copy-btn' data-copy='data/summary.json'>Copy</button></td>"
+        "</tr></table>"
     )
 
     missing_jobs = sum(1 for j in jobs_sorted if not j.get("source_exists", True))
@@ -2786,7 +2917,7 @@ def render_html(
         "<th class='sortable'>Job</th><th class='sortable'>Scaffold</th><th class='sortable'>Status</th><th>Progress</th>"
         "<th class='num sortable'>Instances</th><th class='num sortable'>Passed</th><th class='num sortable'>Errors</th>"
         f"<th class='num sortable'>Pass Rate</th><th class='num sortable' title='{difficulty_title}'>Task Difficulty</th>"
-        "<th class='num sortable'>Valid Trajs</th><th class='num sortable'>Tokens</th>"
+        "<th class='num sortable'>Valid Trajectories</th><th class='num sortable'>Tokens</th>"
         "</tr></thead>"
         f"<tbody>{job_segment_rows or '<tr><td colspan=\"11\" class=\"empty\">No job segments available.</td></tr>'}</tbody>"
         "</table></div></section>"
@@ -2799,7 +2930,7 @@ def render_html(
         '<th class="num segment-sort" data-segment-sort="errors">Errors</th>'
         '<th class="num segment-sort" data-segment-sort="pass_rate">Pass Rate</th>'
         f'<th class="num segment-sort" data-segment-sort="task_difficulty_avg" title="{difficulty_title}">Task Difficulty</th>'
-        '<th class="num segment-sort" data-segment-sort="quality_records">Valid Trajs</th>'
+        '<th class="num segment-sort" data-segment-sort="quality_records">Valid Trajectories</th>'
         '<th class="num segment-sort" data-segment-sort="avg_quality_tokens">Tokens</th>'
         '</tr></thead>'
     )
@@ -2808,12 +2939,14 @@ def render_html(
         "",
     )
     segment_panels = job_segment_panel + "".join(
-        '<section class="panel segment-panel">'
-        f'<div class="panel-head"><div><h2>{html.escape(SEGMENT_LABELS.get(dim, dim))}</h2>'
-        f'<p class="hint">Segmented by {html.escape(SEGMENT_LABELS.get(dim, dim))}.</p></div></div>'
+        '<details class="fold segment-fold">'
+        f'<summary>{CARET_SVG}{html.escape(SEGMENT_LABELS.get(dim, dim))}'
+        f'<span class="hint">pass rate, difficulty and token totals per '
+        f'{html.escape(SEGMENT_LABELS.get(dim, dim).lower())}</span></summary>'
+        '<div class="fold-body">'
         f'<div class="table-wrap"><table class="segment-table" data-segment-dim="{html.escape(dim)}">'
         f'{difficulty_segment_header if dim == "difficulty" else segment_header}<tbody data-segment-rows="{html.escape(dim)}"></tbody></table></div>'
-        '</section>'
+        "</div></details>"
         for dim in segment_dims if dim != "job"
     )
     status_error = status.get("_error")
@@ -2869,9 +3002,9 @@ def render_html(
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-lockup">
-        <div class="brand-mark" aria-hidden="true">SWE</div>
+        <div class="brand-mark" aria-hidden="true">LF</div>
         <div class="brand-title">
-          <h1>tracer</h1>
+          <h1>Tracer Dashboard</h1>
         </div>
       </div>
     </div>
@@ -2881,11 +3014,6 @@ def render_html(
       <button class="nav-item" data-page="trajectories"><span class="nav-icon">{icon_trajectories}</span><span class="nav-label">Trajectories</span></button>
       <button class="nav-item" data-page="operations"><span class="nav-icon">{icon_operations}</span><span class="nav-label">Operations</span></button>
     </nav>
-    <div class="side-meta">
-      <p><strong>Jobs</strong><br><code>{html.escape(str(jobs_dir))}</code></p>
-      <p><strong>SFT</strong><br><code>{html.escape(str(sft_dir))}</code></p>
-      <p><strong>Harbor</strong><br><code>{html.escape(str(harbor_jobs_dir))}</code></p>
-    </div>
   </aside>
   <div class="main-shell">
     <div class="topbar">
@@ -2895,12 +3023,34 @@ def render_html(
       </div>
       <div class="topbar-actions">
         <span class="update-status">Updated {html.escape(now_str)} &middot; refresh {refresh_seconds}s</span>
-        <button class="copy-btn" data-copy="data/summary.json">Copy summary</button>
+        <button id="metricsToggle" class="icon-btn" type="button" aria-label="Trajectory scoring rubric" title="How the trajectory quality score is computed">{ICON_METRICS}</button>
         <button id="infoToggle" class="icon-btn" type="button" aria-label="Dashboard info" title="What this board is reading">{ICON_INFO}</button>
         <button id="refreshNow" class="icon-btn refresh-btn" type="button" aria-label="Refresh dashboard" title="Refresh dashboard">{icon_refresh}</button>
         <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="Toggle black and white theme" title="Toggle theme"><span class="theme-moon">{icon_moon}</span><span class="theme-sun">{icon_sun}</span></button>
       </div>
     </div>
+<div class="modal" id="trajPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box traj-box">
+    <div class="modal-head">
+      <div><h3 id="trajPanelTitle">Trajectory</h3>
+        <div class="sub">metrics, preview and the full turn-by-turn trace when available</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body traj-body">
+      <div id="trajView" class="traj-view empty">Select a trajectory to inspect.</div>
+    </div>
+  </div>
+</div>
+<div class="modal" id="metricsPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3>Trajectory scoring rubric</h3>
+        <div class="sub">how the quality score on this board is computed</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">{rubric_html}</div>
+  </div>
+</div>
 <div class="modal" id="infoPanel" role="dialog" aria-modal="true" hidden>
   <div class="modal-box">
     <div class="modal-head">
@@ -2914,7 +3064,7 @@ def render_html(
 <main class="content">
   <section id="overview" class="section active" data-title="Overview" data-subtitle="Monitor generation health, pass rate, quality score, and data coverage.">
     <div class="grid kpis">
-    <div class="card"><div class="label">Valid Trajs</div>
+    <div class="card"><div class="label">Valid Trajectories</div>
       <div class="value">{fmt_num(coverage.get('valid_trajs'))}</div>
       <div class="sub">for SFT in LF format</div></div>
     <div class="card"><div class="label">Valid Tokens</div>
@@ -3017,11 +3167,8 @@ def render_html(
         </select>
       </div>
       <div class="traj-layout">
-        <div>
-          <div class="card-title">Sampled Trajectories <span id="trajSampleInfo" class="hint"></span></div>
-          <div id="trajList" class="traj-list step-list"></div>
-        </div>
-        <div id="trajView" class="traj-view empty">Select a trajectory card to inspect metrics, preview text, and full turn-by-turn trace when embedded or available through R2.</div>
+        <div class="card-title">Sampled Trajectories <span id="trajSampleInfo" class="hint"></span></div>
+        <div id="trajList" class="traj-list step-list"></div>
       </div>
     </section>
   </section>
@@ -3620,11 +3767,16 @@ function renderTrajectoryList() {{
   if (info) info.textContent = `${{cards.length}} / ${{total}} shown`;
   if (!cards.length) {{
     list.innerHTML = '<div class="empty">No trajectory cards match the current filters.</div>';
-    $('#trajView').innerHTML = 'No trajectory selected.';
+    const view = $('#trajView');
+    if (view) view.innerHTML = 'No trajectory selected.';
     currentTraj = null;
     return;
   }}
+  // A <button> cannot legally contain another <button>, so the row is a wrapper
+  // holding the card and its Inspect control side by side — same shape curator
+  // uses for its Samples rows.
   list.innerHTML = cards.map((card, idx) => `
+    <div class="traj-row">
     <button class="step-row traj-card ${{idx === 0 ? 'active' : ''}}" data-id="${{escapeHtml(card.id)}}">
       <span class="id">#${{idx + 1}}</span>
       <span class="step-row-body">
@@ -3640,9 +3792,25 @@ function renderTrajectoryList() {{
         <span class="traj-card-meta">${{escapeHtml(trajSourceName(card))}} · ${{escapeHtml(card.language || 'unknown')}} · ${{escapeHtml(card.model || '-')}}</span>
       </span>
     </button>
+    <button class="traj-open" type="button" title="Inspect this trajectory">Inspect</button>
+    </div>
   `).join('');
-  $$('.traj-card', list).forEach((btn, idx) => btn.addEventListener('click', () => selectTrajectory(cards[idx], btn)));
+  $$('.traj-card', list).forEach((btn, idx) => btn.addEventListener('click', () => openTrajectory(cards[idx], btn)));
+  $$('.traj-open', list).forEach((btn, idx) => btn.addEventListener('click', () => {{
+    openTrajectory(cards[idx], $$('.traj-card', list)[idx]);
+  }}));
+  // Prime the detail without opening the dialog, so the first Inspect is instant.
   selectTrajectory(cards[0], $('.traj-card', list));
+}}
+
+// Selecting renders; opening also raises the dialog. Keeping them apart lets the
+// list preselect a card on every re-render without popping a dialog open.
+function openTrajectory(card, button) {{
+  selectTrajectory(card, button);
+  const panel = document.getElementById('trajPanel');
+  const title = document.getElementById('trajPanelTitle');
+  if (title) title.textContent = card.instance_id || card.task_name || card.id || 'Trajectory';
+  if (panel) panel.hidden = false;
 }}
 
 function scoreBreakdown(card) {{
@@ -4101,16 +4269,39 @@ function selectSample(sample, button) {{
   `;
 }}
 
+document.addEventListener('keydown', event => {{
+  if (event.key !== 'Escape') return;
+  for (const id of ['infoPanel', 'metricsPanel', 'trajPanel']) {{
+    const panel = document.getElementById(id);
+    if (panel) panel.hidden = true;
+  }}
+}});
+
 document.addEventListener('click', event => {{
-  const info = document.getElementById('infoPanel');
-  const infoBtn = document.getElementById('infoToggle');
-  if (info && infoBtn) {{
-    if (infoBtn.contains(event.target)) {{ info.hidden = !info.hidden; return; }}
-    // the backdrop is the panel itself; clicks inside .modal-box must not close it
-    if (event.target === info || (event.target.hasAttribute && event.target.hasAttribute('data-close'))) {{
-      info.hidden = true;
+  // Every dialog behaves the same: its button toggles it, and the backdrop or the
+  // close control dismisses it. Dismissal resolves against the dialog the click
+  // actually happened in — matching on data-close alone would close whichever
+  // dialog this loop happened to reach first.
+  const PANELS = [['infoPanel', 'infoToggle'], ['metricsPanel', 'metricsToggle'], ['trajPanel', null]];
+  for (const [panelId, buttonId] of PANELS) {{
+    const panel = document.getElementById(panelId);
+    const button = buttonId && document.getElementById(buttonId);
+    if (!panel || !button) continue;
+    if (button.contains(event.target)) {{
+      const opening = panel.hidden;
+      for (const [otherId] of PANELS) {{
+        const other = document.getElementById(otherId);
+        if (other) other.hidden = true;
+      }}
+      panel.hidden = !opening;
       return;
     }}
+  }}
+  const owner = event.target.closest ? event.target.closest('.modal') : null;
+  if (owner && (event.target === owner
+                || (event.target.hasAttribute && event.target.hasAttribute('data-close')))) {{
+    owner.hidden = true;
+    return;
   }}
   const nav = event.target.closest('.nav-item');
   if (nav) setPage(nav.dataset.page);

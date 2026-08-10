@@ -17,7 +17,7 @@ function fmtRuntime(sec: number): string {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+    <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
       <span className="text-xs text-slate-400 font-medium">{label}</span>
       <div className="text-2xl font-semibold text-slate-100 font-mono mt-2 truncate">{value}</div>
     </div>

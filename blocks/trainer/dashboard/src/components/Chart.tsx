@@ -262,7 +262,7 @@ export default function ChartPanel({
 
   if (available.length === 0) {
     return (
-      <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+      <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
         <h3 className="text-sm font-medium text-slate-300 mb-2">{title}</h3>
         <div className="flex items-center justify-center text-slate-500 text-sm" style={{ height }}>
           No data yet
@@ -275,7 +275,7 @@ export default function ChartPanel({
   const ChartComponent = useComposed ? ComposedChart : LineChart;
 
   return (
-    <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+    <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-slate-300">{title}</h3>
         <div className="flex items-center gap-3">
@@ -431,7 +431,7 @@ export function MinMaxChart({
 
   if (available.length === 0) {
     return (
-      <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+      <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
         <h3 className="text-sm font-medium text-slate-300 mb-2">{title}</h3>
         <div className="flex items-center justify-center text-slate-500 text-sm" style={{ height }}>
           No data yet
@@ -441,7 +441,7 @@ export function MinMaxChart({
   }
 
   return (
-    <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4">
+    <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4">
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-sm font-medium text-slate-300">{title}</h3>
         <div className="flex items-center gap-3">

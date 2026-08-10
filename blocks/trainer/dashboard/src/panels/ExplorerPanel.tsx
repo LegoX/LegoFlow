@@ -100,7 +100,7 @@ export default function ExplorerPanel({ data, availableKeys }: Props) {
       </div>
 
       {/* Metric browser */}
-      <div className="rounded-xl bg-slate-900/80 border border-slate-800/60 p-4 mb-6">
+      <div className="rounded-[10px] bg-slate-900/80 border border-slate-800/60 p-4 mb-6">
         <div className="relative mb-3">
           <Search
             size={14}
@@ -229,7 +229,7 @@ export default function ExplorerPanel({ data, availableKeys }: Props) {
       )}
 
       {charts.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-700 p-8 text-center">
+        <div className="rounded-[10px] border border-dashed border-slate-700 p-8 text-center">
           <TrendingUp size={24} className="mx-auto text-slate-600 mb-2" />
           <p className="text-sm text-slate-500">
             Select metrics above and click &quot;Plot&quot; to create custom

@@ -15,7 +15,8 @@ const State = {
   trialDetail: null,
   trajectory: null,
   activeStep: 0,
-  theme: localStorage.getItem("harbor.theme") || "dark",
+  theme: "light",
+  jobsDir: "",
   lang: localStorage.getItem("harbor.lang") || "en",
   charts: [],
   chartTimers: [],
@@ -46,7 +47,6 @@ const I18N = {
     reload: "Reload",
     toggleTheme: "Toggle theme",
     switchLanguage: "切换到中文",
-    langButton: "中",
   },
   zh: {
     jobs: "任务",
@@ -58,7 +58,6 @@ const I18N = {
     reload: "刷新",
     toggleTheme: "切换主题",
     switchLanguage: "Switch to English",
-    langButton: "EN",
   },
 };
 
@@ -667,6 +666,13 @@ function fmtDateTime(value) {
 
 function setStatus(msg) { $("#status").textContent = msg || ""; }
 
+// When the board last pulled data. This page loads on demand rather than on a
+// timer, so it reports the fetch time and says so — no interval to quote.
+function markUpdated() {
+  const el = $("#update-status");
+  if (el) el.textContent = `Updated ${fmtDateTime(new Date())}`;
+}
+
 function persistCompare() {
   localStorage.setItem("harbor.compare", JSON.stringify([...State.compareSet]));
   $("#compare-count").textContent = State.compareSet.size;
@@ -717,6 +723,7 @@ function applyLanguage() {
       infoBody.appendChild(sub);
 
       const rows = [
+        ["jobs dir", State.jobsDir || "\u2014"],
         ["jobs indexed", State.jobs.length ? String(State.jobs.length) : "\u2014"],
         ["job detail loaded", State.jobsDetail],
         ["served from", location.origin + location.pathname],
@@ -751,10 +758,9 @@ function applyLanguage() {
   }
 
   const langToggle = $("#lang-toggle");
-  if (langToggle) {
-    langToggle.textContent = t("langButton");
-    langToggle.title = t("switchLanguage");
-  }
+  // The button carries an SVG, same as the other boards' — only the tooltip is
+  // localised; writing textContent here would wipe the icon.
+  if (langToggle) langToggle.title = t("switchLanguage");
 }
 
 // -- routing ------------------------------------------------------------------
@@ -799,11 +805,12 @@ function applyJobsPayload(data, detail) {
     State.jobs = data.jobs || [];
     State.jobsDetail = detail;
   }
+  if (data.jobs_dir) State.jobsDir = data.jobs_dir;
   renderJobList();
-  if (detail === "full") {
-    setStatus(`${State.jobs.length} jobs · ${data.jobs_dir}`);
-  } else if (State.jobs.length > 0) {
-    setStatus(`${State.jobs.length} jobs · sidebar ready`);
+  markUpdated();
+  // The directory itself lives in the info panel; the topbar only carries the count.
+  if (detail === "full" || State.jobs.length > 0) {
+    setStatus(`${State.jobs.length} jobs`);
   }
 }
 
@@ -2600,15 +2607,15 @@ function renderObservation(obs) {
 // -- init ---------------------------------------------------------------------
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // theme
-  document.documentElement.setAttribute("data-theme", State.theme);
+  // Theme — the inline head script already painted the right mode; adopt what it
+  // resolved rather than re-deciding here, so the two can never disagree. Which
+  // glyph shows is CSS's job (.theme-toggle), as on every other block's board.
+  State.theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   $("#theme-toggle").addEventListener("click", () => {
     State.theme = State.theme === "dark" ? "light" : "dark";
-    localStorage.setItem("harbor.theme", State.theme);
+    localStorage.setItem("evaluator-theme", State.theme);
     document.documentElement.setAttribute("data-theme", State.theme);
-    $("#theme-toggle").textContent = State.theme === "dark" ? "☀" : "☾";
   });
-  $("#theme-toggle").textContent = State.theme === "dark" ? "☀" : "☾";
   applyLanguage();
   $("#lang-toggle").addEventListener("click", async () => {
     State.lang = State.lang === "en" ? "zh" : "en";
