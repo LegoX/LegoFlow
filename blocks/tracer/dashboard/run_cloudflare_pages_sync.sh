@@ -14,8 +14,10 @@ PUBLIC_DIR="${PUBLIC_DIR:-$RUN_DIR/site}"
 CACHE_FILE="${CACHE_FILE:-$RUN_DIR/.cache/.progress_monitor_cache.json}"
 ENV_FILE="${ENV_FILE:-$HOME_DIR/.config/trajgen_progress_cloudflare.env}"
 
-PROJECT_NAME="${PROJECT_NAME:-swe-tracer-databoard}"
-BRANCH_NAME="${BRANCH_NAME:-tracer}"
+# The Pages project is `legoflow-<block>`, decided by scripts/publish_dashboard.sh.
+# It is an account-local identifier, not the URL: the URL is read back after the
+# deploy, because Cloudflare suffixes a name whose subdomain is already taken.
+BRANCH_NAME="${BRANCH_NAME:-main}"
 LOOP_SECONDS="${LOOP_SECONDS:-3600}"
 PORT="${PORT:-8770}"
 # wrangler v4+ requires Node.js >= 22; pin to v3 so it also runs on Node 18.
@@ -160,6 +162,11 @@ fi
 # runtime_info.input.cloudflare) for anything $ENV_FILE did not provide. Values
 # already exported above win, so a per-block env file still overrides the shared
 # config for this block.
+PUBLISH_LIB="$BLOCK_DIR/../../scripts/publish_dashboard.sh"
+if [[ -f "$PUBLISH_LIB" ]]; then
+  # shellcheck disable=SC1090
+  source "$PUBLISH_LIB"
+fi
 SHARED_CREDS="$BLOCK_DIR/../../scripts/shared_credentials.sh"
 if [[ -f "$SHARED_CREDS" ]]; then
   CF_LEGACY_ENV_FILE="$ENV_FILE"
@@ -250,20 +257,10 @@ while true; do
 
   upload_r2_trajectories || log "R2 upload failed; deploying static dashboard anyway"
 
-  if [[ "$PROJECT_READY" -eq 0 ]]; then
-    log "ensuring Cloudflare Pages project $PROJECT_NAME exists"
-    wrangler pages project create "$PROJECT_NAME" \
-      --production-branch "$BRANCH_NAME" >/tmp/tracer_pages_project_create.log 2>&1 || true
-    PROJECT_READY=1
-  fi
-
-  log "deploying dashboard to Cloudflare Pages project $PROJECT_NAME"
-  if ! wrangler pages deploy "$PUBLIC_DIR" \
-    --project-name "$PROJECT_NAME" \
-    --branch "$BRANCH_NAME" \
-    --commit-dirty=true \
-    --commit-message "Update tracer progress dashboard $(date -u '+%Y-%m-%dT%H:%M:%SZ')"; then
-    log "Cloudflare Pages deploy failed; will retry after $LOOP_SECONDS seconds"
+  # Publishes to Cloudflare Pages when credentials resolve, or over a temporary
+  # cloudflared tunnel when they do not, and reports the address either way.
+  if ! publish_dashboard tracer "$PUBLIC_DIR" "$PORT"; then
+    log "publish failed; will retry after $LOOP_SECONDS seconds"
     sleep "$LOOP_SECONDS"
     continue
   fi

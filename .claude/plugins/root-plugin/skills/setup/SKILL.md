@@ -86,8 +86,8 @@ stay `""` there and come from the environment instead.
      node is missing, and if that is the situation, put that bin dir on `PATH`
      in the env file rather than installing a second node.
    - Write `account_id` (not a secret) into root `config.yaml` →
-     `runtime_info.input.cloudflare.account_id`, plus
-     `pages_project_prefix` if they want one.
+     `runtime_info.input.cloudflare.account_id`. Project names are not
+     configurable: each block's dashboard publishes to `legoflow-<block>`.
    - Have the user supply `CLOUDFLARE_API_TOKEN` in their own environment, or
      in whichever per-block env file they already use (curator:
      `swegen_progress_cloudflare.env`, tracer:

@@ -79,14 +79,6 @@ runtime_info:
       java: { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
       rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16, max_verified_tasks: 128 } }
 
-    # The dashboard monitoring path, displaying the progress of PR collection and task creation.
-    # name: path — each entry is one batch. Absolute, or relative to this file.
-    dashboard:
-      prs:
-        collected_prs: /absolute/path/to/curator/artifacts/collected_prs
-      tasks:
-        swe_tasks_py: /absolute/path/to/curator/artifacts/swe_tasks/py-cc
-
   output:
     swe_tasks_dir:
       path: artifacts/swe_tasks

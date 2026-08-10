@@ -27,7 +27,6 @@ runtime_info:
     cloudflare:
       account_id: ""
       api_token: ""
-      pages_project_prefix: "legoflow"
     docker:
       registry: ""            # "" = docker.io
       username: ""

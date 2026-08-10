@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Check that a directory really holds a list of Harbor tasks.
 
-A wrong path is the easy mistake to make in
-`config.yaml -> runtime_info.input.dashboard.tasks`, and its symptom is a board
+A stray directory under `artifacts/swe_tasks/` — or a symlinked-in dataset with a
+different shape — is the easy mistake to make, and its symptom is a board
 that renders fine but reports zero — which looks like "we have no tasks" rather
 than "you pointed me at the wrong place". This tells the two apart.
 

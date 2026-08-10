@@ -33,6 +33,7 @@ from task_toml import collect_task_dim, read_verified_ids  # noqa: E402
 
 DASHBOARD_ROOT = Path(__file__).parent
 BLOCK_ROOT = DASHBOARD_ROOT.parent
+BLOCK_DIR = BLOCK_ROOT
 CONFIG_PATH = BLOCK_ROOT / "config.yaml"
 DEFAULT_OUTPUT = DASHBOARD_ROOT / "site" / "index.html"
 
@@ -44,52 +45,55 @@ def _resolve(path_str: str, base: Path) -> Path:
     return path if path.is_absolute() else (base / path)
 
 
-def load_dashboard_config(config_path: Path = CONFIG_PATH) -> dict[str, Any]:
-    """Resolve the monitored task batches and PR-collection directories.
+def discover_sources(block_dir: Path = BLOCK_DIR) -> dict[str, Any]:
+    """Resolve what the board reads. Fixed locations, no configuration.
 
-    `tasks` and `prs` are both `name: path` maps. A task path must be a list of
-    harbor tasks; a PR path is a collection directory whose per-language files are
-    discovered automatically — one entry covers every language.
+    * PRs   — `artifacts/collected_prs/`, one collection directory whose
+      per-language files are discovered inside.
+    * Tasks — every immediate child of `artifacts/swe_tasks/`. Each child is one
+      **batch**, named by its directory (`py-cc`, `go-cc`, ...), and must hold one
+      harbor task per immediate child of its own.
+
+    A third-party dataset joins the board by being symlinked in as another child
+    of `swe_tasks/`; symlinks are followed, so it is listed like any other batch.
+    """
+    artifacts = block_dir / "artifacts"
+    tasks_root = artifacts / "swe_tasks"
+
+    batches: list[dict[str, Any]] = []
+    if tasks_root.is_dir():
+        for child in sorted(tasks_root.iterdir(), key=lambda c: c.name):
+            # is_dir() follows symlinks, which is what makes a linked-in dataset
+            # indistinguishable from a locally generated pool.
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            batches.append({
+                "name": child.name,
+                "path": child.resolve(),
+                "external": child.is_symlink(),
+            })
+
+    prs = [{"name": "collected_prs", "path": artifacts / "collected_prs", "external": False}]
+    return {"batches": batches, "prs": prs, "tasks_root": tasks_root,
+            "pr_filters": _pr_filters(block_dir)}
+
+
+def _pr_filters(block_dir: Path) -> dict[str, Any]:
+    """Collection thresholds, shown on the board as configuration.
+
+    These are still real inputs to the collector, so they keep coming from
+    config.yaml — unlike the source paths, which are now fixed.
     """
     try:
         import yaml
     except ModuleNotFoundError:
-        raise SystemExit("PyYAML is required: pip install pyyaml")
+        return {}
     try:
-        cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    except OSError as exc:
-        raise SystemExit(f"cannot read {config_path}: {exc}")
-
-    base = config_path.parent.resolve()
+        cfg = yaml.safe_load((block_dir / "config.yaml").read_text(encoding="utf-8")) or {}
+    except OSError:
+        return {}
     inp = ((cfg.get("runtime_info") or {}).get("input") or {})
-    dash = inp.get("dashboard") or {}
-
-    def entries(section: Any) -> list[dict[str, Any]]:
-        out = []
-        for name, raw in (section or {}).items():
-            # `name: path`, or `name: {path: ..., external: true}` for imported
-            # datasets that have no PR provenance.
-            if isinstance(raw, dict):
-                path_str, external = str(raw.get("path") or ""), bool(raw.get("external"))
-            else:
-                path_str, external = str(raw or ""), False
-            if path_str.strip():
-                out.append({"name": str(name), "path": _resolve(path_str, base),
-                            "external": external})
-        return out
-
-    prs = entries(dash.get("prs"))
-    if not prs:
-        # fall back to the collector's own output dir rather than configuring it twice
-        legacy = str((inp.get("pr_collection") or {}).get("output_dir") or "").strip()
-        if legacy:
-            prs = [{"name": "collected_prs", "path": _resolve(legacy, base), "external": False}]
-
-    return {
-        "batches": entries(dash.get("tasks")),
-        "prs": prs,
-        "pr_filters": (inp.get("pr_collection") or {}).get("filters") or {},
-    }
+    return (inp.get("pr_collection") or {}).get("filters") or {}
 
 
 def percentile(values: list[float], q: float) -> float:
@@ -780,7 +784,7 @@ def render_rate_bars(rows: list[tuple[str, int, int]]) -> str:
 
 
 def render_info(batches: list[dict[str, Any]], prs: dict[str, Any],
-                filters: dict[str, Any], config_path: Path) -> str:
+                filters: dict[str, Any], tasks_root: Path) -> str:
     """What the board read, named exactly as config.yaml names it, so a surprising
     number can be traced back to a path without leaving the page."""
     def rows(items):
@@ -806,7 +810,9 @@ def render_info(batches: list[dict[str, Any]], prs: dict[str, Any],
     ) or "<tr><td colspan='3'>none</td></tr>"
 
     return (
-        f"<div class='mini'>config: {html.escape(str(config_path))}</div>"
+        f"<div class='mini'>batches are the subdirectories of "
+        f"{html.escape(str(tasks_root))}; a symlink there joins the board like any "
+        f"other batch</div>"
         "<div class='sub'>Task batches</div>"
         f"<table>{task_rows}</table>"
         "<div class='sub'>PR collection</div>"
@@ -1208,9 +1214,9 @@ def render_html(
     prs: dict[str, Any] | None = None,
     filters: dict[str, Any] | None = None,
     samples: dict[str, Any] | None = None,
-    config_path: Path = CONFIG_PATH,
+    tasks_root: Path = BLOCK_DIR / "artifacts" / "swe_tasks",
 ) -> str:
-    info_html = render_info(batches, prs or {}, filters or {}, config_path)
+    info_html = render_info(batches, prs or {}, filters or {}, tasks_root)
     filter_help = render_filter_help()
     prs = prs or {"exists": False, "dir": "", "languages": {}, "total_prs": 0, "total_repos": 0}
     combined = combine_datasets(batches)
@@ -1599,22 +1605,26 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Generate the curator databoard")
     parser.add_argument("--output-html", type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--config", type=Path, default=CONFIG_PATH,
-                        help="block config.yaml providing runtime_info.input.dashboard")
+    parser.add_argument("--block-dir", type=Path, default=BLOCK_DIR,
+                        help="curator block root holding artifacts/ (default: this block)")
     parser.add_argument("--report-only", action="store_true",
                         help="print the source report and exit without rendering")
     args = parser.parse_args()
 
-    cfg = load_dashboard_config(args.config)
+    cfg = discover_sources(args.block_dir)
+    tasks_root = cfg["tasks_root"]
     if not cfg["batches"]:
         raise SystemExit(
-            "no batches configured — set runtime_info.input.dashboard.tasks "
-            f"in {args.config}"
+            f"no task batches found under {tasks_root}\n"
+            "Each immediate subdirectory there is one batch (py-cc, go-cc, ...).\n"
+            "To put a third-party dataset on the board, symlink it in:\n"
+            f"  ln -s /path/to/dataset {tasks_root}/<name>"
         )
 
     print("=" * 70)
     print("curator dashboard sources")
     print("=" * 70)
+    print(f"  task batches           {tasks_root}/*")
 
     batches = []
     problems: list[str] = []
@@ -1630,6 +1640,8 @@ def main():
         state = "" if b["exists"] else "  [PATH NOT FOUND]"
         if layout["status"] not in {"ok", "partial"}:
             state = f"  [LAYOUT: {layout['status'].upper()}]"
+        elif b.get("external"):
+            state = "  [symlinked dataset]"
         langs = ", ".join(f"{k}={v}" for k, v in list(b["languages"].items())[:6]) or "-"
         print(f"  {b['name']:22s} {b['path']}{state}")
         stale = (f" · {b['stale_verified']:,} verified ids no longer on disk"
@@ -1662,7 +1674,8 @@ def main():
         print("(each with task.toml + instruction.md):")
         for line in problems:
             print("  " + line.replace("\n", "\n  "))
-        print("  Fix the paths in config.yaml before trusting these numbers.")
+        print("  A batch is a directory of harbor tasks. Remove or fix the flagged")
+        print("  entry under artifacts/swe_tasks/ before trusting these numbers.")
     print("=" * 70)
 
     if args.report_only:
@@ -1671,7 +1684,7 @@ def main():
     samples = write_samples(batches, args.output_html.parent)
     print(f"  samples                {sum(v['count'] for v in samples.values())} task(s) cached "
           f"across {len(samples)} batch(es)")
-    render_html(batches, args.output_html, prs, cfg["pr_filters"], samples, args.config)
+    render_html(batches, args.output_html, prs, cfg["pr_filters"], samples, tasks_root)
     print(f"✓ generated: {args.output_html}  ({args.output_html.stat().st_size/1024:.0f} KB)")
     print("=" * 70)
     return 1 if problems else 0

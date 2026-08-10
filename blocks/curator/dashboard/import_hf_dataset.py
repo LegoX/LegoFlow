@@ -4,7 +4,7 @@
 The dashboard reads `task.toml`, so the way to put an open-source dataset on the
 board is to give it the same on-disk shape as a generated one — not a second data
 path. After importing, add the output directory to
-`config.yaml -> runtime_info.input.dashboard.tasks` and it becomes another batch
+symlinked into `artifacts/swe_tasks/` and it becomes another batch
 alongside the pipeline's own.
 
     <out>/<instance_id>/task.toml        [metadata] tags / difficulty / category
@@ -24,7 +24,7 @@ Two stages, matching how the evaluator prepares benchmark datasets
      Resumable: already-tagged tasks are skipped. Until it runs, the board shows
      these tasks as untagged rather than guessing.
 
-These datasets carry no PR provenance, so mark them `external: true` in the config
+These datasets carry no PR provenance; being a symlink is what marks them external
 to keep them out of the PR → task funnel on the Collection view.
 """
 from __future__ import annotations
@@ -159,8 +159,9 @@ def main() -> None:
 
     print(f"wrote {written:,} tasks to {args.out} (skipped {skipped:,} without id/patch)")
     print("next: run the tagger over this directory to fill tags/category/scoring,")
-    print(f"      then add `{args.dataset}: {args.out}` under "
-          "runtime_info.input.dashboard.tasks with external: true")
+    print(f"      check it with: python3 dashboard/check_task_dir.py {args.out}")
+    print(f"      then link it onto the board: "
+          f"ln -s $(pwd)/{args.out} artifacts/swe_tasks/{args.dataset}")
 
 
 if __name__ == "__main__":

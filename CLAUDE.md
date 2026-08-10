@@ -73,7 +73,7 @@ The root `config.yaml` holds orchestration identity only (block roster, roles); 
 The root block consumes no external **pipeline** inputs — those are filled into each active block's `runtime_info.input`. The only exception is two optional, tree-wide infrastructure sections in the root config:
 
 **root** (`config.yaml` → `runtime_info.input`) — both default to all-empty, meaning "feature off":
-- `cloudflare.{account_id, api_token, pages_project_prefix}`: used by every block's dashboard publishing (`dashboard/run_cloudflare_pages_sync.sh`, `docs/deploy_cloudflare_pages.sh`)
+- `cloudflare.{account_id, api_token}`: used by every block's dashboard publishing (`dashboard/run_cloudflare_pages_sync.sh`, `docs/deploy_cloudflare_pages.sh`). Dashboards publish through `scripts/publish_dashboard.sh`: with credentials they go to the Pages project `legoflow-<block>` and the reachable URL is read back from the API (never built from the project name — a taken subdomain gets suffixed); without credentials they fall back to a temporary `*.trycloudflare.com` quick tunnel.
 - `docker.{registry, username, password, mirror}`: registry login used by `scripts/docker_login.sh` to lift the anonymous 100-pulls-per-6h-per-IP cap that otherwise breaks image pulls mid-job in curator/tracer/evaluator
 
 Every block reads these through `scripts/shared_credentials.sh`, which resolves each field as **env > root `config.yaml` > that block's legacy env file** (`~/.config/{legoflow-curator,trajgen,harbor_webui}_*_cloudflare.env`, still supported). `config.yaml` is git-tracked, so keep `api_token` / `password` empty there and supply them via `$CLOUDFLARE_API_TOKEN` / `$DOCKER_PASSWORD`. Missing credentials are always a WARN, never a FAIL — nothing in the core pipeline depends on them.

@@ -35,28 +35,30 @@ Collection statistics come from `artifacts/collected_prs/`:
 
 The large `{language}_prs.jsonl` payloads are deliberately not read.
 
-## Configuration
+## Sources
 
-`config.yaml → runtime_info.input.dashboard`:
+Nothing to configure. The board always reads two fixed locations under the block:
 
-```yaml
-    dashboard:
-      prs:
-        collected_prs: artifacts/collected_prs
-      tasks:
-        swe_tasks_py: artifacts/swe_tasks/py-cc
-        swe_tasks_go: artifacts/swe_tasks/go-cc
+| What | Where |
+| --- | --- |
+| PR collection | `artifacts/collected_prs/` |
+| Task batches | `artifacts/swe_tasks/*` — each immediate subdirectory is one batch |
+
+A batch's **name on the board is its directory name** (`py-cc`, `go-cc`, ...).
+Each batch must hold one harbor task per immediate child (`task.toml` +
+`instruction.md`). The PR directory needs no naming: every `{lang}_pr_ids.txt`
+and `filtering_report.md` inside is discovered automatically.
+
+To put a dataset the collector did not produce on the board, symlink it in:
+
+```bash
+ln -s "$(pwd)/artifacts/hf/<name>" artifacts/swe_tasks/<name>
 ```
 
-`tasks` and `prs` are both `name: path`. A **task** path is any directory holding a
-list of harbor tasks — there is no requirement that it be `merged_swe_tasks`. A
-**PR** path is a whole collection directory; every language inside is discovered
-automatically, so one entry normally covers all of them.
+Symlinks are followed, the link name becomes the batch name, and such batches are
+reported as `[symlinked dataset]` and kept out of the PR → task funnel.
 
-Each `name: path` entry is one **batch**, and must hold one harbor task per
-immediate child (`task.toml` + `instruction.md`). Paths are absolute or relative
-to `config.yaml`.
-
+Check a directory before linking it in:
 Check a path before configuring it:
 
 ```bash
@@ -78,21 +80,21 @@ then list them as a batch. `import_hf_dataset.py` knows `scale_swe`,
 
 ```bash
 python3 dashboard/import_hf_dataset.py scale_swe --out artifacts/hf/scale_swe
-python3 ../repos/swegen/tools/tag_task_metadata.py --tasks-dir artifacts/hf/scale_swe --jobs 64
+python3 ../repos/legoflow-curator/tools/tag_task_metadata.py --tasks-dir artifacts/hf/scale_swe --jobs 64
 ```
 
 The import writes `tags = [language]` only; the tagger fills area, topic, bug_class,
 category and scoring. Until it runs, those tasks show as untagged rather than
-guessed. Then add the batch with `external: true`:
+guessed. Then link it in:
 
-```yaml
-      datasets:
-      tasks:
-        scale_swe: {path: artifacts/hf/scale_swe, external: true}
+```bash
+python3 dashboard/check_task_dir.py artifacts/hf/scale_swe
+ln -s "$(pwd)/artifacts/hf/scale_swe" artifacts/swe_tasks/scale_swe
 ```
 
-`external` keeps them out of the PR → task funnel on Collection — they have no PR
-provenance, so counting them there would understate the pipeline's conversion rate.
+Being a symlink is what marks it external, which keeps it out of the PR → task
+funnel on Collection — these tasks have no PR provenance, so counting them there
+would understate the pipeline's conversion rate.
 They still appear on the Task List and in the Overview totals.
 
 ### Overlapping batches are expected
@@ -120,7 +122,7 @@ Deploy is a separate, explicit step:
 ```bash
 # from blocks/curator/dashboard/site/
 CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... \
-  npx wrangler@3 pages deploy . --project-name=swe-databoard --branch=main
+  source ../../../scripts/publish_dashboard.sh && publish_dashboard curator site
 ```
 
 ## Files
