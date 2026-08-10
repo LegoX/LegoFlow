@@ -29,7 +29,7 @@ see § Validation before changing any value.
 | Chart axis | `chart-axis` | `#c9c3b6` | `#4a423a` |
 | Chart tick label | `chart-tick` | `#6b6b66` | `#a9a297` |
 
-`#b3431f` is the docs' `--swe-live-accent`; `#fafaf7` / `#111111` / `#e6e3da` /
+`#b3431f` is the docs' `--legoflow-accent`; `#fafaf7` / `#111111` / `#e6e3da` /
 `#f1efe9` are its `--color-fd-background` / `-foreground` / `-border` / `-muted`.
 
 **The accent is UI chrome only** — buttons, links, active tabs, focus rings, the
