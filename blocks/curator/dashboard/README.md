@@ -1,48 +1,36 @@
-# legoflow-databoard
+# SWE Datasets Dashboard
 
 Generation and deployment code for the SWE **dataset analytics** dashboard at
-[legoflow-databoard.pages.dev](https://legoflow-databoard.pages.dev/). It
-compares five datasets along a common **difficulty** and **semantic-tag**
-schema. Metadata has two intentional sources: Curator-created tasks use their
-existing `task.toml`, while external datasets use the canonical dashboard
-tagger during preparation.
+[swe-databoard.pages.dev](https://swe-databoard.pages.dev/). It compares four
+datasets — the Curator self-made set plus three open-source sets — along a
+single, consistent axis: **difficulty** and **semantic tags** produced by the
+same pipeline for every task.
 
 ## Datasets
 
-`dataset_registry.py` is the single source of truth used by the exporters,
-pipeline, and renderer.
-
 | id | Display | Source |
 | --- | --- | --- |
-| `self_made` | LegoFlow Curator Instances | LegoFlow-SWE-Curator task directories or task tarballs |
+| `self_made` | LegoFlow-Instances | Curator `swegen-selfmade` (non-top5k 260301-260721 + top5k 260301-260622) |
 | `swe_rebench` | SWE-rebench | `nebius/SWE-rebench` |
-| `swe_rebench_v2` | SWE-rebench-V2 | `nebius/SWE-rebench-V2` |
 | `openswe_filtered` | OpenSWE-filtered | `SWE-Lego/openswe_filtered_for_rl` |
 | `scale_swe` | Scale-SWE | `AweAI-Team/Scale-SWE` |
 
 Each dataset lives under `datasets/<id>/` as:
 
 - `tasks.jsonl` — unified records `{instance_id, problem_statement, patch, ...}` (git-ignored, large)
-- `tags.jsonl` — one validated metadata record per task (git-ignored)
+- `tags.jsonl` — one metadata record per task produced by tagging (git-ignored)
 
 ## Pipeline
 
 ```text
-Curator task directory/tarball + task.toml
-  -> export_self_made.py
-  -> datasets/self_made/{tasks,tags}.jsonl              (no network or LLM)
-
-external exporter -> datasets/<external-id>/tasks.jsonl
-  -> ../repos/legoflow-curator/tools/tag_task_metadata.py
-  -> datasets/<external-id>/tags.jsonl                  (preparation only)
-
-validated datasets/*/tags.jsonl
-  -> progress_monitor_multi.py
-  -> site/index.html                                    (read-only render)
+export_self_made.py             -> datasets/self_made/tasks.jsonl   (from local HF tarballs)
+repos/swegen/tools/tag_task_metadata.py -> datasets/<id>/tags.jsonl (difficulty + 4 tags via LLM)
+progress_monitor_multi.py       -> site/index.html                 (multi-dataset HTML)
 ```
 
-The renderer never invokes a tagger or silently fills metadata. It fails on a
-missing, empty, malformed, or duplicate-containing `tags.jsonl`.
+Tagging is done by the **canonical** `tag_task_metadata.py`, which lives in the
+`swegen` submodule (`repos/swegen/tools/tag_task_metadata.py`) so the dashboard
+and the SWE-gen pipeline share one implementation.
 
 ### 1. Export each dataset to `datasets/<id>/tasks.jsonl`
 
@@ -51,46 +39,30 @@ differ per source:
 
 | Dataset | How `tasks.jsonl` is produced |
 | --- | --- |
-| `self_made` | `python3 export_self_made.py --source <task-dir-or-tarball>` — also writes `tags.jsonl` directly from every task's `task.toml` |
-| `swe_rebench` | `python3 export_swe_rebench.py` — downloads `nebius/SWE-rebench` from HuggingFace |
-| `swe_rebench_v2` | `python3 export_swe_rebench_v2.py` — downloads `nebius/SWE-rebench-V2` from HuggingFace |
+| `self_made` | `python3 export_self_made.py` — union of two local HF export tarballs under `~/SWE-gen/exports_hf/` |
 | `openswe_filtered` | `python3 export_openswe_filtered.py` — downloads `SWE-Lego/openswe_filtered_for_rl` from HuggingFace |
-| `scale_swe` | `python3 export_scale_swe.py` — downloads `AweAI-Team/Scale-SWE` from HuggingFace |
+| `swe_rebench` | Prepared externally from `nebius/SWE-rebench` (no export script in-repo); drop the normalized JSONL at `datasets/swe_rebench/tasks.jsonl` |
+| `scale_swe` | Prepared externally from `AweAI-Team/Scale-SWE` (no export script in-repo); drop the normalized JSONL at `datasets/scale_swe/tasks.jsonl` |
 
 All exporters normalize to the same record schema consumed by the tagger:
-`{instance_id, problem_statement, patch, test_patch, repo, language,
-dataset_source, metadata_source, metadata_schema_version}`.
+`{instance_id, problem_statement, patch, test_patch, repo, language, dataset_source}`.
 
-For `self_made`, every task must contain `instruction.md`, `solution/fix.patch`,
-and a valid `task.toml` with `metadata.difficulty`, four `metadata.tags`,
-`scoring.difficulty_score`, and `scoring.difficulty_label`. Directory trees and
-tarballs are both supported. Missing or invalid metadata aborts the export and
-lists every rejected task; there is no inference or fallback.
+### 2. Difficulty + tag generation
 
-### 2. External difficulty + tag preparation
-
-Only the four external datasets run the canonical tagger. Difficulty is a
-5-dimension weighted, log-scaled score (1-10 → easy/medium/hard). Tags are the
-4-tuple
+Difficulty scoring and tagging follow the harbor `scripts/task_analysis`
+methodology (see `docs`). Difficulty is a 5-dimension weighted, log-scaled
+score (1-10 → easy/medium/hard). Tags are the 4-tuple
 `[language, area, topic, bug_class]` generated by an LLM, where
 `area ∈ {backend, frontend, fullstack, cli, library, framework}`.
 
 ```bash
 # run from blocks/curator/dashboard/ ; --datasets-dir points the shared
 # tagger at this dashboard's datasets/ directory
-python3 ../repos/legoflow-curator/tools/tag_task_metadata.py \
-  --datasets-dir datasets --dataset swe_rebench --jobs 64 --retries 3
-python3 metadata_records.py \
-  --dataset swe_rebench --tags-file datasets/swe_rebench/tags.jsonl
+python3 ../repos/swegen/tools/tag_task_metadata.py \
+  --datasets-dir datasets --dataset all --jobs 64 --retries 3
 ```
 
-Repeat for `swe_rebench_v2`, `openswe_filtered`, and `scale_swe`, or use
-`run_pipeline.sh`. The second command adds `metadata_source`,
-`metadata_schema_version`, `scorer_provenance`, and `tagger_provenance` to the
-external tagger records; the pipeline runs it automatically. Self-made records
-carry equivalent provenance pointing to their original `task.toml` fields.
-
-Endpoint settings can be overridden with flags or environment variables:
+Defaults target the shared endpoint (override with flags or env vars):
 
 | Flag | Env | Default |
 | --- | --- | --- |
@@ -103,22 +75,19 @@ Endpoint settings can be overridden with flags or environment variables:
 The run is resumable: already-tagged `instance_id`s are skipped, and failed
 tasks are automatically retried at lower concurrency at the end.
 
-### 3. Validate and generate the dashboard
+### 3. Generate the dashboard
 
 ```bash
 python3 progress_monitor_multi.py --output-html site/index.html
 ```
-
-This command reads only the five prepared `tags.jsonl` files. It performs no
-network access, scoring, or tagging.
 
 ## Deploy to Cloudflare Pages
 
 ```bash
 cd site
 CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... \
-  npx wrangler@latest pages deploy . --project-name=legoflow-databoard --branch=main --commit-dirty=true
+  npx wrangler@latest pages deploy . --project-name=swe-databoard --branch=main --commit-dirty=true
 ```
 
 The page style is a restrained, document-style dark/light layout matching the
-other LegoFlow dashboards.
+other SWE-Lego dashboards.

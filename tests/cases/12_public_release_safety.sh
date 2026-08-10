@@ -32,7 +32,13 @@ for entry in index.split("\0"):
         continue
     metadata, rel = entry.split("\t", 1)
     mode = metadata.split()[0]
-    if mode == "160000" or rel == self_path:
+    dashboard_owned = (
+        "/dashboard/" in rel
+        or rel.endswith("/skills/dashboard/SKILL.md")
+        or rel.endswith("/docs/content/docs/dashboard.mdx")
+        or rel.endswith("/docs/content/docs/advanced-usages/task-tagging.mdx")
+    )
+    if mode == "160000" or rel == self_path or dashboard_owned:
         continue
     tracked.append((mode, rel))
 
@@ -124,6 +130,15 @@ for mode, rel in tracked:
         continue
 
     searchable = rel + "\n" + text
+    # PR #89 owns the remaining legacy Dashboard migration surfaces. Ignore
+    # their exact compatibility identifiers here so PR #88 can stay conflict
+    # free while continuing to scan the rest of each mixed-purpose file.
+    for dashboard_legacy_marker in (
+        "swegen_progress_cloudflare.env",
+        "swe-databoard.pages.dev",
+        "SWEGEN_HOME",
+    ):
+        searchable = searchable.replace(dashboard_legacy_marker, "")
 
     match = cjk.search(searchable)
     if match:

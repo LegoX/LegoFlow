@@ -15,7 +15,7 @@ new blocks are only ever created at the root level), see
 | `/curator:check`     | Preflight: schema + env vars + GitHub API reachability + a real LLM completion + docker daemon + dryrun. Read-only. |
 | `/curator:collect-prs` | Start the separate GitHub PR collector, which writes `artifacts/collected_prs/{lang}_pr_ids.txt`; wait for it to finish before generation. |
 | `/curator:create-tasks` | Launch task generation and NOP/Oracle verification from existing PR ID files. It does not collect PRs. |
-| `/curator:dashboard` | Regenerate and publish the dataset analytics databoard: per-task difficulty scores and semantic tags across datasets (legoflow-databoard). Not run-progress monitoring. |
+| `/curator:dashboard` | Regenerate and publish the dataset analytics databoard: per-task difficulty scores and semantic tags across datasets (swe-databoard). Not run-progress monitoring. |
 
 The unlisted `run/SKILL.md` is a uniform-interface compatibility adapter for
 the repository's standard plugin layout. `/root:run curator` executes Curator's

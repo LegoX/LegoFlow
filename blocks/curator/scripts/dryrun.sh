@@ -71,7 +71,7 @@ docker run --rm hello-world >/dev/null 2>&1 && echo "Docker: OK" || echo "WARN: 
 # pulls). Resolved by scripts/shared_credentials.sh in this order: env > root
 # config.yaml (runtime_info.input.cloudflare/docker) > this block's legacy env
 # file. Never blocks /curator:run.
-CF_ENV_FILE="${ENV_FILE:-${LEGOFLOW_CURATOR_HOME:-$HOME}/.config/legoflow_curator_dashboard_cloudflare.env}"
+CF_ENV_FILE="${ENV_FILE:-${SWEGEN_HOME:-$HOME}/.config/swegen_progress_cloudflare.env}"
 if [ -f "$REPO_ROOT/scripts/shared_credentials.sh" ]; then
     CF_LEGACY_ENV_FILE="$CF_ENV_FILE"
     # shellcheck source=/dev/null

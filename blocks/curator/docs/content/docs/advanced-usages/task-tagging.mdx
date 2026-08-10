@@ -26,60 +26,42 @@ feature. This makes it easier to compare tasks across languages and projects.
 
 ## How Tagging Works
 
-The dashboard uses a mixed-source policy:
+Curator uses the Harbor task-analysis tooling to tag verified tasks. The tagger:
 
-- **Curator-created tasks:** `export_self_made.py` copies
-  `metadata.difficulty`, `metadata.tags`, `scoring.difficulty_score`, and
-  `scoring.difficulty_label` from each task's existing `task.toml`. It does not
-  call an LLM or regenerate metadata.
-- **External datasets:** the canonical
-  `../repos/legoflow-curator/tools/tag_task_metadata.py` tool reads normalized
-  `tasks.jsonl`, scores difficulty, asks an LLM for the four-tag tuple,
-  validates the result, and writes `tags.jsonl` during dataset preparation.
+- reads the task instruction, patch, tests, and metadata;
+- asks an LLM for the four-tag tuple;
+- disables thinking mode so the model returns strict JSON;
+- validates the tag shape and closed `area` vocabulary;
+- retries on malformed output.
 
 Very large tasks can make a full prompt slow or unstable. The tagger handles
 this with progressive truncation: if a request fails, it retries with a shorter
-patch, instruction, and test excerpt until the request succeeds. This behavior
-applies only to external datasets; self-made metadata is never regenerated.
+patch, instruction, and test excerpt until the request succeeds.
 
 ## Where Tags Live
 
-For Curator-created tasks, the source tags live in:
+Tags are written to each task's `task.toml`:
 
 ```text
 artifacts/swe_tasks/<lang>-cc/<task_id>/task.toml
 ```
 
-The self-made exporter converts those values into
-`dashboard/datasets/self_made/tags.jsonl`. External preparation writes the same
-dashboard JSONL shape under `dashboard/datasets/<external-id>/tags.jsonl`.
-Records identify `metadata_source`, `metadata_schema_version`, and scorer/tagger
-provenance.
+They are also read by the dashboard for filtering and comparison.
 
-## Preparing External Tags
+## Regenerating Tags
 
 From `blocks/curator/dashboard/`, run:
 
 ```bash
-for dataset in swe_rebench swe_rebench_v2 openswe_filtered scale_swe; do
-  python3 ../repos/legoflow-curator/tools/tag_task_metadata.py \
-    --datasets-dir datasets --dataset "$dataset" --jobs 64 --retries 3
-  python3 metadata_records.py \
-    --dataset "$dataset" --tags-file "datasets/$dataset/tags.jsonl"
-done
+python3 ../repos/swegen/tools/tag_task_metadata.py \
+  --datasets-dir datasets --dataset all --jobs 64 --retries 3
 ```
 
-Do not run the external tagger over `self_made`; re-export it from complete task
-directories or task tarballs instead:
+Then rebuild the dashboard HTML:
 
 ```bash
-python3 export_self_made.py --source <task-dir-or-tarball>
+python3 progress_monitor_multi.py --output-html site/index.html
 ```
 
-The exporter fails and lists tasks whose `task.toml` is missing, malformed, or
-missing required metadata. Once all five `tags.jsonl` files are prepared,
-`python3 progress_monitor_multi.py --output-html site/index.html` validates and
-renders them. The renderer never invokes the tagger.
-
 To publish the dashboard, deploy `blocks/curator/dashboard/site/` to the
-`legoflow-databoard` Cloudflare Pages project.
+`swe-databoard` Cloudflare Pages project.

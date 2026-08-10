@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="zh" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>legoflow-databoard</title>
+<title>SWE Datasets Dashboard</title>
 <style>
 :root {
   --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
@@ -91,12 +91,12 @@ td strong { font-weight: 600; }
 <div class="layout">
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-mark">LF</div>
-      <div><div class="logo-title">legoflow-databoard</div><div class="logo-sub">multi-dataset metadata</div></div>
+      <div class="logo-mark">SL</div>
+      <div><div class="logo-title">SWE Databoard</div><div class="logo-sub">multi-dataset · LLM-tagged</div></div>
     </div>
     <div class="ds-nav">
       <div class="section-label">Datasets</div>
-      <button class="ds-item active" data-ds="self_made" onclick="switchDs('self_made')"><span class="ds-name">LegoFlow Curator Instances</span><span class="ds-count">45,881 tasks · 45,881 tagged</span></button><button class="ds-item" data-ds="swe_rebench" onclick="switchDs('swe_rebench')"><span class="ds-name">SWE-rebench</span><span class="ds-count">21,336 tasks · 21,336 tagged</span></button><button class="ds-item" data-ds="openswe_filtered" onclick="switchDs('openswe_filtered')"><span class="ds-name">OpenSWE-filtered</span><span class="ds-count">22,806 tasks · 22,806 tagged</span></button><button class="ds-item" data-ds="scale_swe" onclick="switchDs('scale_swe')"><span class="ds-name">Scale-SWE</span><span class="ds-count">20,181 tasks · 20,181 tagged</span></button>
+      <button class="ds-item active" data-ds="self_made" onclick="switchDs('self_made')"><span class="ds-name">LegoFlow-Instances</span><span class="ds-count">45,881 tasks · 45,881 tagged</span></button><button class="ds-item" data-ds="swe_rebench" onclick="switchDs('swe_rebench')"><span class="ds-name">SWE-rebench</span><span class="ds-count">21,336 tasks · 21,336 tagged</span></button><button class="ds-item" data-ds="openswe_filtered" onclick="switchDs('openswe_filtered')"><span class="ds-name">OpenSWE-filtered</span><span class="ds-count">22,806 tasks · 22,806 tagged</span></button><button class="ds-item" data-ds="scale_swe" onclick="switchDs('scale_swe')"><span class="ds-name">Scale-SWE</span><span class="ds-count">20,181 tasks · 20,181 tagged</span></button>
     </div>
     <div class="sidebar-section">
       <div class="section-label">Global</div>
@@ -109,7 +109,7 @@ td strong { font-weight: 600; }
     <div class="topbar">
       <div>
         <h1>Dataset Analytics</h1>
-        <div class="sub">Prepared difficulty and semantic-tag metadata</div>
+        <div class="sub">统一 LLM 打标 (difficulty · tags · bug class) · updated 2026-07-22 04:22 UTC</div>
       </div>
       <button class="theme-btn" onclick="toggleTheme()">Theme</button>
     </div>
@@ -118,7 +118,7 @@ td strong { font-weight: 600; }
 <div class="ds-panel active" data-ds="self_made">
   <div class="cards">
     <div class="card"><div class="k">Total tasks</div><div class="v">45,881</div></div>
-    <div class="card"><div class="k">Metadata records</div><div class="v">45,881 <small>100.0%</small></div></div>
+    <div class="card"><div class="k">Tagged (LLM)</div><div class="v">45,881 <small>100.0%</small></div></div>
     <div class="card"><div class="k">Mean difficulty</div><div class="v">6.30</div></div>
     <div class="card"><div class="k">Median difficulty</div><div class="v">6.7</div></div>
     <div class="card"><div class="k">Avg patch lines</div><div class="v">313.3</div></div>
@@ -126,7 +126,7 @@ td strong { font-weight: 600; }
   </div>
 
   <div class="panel">
-    <h2>Difficulty distribution <span>LegoFlow Curator Instances</span></h2>
+    <h2>Difficulty distribution <span>LegoFlow-Instances</span></h2>
     <table>
       <tr><th>Label breakdown</th><th>easy</th><th>medium</th><th>hard</th></tr>
       <tr>
@@ -240,7 +240,7 @@ td strong { font-weight: 600; }
 <div class="ds-panel" data-ds="swe_rebench">
   <div class="cards">
     <div class="card"><div class="k">Total tasks</div><div class="v">21,336</div></div>
-    <div class="card"><div class="k">Metadata records</div><div class="v">21,336 <small>100.0%</small></div></div>
+    <div class="card"><div class="k">Tagged (LLM)</div><div class="v">21,336 <small>100.0%</small></div></div>
     <div class="card"><div class="k">Mean difficulty</div><div class="v">5.64</div></div>
     <div class="card"><div class="k">Median difficulty</div><div class="v">6.0</div></div>
     <div class="card"><div class="k">Avg patch lines</div><div class="v">142.2</div></div>
@@ -361,7 +361,7 @@ td strong { font-weight: 600; }
 <div class="ds-panel" data-ds="openswe_filtered">
   <div class="cards">
     <div class="card"><div class="k">Total tasks</div><div class="v">22,806</div></div>
-    <div class="card"><div class="k">Metadata records</div><div class="v">22,806 <small>100.0%</small></div></div>
+    <div class="card"><div class="k">Tagged (LLM)</div><div class="v">22,806 <small>100.0%</small></div></div>
     <div class="card"><div class="k">Mean difficulty</div><div class="v">5.36</div></div>
     <div class="card"><div class="k">Median difficulty</div><div class="v">5.8</div></div>
     <div class="card"><div class="k">Avg patch lines</div><div class="v">61.8</div></div>
@@ -482,7 +482,7 @@ td strong { font-weight: 600; }
 <div class="ds-panel" data-ds="scale_swe">
   <div class="cards">
     <div class="card"><div class="k">Total tasks</div><div class="v">20,181</div></div>
-    <div class="card"><div class="k">Metadata records</div><div class="v">20,181 <small>100.0%</small></div></div>
+    <div class="card"><div class="k">Tagged (LLM)</div><div class="v">20,181 <small>100.0%</small></div></div>
     <div class="card"><div class="k">Mean difficulty</div><div class="v">5.98</div></div>
     <div class="card"><div class="k">Median difficulty</div><div class="v">6.3</div></div>
     <div class="card"><div class="k">Avg patch lines</div><div class="v">321.4</div></div>

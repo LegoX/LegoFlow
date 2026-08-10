@@ -10,7 +10,7 @@ rendered panels verbatim and only:
   1. render a fresh swe_rebench_v2 panel from its freshly-tagged tags.jsonl,
      inserting it right after swe_rebench (matching DATASETS order),
   2. replace every brief "Tag schema" block with the prominent Methodology,
-  3. drop the metadata-count card and "· N tagged" / "<span>N tagged</span>"
+  3. drop the "Tagged (LLM)" card and "· N tagged" / "<span>N tagged</span>"
      counts (unified "N tasks" style),
   4. swap in the current (enlarged, English-only) CSS from progress_monitor_multi
      and fix the page language + subtitle.
@@ -25,7 +25,6 @@ import re
 from pathlib import Path
 
 import progress_monitor_multi as pm
-from dataset_registry import DATASET_IDS, DATASETS_BY_ID
 
 DASH = Path(__file__).parent
 BASE = DASH / "base_4ds.html"
@@ -33,7 +32,7 @@ DEPLOYED = BASE if BASE.exists() else Path("/tmp/deployed_index.html")
 OUTPUT = DASH / "site" / "index.html"
 
 V2_ID = "swe_rebench_v2"
-V2_DISPLAY = DATASETS_BY_ID[V2_ID].display_name
+V2_DISPLAY = "SWE-rebench-V2"
 
 # Prominent methodology block, shared with progress_monitor_multi (single source).
 METHODOLOGY = pm.METHODOLOGY_HTML
@@ -106,10 +105,9 @@ def render_v2_panel(data: dict) -> str:
 
 def unify_existing(doc: str) -> str:
     """Transform the 4 deployed panels to the unified new style."""
-    # 1. drop legacy metadata-count cards
+    # 1. drop "Tagged (LLM)" cards
     doc = re.sub(
-        r'\s*<div class="card"><div class="k">'
-        r'(?:Tagged \(LLM\)|Metadata records)</div>.*?</div></div>',
+        r'\s*<div class="card"><div class="k">Tagged \(LLM\)</div>.*?</div></div>',
         "",
         doc,
     )
@@ -170,10 +168,6 @@ def apply_style_and_i18n(doc: str) -> str:
     doc = doc.replace('<html lang="zh"', '<html lang="en"')
     # 3. remove the subtitle line entirely
     doc = re.sub(r'\s*<div class="sub">.*?</div>', "", doc, count=1, flags=re.DOTALL)
-    # 4. apply the canonical site and self-made display names
-    doc = re.sub(r"<title>.*?</title>", "<title>legoflow-databoard</title>", doc, count=1)
-    doc = doc.replace("SWE Databoard", "legoflow-databoard")
-    doc = doc.replace("LegoFlow-Instances", DATASETS_BY_ID["self_made"].display_name)
     return doc
 
 
@@ -223,19 +217,15 @@ def main() -> None:
     OUTPUT.write_text(doc, encoding="utf-8")
     print(f"wrote {OUTPUT}")
     # sanity checks
-    for did in DATASET_IDS:
+    for did in ("self_made", "swe_rebench", "swe_rebench_v2", "openswe_filtered", "scale_swe"):
         n = doc.count(f'data-ds="{did}"')
         print(f"  {did}: {n} refs (expect 2: nav+panel)")
-    metadata_cards = doc.count("Tagged (LLM)") + doc.count("Metadata records")
-    print(f"  Metadata count cards remaining: {metadata_cards}")
+    print(f"  Tagged (LLM) cards remaining: {doc.count('Tagged (LLM)')}")
     print(f"  Tag schema blocks remaining: {doc.count('Tag schema')}")
     print(f"  Methodology blocks: {doc.count('>Methodology ')}")
     print(f"  method-card blocks: {doc.count('method-card')}")
-    cjk = re.findall(
-        r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]",
-        doc,
-    )
-    print(f"  CJK chars remaining: {len(cjk)}")
+    chinese = re.findall(r"[一-鿿]", doc)
+    print(f"  Chinese chars remaining: {len(chinese)}")
     print(f"  lang=en: {'<html lang=\"en\"' in doc}")
 
 

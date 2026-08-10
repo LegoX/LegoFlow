@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Loop-generate the tracer dashboard and publish dashboard/site/ to Cloudflare
-# Pages via wrangler, so progress is viewable remotely. Mirrors the legoflow-curator
+# Pages via wrangler, so progress is viewable remotely. Mirrors the swegen
 # branch reference (blocks/curator/dashboard/run_cloudflare_pages_sync.sh), adapted to
 # tracer's progress_monitor.py (no --state-file).
 set -u

@@ -12,8 +12,6 @@ from pathlib import Path
 
 from huggingface_hub import hf_hub_download
 
-from metadata_records import METADATA_SCHEMA_VERSION
-
 DASHBOARD_ROOT = Path(__file__).parent
 OUTPUT_DIR = DASHBOARD_ROOT / "datasets" / "openswe_filtered"
 
@@ -77,8 +75,6 @@ def export():
                 "repo": rec.get("repo") or "",
                 "language": infer_language_from_patch(patch),
                 "dataset_source": "openswe_filtered",
-                "metadata_source": "canonical_dashboard_tagger",
-                "metadata_schema_version": METADATA_SCHEMA_VERSION,
             }
             fout.write(json.dumps(unified, ensure_ascii=False) + "\n")
             count += 1

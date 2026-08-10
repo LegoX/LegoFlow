@@ -15,6 +15,7 @@ import {
   GitCompareArrows,
   Sun,
   Moon,
+  Languages,
 } from "lucide-react";
 import { useRuns, useMetrics } from "./hooks/useMetrics";
 import type { RunInfo } from "./types";
@@ -27,7 +28,13 @@ import ExplorerPanel from "./panels/ExplorerPanel";
 import AnalysisPanel from "./panels/AnalysisPanel";
 import ComparePanel from "./panels/ComparePanel";
 import SettingsPanel from "./panels/SettingsPanel";
-import { I18nContext, createT } from "./i18n";
+import {
+  I18nContext,
+  getSavedLang,
+  saveLang,
+  createT,
+  type Lang,
+} from "./i18n";
 
 const PANELS = [
   { id: "overview", labelKey: "nav.overview", icon: Activity },
@@ -117,7 +124,13 @@ export default function App() {
   const [refreshInterval, setRefreshInterval] = useState(15);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { theme, toggle: toggleTheme } = useTheme();
-  const t = useMemo(() => createT(), []);
+  const [lang, setLang] = useState<Lang>(getSavedLang);
+  const t = useMemo(() => createT(lang), [lang]);
+  const toggleLang = useCallback(() => {
+    const next = lang === "en" ? "zh" : "en";
+    setLang(next);
+    saveLang(next);
+  }, [lang]);
 
   const { runs, error: runsError } = useRuns(refreshInterval);
   const { data, loading, error: metricsError } = useMetrics(
@@ -140,7 +153,7 @@ export default function App() {
   }, []);
 
   return (
-    <I18nContext.Provider value={{ lang: "en", t }}>
+    <I18nContext.Provider value={{ lang, t }}>
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
       <aside
@@ -271,6 +284,13 @@ export default function App() {
             <span className="text-xs text-slate-500 font-mono">
               {metrics.length} {t("app.steps")}
             </span>
+            <button
+              onClick={toggleLang}
+              className="text-slate-400 hover:text-slate-200 transition-colors text-xs font-medium"
+              title={t("app.langToggle")}
+            >
+              <Languages size={14} />
+            </button>
             <button
               onClick={toggleTheme}
               className="text-slate-400 hover:text-slate-200 transition-colors"

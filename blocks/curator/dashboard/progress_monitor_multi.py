@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Validate prepared tags.jsonl files and render the multi-dataset dashboard.
+"""Multi-dataset dashboard generator.
 
-The renderer is deliberately read-only. Self-made metadata is copied from each
-task.toml by export_self_made.py; external metadata is prepared by the canonical
-tag_task_metadata.py tool before this script runs.
+Read LLM tagging results from each dataset's datasets/<id>/tags.jsonl
+(difficulty_score / difficulty_label / tags / bug_class),
+aggregate statistics and render a single-page HTML, supporting switching between 4 datasets:
+
+  - self_made         LegoFlow-Instances
+  - swe_rebench        SWE-rebench (nebius/SWE-rebench)
+  - openswe_filtered   OpenSWE-filtered (SWE-Lego/openswe_filtered_for_rl)
+  - scale_swe          Scale-SWE (AweAI-Team/Scale-SWE)
+
+All datasets use the same LLM tagging scheme for comparability.
 """
 from __future__ import annotations
 
@@ -14,18 +21,18 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from dataset_registry import DATASETS as DATASET_REGISTRY
-from dataset_registry import DatasetSpec
-
 DASHBOARD_ROOT = Path(__file__).parent
 DATASETS_DIR = DASHBOARD_ROOT / "datasets"
 DEFAULT_OUTPUT = DASHBOARD_ROOT / "site" / "index.html"
 
-DATASETS = DATASET_REGISTRY
-
-
-class DashboardDataError(ValueError):
-    """Raised when a prepared tags.jsonl file is missing or malformed."""
+# (id, display name, description)
+DATASETS = [
+    ("self_made", "LegoFlow-Instances", "Curator self-made instances (swegen-selfmade non-top5k + top5k)"),
+    ("swe_rebench", "SWE-rebench", "Open-source dataset nebius/SWE-rebench"),
+    ("swe_rebench_v2", "SWE-rebench-V2", "Open-source dataset nebius/SWE-rebench-V2"),
+    ("openswe_filtered", "OpenSWE-filtered", "Open-source dataset SWE-Lego/openswe_filtered_for_rl"),
+    ("scale_swe", "Scale-SWE", "Open-source dataset AweAI-Team/Scale-SWE"),
+]
 
 def percentile(values: list[float], q: float) -> float:
     if not values:
@@ -72,82 +79,11 @@ def score_bins(values: list[float]) -> dict[str, int]:
     return bins
 
 
-def load_tag_records(dataset_id: str, datasets_dir: Path = DATASETS_DIR) -> list[dict[str, Any]]:
-    """Load and validate one prepared metadata record per task."""
-    tags_file = datasets_dir / dataset_id / "tags.jsonl"
-    if not tags_file.is_file():
-        raise DashboardDataError(
-            f"{dataset_id}: missing {tags_file}; prepare tags.jsonl before rendering"
-        )
+def aggregate_dataset(dataset_id: str) -> dict[str, Any]:
+    """Aggregate one dataset's statistics from tags.jsonl."""
+    tags_file = DATASETS_DIR / dataset_id / "tags.jsonl"
+    tasks_file = DATASETS_DIR / dataset_id / "tasks.jsonl"
 
-    records: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
-    errors: list[str] = []
-    with tags_file.open("r", encoding="utf-8") as input_file:
-        for line_number, line in enumerate(input_file, start=1):
-            if not line.strip():
-                continue
-            prefix = f"{tags_file}:{line_number}"
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError as exc:
-                errors.append(f"{prefix}: invalid JSON: {exc.msg}")
-                continue
-            if not isinstance(record, dict):
-                errors.append(f"{prefix}: expected a JSON object")
-                continue
-
-            instance_id = record.get("instance_id")
-            if not isinstance(instance_id, str) or not instance_id.strip():
-                errors.append(f"{prefix}: missing instance_id")
-            elif instance_id in seen_ids:
-                errors.append(f"{prefix}: duplicate instance_id {instance_id!r}")
-            else:
-                seen_ids.add(instance_id)
-
-            score = record.get("difficulty_score")
-            if (
-                isinstance(score, bool)
-                or not isinstance(score, (int, float))
-                or not math.isfinite(score)
-            ):
-                errors.append(f"{prefix}: difficulty_score must be a finite number")
-
-            label = record.get("difficulty_label")
-            if not isinstance(label, str) or label.strip().lower() not in {
-                "easy",
-                "medium",
-                "hard",
-            }:
-                errors.append(f"{prefix}: difficulty_label must be easy, medium, or hard")
-
-            raw_tags = record.get("tags")
-            if not isinstance(raw_tags, list) or len(raw_tags) != 4 or not all(
-                isinstance(tag, str) and tag.strip() for tag in raw_tags
-            ):
-                errors.append(f"{prefix}: tags must contain four non-empty strings")
-
-            patch = record.get("patch_stats")
-            if patch is not None and not isinstance(patch, dict):
-                errors.append(f"{prefix}: patch_stats must be an object")
-
-            records.append(record)
-
-    if not records:
-        errors.append(f"{tags_file}: no metadata records")
-    if errors:
-        details = "\n".join(f"  - {error}" for error in errors)
-        raise DashboardDataError(
-            f"{dataset_id}: invalid tags.jsonl ({len(errors)} error(s)):\n{details}"
-        )
-    return records
-
-
-def aggregate_dataset(
-    dataset_id: str, datasets_dir: Path = DATASETS_DIR
-) -> dict[str, Any]:
-    """Aggregate one dataset using only its validated tags.jsonl."""
-    records = load_tag_records(dataset_id, datasets_dir)
     difficulty_scores: list[float] = []
     difficulty_labels: Counter[str] = Counter()
     topic_counts: Counter[str] = Counter()
@@ -160,32 +96,62 @@ def aggregate_dataset(
     patch_hunks = 0
     patch_files = 0
     patch_denom = 0
-    tagged = len(records)
+    tagged = 0
 
-    for record in records:
-        difficulty_scores.append(float(record["difficulty_score"]))
-        difficulty_labels[str(record["difficulty_label"]).strip().lower()] += 1
+    if tags_file.exists():
+        with tags_file.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                tagged += 1
 
-        raw_tags = [str(tag).strip().lower() for tag in record["tags"]]
-        lang_counts[raw_tags[0]] += 1
-        area_counts[raw_tags[1]] += 1
-        tasks_with_topic += 1
-        topic_counts[raw_tags[2]] += 1
+                score = rec.get("difficulty_score")
+                if score is not None:
+                    difficulty_scores.append(float(score))
+                label = rec.get("difficulty_label")
+                if label:
+                    difficulty_labels[str(label)] += 1
 
-        bug_class = str(record.get("bug_class") or raw_tags[3]).strip().lower()
-        tasks_with_bug_class += 1
-        bug_classes[bug_class] += 1
+                # harbor 4-tag schema: [language, area, topic, bug_class]
+                raw_tags = [str(t).strip().lower() for t in rec.get("tags", []) if str(t).strip()]
+                if len(raw_tags) >= 1:
+                    lang_counts[raw_tags[0]] += 1
+                if len(raw_tags) >= 2:
+                    area_counts[raw_tags[1]] += 1
+                if len(raw_tags) >= 3 and raw_tags[2]:
+                    tasks_with_topic += 1
+                    topic_counts[raw_tags[2]] += 1
 
-        patch = record.get("patch_stats") or {}
-        patch_denom += 1
-        patch_lines += int(patch.get("lines") or 0)
-        patch_hunks += int(patch.get("hunks") or 0)
-        patch_files += int(patch.get("files") or 0)
+                bug_class = rec.get("bug_class")
+                if bug_class:
+                    bug_class = str(bug_class).strip().lower()
+                    if bug_class:
+                        tasks_with_bug_class += 1
+                        bug_classes[bug_class] += 1
+
+                ps = rec.get("patch_stats") or {}
+                patch_denom += 1
+                patch_lines += int(ps.get("lines") or 0)
+                patch_hunks += int(ps.get("hunks") or 0)
+                patch_files += int(ps.get("files") or 0)
+
+    # Total dataset size (tasks.jsonl line count)
+    total = 0
+    if tasks_file.exists():
+        with tasks_file.open("r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    total += 1
 
     denom = patch_denom or 1
     return {
         "id": dataset_id,
-        "total": tagged,
+        "total": total,
         "tagged": tagged,
         "difficulty_scores": difficulty_scores,
         "difficulty_stats": score_stats(difficulty_scores),
@@ -208,14 +174,14 @@ def aggregate_dataset(
 def fmt_int(v) -> str:
     try:
         return f"{int(v):,}"
-    except (TypeError, ValueError, OverflowError):
+    except Exception:
         return "0"
 
 
 def fmt_float(v, digits: int = 2) -> str:
     try:
         return f"{float(v):,.{digits}f}"
-    except (TypeError, ValueError, OverflowError):
+    except Exception:
         return "0"
 
 
@@ -382,7 +348,7 @@ td strong { font-weight: 600; }
 # Single source of truth for the difficulty & tagging methodology card, shared by
 # render_panel() (full regenerate) and inject_v2.py (surgical injection) so every
 # panel shows identical, prominent, English-only copy. Weights/thresholds here
-# mirror the dashboard tagger repos/legoflow-curator/tools/tag_task_metadata.py.
+# mirror the dashboard tagger repos/swegen/tools/tag_task_metadata.py.
 METHODOLOGY_HTML = """    <section class="tag-card method-card"><h3>Methodology <span>unified difficulty &amp; tagging</span></h3>
       <div class="method-body">
       <span class="mh">Difficulty Scoring (1&ndash;10 scale)</span><br>
@@ -403,12 +369,12 @@ METHODOLOGY_HTML = """    <section class="tag-card method-card"><h3>Methodology 
     </section>"""
 
 
-def render_panel(dataset: DatasetSpec, data: dict[str, Any], active: bool) -> str:
-    ds_id = dataset.id
-    display = dataset.display_name
+def render_panel(ds_meta: tuple[str, str, str], data: dict[str, Any], active: bool) -> str:
+    ds_id, display, desc = ds_meta
     stats = data["difficulty_stats"]
     tagged = data["tagged"]
     total = data["total"]
+    tag_pct = (tagged / total * 100.0) if total else 0.0
 
     lang_rows = render_tags(data["languages"], tagged, limit=15)
     area_rows = render_tags(data["areas"], tagged, limit=6)
@@ -475,24 +441,25 @@ def render_panel(dataset: DatasetSpec, data: dict[str, Any], active: bool) -> st
 def render_html(datasets: list[dict[str, Any]], output_path: Path) -> str:
     by_id = {d["id"]: d for d in datasets}
     grand_total = sum(d["total"] for d in datasets)
+    grand_tagged = sum(d["tagged"] for d in datasets)
 
     ds_nav = []
     panels = []
-    for dataset in DATASETS:
-        ds_id = dataset.id
-        display = dataset.display_name
+    for idx, meta in enumerate(DATASETS):
+        ds_id, display, desc = meta
         data = by_id.get(ds_id)
         if data is None:
             continue
-        active = not panels
+        active = idx == 0
         ds_nav.append(
             f'<button class="ds-item{" active" if active else ""}" data-ds="{ds_id}" onclick="switchDs(\'{ds_id}\')">'
             f'<span class="ds-name">{html.escape(display)}</span>'
             f'<span class="ds-count">{fmt_int(data["total"])} tasks</span>'
             f'</button>'
         )
-        panels.append(render_panel(dataset, data, active))
+        panels.append(render_panel(meta, data, active))
 
+    first = datasets[0]
     sidebar_stats = f"""
       <div class="section-label">Global</div>
       <div class="sidebar-stat"><span class="l">Datasets</span><span class="v">{len(datasets)}</span></div>
@@ -504,15 +471,15 @@ def render_html(datasets: list[dict[str, Any]], output_path: Path) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>legoflow-databoard</title>
+<title>SWE Datasets Dashboard</title>
 <style>{CSS}</style>
 </head>
 <body>
 <div class="layout">
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-mark">LF</div>
-      <div><div class="logo-title">legoflow-databoard</div></div>
+      <div class="logo-mark">SL</div>
+      <div><div class="logo-title">SWE Databoard</div></div>
     </div>
     <div class="ds-nav">
       <div class="section-label">Datasets</div>
@@ -556,32 +523,18 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Generate multi-dataset dashboard")
     parser.add_argument("--output-html", type=Path, default=DEFAULT_OUTPUT)
-    parser.add_argument("--datasets-dir", type=Path, default=DATASETS_DIR)
-    parser.add_argument(
-        "--dataset",
-        action="append",
-        choices=[dataset.id for dataset in DATASETS],
-        help="Render only this prepared dataset; repeat to select multiple",
-    )
     args = parser.parse_args()
 
     print(f"{'='*70}")
     print("Generate multi-dataset dashboard")
     print(f"{'='*70}")
 
-    selected_ids = set(args.dataset or ())
-    selected = [
-        dataset for dataset in DATASETS if not selected_ids or dataset.id in selected_ids
-    ]
     datasets = []
-    for dataset in selected:
-        data = aggregate_dataset(dataset.id, args.datasets_dir)
+    for ds_id, display, desc in DATASETS:
+        data = aggregate_dataset(ds_id)
         datasets.append(data)
-        print(
-            f"  {dataset.display_name:26s}: total={data['total']:>7,}  "
-            f"tagged={data['tagged']:>7,}  "
-            f"mean_diff={data['difficulty_stats']['mean']:.2f}"
-        )
+        print(f"  {display:26s}: total={data['total']:>7,}  tagged={data['tagged']:>7,}  "
+              f"mean_diff={data['difficulty_stats']['mean']:.2f}")
 
     render_html(datasets, args.output_html)
     print(f"{'='*70}")
