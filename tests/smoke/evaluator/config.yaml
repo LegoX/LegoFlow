@@ -28,9 +28,9 @@ meta_info:
     ip: local                          # eval orchestration + Harbor containers run on the CI host
     user: null
     pwd: null
-    directory: /gpufs/haoli/code/
+    directory: null
     description: local Harbor execution; the model under test is served remotely on the sft GPU pod
-    public_storage: /gpufs/haoli/swedata
+    public_storage: null
 
   repositories:
     harbor:

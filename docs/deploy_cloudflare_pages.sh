@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the LegoFlow root docs (fumadocs/Next.js static export) and deploy
 # to a dedicated Cloudflare Pages project. Independent of the per-block docs
-# projects (e.g. swe-tracer-docs); this one defaults to swe-lego-live-docs.
+# projects (e.g. swe-tracer-docs); this one defaults to legoflow-docs.
 #
 # Reuses the same Cloudflare credentials pattern as the tracer dashboard sync:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
@@ -12,7 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PROJECT_NAME="${PROJECT_NAME:-swe-lego-live-docs}"
+PROJECT_NAME="${PROJECT_NAME:-legoflow-docs}"
 BRANCH_NAME="${BRANCH_NAME:-main}"
 OUT_DIR="${OUT_DIR:-out}"
 # Node 22 supports current wrangler.

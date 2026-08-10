@@ -21,22 +21,35 @@ The easiest way to use LegoFlow is through plugin skills. Think of these as
 guided commands that know the project layout, check the right files, and ask
 for confirmation before expensive jobs start.
 
-At the repository root, load the root plugin and all block plugins together:
+Install all plugins once per machine. From the repository root, first register
+each local plugin directory as a Claude Code marketplace:
 
 ```bash
-claude \
-  --plugin-dir .claude/plugins/root-plugin \
-  --plugin-dir blocks/curator/.claude/plugins/curator-plugin \
-  --plugin-dir blocks/tracer/.claude/plugins/tracer-plugin \
-  --plugin-dir blocks/trainer/.claude/plugins/trainer-plugin \
-  --plugin-dir blocks/evaluator/.claude/plugins/evaluator-plugin
+claude plugin marketplace add ./.claude/plugins
+claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/tracer/.claude/plugins
+claude plugin marketplace add ./blocks/trainer/.claude/plugins
+claude plugin marketplace add ./blocks/evaluator/.claude/plugins
 ```
 
-After Claude Code starts, run `/reload-plugins` once. You should then see root
-and block skills such as `/root:setup`, `/root:check`, `/curator:create-tasks`, and
-`/tracer:dashboard`. These skills are the main entry points for LegoFlow: they
-guide users through setup, checks, runs, and inspection without requiring them
-to memorize the underlying scripts.
+Then install the plugin from each marketplace. The format is
+`<plugin-name>@<marketplace-name>`, as defined by each local
+`marketplace.json`:
+
+```bash
+claude plugin install root@root-block
+claude plugin install curator@curator-block
+claude plugin install tracer@tracer
+claude plugin install trainer@trainer-block
+claude plugin install evaluator@evaluator-block
+```
+
+In any active Claude Code session, run `/reload-plugins` once to pick them up,
+or restart the session. You should then see root and block skills such as
+`/root:setup`, `/root:check`, `/curator:create-tasks`, and `/tracer:dashboard`. These
+skills are the main entry points for LegoFlow: they guide users through setup,
+checks, runs, and inspection without requiring them to memorize the underlying
+scripts.
 
 
 
@@ -61,7 +74,7 @@ metadata:
 
 
 <ConfigSnippet title="config.yaml">
-{"runtime_info:\n  input:\n    cloudflare:\n      account_id: \"\"              # Optional: only needed for dashboard publishing\n      api_token: \"\"               # Optional: prefer an env/secret; never commit a real token\n      pages_project_prefix: \"swe-lego-live\"  # Optional: dashboard project prefix\n\n    docker:\n      registry: \"\"                # Optional: leave empty for Docker Hub/default registry\n      username: \"\"                # Optional: needed only for authenticated image pulls\n      password: \"\"                # Optional: prefer an env/secret; never commit a real password\n      mirror: \"\"                  # Optional: use only if your network needs a Docker mirror\n      host: \"\"                    # Optional: leave empty for the default Docker daemon"}
+{"runtime_info:\n  input:\n    cloudflare:\n      account_id: \"\"              # Optional: only needed for dashboard publishing\n      api_token: \"\"               # Optional: prefer an env/secret; never commit a real token\n      pages_project_prefix: \"legoflow\"  # Optional: dashboard project prefix\n\n    docker:\n      registry: \"\"                # Optional: leave empty for Docker Hub/default registry\n      username: \"\"                # Optional: needed only for authenticated image pulls\n      password: \"\"                # Optional: prefer an env/secret; never commit a real password\n      mirror: \"\"                  # Optional: use only if your network needs a Docker mirror\n      host: \"\"                    # Optional: leave empty for the default Docker daemon"}
 </ConfigSnippet>
 
 
@@ -86,23 +99,6 @@ before you ask the root block to run the whole pipeline.
 Each block's own Getting Started page explains how to fill its `config.yaml`,
 which credentials it expects, and what outputs it writes. Keep those details in
 the block pages so this root guide can stay focused on the overall workflow.
-
-## Handoff Map
-
-LegoFlow connects blocks through artifacts. Treat this as the high-level map;
-use each block's Getting Started and Configuration Guide for the exact
-`config.yaml` fields.
-
-```text
-Curator artifacts/merged_swe_tasks/
-  -> Tracer task_source.dataset_name
-
-Tracer artifacts/sft_data/<job>/lf.json
-  -> Trainer source.lf_path with source.type: local_lf
-
-Trainer runtime_info.output.checkpoint_path
-  -> Evaluator local_model_serving.model_path, then serve with vLLM
-```
 
 ### Step 1: Task Curation
 

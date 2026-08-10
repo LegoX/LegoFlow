@@ -48,6 +48,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SFT_CFG="$ROOT_DIR/tests/smoke/trainer/config.yaml"
 EVAL_CFG="$ROOT_DIR/blocks/evaluator/config.yaml"
 TUNNEL_PIDFILE="$ROOT_DIR/.smoke-run/serve-tunnel.pid"
+CI_ENV_FILE="${LEGOFLOW_CI_ENV_FILE:-}"
+if [[ -z "$CI_ENV_FILE" && -n "${LEGOFLOW_CI_SHARED:-}" ]]; then
+  CI_ENV_FILE="${LEGOFLOW_CI_SHARED%/}/.env"
+fi
 
 cfg() {  # cfg <file> <dotted-key>
   python3 - "$1" "$2" <<'PY'
@@ -67,7 +71,7 @@ PY
 # ip/key read back empty — the pod address only ever exists in the overlaid
 # copy. Fall back to the same env the injector uses, so serving the checkpoint
 # does not depend on a config that has already been rolled back.
-[[ -f /gpufs/haoli/cicd/shared/.env ]] && { set -a; . /gpufs/haoli/cicd/shared/.env; set +a; }
+[[ -n "$CI_ENV_FILE" && -f "$CI_ENV_FILE" ]] && { set -a; . "$CI_ENV_FILE"; set +a; }
 R_IP="$(cfg "$SFT_CFG" meta_info.resources.ip)";   R_IP="${R_IP:-${SMOKE_REMOTE_IP:-}}"
 R_USER="$(cfg "$SFT_CFG" meta_info.resources.user)"; R_USER="${R_USER:-${SMOKE_REMOTE_USER:-}}"
 R_KEY="$(cfg "$SFT_CFG" meta_info.resources.key)";  R_KEY="${R_KEY:-${SMOKE_REMOTE_KEY:-}}"
@@ -99,7 +103,7 @@ if [[ -z "$R_IP" || "$R_IP" == "local" || "$R_IP" == "null" ]]; then
 fi
 
 VLLM_CONDA_ENV="${VLLM_CONDA_ENV:-vllm_0.18.1}"
-CONDA_SH="${CONDA_SH:-/anaconda3/etc/profile.d/conda.sh}"
+CONDA_SH="${CONDA_SH:-}"
 
 _remote_raw() {
   ssh -i "$R_KEY" -p "$R_PORT" -o ControlMaster=auto -o ControlPath=/tmp/.ssh-smoke-%r@%h:%p -o ControlPersist=900 \
@@ -209,10 +213,10 @@ PYEOF" || echo "WARN: could not normalise tokenizer_config (continuing)"
     fi
 
     echo "INFO: serving trainer checkpoint for evaluator (vLLM DP=$DP TP=$TP; evaluator's LiteLLM wraps it)"
-    echo "      pod        : $R_USER@$R_IP:$R_PORT"
+    echo "      remote     : $R_USER@$R_IP:$R_PORT"
     echo "      checkpoint : $CKPT_REMOTE"
     echo "      vLLM       : :$VLLM_PORT  dp=$DP tp=$TP  max_len=$MAXLEN  served_name=$SERVED_NAME  (conda $VLLM_CONDA_ENV)"
-    echo "      base_url   : $BASE_URL   api_key=$VLLM_API_KEY (matches evaluator llm_api.api_key)"
+    echo "      base_url   : $BASE_URL   api_key=<configured>"
 
     LOG_DIR="$R_DIR/blocks/trainer/artifacts/logs"
     DP_FLAG=""; [[ "$DP" -gt 1 ]] && DP_FLAG="--data-parallel-size ${DP}"
@@ -221,8 +225,15 @@ PYEOF" || echo "WARN: could not normalise tokenizer_config (continuing)"
     remote "bash -s" <<REMOTE_EOF || { echo "FAIL: could not launch vLLM (see above)"; exit 1; }
 set -e
 mkdir -p '$LOG_DIR'
-source '$CONDA_SH' 2>/dev/null && conda activate '$VLLM_CONDA_ENV' \
-  || { echo 'NO_CONDA: cannot source $CONDA_SH / activate $VLLM_CONDA_ENV'; exit 3; }
+if [ -n '$CONDA_SH' ]; then
+  source '$CONDA_SH' 2>/dev/null || { echo 'NO_CONDA: cannot source configured CONDA_SH'; exit 3; }
+elif command -v conda >/dev/null 2>&1; then
+  eval "\$(conda shell.bash hook)"
+else
+  echo 'NO_CONDA: set CONDA_SH or add conda to PATH'; exit 3
+fi
+conda activate '$VLLM_CONDA_ENV' \
+  || { echo 'NO_CONDA: cannot activate $VLLM_CONDA_ENV'; exit 3; }
 command -v vllm >/dev/null 2>&1 || { echo 'NO_VLLM: vllm not on PATH in $VLLM_CONDA_ENV'; exit 3; }
 if curl -fsS http://127.0.0.1:${VLLM_PORT}/health >/dev/null 2>&1; then
   # Only REUSE the running server if it is serving the checkpoint we intend to

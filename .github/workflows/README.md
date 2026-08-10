@@ -17,10 +17,10 @@ shape of CI before diving into `ci.yml` (which is mechanical detail).
   dispatch UI. Goal: catch integration regressions that a unit pass would
   miss (Docker image drift, LLM endpoint changes, env-mount breakage,
   trainer crashes at real `cutoff_len`, etc.).
-- **Self-hosted runners** — most jobs run on our own infra (`swe-lego-ci`
-  pool) because they need Docker, GPUs, or cpfs-backed caches. The lone
+- **Self-hosted runners** — most jobs run on our own infra (`legoflow-ci`
+  pool) because they need Docker, GPUs, or shared caches. The lone
   cloud job is `Root block sanity` (tiny pytest on `ubuntu-latest`). The
-  `trainer` smoke is pinned to the 8-GPU runner (`swe-lego-gpu`).
+  `trainer` smoke is pinned to the 8-GPU runner (`legoflow-gpu`).
 - **Claude SDK drives every smoke launch**. A narrow `claude -p` prompt
   walks through 3 gated phases per block (setup → check → run) and stops
   on the first failure. See [Smoke deep-dive](#smoke-deep-dive-claude-sdk--3-phase-gating).
@@ -58,7 +58,7 @@ your push / PR / manual dispatch
 | `.github/workflows/ci.yml` | The workflow. All job graph, runner pinning, and gating logic. |
 | `.github/workflows/ci-from-scratch.yml` | Optional "rebuild everything from cold state" workflow used to validate runner provisioning end-to-end. Not part of normal CI. |
 | `.github/scripts/smoke_run.sh` | The smoke launcher. Same script for all 4 blocks; takes `<block> <budget_seconds>`. Drives the claude SDK 3-phase chain. |
-| `.github/scripts/register-gpu-runner.sh` | One-shot runner enrollment for the GPU box (`swe-lego-gpu` label). Operator script — not invoked by CI. See [Self-hosted runner setup](#self-hosted-runner-setup-operator-only) below. |
+| `.github/scripts/register-gpu-runner.sh` | One-shot runner enrollment for the GPU box (`legoflow-gpu` label). Operator script — not invoked by CI. See [Self-hosted runner setup](#self-hosted-runner-setup-operator-only) below. |
 | `blocks/<block>/tests/run.sh` | Each block's case runner. Iterates `tests/cases/*.sh`. |
 | `blocks/<block>/tests/cases/` | The per-block case scripts (unit-shaped, no real LLM calls except `04_llm_endpoint.sh`). |
 | `blocks/<block>/tests/smoke/config.yaml` | Smoke-mode config overlay (schema-compatible with the production `blocks/<block>/config.yaml`). Copied over the production file at the top of each smoke job. |
@@ -83,18 +83,18 @@ doesn't burn cycles on the other three blocks.
 
 ### `<block>` tests (cases)
 
-Runs on `[self-hosted, swe-lego-ci]`. Lifecycle:
+Runs on `[self-hosted, legoflow-ci]`. Lifecycle:
 
 1. **Pre-checkout cleanup** — a tiny docker-alpine container reclaims any
    root-owned residue left by prior smoke runs (harbor's agent
-   containers write `agent/sessions` as `root:700`, which the cpfs FUSE
+   containers write `agent/sessions` as `root:700`, which a root-squashed
    `root_squash` can't fix from outside docker).
 2. **`actions/checkout`** with `submodules: false, clean: false` — the
    pre-checkout step is responsible for cleanliness; the default
    `clean: true` would re-create dirs on every `EACCES`.
 3. **Isolate `HOME` + load shared CI env** — points `HOME` at a runner-temp
    dir (so claude SDK history doesn't leak), then sources
-   `/gpufs/haoli/cicd/shared/.env` to pull in `HF_TOKEN`, cache dirs, etc.
+   `$LEGOFLOW_CI_SHARED/.env` to pull in `HF_TOKEN`, cache dirs, etc.
 4. **Link runtime state** — symlinks the block's `repos/`, `artifacts/env(s)/`,
    `gh_token.txt`, and any large fixtures from
    `$SHARED_RUNTIME/<block>/` into the per-job workspace. This is why
@@ -124,7 +124,7 @@ Same lifecycle as cases, plus:
 - **Upload logs** — `if: always()`, so you can debug PASS-with-warnings
   too.
 
-The `trainer` smoke is the one job pinned to `[self-hosted, swe-lego-gpu]`.
+The `trainer` smoke is the one job pinned to `[self-hosted, legoflow-gpu]`.
 If no GPU runner is online, the job queues rather than route to a CPU box.
 
 ## Smoke deep-dive: claude SDK + 3-phase gating
@@ -187,7 +187,7 @@ The cases tier runs on **every** push/PR regardless of the smoke gate.
 
 - `concurrency: ci-${{ github.ref }}` with `cancel-in-progress: true` —
   a new push to a branch cancels its older still-running CI.
-- Per-job `timeout-minutes`: cases jobs at 30 min (cpfs cold-cache cases
+- Per-job `timeout-minutes`: cases jobs at 30 min (network-filesystem cold-cache cases
   can take ~7 min), smoke jobs at 70 min (trainer is the long pole due to
   remote training).
 - **No automatic retries.** A FAIL is a FAIL. If you suspect a flake (the
@@ -220,17 +220,17 @@ once the runners are up.
 
 | Label | Runs | Where |
 |---|---|---|
-| `swe-lego-ci` | every cheap/CPU + Docker job (cases, curator/tracer/evaluator smokes) | the generic CI host(s) |
-| `swe-lego-gpu` | **only** the `trainer-smoke` job — real 8-GPU DeepSpeed ZeRO-3 training | the GPU machine (8× L20X) |
+| `legoflow-ci` | every cheap/CPU + Docker job (cases, curator/tracer/evaluator smokes) | the generic CI host(s) |
+| `legoflow-gpu` | **only** the `trainer-smoke` job — real 8-GPU DeepSpeed ZeRO-3 training | the GPU machine (8× L20X) |
 
 ### Why `trainer-smoke` is special
 
 `trainer-smoke` is the **one training job in CI**. It launches full-parameter
 Qwen3-8B training at `cutoff_len=131072` across 8 GPUs (see
 `blocks/trainer/tests/smoke/10_train_demo.sh`). Every other CI job is CPU/Docker
-work that any `swe-lego-ci` runner can take. The training smoke must land on
+work that any `legoflow-ci` runner can take. The training smoke must land on
 the host that actually has the 8 GPUs, so its `runs-on` in `ci.yml` is pinned
-to `[self-hosted, swe-lego-gpu]` — a label that **only the GPU machine's
+to `[self-hosted, legoflow-gpu]` — a label that **only the GPU machine's
 runner carries**. If no GPU runner is online the job queues (gated to
 `workflow_dispatch run_smoke=true` or pushes to `dev`/`main`) rather than risk
 running on a CPU-only runner.
@@ -243,7 +243,7 @@ token from `repo Settings → Actions → Runners → New self-hosted runner`,
 or:
 
 ```bash
-gh api -X POST repos/SWE-Lego/SWE-Lego-Live/actions/runners/registration-token -q .token
+gh api -X POST "repos/<owner>/<repository>/actions/runners/registration-token" -q .token
 ```
 
 Then on the GPU host:
@@ -252,32 +252,29 @@ Then on the GPU host:
 REG_TOKEN=<token> bash .github/scripts/register-gpu-runner.sh
 ```
 
-It registers a runner with labels `swe-lego-ci,swe-lego-gpu` (so the box also
+It registers a runner with labels `legoflow-ci,legoflow-gpu` (so the box also
 serves the generic pool) and a name derived from the host. Start it with
 `./run.sh` in the runner dir, or install it as a service
 (`sudo ./svc.sh install && sudo ./svc.sh start`).
 
 To confirm the label is live: the runner appears under repo Settings →
-Actions → Runners with a `swe-lego-gpu` label, and a manual *Run workflow*
+Actions → Runners with a `legoflow-gpu` label, and a manual *Run workflow*
 (Actions → CI → Run workflow, *Also run smoke tests* = true) dispatches
 `trainer-smoke` to it.
 
-### Host-side files the runner expects under `/gpufs/haoli/cicd/`
+### Host-side files for self-hosted runners
 
-The repo CI workflow assumes a few files live on every runner host at
-hardcoded host paths. They are NOT tracked in this repo — host operators
-keep them in sync manually (the operational copy is the source of truth,
-since the host is what actually runs).
+Configure the `LEGOFLOW_CI_SHARED`, `LEGOFLOW_SHARED_RUNTIME`, and optional
+`LEGOFLOW_CLI_HOME` repository variables for each runner pool. The referenced
+files are operator-managed and are never tracked in this repository.
 
-| Host path | Purpose | Provisioned by |
-|---|---|---|
-| `/gpufs/haoli/cicd/actions-runner*/` | self-hosted runner install + per-host registration token | `.github/scripts/register-gpu-runner.sh` for GPU; analogous for the CPU pool |
-| `/gpufs/haoli/cicd/shared/.env` | shared CI env (HF_TOKEN, HF_HOME, PIP/UV cache paths). `chmod 600`. | hand-authored once per host |
-| `/gpufs/haoli/cicd/shared/gh_token.txt` | comma-separated GitHub PATs for curator's PR collector + private submodules | rotated by hand |
-| `/gpufs/haoli/cicd/shared/uv/` | uv binary install (`bin/uv` is on the runner PATH) | one-shot install |
-| `/gpufs/haoli/cicd/shared/{pip,uv,hf}-cache/` | shared package + dataset caches; second PR onwards benefits | auto-grown |
-| `/gpufs/haoli/cicd/shared/runtime/<block>/` | mirror of each block's `repos/` + uv envs + `gh_token.txt`, symlinked into per-job workspaces by the workflow's "Link runtime state" step | `sync_runtime.sh` (operator runs after any pin bump) |
-| `/gpufs/haoli/cicd/sync_runtime.sh` | rebuilds the runtime mirror under `shared/runtime/<block>/` from a canonical checkout | hand-maintained — operator's working copy |
+| Path relative to `$LEGOFLOW_CI_SHARED` | Purpose |
+|---|---|
+| `.env` | Shared CI environment, including cache locations and runtime-only tokens. Keep it mode `0600`. |
+| `gh_token.txt` | GitHub PATs for private submodules and the PR collector. |
+| `uv/bin/` | Shared `uv` installation added to `PATH`. |
+| `runtime/<block>/` | Runtime mirror containing repositories, environments, and large fixtures. |
+| `sync_runtime.sh` | Operator-provided command that refreshes the runtime mirror after dependency pin changes. |
 
 ## See also
 

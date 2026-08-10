@@ -89,7 +89,7 @@ Walk `runtime_info.input` and prompt only for unset fields (the literal `human` 
   - `{provider: local, dataset_name: ../curator/artifacts/swe_tasks/<lang>-cc}`
     — only valid if curator has actually exposed verified tasks at that
     contract path. curator historically keeps outputs inside
-    `repos/swegen/artifacts/...`; before picking `local`, verify the
+    `repos/legoflow-curator/artifacts/...`; before picking `local`, verify the
     path exists or have curator symlink it.
 - `harbor_job.{n_concurrent, n_tasks, max_retries, timeout_multiplier}`,
   `agent.{name, version, runtime_image, max_turns, temperature}`,
@@ -107,7 +107,7 @@ Walk `runtime_info.input` and prompt only for unset fields (the literal `human` 
   of `scripts/dryrun.sh`, so setup does not need to repeat it. Note: when
   running inside Claude Code's sandboxed shell, some endpoints (e.g.
   `<your-production-endpoint>`) return 401 due to CF gating — see memory
-  `project-swegen-llm-endpoint`. That is not a credential failure.
+  `project-legoflow-curator-llm-endpoint`. That is not a credential failure.
 
 ### 6. Ledger
 

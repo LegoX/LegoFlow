@@ -6,7 +6,7 @@
 # starts the proxy and then delegates to start.sh (all-language generation; PR
 # collection is separate).
 # The smoke drivers (.github/scripts/smoke_run.sh and tests/smoke/10_pr_demo.sh)
-# build their own narrow `swegen create` command, so they must own the proxy
+# build their own narrow `legoflow-curator create` command, so they must own the proxy
 # lifecycle themselves. This lib gives them the same proxy-start logic without
 # duplicating it.
 #
@@ -49,18 +49,19 @@ cc_proxy_start() {
   local block_dir="$1" cfg="$2"
   local mode port base model key
 
-  mode="$(_cc_cfg "$cfg" cc_provider_mode)"
+  mode="${LEGOFLOW_CURATOR_CC_PROVIDER_MODE:-$(_cc_cfg "$cfg" cc_provider_mode)}"
   if [ "$mode" != "openai_proxy" ]; then
     echo "INFO: cc_provider_mode='${mode:-unset}' — no LiteLLM CC proxy needed."
     return 0
   fi
 
-  port="$(_cc_cfg "$cfg" cc_proxy_port)"; port="${port:-4010}"
-  base="$(_cc_cfg "$cfg" api_base_url)"
+  port="${LEGOFLOW_CURATOR_CC_PROXY_PORT:-$(_cc_cfg "$cfg" cc_proxy_port)}"
+  port="${port:-4010}"
+  base="${OPENAI_API_BASE_URL:-${OPENAI_API_BASE:-$(_cc_cfg "$cfg" api_base_url)}}"
   # The Claude Code SDK requests claude-* ids; the proxy maps them to the real
   # upstream OpenAI model, which is pr_model (the model actually served upstream).
-  model="$(_cc_cfg "$cfg" pr_model)"
-  key="$(_cc_cfg "$cfg" api_key)"
+  model="${OPENAI_MODEL:-$(_cc_cfg "$cfg" pr_model)}"
+  key="${OPENAI_API_KEY:-$(_cc_cfg "$cfg" api_key)}"
 
   if [ -z "$base" ] || [ -z "$model" ] || [ -z "$key" ]; then
     echo "ERROR: openai_proxy mode but llm_api.{api_base_url,pr_model,api_key} incomplete." >&2
@@ -89,7 +90,7 @@ cc_proxy_start() {
       "$template" > "$gen"
 
   # Resolve a PROXY-CAPABLE litellm binary. Not every `litellm` on PATH ships
-  # the litellm[proxy] extra (e.g. swegen-env's lacks `backoff`), and such a
+  # the litellm[proxy] extra (e.g. legoflow-curator-env's lacks `backoff`), and such a
   # binary dies on startup — so probe each candidate's interpreter for the
   # proxy server import and skip the ones that can't serve. tracer's
   # litellm-venv is the canonical proxy-capable install. An explicit
@@ -98,8 +99,9 @@ cc_proxy_start() {
   if [ -z "$bin" ]; then
     local cand
     for cand in \
+      "$block_dir/artifacts/envs/litellm-proxy/bin/litellm" \
       "$block_dir/../tracer/artifacts/env/litellm-venv/bin/litellm" \
-      "$block_dir/artifacts/envs/swegen-env/bin/litellm" \
+      "$block_dir/artifacts/envs/legoflow-curator-env/bin/litellm" \
       "$(command -v litellm 2>/dev/null || true)"; do
       [ -n "$cand" ] && [ -x "$cand" ] || continue
       if _cc_litellm_proxy_ok "$cand"; then bin="$cand"; break; fi
@@ -141,6 +143,16 @@ cc_proxy_start() {
       return 1
     fi
   done
+  # A different user's proxy may already own the port but be invisible to
+  # lsof. Its liveliness response must not make a newly failed process look
+  # healthy; verify that the PID we launched is still alive.
+  sleep 1
+  if ! kill -0 "$CC_PROXY_PID" 2>/dev/null; then
+    echo "ERROR: port $port answered, but the newly started proxy exited." >&2
+    echo "       Choose a free LEGOFLOW_CURATOR_CC_PROXY_PORT." >&2
+    CC_PROXY_PID=""
+    return 1
+  fi
   echo "INFO: LiteLLM CC proxy ready on :$port (PID=$CC_PROXY_PID)."
   return 0
 }

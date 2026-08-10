@@ -12,11 +12,11 @@ task pool that Tracer can consume.
 ## 1. Collect PRs
 
 `/curator:collect-prs` runs `scripts/collect_all_bg.sh`. The script hydrates
-`config.yaml`, installs the pinned `repos/swegen` package if needed, and starts
-the SWE-gen collector in the background:
+`config.yaml`, installs the pinned `repos/legoflow-curator` package if needed, and starts
+the LegoFlow Curator collector in the background:
 
 ```bash
-python3 repos/swegen/tools/collect_prs_wo_image.py
+python3 repos/legoflow-curator/tools/collect_prs_wo_image.py
 ```
 
 The collector reads `runtime_info.input.pr_collection` to decide:
@@ -56,21 +56,21 @@ as `scripts/create_py.sh`. Each language script reads its own timeout,
 concurrency, and task cap through `scripts/read_params.py`, then calls:
 
 ```bash
-swegen create
+legoflow-curator create
 ```
 
 For Python, the handoff is roughly:
 
 ```bash
-swegen create \
+legoflow-curator create \
   --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
   --output artifacts/swe_tasks/py-cc \
-  --state-dir artifacts/state/swegen-py \
+  --state-dir artifacts/state/legoflow-curator-py \
   --timeout ... \
   --cc-timeout ...
 ```
 
-This is the point where noisy PR history becomes a task candidate. SWE-gen pulls
+This is the point where noisy PR history becomes a task candidate. LegoFlow Curator pulls
 the PR context, prepares the repository state, asks the coding model to create a
 clear task, and separates the materials that should be visible to a solver from
 the materials used only for validation.
@@ -102,7 +102,7 @@ without leaking the reference fix into the prompt.
 ## 4. Validate And Score
 
 Curator does not trust a task just because the directory exists. During
-`swegen create`, Harbor runs the baseline agents:
+`legoflow-curator create`, Harbor runs the baseline agents:
 
 - **NOP baseline**: the buggy task should fail, giving reward `0`.
 - **Oracle pass**: applying the ground-truth fix should pass, giving reward `1`.
@@ -144,7 +144,7 @@ The mechanism above is exposed through a small set of plugin skills:
 
 | Command | What it gates |
 | --- | --- |
-| `/curator:setup` | Initializes `repos/swegen`, installs the environment, and hydrates runtime inputs. |
+| `/curator:setup` | Initializes `repos/legoflow-curator`, installs the environment, and hydrates runtime inputs. |
 | `/curator:check` | Validates config, repo pin, GitHub tokens, LLM endpoint, and Docker before work starts. |
 | `/curator:collect-prs` | Runs the Discover stage and writes PR pools. |
 | `/curator:create-tasks` | Runs Prepare, Assembly, and Verification. |

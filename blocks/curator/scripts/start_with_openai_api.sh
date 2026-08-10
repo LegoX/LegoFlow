@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch swegen for the OPENAI_PROXY Claude Code provider mode.
+# Launch legoflow-curator for the OPENAI_PROXY Claude Code provider mode.
 #
 # Use this when config.yaml -> runtime_info.input.llm_api.cc_provider_mode is
 # "openai_proxy": your provider is OpenAI-only (Qwen / GLM / sglang / vLLM /
@@ -15,7 +15,7 @@
 #           -> create_all_bg -> archive launcher exit.
 #
 # NOTE on proxy lifecycle: create_all_bg.sh launches all 8 per-language
-# `swegen create` jobs detached (nohup) and returns almost immediately, but
+# `legoflow-curator create` jobs detached (nohup) and returns almost immediately, but
 # those jobs keep needing the CC proxy for hours afterward. This script
 # therefore does NOT kill a proxy it started when it exits (that used to
 # happen via an EXIT trap and silently broke verification for every
@@ -35,7 +35,7 @@ for a in "$@"; do
 done
 set -- "${args[@]}"
 
-PY_BIN="${PY_BIN:-artifacts/envs/swegen-env/bin/python}"
+PY_BIN="${PY_BIN:-artifacts/envs/legoflow-curator-env/bin/python}"
 [ -x "$PY_BIN" ] || PY_BIN=python3
 read MODE PORT < <("$PY_BIN" -c "
 import yaml,sys
@@ -68,13 +68,13 @@ mkdir -p "$PROXY_LOG_DIR"
 PROXY_LOG="${PROXY_LOG_DIR}/litellm_cc_proxy.log"
 PROXY_PID_FILE="${PROXY_LOG_DIR}/litellm_cc_proxy.pid"
 
-# Resolve litellm binary. The block's swegen-env may not ship litellm; tracer
+# Resolve litellm binary. The block's legoflow-curator-env may not ship litellm; tracer
 # block's litellm-venv is the canonical location. Override via LITELLM_BIN.
 LITELLM_BIN="${LITELLM_BIN:-}"
 if [ -z "$LITELLM_BIN" ]; then
   for cand in \
     "${BLOCK_DIR}/../tracer/artifacts/env/litellm-venv/bin/litellm" \
-    "${BLOCK_DIR}/artifacts/envs/swegen-env/bin/litellm" \
+    "${BLOCK_DIR}/artifacts/envs/legoflow-curator-env/bin/litellm" \
     "$(command -v litellm 2>/dev/null || true)"; do
     [ -n "$cand" ] && [ -x "$cand" ] && { LITELLM_BIN="$cand"; break; }
   done
@@ -191,5 +191,5 @@ fi
 
 # Delegate to the shared start.sh (which runs archive + create_all_bg).
 # Guard so start.sh runs generation directly instead of dispatching back here.
-export SWEGEN_LAUNCHER_ACTIVE=1
+export LEGOFLOW_CURATOR_LAUNCHER_ACTIVE=1
 bash "${BLOCK_DIR}/scripts/start.sh" "$@"

@@ -126,14 +126,14 @@ LOG="$BLOCK_DIR/artifacts/logs/smoke-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p "$(dirname "$LOG")"
 echo "INFO: smoke log -> $LOG"
 
-# Warm cpfs/networked-FS cache: the first `harbor --help` import takes ~20 s on a
+# Warm the networked-filesystem cache: the first `harbor --help` import takes ~20 s on a
 # cold gpufs mount (lots of pydantic/asyncio modules to page in). Warming it here
 # keeps the preflight and smoke startup latency predictable.
 echo "INFO: warming harbor CLI cache"
 "$BLOCK_DIR/artifacts/env/harbor-uv/bin/harbor" --help >/dev/null 2>&1 || true
 
 # LiteLLM proxy: force a single uvicorn worker for the smoke. Multi-worker
-# mode uses gunicorn with a 30s worker-boot timeout; on a cold cpfs cache the
+# mode uses gunicorn with a 30s worker-boot timeout; on a cold filesystem cache the
 # litellm[proxy] import takes >30s, so every worker is SIGKILL'd, the
 # supervisor crashloops, the TCP port is briefly open during each restart (so
 # start.sh's readiness probe passes) but trial containers find no live worker

@@ -13,7 +13,7 @@
 - [09:02] Epoch 1/3 complete — train_loss=0.51
 - [09:58] Epoch 2/3 complete — train_loss=0.38, val_loss=0.44
 - [10:10] Epoch 3/3 complete — train_loss=0.31, val_loss=0.42
-- [10:11] Checkpoint saved to /mnt/shared/sft_training/ckpt_001
+- [10:11] Checkpoint saved to artifacts/shared/sft_training/ckpt_001
 
 ## Result
 

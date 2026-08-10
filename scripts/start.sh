@@ -15,7 +15,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SWEGEN_CFG="$ROOT_DIR/blocks/curator/config.yaml"
+LEGOFLOW_CURATOR_CFG="$ROOT_DIR/blocks/curator/config.yaml"
 
 # Archive this run when start.sh exits (success, error, or signal).
 RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -29,7 +29,7 @@ _archive_run_on_exit() {
 }
 trap _archive_run_on_exit EXIT
 
-START_SWEGEN=1
+START_LEGOFLOW_CURATOR=1
 START_TRAJGEN=1
 DO_SYNC=1
 DO_DRYRUN=1
@@ -42,7 +42,7 @@ usage() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --curator-only)  START_TRAJGEN=0; shift ;;
-    --tracer-only) START_SWEGEN=0;  shift ;;
+    --tracer-only) START_LEGOFLOW_CURATOR=0;  shift ;;
     --no-sync)      DO_SYNC=0;       shift ;;
     --no-dryrun)    DO_DRYRUN=0;     shift ;;
     --dry-run)      DRY_RUN=1;       shift ;;
@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 cfg() {
-  python3 - "$SWEGEN_CFG" "$1" <<'PY'
+  python3 - "$LEGOFLOW_CURATOR_CFG" "$1" <<'PY'
 import sys
 try:
     import yaml
@@ -122,7 +122,7 @@ else
     exit 1
   fi
   REMOTE_HOST="${REMOTE_USER}@${REMOTE_IP}"
-  REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
+  REPO_DIR="${REMOTE_DIR%/}/${LEGOFLOW_REMOTE_REPO_NAME:-LegoFlow}"
   echo "Execution   : remote"
   echo "Remote node : ${REMOTE_HOST}"
   echo "Remote path : ${REPO_DIR}"
@@ -207,19 +207,19 @@ attach_hint() {
 }
 
 # ── 3. Start curator ───────────────────────────────────────────────────────────
-if [[ $START_SWEGEN -eq 1 ]]; then
+if [[ $START_LEGOFLOW_CURATOR -eq 1 ]]; then
   echo "Step 3: Starting curator ..."
-  SWEGEN_SESSION="curator-py"
-  SWEGEN_DIR="${REPO_DIR}/blocks/curator"
+  LEGOFLOW_CURATOR_SESSION="curator-py"
+  LEGOFLOW_CURATOR_DIR="${REPO_DIR}/blocks/curator"
 
-  if tmux_has_session "${SWEGEN_SESSION}"; then
-    echo "  [SKIP] tmux session '${SWEGEN_SESSION}' already exists"
-    attach_hint "${SWEGEN_SESSION}"
+  if tmux_has_session "${LEGOFLOW_CURATOR_SESSION}"; then
+    echo "  [SKIP] tmux session '${LEGOFLOW_CURATOR_SESSION}' already exists"
+    attach_hint "${LEGOFLOW_CURATOR_SESSION}"
   else
-    SWEGEN_CMD="cd '${SWEGEN_DIR}' && bash scripts/create_py.sh"
-    tmux_start "${SWEGEN_SESSION}" "${SWEGEN_CMD}"
-    echo "  started tmux session '${SWEGEN_SESSION}'"
-    attach_hint "${SWEGEN_SESSION}"
+    LEGOFLOW_CURATOR_CMD="cd '${LEGOFLOW_CURATOR_DIR}' && bash scripts/create_py.sh"
+    tmux_start "${LEGOFLOW_CURATOR_SESSION}" "${LEGOFLOW_CURATOR_CMD}"
+    echo "  started tmux session '${LEGOFLOW_CURATOR_SESSION}'"
+    attach_hint "${LEGOFLOW_CURATOR_SESSION}"
   fi
   echo ""
 fi
@@ -248,12 +248,12 @@ echo ""
 if [[ $IS_LOCAL -eq 1 ]]; then
   echo "Monitor sessions locally:"
   echo "  tmux ls"
-  [[ $START_SWEGEN  -eq 1 ]] && echo "  tmux attach -t curator-py    # curator task generation"
+  [[ $START_LEGOFLOW_CURATOR  -eq 1 ]] && echo "  tmux attach -t curator-py    # curator task generation"
   [[ $START_TRAJGEN -eq 1 ]] && echo "  tmux attach -t tracer      # tracer trajectory generation"
 else
   echo "Monitor sessions on the remote node:"
   echo "  ssh ${REMOTE_HOST}"
   echo "  tmux ls"
-  [[ $START_SWEGEN  -eq 1 ]] && echo "  tmux attach -t curator-py    # curator task generation"
+  [[ $START_LEGOFLOW_CURATOR  -eq 1 ]] && echo "  tmux attach -t curator-py    # curator task generation"
   [[ $START_TRAJGEN -eq 1 ]] && echo "  tmux attach -t tracer      # tracer trajectory generation"
 fi

@@ -166,8 +166,8 @@ Block tree:
 **Run configuration** (one block per fenced block, only for blocks with a dryrun Run Configuration Summary)
 ```
 blocks/trainer:
-  Model:        /mnt/public/models/Qwen3-30B-A3B-Instruct-2507
-  Backend:      Docker (tcp://192.168.35.240:2375)
+  Model:        /path/to/models/Qwen3-30B-A3B-Instruct-2507
+  Backend:      Docker (unix:///var/run/docker.sock)
   Parallelism:  16 workers
   Batch size:   64 × 8 = 512 trials/step
   Algorithm:    grpo / gspo  lr=1e-06

@@ -15,7 +15,7 @@ Before starting, make sure these are available:
 
 - Claude Code with the Curator plugin loaded.
 - Docker, used by Harbor task validation.
-- Python, used to install and run the pinned `repos/swegen` package.
+- Python, used to install and run the pinned `repos/legoflow-curator` package.
 - GitHub token(s), used to collect pull requests and read PR metadata.
 - An LLM endpoint for PR filtering, instruction generation, and task creation.
 - Optional Cloudflare credentials, only needed if you want to publish the dashboard.
@@ -78,8 +78,14 @@ Curator needs GitHub tokens for PR collection and metadata lookup. Put one
 token per line in a local text file, for example:
 
 <ConfigSnippet title="blocks/curator/config.yaml">
-{"runtime_info:\n  input:\n    github_token: repos/swegen/gh_token.txt      # one GitHub token per line"}
+{"runtime_info:\n  input:\n    github_token: repos/legoflow-curator/gh_token.txt      # one GitHub token per line"}
 </ConfigSnippet>
+
+<Callout title="Tip" type="info">
+If you want PR collection to move faster, prepare multiple GitHub tokens. Curator
+can rotate through them during metadata collection, which helps avoid rate-limit
+bottlenecks on larger runs.
+</Callout>
 
 Now run setup:
 
@@ -87,7 +93,7 @@ Now run setup:
 /curator:setup
 ```
 
-This prepares `repos/swegen`, builds the Python environment, installs `swegen`,
+This prepares `repos/legoflow-curator`, builds the Python environment, installs `legoflow-curator`,
 and checks that the needed environment variables are available. Re-running it is
 fine.
 
@@ -99,7 +105,7 @@ Before anything expensive, run:
 /curator:check
 ```
 
-This is read-only. It checks config, `repos/swegen`, GitHub tokens, the LLM
+This is read-only. It checks config, `repos/legoflow-curator`, GitHub tokens, the LLM
 endpoint, and Docker. For exact pass conditions, see
 [Validation Checks](/docs/blocks/curator/advanced-usages/validation-checks).
 A healthy report should look roughly like this:
@@ -107,7 +113,7 @@ A healthy report should look roughly like this:
 ```text
 Curator check
 ✓ config schema
-✓ repos/swegen checkout
+✓ repos/legoflow-curator checkout
 ✓ GitHub token(s)
 ✓ LLM endpoint
 ✓ Docker daemon

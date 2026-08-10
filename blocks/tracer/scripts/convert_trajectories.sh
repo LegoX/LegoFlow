@@ -140,10 +140,10 @@ derive_scaffold() {
     custom-claude-code|claude-code|claude_code)
       echo "claude_code"
       ;;
-    open-code|opencode|open_code)
+    custom-opencode|open-code|opencode|open_code)
       echo "open_code"
       ;;
-    openhands-sdk|openhands_sdk|openhands)
+    custom-openhands-sdk|openhands-sdk|openhands_sdk|openhands)
       echo "openhands_sdk"
       ;;
     terminus2|terminus-2)

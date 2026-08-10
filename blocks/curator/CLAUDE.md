@@ -20,7 +20,7 @@ Automated pipeline that converts GitHub PRs into verified SWE-Bench tasks across
 
 ### Required Environment Variables
 
-swegen calls the LLM over **two different API paths**. The recommended way to
+legoflow-curator calls the LLM over **two different API paths**. The recommended way to
 configure both is to fill `config.yaml -> runtime_info.input.llm_api` and let
 `scripts/load_runtime_env.sh` export the env vars for you — every `create_*.sh`,
 `dryrun.sh`, and the skills source it. You normally do **not** set these env
@@ -33,8 +33,8 @@ vars by hand. The mapping is:
 | `pr_model` | `OPENAI_MODEL` | Model for PR evaluation + instruction generation |
 | `task_model` | `ANTHROPIC_MODEL` | Model for the Claude Code path |
 | `anthropic_base_url` | `ANTHROPIC_BASE_URL` | Claude Code path endpoint (task completion + verification) |
-| `cc_provider_mode` | `SWEGEN_CC_PROVIDER_MODE` | `native` or `openai_proxy` (see below) |
-| `cc_proxy_port` | `SWEGEN_CC_PROXY_PORT` | local LiteLLM proxy port (openai_proxy only) |
+| `cc_provider_mode` | `LEGOFLOW_CURATOR_CC_PROVIDER_MODE` | `native` or `openai_proxy` (see below) |
+| `cc_proxy_port` | `LEGOFLOW_CURATOR_CC_PROXY_PORT` | local LiteLLM proxy port (openai_proxy only) |
 
 GitHub tokens are never stored in `config.yaml`: runtime tokens come from
 `GITHUB_TOKENS`, `GITHUB_TOKEN`, or local token files (`gh_token.txt`).
@@ -44,7 +44,7 @@ shell, then sources the block's `.env`, so `.env` overrides the imported shell
 values. `config.yaml` only fills still-unset exported variables. Keep real keys
 out of `config.yaml`; prefer the shell or an ignored `.env`. The collector also
 combines `GITHUB_TOKENS` / `GITHUB_TOKEN` with
-`repos/swegen/gh_token.txt` (or `COLLECT_GITHUB_TOKEN_FILE`).
+`repos/legoflow-curator/gh_token.txt` (or `COLLECT_GITHUB_TOKEN_FILE`).
 
 ### LLM provider modes (read this before your first run)
 
@@ -63,7 +63,7 @@ skeletons stay as templates, no task is verified, yet batch state still reports
   translates Anthropic → OpenAI, and point `anthropic_base_url` at it:
 
   ```bash
-  # one-time, before `swegen create`; fill in your endpoint/model/key first.
+  # one-time, before `legoflow-curator create`; fill in your endpoint/model/key first.
   # The config maps the Claude Code SDK's claude-* calls to your OpenAI endpoint
   # via use_chat_completions_url_for_anthropic_messages.
   litellm --config scripts/litellm_cc_proxy.example.yaml \
@@ -89,12 +89,12 @@ skeletons stay as templates, no task is verified, yet batch state still reports
 `/curator:setup` does this for you (submodule init, venv, `pip install -e`,
 dryrun). To do it by hand, create the venv at the path the scripts and skills
 expect — `config.yaml`'s `meta_info.environment.venv_path`
-(`artifacts/envs/swegen-env`); `dryrun.sh` and `load_runtime_env.sh` look for it
+(`artifacts/envs/legoflow-curator-env`); `dryrun.sh` and `load_runtime_env.sh` look for it
 there:
 
 ```bash
-python3 -m venv artifacts/envs/swegen-env && source artifacts/envs/swegen-env/bin/activate
-pip install -e repos/swegen/
+python3 -m venv artifacts/envs/legoflow-curator-env && source artifacts/envs/legoflow-curator-env/bin/activate
+pip install -e repos/legoflow-curator/
 ```
 
 ### Verify Docker
@@ -122,7 +122,7 @@ smoke and single-language modes do not:
 `/curator:create-tasks` does not invoke `/curator:collect-prs`. For production modes,
 wait for collection to finish before starting generation; the create scripts
 read fixed files under `artifacts/collected_prs/`. The create-tasks skill's smoke
-mode is an exception and uses a sample PR file bundled in `repos/swegen`.
+mode is an exception and uses a sample PR file bundled in `repos/legoflow-curator`.
 
 The knobs each command reads live in `config.yaml`: LLM under
 `runtime_info.input.llm_api`, PR collection under
@@ -139,7 +139,7 @@ Before running a large batch, a new AI agent should run the short verification f
 PR collection is configured in `config.yaml -> runtime_info.input.pr_collection`
 (`languages`, `repo_num`, `max_prs_per_repo`, `output_dir`, `token_limit`, and
 global `filters`). `scripts/load_runtime_env.sh` exports these as
-`SWEGEN_COLLECT_*` / `SWEGEN_PR_*` / `COLLECT_TOKEN_LIMIT`; the collector reads
+`LEGOFLOW_CURATOR_COLLECT_*` / `LEGOFLOW_CURATOR_PR_*` / `COLLECT_TOKEN_LIMIT`; the collector reads
 them, falling back to its built-in defaults. Per-language threshold overrides
 live in the collector's `LANGUAGE_OVERRIDES` and win over the global `filters`.
 Collection tokens come from the collector's token file plus
@@ -159,7 +159,7 @@ Or call the collector directly (small smoke; filters still from config/defaults)
 
 ```bash
 source scripts/load_runtime_env.sh && load_runtime_env
-python repos/swegen/tools/collect_prs_wo_image.py \
+python repos/legoflow-curator/tools/collect_prs_wo_image.py \
   --languages python \
   --repo_num 2 \
   --max_prs_per_repo 10 \
@@ -174,7 +174,7 @@ Supported languages: `python`, `javascript`, `typescript`, `go`, `c`, `cpp`, `ja
 ### Step 2: Create SWE Tasks
 
 ```bash
-swegen create \
+legoflow-curator create \
   --input-ids-file ./artifacts/collected_prs/python_pr_ids.txt \
   --n-concurrent 8 \
   --output ./artifacts/swe_tasks/py-cc \
@@ -223,7 +223,7 @@ the detached workers' full lifetime.
 
 ### Scaled parallel runs (proven recipe)
 
-To accumulate hundreds of verified tasks, run several `swegen create` shards
+To accumulate hundreds of verified tasks, run several `legoflow-curator create` shards
 **writing to the same `--output` pool but different `--state-dir`** — appends to
 `verifiable_tasks.txt` are atomic (O_APPEND), so shards never collide. Keep
 `--n-concurrent` around 16–20 (CPU-bound; higher causes Docker/LLM contention).
@@ -235,25 +235,25 @@ tasks — no need to wait for the full run.
 ### Step 3: Validate (optional, built into create)
 
 ```bash
-swegen validate ./artifacts/swe_tasks/py-cc --max-parallel 8 \
+legoflow-curator validate ./artifacts/swe_tasks/py-cc --max-parallel 8 \
   --jobs-dir artifacts/experiments/validate-jobs
 ```
 
-`--jobs-dir` defaults to `.swegen/harbor-jobs` (relative to CWD) if omitted —
+`--jobs-dir` defaults to `.legoflow-curator/harbor-jobs` (relative to CWD) if omitted —
 always pass it explicitly so Harbor job artifacts land under `artifacts/`,
 not the block root.
 
 ### Step 4: Difficulty + metadata tagging
 
-Difficulty is scored inline during `swegen create` (via `swegen.scoring`), so a
+Difficulty is scored inline during `legoflow-curator create` (via `legoflow_curator.scoring`), so a
 separate batch scoring pass is no longer required. Dataset-level difficulty +
 the 4-tag `[language, area, topic, bug_class]` metadata (used by the databoard)
 are produced by the **single canonical tagger**,
-`repos/swegen/tools/tag_task_metadata.py`, over unified JSONL datasets:
+`repos/legoflow-curator/tools/tag_task_metadata.py`, over unified JSONL datasets:
 
 ```bash
 # from blocks/curator/dashboard/ (datasets exported to datasets/<id>/tasks.jsonl)
-python3 ../repos/swegen/tools/tag_task_metadata.py \
+python3 ../repos/legoflow-curator/tools/tag_task_metadata.py \
   --datasets-dir datasets --dataset all --jobs 64 --retries 3
 ```
 
@@ -290,12 +290,12 @@ Each task directory contains:
 ## Directory Layout
 
 ```
-repos/swegen/         # Core Python package + tools
-  src/swegen/         # Python package (CLI, task generation, validation, scoring)
+repos/legoflow-curator/         # Core Python package + tools
+  src/legoflow-curator/         # Python package (CLI, task generation, validation, scoring)
   tools/              # Standalone scripts (PR collection; tag_task_metadata.py difficulty + 4-tag tagging)
 scripts/              # Per-language create scripts and the two mode-specific launchers
 artifacts/
-  collected_prs/      # PR ID lists (input to swegen create)
+  collected_prs/      # PR ID lists (input to legoflow-curator create)
   swe_tasks/          # Generated SWE tasks per language ({lang}-cc/)
   merged_swe_tasks/   # Optional flat verified-task export
   logs/               # Per-language create logs
@@ -307,15 +307,15 @@ artifacts/
 |------|---------|
 | `config.yaml` | Single source of truth for inputs: identity, resources, runtime I/O, per-language params (`languages.<lang>.params`). One-shot per run; worker progress lives in logs and batch state. |
 | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` | Authoritative manifest of validated task IDs per language. Consumers (e.g. tracer) must filter by this file. |
-| `artifacts/swe_tasks/{lang}-cc/.swegen-create-batch/` | Per-batch state JSON used by `swegen create` for resume/dedup. |
+| `artifacts/swe_tasks/{lang}-cc/.legoflow-curator-create-batch/` | Per-batch state JSON used by `legoflow-curator create` for resume/dedup. |
 | `scripts/extract_verified_tasks.py` | Optional: merges all verified tasks into a flat `artifacts/merged_swe_tasks/` directory. |
 
 ## Coding Standards
 
 - Python 3.12, formatted with `black` + `ruff` (line-length=100)
-- Install: `pip install -e repos/swegen/`
-- Run tests: `pytest repos/swegen/tests/`
-- CLI entry point: `swegen` (defined in pyproject.toml)
+- Install: `pip install -e repos/legoflow-curator/`
+- Run tests: `pytest repos/legoflow-curator/tests/`
+- CLI entry point: `legoflow-curator` (defined in pyproject.toml)
 
 ## Per-Language Parameters
 
@@ -327,7 +327,7 @@ artifacts/
 | `cc_timeout` | Claude Code SDK session timeout (seconds) |
 | `n_concurrent` | concurrent task workers |
 
-`scripts/create_<lang>.sh` reads these via `scripts/read_params.py` before launching `swegen create`. Edit them in `config.yaml`; no auto-tuning is performed.
+`scripts/create_<lang>.sh` reads these via `scripts/read_params.py` before launching `legoflow-curator create`. Edit them in `config.yaml`; no auto-tuning is performed.
 The all-language launcher honors `enabled`; set it to `false` to drop a
 language, or invoke a single `scripts/create_<lang>.sh` directly.
 
@@ -340,26 +340,26 @@ echo $TIMEOUT $CC_TIMEOUT $N_CONCURRENT
 
 `config.yaml -> runtime_info.input.pr_collection` controls Step 1 (PR
 collection). `scripts/load_runtime_env.sh` exports each key as an env var that
-`repos/swegen/tools/collect_prs_wo_image.py` and `scripts/collect_all_bg.sh`
+`repos/legoflow-curator/tools/collect_prs_wo_image.py` and `scripts/collect_all_bg.sh`
 read; unset/empty values fall back to the collector's built-in defaults.
 The block `.env` is sourced after the imported interactive environment, and
 `config.yaml` fills only still-unset exported values.
 
 | config key | env var | Meaning |
 |---|---|---|
-| `languages` | `SWEGEN_COLLECT_LANGUAGES` | comma-joined `--languages` list |
-| `repo_num` | `SWEGEN_COLLECT_REPO_NUM` | repos with qualifying PRs per language |
-| `max_prs_per_repo` | `SWEGEN_COLLECT_MAX_PRS_PER_REPO` | max qualifying PRs kept per repo |
-| `output_dir` | `SWEGEN_COLLECT_OUTPUT_DIR` | where `{lang}_pr_ids.txt` is written |
+| `languages` | `LEGOFLOW_CURATOR_COLLECT_LANGUAGES` | comma-joined `--languages` list |
+| `repo_num` | `LEGOFLOW_CURATOR_COLLECT_REPO_NUM` | repos with qualifying PRs per language |
+| `max_prs_per_repo` | `LEGOFLOW_CURATOR_COLLECT_MAX_PRS_PER_REPO` | max qualifying PRs kept per repo |
+| `output_dir` | `LEGOFLOW_CURATOR_COLLECT_OUTPUT_DIR` | where `{lang}_pr_ids.txt` is written |
 | `token_limit` | `COLLECT_TOKEN_LIMIT` | first N combined file + environment tokens (0 = all) |
-| `filters.min_stars` | `SWEGEN_PR_MIN_STARS` | min repo stars |
-| `filters.min_merged_prs` | `SWEGEN_PR_MIN_MERGED_PRS` | min merged PRs in repo |
-| `filters.min_language_percentage` | `SWEGEN_PR_MIN_LANGUAGE_PERCENTAGE` | min fraction of codebase in target language |
-| `filters.max_days_since_push` | `SWEGEN_PR_MAX_DAYS_SINCE_PUSH` | skip repos idle longer than this |
-| `filters.min_issue_body_length` | `SWEGEN_PR_MIN_ISSUE_BODY_LENGTH` | min linked-issue body length |
-| `filters.min_files_changed` | `SWEGEN_PR_MIN_FILES_CHANGED` | min files changed in the PR |
-| `filters.max_files_changed` | `SWEGEN_PR_MAX_FILES_CHANGED` | max files changed in the PR |
-| `filters.max_lines_changed` | `SWEGEN_PR_MAX_LINES_CHANGED` | max (additions + deletions) in the PR |
+| `filters.min_stars` | `LEGOFLOW_CURATOR_PR_MIN_STARS` | min repo stars |
+| `filters.min_merged_prs` | `LEGOFLOW_CURATOR_PR_MIN_MERGED_PRS` | min merged PRs in repo |
+| `filters.min_language_percentage` | `LEGOFLOW_CURATOR_PR_MIN_LANGUAGE_PERCENTAGE` | min fraction of codebase in target language |
+| `filters.max_days_since_push` | `LEGOFLOW_CURATOR_PR_MAX_DAYS_SINCE_PUSH` | skip repos idle longer than this |
+| `filters.min_issue_body_length` | `LEGOFLOW_CURATOR_PR_MIN_ISSUE_BODY_LENGTH` | min linked-issue body length |
+| `filters.min_files_changed` | `LEGOFLOW_CURATOR_PR_MIN_FILES_CHANGED` | min files changed in the PR |
+| `filters.max_files_changed` | `LEGOFLOW_CURATOR_PR_MAX_FILES_CHANGED` | max files changed in the PR |
+| `filters.max_lines_changed` | `LEGOFLOW_CURATOR_PR_MAX_LINES_CHANGED` | max (additions + deletions) in the PR |
 
 The `filters` are **global** thresholds. Per-language overrides remain in the
 collector's `LANGUAGE_OVERRIDES` dict and take precedence over these globals —

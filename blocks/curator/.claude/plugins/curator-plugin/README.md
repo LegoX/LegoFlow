@@ -1,6 +1,6 @@
 # curator — block-local skills for the SWE task-generation block
 
-Slash commands tailored to `blocks/curator/`. They wrap the swegen CLI,
+Slash commands tailored to `blocks/curator/`. They wrap the legoflow-curator CLI,
 GitHub PR collection, and per-language task generation/verification.
 
 For the generic block-system command (only `/root:create` lives there, since
@@ -11,7 +11,7 @@ new blocks are only ever created at the root level), see
 
 | Command | What it does |
 | --- | --- |
-| `/curator:setup`     | Bootstrap: install `repos/swegen/` editable, verify GitHub/LLM env vars, prepare an optional `gh_token.txt`. |
+| `/curator:setup`     | Bootstrap: install `repos/legoflow-curator/` editable, verify GitHub/LLM env vars, prepare an optional `gh_token.txt`. |
 | `/curator:check`     | Preflight: schema + env vars + GitHub API reachability + a real LLM completion + docker daemon + dryrun. Read-only. |
 | `/curator:collect-prs` | Start the separate GitHub PR collector, which writes `artifacts/collected_prs/{lang}_pr_ids.txt`; wait for it to finish before generation. |
 | `/curator:create-tasks` | Launch task generation and NOP/Oracle verification from existing PR ID files. It does not collect PRs. |

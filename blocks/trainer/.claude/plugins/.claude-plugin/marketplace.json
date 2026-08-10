@@ -1,6 +1,6 @@
 {
   "name": "trainer-block",
-  "owner": { "name": "haoli" },
+  "owner": { "name": "SWE-Lego" },
   "plugins": [
     {
       "name": "trainer",

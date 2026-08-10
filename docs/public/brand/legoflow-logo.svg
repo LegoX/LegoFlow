@@ -1,0 +1,13 @@
+<svg width="640" height="180" viewBox="0 0 640 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">LegoFlow logo</title>
+  <desc id="desc">A serif LegoFlow wordmark with Lego in black and Flow in rust red.</desc>
+  <rect width="640" height="180" fill="transparent"/>
+  <text
+    x="32"
+    y="122"
+    fill="#111111"
+    font-family="Georgia, Cambria, 'Times New Roman', Times, serif"
+    font-size="108"
+    font-weight="700"
+  >Lego<tspan fill="#b3431f">Flow</tspan></text>
+</svg>

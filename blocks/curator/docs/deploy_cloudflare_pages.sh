@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # Build the Curator docs (fumadocs/Next.js static export) and deploy to a
 # dedicated Cloudflare Pages project. Independent of the data dashboard project
-# (swe-databoard); this one publishes at swe-swegen-docs.
+# (legoflow-databoard); this one publishes at legoflow-curator-docs.
 #
 # Required credentials:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
-# read from $ENV_FILE (default ~/.config/swegen_docs_cloudflare.env), or from
+# read from $ENV_FILE (default ~/.config/legoflow_curator_docs_cloudflare.env), or from
 # already-exported env vars.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PROJECT_NAME="${PROJECT_NAME:-swe-swegen-docs}"
-BRANCH_NAME="${BRANCH_NAME:-swegen}"
+PROJECT_NAME="${PROJECT_NAME:-legoflow-curator-docs}"
+BRANCH_NAME="${BRANCH_NAME:-main}"
 OUT_DIR="${OUT_DIR:-out}"
 WRANGLER_PKG="${WRANGLER_PKG:-wrangler@latest}"
-ENV_FILE="${ENV_FILE:-$HOME/.config/swegen_docs_cloudflare.env}"
+ENV_FILE="${ENV_FILE:-$HOME/.config/legoflow_curator_docs_cloudflare.env}"
 
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*"; }
 

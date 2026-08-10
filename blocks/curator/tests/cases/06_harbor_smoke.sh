@@ -12,14 +12,14 @@ load_runtime_env >/dev/null 2>&1 || true
 
 DATASET_ROOT="$BLOCK_DIR/artifacts/swe_tasks/py-cc"
 TASK_ID="tox-dev__tox-3813"
-JOBS_DIR="$BLOCK_DIR/artifacts/swe_tasks/.swegen/harbor-jobs-cases-test"
-VENV_BIN="$BLOCK_DIR/artifacts/envs/swegen-env/bin"
+JOBS_DIR="$BLOCK_DIR/artifacts/swe_tasks/.legoflow-curator/harbor-jobs-cases-test"
+VENV_BIN="$BLOCK_DIR/artifacts/envs/legoflow-curator-env/bin"
 
 if [[ ! -d "$DATASET_ROOT/$TASK_ID" ]]; then
   echo "SKIP: $DATASET_ROOT/$TASK_ID not present — no Harbor smoke fixture"
   exit 77
 fi
-[[ -x "$VENV_BIN/swegen" ]] || { echo "FAIL: $VENV_BIN/swegen missing — run /curator:setup"; exit 1; }
+[[ -x "$VENV_BIN/legoflow-curator" ]] || { echo "FAIL: $VENV_BIN/legoflow-curator missing — run /curator:setup"; exit 1; }
 
 : "${DOCKER_HOST:=unix:///var/run/docker.sock}"
 export DOCKER_HOST
@@ -27,11 +27,11 @@ export DOCKER_HOST
 OUT="$(mktemp)"
 trap 'rm -f "$OUT"' EXIT
 
-if ! "$VENV_BIN/swegen" validate "$DATASET_ROOT" \
+if ! "$VENV_BIN/legoflow-curator" validate "$DATASET_ROOT" \
     --task "$TASK_ID" \
     --jobs-dir "$JOBS_DIR" \
     --env docker >"$OUT" 2>&1; then
-  echo "FAIL: swegen validate exited non-zero"
+  echo "FAIL: legoflow-curator validate exited non-zero"
   tail -40 "$OUT"
   exit 1
 fi

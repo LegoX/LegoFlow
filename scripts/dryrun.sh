@@ -189,7 +189,7 @@ else
   fi
 
   if [[ $SSH_OK -eq 1 && -n "$REMOTE_DIR" && "$REMOTE_DIR" != "null" ]]; then
-    REMOTE_REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
+    REMOTE_REPO_DIR="${REMOTE_DIR%/}/${LEGOFLOW_REMOTE_REPO_NAME:-LegoFlow}"
     if ssh -o BatchMode=yes "${REMOTE_USER}@${REMOTE_IP}" \
          "test -d '${REMOTE_REPO_DIR}'" 2>/dev/null; then
       ok "remote dir exists: ${REMOTE_REPO_DIR}"
@@ -218,7 +218,7 @@ PY
       continue
     fi
     if [[ $SSH_OK -eq 1 ]]; then
-      REMOTE_REPO_DIR="${REMOTE_DIR%/}/SWE-Lego-Live"
+      REMOTE_REPO_DIR="${REMOTE_DIR%/}/${LEGOFLOW_REMOTE_REPO_NAME:-LegoFlow}"
       info "running blocks/${block}/scripts/dryrun.sh on remote ..."
       if ssh -o BatchMode=yes "${REMOTE_USER}@${REMOTE_IP}" \
            "cd '${REMOTE_REPO_DIR}/blocks/${block}' && bash scripts/dryrun.sh" 2>&1 \

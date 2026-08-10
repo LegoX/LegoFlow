@@ -195,6 +195,8 @@ for rel in paths:
                 bad.append(f"{rel}: {dotted} = {v!r} is a non-local endpoint")
             continue
         if leaf in HOST_KEYS:
+            if v.endswith((".example.com", ".example.net", ".example.org")):
+                continue
             if not is_private_host(v):
                 bad.append(f"{rel}: {dotted} = {v!r} is a routable host")
             continue
@@ -210,7 +212,7 @@ if bad:
     for b in bad:
         print(f"       {b}", file=sys.stderr)
     print("", file=sys.stderr)
-    print("       Move the value into /gpufs/haoli/cicd/shared/.env and leave the", file=sys.stderr)
+    print("       Move the value into an operator-managed env file and leave the", file=sys.stderr)
     print("       field as \"\" — scripts/inject_smoke_secrets.py fills it at run time.", file=sys.stderr)
     sys.exit(1)
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# CI test 02: repos/swegen pin + venv editable install.
+# CI test 02: repos/legoflow-curator pin + venv editable install.
 # - If commit_id is non-null, assert HEAD matches.
-# - Assert artifacts/envs/swegen-env exists.
-# - Assert `python -c "import swegen"` succeeds inside that venv.
+# - Assert artifacts/envs/legoflow-curator-env exists.
+# - Assert `python -c "import legoflow_curator"` succeeds inside that venv.
 
 set -euo pipefail
 
@@ -21,8 +21,8 @@ print("" if cur is None else cur)
 PY
 }
 
-REPO_PATH="$BLOCK_DIR/repos/swegen"
-COMMIT_PIN="$(cfg meta_info.repos.swegen.commit_id)"
+REPO_PATH="$BLOCK_DIR/repos/legoflow-curator"
+COMMIT_PIN="$(cfg meta_info.repos.legoflow-curator.commit_id)"
 VENV_PATH_RAW="$(cfg meta_info.environment.venv_path)"
 VENV_PATH="$BLOCK_DIR/$VENV_PATH_RAW"
 
@@ -31,19 +31,19 @@ VENV_PATH="$BLOCK_DIR/$VENV_PATH_RAW"
 if [[ -n "$COMMIT_PIN" && "$COMMIT_PIN" != "null" ]]; then
   HEAD="$(git -C "$REPO_PATH" rev-parse HEAD 2>/dev/null || true)"
   if [[ "$HEAD" != "$COMMIT_PIN" ]]; then
-    echo "FAIL: repos/swegen HEAD=$HEAD does not match config commit_id=$COMMIT_PIN"
+    echo "FAIL: repos/legoflow-curator HEAD=$HEAD does not match config commit_id=$COMMIT_PIN"
     exit 1
   fi
-  echo "INFO: repos/swegen pinned at $COMMIT_PIN"
+  echo "INFO: repos/legoflow-curator pinned at $COMMIT_PIN"
 else
-  echo "INFO: meta_info.repos.swegen.commit_id is null (treated as latest); skipping pin check"
+  echo "INFO: meta_info.repos.legoflow-curator.commit_id is null (treated as latest); skipping pin check"
 fi
 
 [[ -x "$VENV_PATH/bin/python" ]] || { echo "FAIL: venv missing at $VENV_PATH_RAW — run /curator:setup"; exit 1; }
 
-if "$VENV_PATH/bin/python" -c "import swegen" >/dev/null 2>&1; then
-  echo "PASS: repos/swegen pin + swegen importable in venv"
+if "$VENV_PATH/bin/python" -c "import legoflow_curator" >/dev/null 2>&1; then
+  echo "PASS: repos/legoflow-curator pin + legoflow-curator importable in venv"
 else
-  echo "FAIL: swegen not importable in $VENV_PATH/bin/python — run pip install -e repos/swegen/"
+  echo "FAIL: legoflow-curator not importable in $VENV_PATH/bin/python — run pip install -e repos/legoflow-curator/"
   exit 1
 fi

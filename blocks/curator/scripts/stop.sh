@@ -4,7 +4,7 @@
 # Kills, in order:
 #   1. the create_all_bg.sh launcher (if still alive),
 #   2. each per-language bash scripts/create_<lang>.sh worker,
-#   3. any `swegen create` python process spawned by those workers.
+#   3. any `legoflow-curator create` python process spawned by those workers.
 #
 # Idempotent: re-running after everything is gone exits 0 with no error.
 # Sends SIGTERM first, waits up to $GRACE seconds, then escalates to SIGKILL.
@@ -12,7 +12,7 @@
 # Flags:
 #   -n|--dry-run     list what would be killed; touch nothing
 #   --with-docker    additionally stop any docker containers whose image
-#                    name starts with `harbor` or `swegen-` (off by default
+#                    name starts with `harbor` or `legoflow-curator-` (off by default
 #                    so we don't disturb unrelated user containers)
 #   --grace SECONDS  TERM→KILL grace period (default 15)
 #   -h|--help        usage
@@ -38,13 +38,13 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# Argv patterns that uniquely identify swegen worker processes.
+# Argv patterns that uniquely identify legoflow-curator worker processes.
 # Anchored on the block dir's scripts/ path so we never match a homonym
 # process from another block or another user.
 PATTERNS=(
     "bash[[:space:]]+${BLOCK_DIR}/scripts/create_all_bg\.sh"
     "bash[[:space:]]+(\./)?scripts/create_(py|js|ts|go|c|cpp|java|rust)\.sh"
-    "${BLOCK_DIR}/artifacts/envs/swegen-env/bin/python.*swegen.*create"
+    "${BLOCK_DIR}/artifacts/envs/legoflow-curator-env/bin/python.*legoflow-curator.*create"
 )
 
 # Collect PIDs once so the report and the kill loop see the same set.
@@ -67,7 +67,7 @@ collect_pids() {
 PIDS="$(collect_pids)"
 
 if [ -z "$PIDS" ]; then
-    echo "stop.sh: no swegen workers running."
+    echo "stop.sh: no legoflow-curator workers running."
 else
     echo "stop.sh: target processes:"
     while IFS= read -r pid; do
@@ -114,9 +114,9 @@ if [ "$WITH_DOCKER" -eq 1 ]; then
         echo "stop.sh: --with-docker requested but docker binary not found; skipping container cleanup." >&2
     else
         CONTAINERS="$(docker ps --filter 'ancestor=' --format '{{.ID}} {{.Image}}' 2>/dev/null \
-            | awk 'tolower($2) ~ /^(harbor|swegen-)/ {print $1}')"
+            | awk 'tolower($2) ~ /^(harbor|legoflow-curator-)/ {print $1}')"
         if [ -z "$CONTAINERS" ]; then
-            echo "stop.sh: no harbor/swegen-* containers running."
+            echo "stop.sh: no harbor/legoflow-curator-* containers running."
         else
             echo "stop.sh: stopping containers:"
             echo "$CONTAINERS" | sed 's/^/  /'

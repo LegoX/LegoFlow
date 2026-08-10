@@ -4,4 +4,4 @@ runs:
     completed_at: "2026-05-04T10:11:35Z"
     status: completed
     archive: artifacts/archives/run_001/
-    notes: "lr=1e-4, epochs=3; val_loss=0.42, checkpoint saved to /mnt/shared/sft_training/ckpt_001"
+    notes: "lr=1e-4, epochs=3; val_loss=0.42, checkpoint saved to artifacts/shared/sft_training/ckpt_001"

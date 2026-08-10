@@ -2,8 +2,8 @@
 
 ## Context
 
-The current block is named `curator`; the legacy `blocks/swegen` path and
-`/swegen:*` namespace were renamed before the latest `dev`. Before this design
+The current block is named `curator`; the legacy `blocks/legoflow-curator` path and
+`/legoflow-curator:*` namespace were renamed before the latest `dev`. Before this design
 was implemented, the task-generation skill was exposed publicly as
 `/curator:run`, although its only domain operation was creating and verifying
 tasks from existing PR ID files.
@@ -12,8 +12,8 @@ The repository's uniform plugin layout keeps a `/<block>:run` skill in every
 block, so Curator retains that slot as a thin compatibility adapter. Root target
 resolution is separate: `/root:run curator` directly executes Curator's
 all-language `scripts/start.sh` and does not invoke the adapter. The public
-documentation site at <https://swe-swegen-docs.pages.dev/> still serves legacy
-SWEgen content, while the maintained site source now lives under
+documentation site at <https://legoflow-curator-docs.pages.dev/> still serves legacy
+LegoFlow Curator content, while the maintained site source now lives under
 `blocks/curator/docs`.
 
 ## Final-Review Architecture Decision (2026-07-21)
@@ -32,11 +32,11 @@ plugin interface; current root targeting does not use it.
 - Replace user-facing `/curator:run` references across plugin, block, root, test,
   and web documentation.
 - Publish the maintained Curator documentation to the existing
-  `swe-swegen-docs` Cloudflare Pages project.
+  `legoflow-curator-docs` Cloudflare Pages project.
 
 ## Non-goals
 
-- Do not restore `blocks/swegen` or the `/swegen:*` plugin namespace.
+- Do not restore `blocks/legoflow-curator` or the `/legoflow-curator:*` plugin namespace.
 - Do not change task-generation scripts, PR collection behavior, or artifacts.
 - Do not rename `:run` for other blocks or change the generic root block protocol.
 
@@ -68,12 +68,12 @@ Update all directly relevant references in:
   user command.
 
 The web source remains `blocks/curator/docs`; no files are restored under
-`blocks/swegen/docs`. The deployment script and docs README target:
+`blocks/legoflow-curator/docs`. The deployment script and docs README target:
 
 ```text
-project: swe-swegen-docs
-branch:  swegen
-URL:     https://swe-swegen-docs.pages.dev/
+project: legoflow-curator-docs
+branch:  legoflow-curator
+URL:     https://legoflow-curator-docs.pages.dev/
 ```
 
 After the follow-up PR merges, deploy the static export to that project and
@@ -93,5 +93,5 @@ verify the live site contains `/curator:create-tasks` and no longer recommends
 ## Delivery
 
 PR #60 is already merged and cannot accept more commits. This change uses the
-same remote `swegen` branch in a new follow-up PR targeting `dev`, then deploys
+same remote `legoflow-curator` branch in a new follow-up PR targeting `dev`, then deploys
 the merged documentation to Cloudflare Pages.

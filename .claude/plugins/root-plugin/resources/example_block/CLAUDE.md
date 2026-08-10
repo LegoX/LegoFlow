@@ -50,5 +50,5 @@ Example index.yaml entry written by `archive_run.sh`:
 
 `meta_info.resources.ip` is set. Always execute on the remote node:
 1. `tmux new-window -n sft_training`
-2. SSH into 192.168.1.10 and attach to (or create) a tmux session there
+2. SSH into the host configured by `meta_info.resources.ip` and attach to (or create) a tmux session there
 3. Run scripts inside that remote session — never run this block locally

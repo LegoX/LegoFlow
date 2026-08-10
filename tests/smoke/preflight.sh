@@ -25,7 +25,7 @@ set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SFT_CFG="$ROOT_DIR/tests/smoke/trainer/config.yaml"
-SWEGEN_CFG="$ROOT_DIR/tests/smoke/curator/config.yaml"
+LEGOFLOW_CURATOR_CFG="$ROOT_DIR/tests/smoke/curator/config.yaml"
 EVAL_CFG="$ROOT_DIR/tests/smoke/evaluator/config.yaml"
 
 STAGES=(curator tracer trainer evaluator)
@@ -134,9 +134,9 @@ fi
 # =========================================== upstream LLM endpoint (curator) ===
 if in_window curator || in_window tracer; then
   echo "[2] Upstream LLM endpoint (curator/tracer)"
-  LLM_URL="$(cfg "$SWEGEN_CFG" runtime_info.input.llm_api.api_base_url)"
+  LLM_URL="$(cfg "$LEGOFLOW_CURATOR_CFG" runtime_info.input.llm_api.api_base_url)"
   if [[ -z "$LLM_URL" ]]; then
-    warn "no llm_api.api_base_url in $SWEGEN_CFG"
+    warn "no llm_api.api_base_url in $LEGOFLOW_CURATOR_CFG"
   else
     # Reachability only: the real path goes through the local CC proxy (:4010),
     # and this endpoint is Cloudflare-gated — a 401/403/404/5xx still proves

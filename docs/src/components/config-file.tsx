@@ -42,7 +42,7 @@ function highlightYaml(line: string) {
   return (
     <>
       {indent}
-      <span className="font-semibold text-[var(--swe-live-accent)]">{key}</span>
+      <span className="font-semibold text-[var(--legoflow-accent)]">{key}</span>
       <span>{colon}</span>
       <span className={valueClass}>{value}</span>
       {comment && <span className="text-emerald-700">{comment}</span>}

@@ -1,13 +1,13 @@
-# SWEgen Quick Verification
+# LegoFlow Curator Quick Verification
 
-This document helps a new AI agent decide, in 5-10 minutes, whether the SWEgen
+This document helps a new AI agent decide, in 5-10 minutes, whether the LegoFlow Curator
 checkout wired into `LegoFlow/curator` can run end to end, and quickly
 tell whether a problem is in the environment, the LLM, Docker/Harbor, or the
-SWEgen code itself.
+LegoFlow Curator code itself.
 
 This is a manual block-local verification flow. It is distinct from
 `/curator:create-tasks` smoke mode, which reads the bundled PR list under
-`repos/swegen/artifacts/` and writes under `artifacts/experiments/quick-verify/`.
+`repos/legoflow-curator/artifacts/` and writes under `artifacts/experiments/quick-verify/`.
 
 ## Goal
 
@@ -24,15 +24,15 @@ Before running inside the `LegoFlow/blocks/curator` block, make sure the
 submodule is initialized:
 
 ```bash
-git submodule update --init blocks/curator/repos/swegen
+git submodule update --init blocks/curator/repos/legoflow-curator
 ```
 
-Install SWEgen:
+Install LegoFlow Curator:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e repos/swegen/
+pip install -e repos/legoflow-curator/
 ```
 
 Check the GitHub token:
@@ -64,7 +64,7 @@ export OPENAI_API_BASE_URL="https://your-openai-compatible-endpoint/v1"
 export ANTHROPIC_BASE_URL="https://your-anthropic-compatible-endpoint"
 export OPENAI_MODEL="..."
 export ANTHROPIC_MODEL="..."
-export CLAUDE_CONFIG_DIR="$PWD/artifacts/claude-config/swegen-clean"
+export CLAUDE_CONFIG_DIR="$PWD/artifacts/claude-config/legoflow-curator-clean"
 mkdir -p "$CLAUDE_CONFIG_DIR"
 ```
 
@@ -75,9 +75,9 @@ local LiteLLM proxy, not the raw provider URL — see the "LLM provider modes"
 section of `CLAUDE.md`. Verify the OpenAI path with a real completion:
 
 ```bash
-PYTHONPATH=repos/swegen/src python - <<'PY'
+PYTHONPATH=repos/legoflow-curator/src python - <<'PY'
 from openai import OpenAI
-from swegen.llm_env import hydrate_cross_provider_env, get_openai_compatible_config
+from legoflow_curator.llm_env import hydrate_cross_provider_env, get_openai_compatible_config
 
 hydrate_cross_provider_env()
 model, key, base = get_openai_compatible_config()
@@ -117,10 +117,10 @@ export DOCKER_HOST=unix:///var/run/docker.sock
 If a Python verified task already exists, validate the known sample first:
 
 ```bash
-swegen validate \
+legoflow-curator validate \
   artifacts/swe_tasks/py-cc \
   --task tox-dev__tox-3813 \
-  --jobs-dir artifacts/swe_tasks/.swegen/harbor-jobs-quick \
+  --jobs-dir artifacts/swe_tasks/.legoflow-curator/harbor-jobs-quick \
   --env docker
 ```
 
@@ -173,12 +173,12 @@ electricitymaps/electricitymaps-contrib:pr-8119
 Run the small sample:
 
 ```bash
-swegen create \
+legoflow-curator create \
   --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
   --max-pr 1 \
   --n-concurrent 1 \
   --output artifacts/swe_tasks/py-cc \
-  --state-dir artifacts/state/swegen-py \
+  --state-dir artifacts/state/legoflow-curator-py \
   --timeout 2400 \
   --cc-timeout 1800 \
   --no-require-issue \
@@ -215,11 +215,11 @@ tox-dev__tox-3813
 
 ## 5. Recommended judgement
 
-If `tox-dev/tox:pr-3813` passes `swegen create --max-pr 1` and writes to
-`verifiable_tasks.txt`, the SWEgen main flow, LLM API, Claude SDK, and
+If `tox-dev/tox:pr-3813` passes `legoflow-curator create --max-pr 1` and writes to
+`verifiable_tasks.txt`, the LegoFlow Curator main flow, LLM API, Claude SDK, and
 Docker/Harbor local validation chain are all working.
 
-If quick verification fails, do not immediately edit SWEgen code. First use
+If quick verification fails, do not immediately edit LegoFlow Curator code. First use
 the table above to decide whether it is an environment, candidate-PR, or
 Harbor/Docker argument issue; only enter code debugging once the same problem
 reproduces consistently across several lightweight PRs.

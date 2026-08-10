@@ -26,7 +26,7 @@ REQUIRED = [
     "meta_info.name",
     "meta_info.environment.venv_path",
     "meta_info.environment.requirements",
-    "meta_info.repos.swegen",
+    "meta_info.repos.legoflow-curator",
     "runtime_info.input.llm_api.api_key",
     "runtime_info.input.llm_api.api_base_url",
     "runtime_info.input.llm_api.pr_model",

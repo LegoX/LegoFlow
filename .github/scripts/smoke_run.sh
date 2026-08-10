@@ -105,7 +105,7 @@ case "$BLOCK" in
       cat /tmp/trainer-remote-probe
     else
       # Local mode and no GPU: SKIP fast so verify.sh maps to ::warning::
-      # (the swe-lego-gpu runner isn't online and there's no remote SSH
+      # (the legoflow-gpu runner isn't online and there's no remote SSH
       # config either).
       if ! command -v nvidia-smi >/dev/null 2>&1; then
         echo "INFO: trainer SKIP-fast — no remote SSH config and nvidia-smi absent"
@@ -126,7 +126,7 @@ esac
 
 case "$BLOCK" in
   tracer|evaluator)
-    # Warm the cpfs/aliyun-alinas-efc cache for harbor's CLI: the first import
+    # Warm the networked-filesystem cache for Harbor's CLI: the first import
     # takes ~20s (pydantic/asyncio cold pages). Warming keeps preflight and
     # launch latency predictable; the second invocation is ~9s.
     # Done AFTER prepare_tasks (which reads 200 task dirs and can evict
@@ -175,7 +175,7 @@ LAUNCH_LOG="$BLOCK_DIR/artifacts/logs/smoke-launch.log"
 #   $5 label       — printed back so claude's output is greppable
 claude_launch() {
   local setup_check="$1" preflight="$2" run_cmd="$3" pgrep_pat="$4" label="$5"
-  HOME=/home/haoli timeout 900 claude -p \
+  HOME="${LEGOFLOW_CLI_HOME:-$HOME}" timeout 900 claude -p \
 "CI smoke for ${label}. The smoke config has been overlaid at blocks/${BLOCK}/config.yaml. cwd is already blocks/${BLOCK}.
 
 Run 3 gated phases via the Bash tool. STOP and reply FAILED <phase-number> with the last 20 lines of output if any phase exits non-zero. Do NOT proceed past a failure.
@@ -206,10 +206,10 @@ PREFLIGHT_LOCAL='bash scripts/dryrun.sh'
 case "$BLOCK" in
   curator)
     # Drive via claude SDK. The smoke config is the source of truth — it
-    # specifies the PR list (smoke.input_prs) and all swegen create flags
+    # specifies the PR list (smoke.input_prs) and all legoflow-curator create flags
     # under runtime_info.input.smoke.*. We materialize the PR list into a
     # tempfile and read the flags via the `cfg` helper, then hand a single
-    # composed swegen-create command to claude headless. Claude's job is
+    # composed legoflow-curator-create command to claude headless. Claude's job is
     # narrow: nohup the command in the background and exit (the headless
     # `claude -p` Bash tool caps at 10 min and has no harness callback, so
     # it cannot wait the 60-min budget). The bash WAIT phase below polls
@@ -224,7 +224,7 @@ case "$BLOCK" in
     SWE_TASKS_BASE="$(cfg runtime_info.output.swe_tasks_dir.path)"
     SMOKE_OUT="$BLOCK_DIR/$SWE_TASKS_BASE/$(cfg runtime_info.input.smoke.output_subdir)"
     SMOKE_STATE="$BLOCK_DIR/$SWE_TASKS_BASE/$(cfg runtime_info.input.smoke.state_subdir)"
-    SMOKE_IDS_FILE="$BLOCK_DIR/$SWE_TASKS_BASE/.swegen-smoke-input-prs.txt"
+    SMOKE_IDS_FILE="$BLOCK_DIR/$SWE_TASKS_BASE/.legoflow-curator-smoke-input-prs.txt"
     mkdir -p "$SMOKE_OUT" "$SMOKE_STATE" "$(dirname "$SMOKE_IDS_FILE")"
     python3 - "$BLOCK_DIR/config.yaml" "$SMOKE_IDS_FILE" <<'PY'
 import sys, yaml
@@ -242,10 +242,10 @@ PY
     SMOKE_DPB="$(cfg runtime_info.input.smoke.docker_prune_batch)"
     echo "INFO: smoke PR list ($(wc -l <"$SMOKE_IDS_FILE") entries):"
     sed 's/^/         /' "$SMOKE_IDS_FILE"
-    SMOKE_CMD="source scripts/load_runtime_env.sh && load_runtime_env >/dev/null 2>&1 ; source artifacts/envs/swegen-env/bin/activate ; nohup swegen create --input-ids-file ${SMOKE_IDS_FILE#${BLOCK_DIR}/} --max-pr ${SMOKE_MAX_PR} --n-concurrent ${SMOKE_NCONC} --output ${SMOKE_OUT#${BLOCK_DIR}/} --state-dir ${SMOKE_STATE#${BLOCK_DIR}/} --timeout ${SMOKE_TO} --cc-timeout ${SMOKE_CCTO} --no-require-issue --min-source-files ${SMOKE_MINSF} --max-source-files ${SMOKE_MAXSF} --docker-prune-batch ${SMOKE_DPB} --verbose >> artifacts/logs/smoke-launch.log 2>&1 &"
-    # curator's (swegen CLI) openai_proxy CC verification path (the half that writes
+    SMOKE_CMD="source scripts/load_runtime_env.sh && load_runtime_env >/dev/null 2>&1 ; source artifacts/envs/legoflow-curator-env/bin/activate ; nohup legoflow-curator create --input-ids-file ${SMOKE_IDS_FILE#${BLOCK_DIR}/} --max-pr ${SMOKE_MAX_PR} --n-concurrent ${SMOKE_NCONC} --output ${SMOKE_OUT#${BLOCK_DIR}/} --state-dir ${SMOKE_STATE#${BLOCK_DIR}/} --timeout ${SMOKE_TO} --cc-timeout ${SMOKE_CCTO} --no-require-issue --min-source-files ${SMOKE_MINSF} --max-source-files ${SMOKE_MAXSF} --docker-prune-batch ${SMOKE_DPB} --verbose >> artifacts/logs/smoke-launch.log 2>&1 &"
+    # curator's (legoflow-curator CLI) openai_proxy CC verification path (the half that writes
     # verifiable_tasks.txt) needs a local LiteLLM proxy on cc_proxy_port. This
-    # runner builds its own swegen-create, so it must start the proxy itself —
+    # runner builds its own legoflow-curator-create, so it must start the proxy itself —
     # otherwise PREFLIGHT_LOCAL (dryrun.sh) /health check fails and verification
     # silently banks 0 tasks. No-op when cc_provider_mode != openai_proxy; the
     # EXIT trap keeps it up through the WAIT phase and tears it down on exit.
@@ -255,8 +255,8 @@ PY
     cc_proxy_start "$BLOCK_DIR" "$BLOCK_DIR/config.yaml" \
       || { echo "FAIL: CC LiteLLM proxy did not start (openai_proxy mode)"; exit 1; }
     claude_launch "$SETUP_CHECK_LOCAL" "$PREFLIGHT_LOCAL" "$SMOKE_CMD" \
-                  "swegen create --input-ids-file" "curator"
-    LAUNCH_PAT='swegen create --input-ids-file'
+                  "legoflow-curator create --input-ids-file" "curator"
+    LAUNCH_PAT='legoflow-curator create --input-ids-file'
     LAUNCH_PID=$(pgrep -f "$LAUNCH_PAT" | head -1)
     LAUNCH_PID=${LAUNCH_PID:-0}
     ;;
@@ -279,7 +279,8 @@ PY
       # current branch + overlays the smoke config (this IS the setup-step,
       # which is intentional: dryrun.sh in phase 2 must read the smoke
       # config, not whatever was on the remote before).
-      BRANCH="${GITHUB_REF_NAME:-haoli/ci-cd}"
+      BRANCH="${GITHUB_REF_NAME:-$(git -C "$REPO_ROOT" branch --show-current)}"
+      BRANCH="${BRANCH:-main}"
       REMOTE_LOG="$REMOTE_DIR/blocks/trainer/artifacts/logs/smoke-launch.log"
       SETUP_SH="artifacts/logs/.smoke-remote-setup.sh"
       CHECK_SH="artifacts/logs/.smoke-remote-check.sh"
@@ -441,7 +442,7 @@ if (( LAST_COUNT == 0 )); then
 fi
 
 # Harbor's claude-code agent docker containers write agent/sessions/ as
-# root:root mode 700. cpfs root-squashes chown from inside a docker
+# root:root mode 700. The shared filesystem root-squashes chown from Docker
 # container so we can't fix ownership — but docker-root CAN delete those
 # dirs IF no harbor trial container is still writing to them.
 #
