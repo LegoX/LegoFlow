@@ -153,6 +153,9 @@ publish_dashboard() {
     _publish_log "nothing to publish: $dir does not exist"
     return 1
   fi
+  # Resolve now, while we are still in the caller's directory: wrangler runs from
+  # its own workdir, where a relative path would point somewhere else entirely.
+  dir="$(cd "$dir" && pwd)"
 
   local shared
   shared="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/shared_credentials.sh"
