@@ -7,7 +7,10 @@ const STORAGE_KEY = "lf-dashboard-lang";
 export function getSavedLang(): Lang {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved === "zh" || saved === "en") return saved;
-  return navigator.language.startsWith("zh") ? "zh" : "en";
+  // English by default, regardless of the browser's locale: this board is shared
+  // and read by people who do not share one. A visitor who prefers Chinese
+  // switches once and the choice is remembered.
+  return "en";
 }
 
 export function saveLang(lang: Lang) {
