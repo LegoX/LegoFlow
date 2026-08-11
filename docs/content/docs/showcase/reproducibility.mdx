@@ -1,0 +1,126 @@
+---
+title: Reproducibility Boundaries
+description: What LegoFlow records, what remains nondeterministic, and how to report adaptive multi-block runs responsibly.
+---
+
+<Callout title="Short warning" type="warning">
+An agent may correct, adapt, or optimize a multi-block run after inspecting live
+failures. The exact sequence of decisions may not repeat: model sampling,
+provider behavior, endpoint health, GitHub state, container timing, and
+hardware scheduling can all change. Reproduce the archived inputs and
+interventions, not the assumption that the agent will reason identically.
+</Callout>
+
+## What the case study's agent adapted
+
+The completed experiment included several cross-block corrections:
+
+- **Tracer infrastructure:** inference endpoints began returning HTTP 502
+  responses or timing out, so traffic moved to healthy endpoints.
+- **Data selection:** the first 56.1% result prompted a review of trajectories;
+  the second attempt selected for reasoning depth rather than `<think>`-block
+  frequency.
+- **Format compatibility:** malformed or incompatible tool-call records were
+  normalized so the downstream training and evaluation stack could read them.
+- **Trainer memory:** `use_unsloth_gc` was replaced with standard gradient
+  checkpointing after host-memory exhaustion at 128k context.
+- **Distributed training:** NCCL was directed to loopback on the single-host
+  eight-GPU topology after synchronization failed through `eth0`.
+
+These were evidence-driven improvements, but they are also experimental
+interventions. A replay that starts from the corrected configuration is not a
+replay of the original failure sequence; it is a reproduction of the improved
+run.
+
+## Three levels of reproducibility
+
+| Level | What can be reproduced | Main condition |
+| --- | --- | --- |
+| **Structural** | Block graph, declared handoffs, setup/check/run lifecycle, archive layout, and verifier contract. | Use the same LegoFlow and pinned repository commits. |
+| **Artifact** | A specific task set, trajectory dataset, generated training config, checkpoint lineage, and evaluation task list. | Freeze ordered manifests, files, image digests, model revisions, and hashes. |
+| **Behavioral** | Similar trajectory quality, loss curve, and solve-rate trend. | Hold as many runtime variables constant as possible and report uncertainty across repeated runs. |
+
+Bit-for-bit equality is usually unrealistic for model generation and
+distributed GPU training. A strong reproduction instead proves lineage:
+identical frozen inputs entered a known configuration, every intervention is
+recorded, and the resulting metrics fall within a reported range.
+
+## Why LegoFlow improves the situation
+
+LegoFlow does not remove nondeterminism. It reduces the amount of invisible
+state around it.
+
+### Declared dependencies localize change
+
+Each consumer names the upstream block output it accepts, and each producer
+names the downstream input it feeds. If Trainer receives malformed tool calls,
+the dependency graph points back to Tracer's conversion output. The correction
+can be made at the contract boundary instead of becoming an undocumented patch
+inside training.
+
+### Archived runs preserve the scene
+
+Each run stores status, configuration, scripts, logs, and repository pins in a
+consistent archive. The agent can compare the first and second attempts, test
+one hypothesis, and preserve both outcomes. A human reviewer can see that the
+8.3-point gain followed a data-selection change rather than a silent teacher
+model upgrade.
+
+### Uniform blocks make interventions comparable
+
+Curator, Tracer, Trainer, and Evaluator expose the same lifecycle and artifact
+shape. That lets the agent move between task verification, trajectory quality,
+training loss, and benchmark score without inventing a new operating model for
+every stage. The block's input/output contract remains stable even when its
+internal implementation is corrected.
+
+Together, these properties turn self-correction from hidden session behavior
+into a sequence of inspectable run revisions. They improve auditability and
+repeatability even when exact agent reasoning cannot be replayed.
+
+## Variables that can still change the result
+
+Record these explicitly:
+
+- live GitHub repository and pull-request state;
+- GitHub API ordering, pagination, rate limits, and token permissions;
+- model weights or provider revisions hidden behind the same model name;
+- sampling temperature, seed support, retry behavior, and prompt or scaffold
+  version;
+- endpoint routing, load balancing, transient errors, and fallback policy;
+- container image digests, package indexes, base images, and downloaded build
+  dependencies;
+- CPU, host RAM, disk, filesystem, GPU, driver, CUDA, NCCL, and network
+  topology;
+- benchmark dataset, verifier, agent runtime, max turns, and egress policy;
+- any manual or agent-authored edit made between archived runs.
+
+Checked-in `config.yaml` files are working profiles and may evolve. For a
+historical comparison, the archived run config and scripts take precedence
+over today's defaults.
+
+## Minimum reporting standard for an adaptive run
+
+1. Give every attempt a distinct run ID; never overwrite the first attempt.
+2. Hash the ordered PR, task, trajectory, training, and evaluation manifests.
+3. Record model and dataset revisions, not only friendly names.
+4. Save the agent scaffold, prompt, runtime image digest, and endpoint-routing
+   policy.
+5. Write each correction as **evidence -> hypothesis -> change -> result**.
+6. Preserve pre-change and post-change metrics in separate archives.
+7. Report missing provenance directly; do not fill gaps with current defaults.
+8. Repeat stochastic stages when budget permits and report the distribution,
+   not only the best run.
+
+Applied to this case study, the correct claim is:
+
+> Under the recorded experiment conditions, a depth-first 512-trajectory SFT
+> run reached 64.4% on SWE-bench Verified, 8.3 points above the first
+> coverage-first attempt.
+
+It is not:
+
+> Any new LegoFlow run with 512 trajectories will reach 64.4%.
+
+Use the [reproduction guide](/docs/showcase/reproduce) to build the evidence
+package needed for the stronger, correctly scoped claim.

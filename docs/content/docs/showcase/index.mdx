@@ -1,0 +1,127 @@
+---
+title: From GitHub Pull Requests to a 64.4% SWE Solve Rate
+description: A complete LegoFlow case study spanning task curation, agent trajectories, full-parameter training, and SWE-bench Verified evaluation.
+---
+
+This case study shows one AI agent operating LegoFlow across **Curator**,
+**Tracer**, **Trainer**, and **Evaluator**. Starting from merged pull requests in
+real GitHub repositories, the run produced verifiable software-engineering
+tasks, collected teacher trajectories, trained
+`Qwen3.5-35B-A3B-Base`, and evaluated the result on SWE-bench Verified.
+
+No external training dataset was introduced: the training data came from tasks
+and trajectories produced by this pipeline. The teacher model was `GLM-5.2`;
+Curator used `claude-sonnet-4-6` through its Claude Code task-creation path.
+
+<Callout title="Result, not a guarantee" type="warning">
+The reported percentages belong to one completed experiment and its archived
+conditions. Re-running a live GitHub and multi-agent pipeline can reproduce the
+workflow and validate the same hypotheses, but it does not guarantee identical
+tasks, trajectories, or benchmark scores. Read the
+[reproducibility notes](/docs/showcase/reproducibility) before planning a run.
+</Callout>
+
+## The end-to-end result
+
+```text
+merged GitHub PRs
+  -> Curator: 4,166 verifiable Python tasks
+  -> Tracer: 915 solved teacher trajectories
+  -> quality selection: 512 depth-filtered trajectories
+  -> Trainer: full-parameter SFT, 128k context, 3 epochs
+  -> Evaluator: 64.4% on SWE-bench Verified
+```
+
+| Stage | What happened | Recorded result |
+| --- | --- | --- |
+| **Curator** | Converted merged Python pull requests into containerized tasks and accepted only verifiable instances. | **4,166** tasks |
+| **Tracer** | Asked `GLM-5.2` to solve tasks in isolated environments and archived the trajectories. | **915** solved trajectories |
+| **Selection** | Removed duplicate and shallow trajectories, favoring reasoning substance over reasoning frequency. | **512** trajectories |
+| **Trainer** | Full-parameter SFT of `Qwen3.5-35B-A3B-Base` at 128k context on 8× H800 80GB GPUs. | 3 epochs, 24 optimizer steps |
+| **Evaluator** | Ran the trained model on SWE-bench Verified. | **64.4%** solve rate |
+
+## What the agent changed between attempts
+
+The first training attempt used 500 trajectories and reached **56.1%**. The
+agent then inspected its own trajectories. A `<think>` block appeared in 80.7%
+of model turns, but many blocks were only short transition phrases rather than
+substantive debugging.
+
+The second attempt changed the selection objective: keep trajectories whose
+reasoning averaged at least 500 characters per turn, accepting lower coverage
+in exchange for deeper reasoning. The final selection contained 512
+trajectories. Median reasoning depth rose from 140 to **959 characters per
+turn**, while reasoning coverage fell from 80.7% to 30.7%.
+
+| Metric | First attempt | Second attempt | Change |
+| --- | ---: | ---: | ---: |
+| Trajectories | 500 | 512 | +2.4% |
+| Reasoning coverage | 80.7% | 30.7% | -50 points |
+| Reasoning depth | 140 char/block | 959 char/turn | **5.9×** |
+| Solve rate | 56.1% | **64.4%** | **+8.3 points** |
+
+The teacher did not become stronger between attempts: both used `GLM-5.2`.
+The gain came from selecting for reasoning depth. During conversion, the agent
+also found tool calls that the evaluation harness could not parse and
+normalized them before training.
+
+## Training
+
+The selected data was used for full-parameter SFT with a 128k-token context,
+global batch size 64, learning rate `5e-5`, and three epochs. The run used 512
+trajectories and completed 24 optimizer steps.
+
+Two infrastructure corrections were required:
+
+- Host memory was exhausted when `use_unsloth_gc` offloaded activations at the
+  128k context length. The run switched to standard gradient checkpointing.
+- NCCL selected `eth0` on a single multi-GPU host. Setting the communication
+  interface to loopback (`lo`) restored distributed synchronization.
+
+Loss fell without divergence, reaching a minimum of 0.229 and finishing at
+0.369.
+
+![Full-parameter SFT loss over 24 optimizer steps](/showcase/live-e2e-20260730/training-loss.png)
+
+*Figure 1. Full-parameter SFT loss over 24 steps. The 512-trajectory run
+converged cleanly.*
+
+## Evaluation
+
+The untrained base model scored **7.6%** on SWE-bench Verified. The
+coverage-first attempt reached **56.1%**, and the depth-first attempt reached
+**64.4%**. That is an 8.3-point gain between the two SFT attempts and a
+56.8-point gain over the base model.
+
+![SWE-bench Verified solve-rate comparison](/showcase/live-e2e-20260730/solve-rate-comparison.png)
+
+*Figure 2. SWE-bench Verified solve rate for the base model and the two SFT
+attempts.*
+
+## Why LegoFlow makes this possible
+
+Three design properties let the agent diagnose and improve a run that spans
+multiple modules:
+
+1. **Dependencies across blocks are declared, not implied.** Each block states
+   which upstream outputs it consumes and which downstream inputs it feeds. A
+   format mismatch can therefore be traced to the producing block, and
+   preflight checks can reject broken wiring before an expensive job starts.
+2. **Every run archives its execution evidence.** Exit status, logs, config
+   snapshots, scripts, and repository pins give the agent a durable scene to
+   inspect after success or failure. It can diagnose, change one condition, and
+   run again without relying on memory of the previous attempt.
+3. **Every block exposes the same lifecycle and archive shape.** Curator,
+   Tracer, Trainer, and Evaluator can be operated through setup, check, run,
+   archive, and dashboard surfaces. Metrics such as task verification,
+   reasoning depth, training loss, and solve rate can be compared across block
+   boundaries without coupling the root workflow to each implementation.
+
+These properties do not make an LLM or an external service deterministic.
+They make adaptations **visible, bounded by interfaces, and reviewable**. That
+is why the agent could move traffic away from failing inference endpoints,
+repair trajectory formatting, alter the data-selection rule, correct training
+memory behavior, and rerun only the affected stages.
+
+Continue with the [step-by-step reproduction guide](/docs/showcase/reproduce)
+or read [what can and cannot be reproduced](/docs/showcase/reproducibility).

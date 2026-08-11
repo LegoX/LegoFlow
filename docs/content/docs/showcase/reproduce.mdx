@@ -1,0 +1,279 @@
+---
+title: Reproduce the Workflow
+description: Resource requirements, configuration checkpoints, and block-by-block instructions for replaying the LegoFlow case study.
+---
+
+There are two useful reproduction targets:
+
+- **Workflow reproduction** runs every block on a small sample and proves that
+  task, trajectory, training, and evaluation handoffs work on your systems.
+- **Result reproduction** attempts to match the reported 512-trajectory
+  training run and 64.4% evaluation. This requires the original frozen dataset,
+  repository revisions, model revisions, agent scaffold, prompts, endpoint
+  behavior, and evaluator settings—not only the commands below.
+
+Start with workflow reproduction. Scale up only after every block passes its
+own check and a small artifact reaches the next block.
+
+## Resource plan
+
+| Stage | Compute | External resources | Storage and operational notes |
+| --- | --- | --- | --- |
+| **Control plane** | Linux host with Git, Claude Code, Python, and `uv` | Access to all pinned Git submodules | Keep secrets in a manager or ignored local env file. |
+| **Curator** | CPU and Docker; no training GPU required | GitHub token(s), `claude-sonnet-4-6` or a compatible configured endpoint | Repository clones, images, build caches, task environments, and verifier logs grow with task count. |
+| **Tracer** | CPU and Docker when the teacher is served remotely | `GLM-5.2` API access with sufficient concurrency, quota, and context | Preserve raw trajectories as well as converted IM/LF data. |
+| **Trainer** | The reported run used **one host with 8× H800 80GB GPUs** | Base-model and dataset access | Full-parameter 35B training at 128k context also needs substantial host RAM and fast local storage. The report did not record exact host-RAM or disk minima. |
+| **Evaluator** | CPU/Docker Harbor runner plus GPU capacity to serve the trained checkpoint | SWE-bench Verified assets and model endpoint | The report did not record exact serving GPU count, evaluator concurrency, or wall-clock time. Preserve all per-task verifier reports. |
+
+<Callout title="Do not treat the GPU line as a complete hardware specification" type="warning">
+Eight H800 80GB GPUs are the recorded training accelerator configuration, not a
+guaranteed minimum. CPU count, host RAM, local disk, filesystem throughput,
+CUDA, driver, NCCL, container runtime, and model-serving topology also affect
+whether the run completes. Measure and archive those values on your host before
+launching the full experiment.
+</Callout>
+
+## 1. Freeze the software and inputs
+
+Clone the repository, select the commit you intend to reproduce, and initialize
+the pinned repositories:
+
+```bash
+git clone https://github.com/SWE-Lego/SWE-Lego-Live legoflow
+cd legoflow
+git checkout <RECORDED_COMMIT>
+git submodule update --init --recursive
+```
+
+Record the state before changing private run configuration:
+
+```bash
+git rev-parse HEAD
+git submodule status --recursive
+docker version
+python --version
+uv --version
+nvidia-smi
+```
+
+For a result comparison, also record:
+
+- the immutable revision of every model and dataset;
+- the exact ordered task and trajectory manifests;
+- hashes of collected-PR files, converted `lf.json`, generated training YAML,
+  and evaluator `result.json`;
+- agent scaffold name and version, runtime image digest, prompt, max turns,
+  temperature, and random seeds where supported;
+- endpoint model identifier, provider revision, routing policy, and retry
+  policy.
+
+The original experiment report does not contain every item in this list. If an
+archived item is unavailable, label the run as a workflow reproduction rather
+than an exact result reproduction.
+
+## 2. Install the LegoFlow plugins
+
+Follow [Getting Started](/docs/getting-started) to register and install the
+root, Curator, Tracer, Trainer, and Evaluator plugins. Then reload them and run:
+
+```text
+/root:setup
+/root:check
+```
+
+`/root:check` is read-only. It validates the block graph and delegates
+block-specific checks. Do not launch expensive work until required failures are
+fixed and the agent has shown the resolved run configuration for confirmation.
+
+## 3. Curate verified Python tasks
+
+The reported experiment stayed on Python. Configure
+`blocks/curator/config.yaml` for Python-only PR collection and task creation,
+provide GitHub and model credentials through secure local channels, and disable
+the other language profiles for this run.
+
+For a smoke run, start with 1-5 verified tasks and low concurrency. For a
+full-scale replay, use the frozen candidate-PR files from the archived
+experiment. Re-querying GitHub later can produce a different corpus because
+repositories, pull requests, API responses, and rate limits change.
+
+```text
+/curator:setup
+/curator:check
+/curator:collect-prs
+/curator:create-tasks
+```
+
+The important checkpoints are:
+
+```text
+blocks/curator/artifacts/collected_prs/
+blocks/curator/artifacts/swe_tasks/py-cc/verifiable_tasks.txt
+blocks/curator/artifacts/merged_swe_tasks/verifiable_tasks.txt
+```
+
+Only tasks in `verifiable_tasks.txt` should cross into Tracer. Curator's
+acceptance contract is that the task fails without the solution and passes with
+the reference solution—the NOP/Oracle pattern—inside the generated
+environment. The reported large run produced 4,166 verifiable tasks; a new
+live collection is not expected to produce the same list.
+
+## 4. Collect teacher trajectories
+
+Point Tracer at Curator's merged task directory and configure the teacher
+endpoint as `GLM-5.2` using the provider-specific model identifier. Preserve
+the archived scaffold and runtime image if you are comparing results; the
+report itself does not specify those fields.
+
+```text
+/tracer:setup
+/tracer:check
+/tracer:run
+```
+
+Inspect these outputs before filtering:
+
+```text
+blocks/tracer/artifacts/jobs/<job>/result.json
+blocks/tracer/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+blocks/tracer/artifacts/sft_data/<job>/im.jsonl
+blocks/tracer/artifacts/sft_data/<job>/lf.json
+blocks/tracer/artifacts/sft_data/<job>/lf.stats.json
+```
+
+The reported run yielded 915 solved trajectories. During that run, some model
+endpoints returned HTTP 502 responses or timed out; traffic was moved to
+healthy endpoints. If that happens in a replay, archive the endpoint health
+record and routing change instead of treating the retry as equivalent to an
+unchanged run.
+
+## 5. Recreate the depth-first selection
+
+The experiment's second attempt selected for reasoning substance:
+
+1. start from successful trajectories;
+2. normalize scaffold-specific messages and tool calls into the shared IM/LF
+   schema;
+3. remove duplicates using the archived deduplication rule;
+4. calculate reasoning depth per trajectory;
+5. keep trajectories averaging at least **500 reasoning characters per turn**;
+6. freeze the final ordered 512-row dataset and its manifest.
+
+The report states that 97 duplicates and 234 shallow trajectories were removed
+and that 512 remained. Those stage counts should not be interpreted as a
+simple additive partition unless the original filtering order and overlap are
+also available.
+
+The checked-in Trainer profile references the 512-row Hugging Face resource
+[`SWE-Lego/samples_for_llama_factory_sft`](https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft)
+and a file named
+`jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json`.
+Verify access, revision, row order, and content hash against the archived run
+before using it as an exact substitute.
+
+```bash
+sha256sum blocks/tracer/artifacts/sft_data/<job>/lf.json
+```
+
+## 6. Train the 35B base model
+
+Use the selected LF file or the verified 512-row snapshot. The experiment used
+the following material settings:
+
+```yaml
+runtime_info:
+  input:
+    model:
+      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base
+      trust_remote_code: true
+
+    training:
+      stage: sft
+      finetuning_type: full
+      deepspeed: scripts/deepspeed/ds_z3_config.json
+      template: qwen3_5
+      cutoff_len: 131072
+      per_device_train_batch_size: 1
+      gradient_accumulation_steps: 8
+      learning_rate: 5.0e-5
+      num_train_epochs: 3.0
+      bf16: true
+      use_unsloth_gc: false
+      flash_attn: fa2
+
+    infrastructure:
+      n_gpus_per_node: 8
+```
+
+With eight GPUs, batch size 1, and accumulation 8, the global batch size is 64.
+The checked-in profile may evolve; for this experiment,
+`use_unsloth_gc: false` is intentional because the first setting exhausted
+host memory at 128k context.
+
+On the reported single-host topology, NCCL also needed the loopback interface:
+
+```bash
+export NCCL_SOCKET_IFNAME=lo
+```
+
+Do not copy that setting to a multi-node cluster. Select the interface that
+actually connects the nodes and record it with the run.
+
+```text
+/trainer:setup
+/trainer:check
+/trainer:run
+```
+
+Confirm that the generated YAML under
+`blocks/trainer/artifacts/training_config/` contains the intended values.
+Expected comparison points from the report are 24 optimizer steps, minimum loss
+0.229, and final loss 0.369. They are evidence to compare, not pass/fail
+thresholds for a new environment.
+
+## 7. Evaluate on SWE-bench Verified
+
+Serve the trained checkpoint through vLLM as described in
+[Local Model Evaluation](/docs/blocks/evaluator/advanced-usages/local-model-evaluation).
+Keep the checkpoint, served model name, and Evaluator `llm_api.model` aligned.
+Use the full `swebench-verified@1.0` task set for a comparable score; use
+`harbor_job.n_tasks` only for smoke tests.
+
+```text
+/evaluator:setup
+/evaluator:check
+/evaluator:run
+/evaluator:dashboard
+```
+
+Archive:
+
+```text
+blocks/evaluator/artifacts/jobs/<job>/result.json
+blocks/evaluator/artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+blocks/evaluator/artifacts/jobs/<job>/<task>/verifier/report.json
+blocks/evaluator/artifacts/jobs/<job>/analysis/
+```
+
+Compare the base model, first SFT attempt, and depth-first attempt under the
+same evaluator configuration. The reported reference points are 7.6%, 56.1%,
+and 64.4%, respectively. A fair comparison holds the benchmark, scaffold,
+prompt, runtime image, max turns, temperature, retries, network policy, and
+verifier version constant.
+
+## 8. Package the reproduction evidence
+
+For every block, preserve its `artifacts/archives/run_NNN/` directory and
+`artifacts/index.yaml` entry. Add a top-level experiment manifest that links
+the four run IDs and records all hashes and external revisions.
+
+A reproducible handoff is complete when another user can answer:
+
+- Which exact artifact entered each block?
+- Which config, scripts, and repository pins produced the output?
+- Which external model or service revision was called?
+- Which adaptive changes occurred, and at what point?
+- Can the final score be traced back to an ordered trajectory manifest?
+
+See [Reproducibility Boundaries](/docs/showcase/reproducibility) for how to
+interpret differences between a replay and the original run.
