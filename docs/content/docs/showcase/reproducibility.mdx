@@ -30,7 +30,9 @@ The completed experiment included several cross-block corrections:
 These were evidence-driven improvements, but they are also experimental
 interventions. A replay that starts from the corrected configuration is not a
 replay of the original failure sequence; it is a reproduction of the improved
-run.
+run. The final settings support the memory and network diagnoses, but the
+archived logs include other environment and dataset-format failures as well;
+do not present either correction as an isolated controlled experiment.
 
 ## Three levels of reproducibility
 
@@ -56,15 +58,18 @@ Each consumer names the upstream block output it accepts, and each producer
 names the downstream input it feeds. If Trainer receives malformed tool calls,
 the dependency graph points back to Tracer's conversion output. The correction
 can be made at the contract boundary instead of becoming an undocumented patch
-inside training.
+inside training. The current concrete declarations cover Curator -> Tracer and
+Tracer -> Trainer; serving a Trainer checkpoint to Evaluator remains an
+explicit manual handoff.
 
 ### Archived runs preserve the scene
 
-Each run stores status, configuration, scripts, logs, and repository pins in a
-consistent archive. The agent can compare the first and second attempts, test
-one hypothesis, and preserve both outcomes. A human reviewer can see that the
-8.3-point gain followed a data-selection change rather than a silent teacher
-model upgrade.
+The automatic archive stores status, timestamps, exit code, configuration and
+script snapshots, and vendored repository SHAs. Outputs and logs remain under
+the block's `artifacts/` tree and must be referenced or copied when they are
+needed in the evidence package. This lets the agent compare attempts and makes
+it possible for a reviewer to verify that the teacher model name did not
+silently change.
 
 ### Uniform blocks make interventions comparable
 
@@ -83,6 +88,8 @@ repeatability even when exact agent reasoning cannot be replayed.
 Record these explicitly:
 
 - live GitHub repository and pull-request state;
+- the distinction between imported task instances and externally sourced
+  trajectories;
 - GitHub API ordering, pagination, rate limits, and token permissions;
 - model weights or provider revisions hidden behind the same model name;
 - sampling temperature, seed support, retry behavior, and prompt or scaffold
@@ -115,8 +122,9 @@ over today's defaults.
 Applied to this case study, the correct claim is:
 
 > Under the recorded experiment conditions, a depth-first 512-trajectory SFT
-> run reached 64.4% on SWE-bench Verified, 8.3 points above the first
-> coverage-first attempt.
+> run reached 64.4% (322/500) on SWE-bench Verified after a documented
+> stochastic retry protocol, 8.3 points above the separate coverage-first
+> experiment and consistent with the reasoning-depth hypothesis.
 
 It is not:
 

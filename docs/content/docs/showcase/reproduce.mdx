@@ -22,8 +22,8 @@ own check and a small artifact reaches the next block.
 | **Control plane** | Linux host with Git, Claude Code, Python, and `uv` | Access to all pinned Git submodules | Keep secrets in a manager or ignored local env file. |
 | **Curator** | CPU and Docker; no training GPU required | GitHub token(s), `claude-sonnet-4-6` or a compatible configured endpoint | Repository clones, images, build caches, task environments, and verifier logs grow with task count. |
 | **Tracer** | CPU and Docker when the teacher is served remotely | `GLM-5.2` API access with sufficient concurrency, quota, and context | Preserve raw trajectories as well as converted IM/LF data. |
-| **Trainer** | The reported run used **one host with 8× H800 80GB GPUs** | Base-model and dataset access | Full-parameter 35B training at 128k context also needs substantial host RAM and fast local storage. The report did not record exact host-RAM or disk minima. |
-| **Evaluator** | CPU/Docker Harbor runner plus GPU capacity to serve the trained checkpoint | SWE-bench Verified assets and model endpoint | The report did not record exact serving GPU count, evaluator concurrency, or wall-clock time. Preserve all per-task verifier reports. |
+| **Trainer** | The reported run used **one host with 8× H800 80GB GPUs** | Base-model and dataset access | Full-parameter 35B training at 128k context also needs substantial host RAM and fast local storage; plan roughly 200GB of free disk for the current workflow. |
+| **Evaluator** | CPU/Docker Harbor runner plus the archived TP8 vLLM service on 8 GPUs | SWE-bench Verified assets and model endpoint | The archived Harbor run used concurrency 10. Preserve all per-task verifier reports and retry manifests. |
 
 <Callout title="Do not treat the GPU line as a complete hardware specification" type="warning">
 Eight H800 80GB GPUs are the recorded training accelerator configuration, not a
@@ -67,9 +67,10 @@ For a result comparison, also record:
 - endpoint model identifier, provider revision, routing policy, and retry
   policy.
 
-The original experiment report does not contain every item in this list. If an
-archived item is unavailable, label the run as a workflow reproduction rather
-than an exact result reproduction.
+The narrative report does not contain every item in this list, so consult the
+archived experiment configs, scripts, and logs as well. If an archived item is
+unavailable, label the run as a workflow reproduction rather than an exact
+result reproduction.
 
 ## 2. Install the LegoFlow plugins
 
@@ -115,15 +116,19 @@ blocks/curator/artifacts/merged_swe_tasks/verifiable_tasks.txt
 Only tasks in `verifiable_tasks.txt` should cross into Tracer. Curator's
 acceptance contract is that the task fails without the solution and passes with
 the reference solution—the NOP/Oracle pattern—inside the generated
-environment. The reported large run produced 4,166 verifiable tasks; a new
-live collection is not expected to produce the same list.
+environment. The reported 4,166-task pool contained 3,518 GitHub-derived tasks
+and 648 imported Hugging Face/SWE-bench tasks. It began with zero external
+trajectories, not zero external task instances. A new live collection is not
+expected to produce the same list.
 
 ## 4. Collect teacher trajectories
 
-Point Tracer at Curator's merged task directory and configure the teacher
-endpoint as `GLM-5.2` using the provider-specific model identifier. Preserve
-the archived scaffold and runtime image if you are comparing results; the
-report itself does not specify those fields.
+Point Tracer at Curator's merged task directory and configure the teacher as
+`openai/GLM-5.2-FP8`. The archived collection used OpenHands SDK 1.14.0 with
+`docker.io/jierun/c-oh-sdk-1.14.0:v0.5`, temperature 0.7, 45 maximum turns,
+one retry, and timeout multiplier 10. Concurrency was 40 for the first wave and
+20 for the second. Preserve these values and the image digest for a result
+comparison.
 
 ```text
 /tracer:setup
@@ -141,11 +146,13 @@ blocks/tracer/artifacts/sft_data/<job>/lf.json
 blocks/tracer/artifacts/sft_data/<job>/lf.stats.json
 ```
 
-The reported run yielded 915 solved trajectories. During that run, some model
-endpoints returned HTTP 502 responses or timed out; traffic was moved to
-healthy endpoints. If that happens in a replay, archive the endpoint health
-record and routing change instead of treating the retry as equivalent to an
-unchanged run.
+The report records 915 solved trajectories at its collection snapshot. Nearby
+intermediate artifacts contain different counts, so use the frozen ordered
+manifest—not the headline number—as the exact downstream input. During that
+run, some model endpoints returned HTTP 502 responses or timed out; traffic was
+moved to healthy endpoints. If that happens in a replay, archive the endpoint
+health record and routing change instead of treating the retry as equivalent to
+an unchanged run.
 
 ## 5. Recreate the depth-first selection
 
@@ -159,17 +166,14 @@ The experiment's second attempt selected for reasoning substance:
 5. keep trajectories averaging at least **500 reasoning characters per turn**;
 6. freeze the final ordered 512-row dataset and its manifest.
 
-The report states that 97 duplicates and 234 shallow trajectories were removed
-and that 512 remained. Those stage counts should not be interpreted as a
-simple additive partition unless the original filtering order and overlap are
-also available.
-
 The checked-in Trainer profile references the 512-row Hugging Face resource
 [`SWE-Lego/samples_for_llama_factory_sft`](https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft)
 and a file named
 `jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json`.
-Verify access, revision, row order, and content hash against the archived run
-before using it as an exact substitute.
+That resource is useful for exercising Trainer, but it is not proven to be an
+exact substitute for the archived `live30_selfprod_512.json`. Verify access,
+revision, row order, instance manifest, and content hash before comparing
+results.
 
 ```bash
 sha256sum blocks/tracer/artifacts/sft_data/<job>/lf.json
@@ -190,14 +194,16 @@ runtime_info:
     training:
       stage: sft
       finetuning_type: full
-      deepspeed: scripts/deepspeed/ds_z3_config.json
-      template: qwen3_5
+      deepspeed: <ZERO3_OPTIMIZER_CPU_OFFLOAD_CONFIG>
+      template: qwen3_5_nothink
       cutoff_len: 131072
+      rope_scaling: yarn
       per_device_train_batch_size: 1
       gradient_accumulation_steps: 8
       learning_rate: 5.0e-5
       num_train_epochs: 3.0
       bf16: true
+      enable_liger_kernel: true
       use_unsloth_gc: false
       flash_attn: fa2
 
@@ -206,14 +212,16 @@ runtime_info:
 ```
 
 With eight GPUs, batch size 1, and accumulation 8, the global batch size is 64.
-The checked-in profile may evolve; for this experiment,
-`use_unsloth_gc: false` is intentional because the first setting exhausted
-host memory at 128k context.
+The archived DeepSpeed profile used ZeRO-3 with optimizer CPU offload and
+`pin_memory: false`. The checked-in profile may evolve; for this experiment,
+`qwen3_5_nothink`, YaRN, and `use_unsloth_gc: false` are intentional.
 
 On the reported single-host topology, NCCL also needed the loopback interface:
 
 ```bash
 export NCCL_SOCKET_IFNAME=lo
+export GLOO_SOCKET_IFNAME=lo
+export TP_SOCKET_IFNAME=lo
 ```
 
 Do not copy that setting to a multi-node cluster. Select the interface that
@@ -227,17 +235,24 @@ actually connects the nodes and record it with the run.
 
 Confirm that the generated YAML under
 `blocks/trainer/artifacts/training_config/` contains the intended values.
-Expected comparison points from the report are 24 optimizer steps, minimum loss
-0.229, and final loss 0.369. They are evidence to compare, not pass/fail
-thresholds for a new environment.
+Expected comparison points are 24 optimizer steps, step-1 loss 0.5236, minimum
+step loss 0.2294, last-step loss 0.2391, and aggregate `train_loss` 0.3684.
+They are evidence to compare, not pass/fail thresholds for a new environment.
 
 ## 7. Evaluate on SWE-bench Verified
 
 Serve the trained checkpoint through vLLM as described in
 [Local Model Evaluation](/docs/blocks/evaluator/advanced-usages/local-model-evaluation).
+The archived run used vLLM 0.18.1, tensor parallelism 8, maximum model length
+262,144, BF16, GPU-memory utilization 0.92, at most 10 concurrent sequences,
+the `qwen3_coder` tool parser, and repetition penalty 1.15.
+
 Keep the checkpoint, served model name, and Evaluator `llm_api.model` aligned.
-Use the full `swebench-verified@1.0` task set for a comparable score; use
-`harbor_job.n_tasks` only for smoke tests.
+Use the full `swebench-verified@1.0` task set with OpenHands SDK 1.14.0,
+temperature 0.7, 200 maximum turns, output budget 24,576, concurrency 10, one
+retry, and timeout multiplier 5. The historical launcher does not establish
+that the current `no_hack` mode was used, so do not add that label to the
+reported result.
 
 ```text
 /evaluator:setup
@@ -255,11 +270,15 @@ blocks/evaluator/artifacts/jobs/<job>/<task>/verifier/report.json
 blocks/evaluator/artifacts/jobs/<job>/analysis/
 ```
 
+The final 64.4% result is 322 solved tasks out of 500 after the documented
+crash-and-unsolved retry process, including up to three follow-up retry passes.
+It was not a single deterministic evaluation pass.
+
 Compare the base model, first SFT attempt, and depth-first attempt under the
 same evaluator configuration. The reported reference points are 7.6%, 56.1%,
-and 64.4%, respectively. A fair comparison holds the benchmark, scaffold,
-prompt, runtime image, max turns, temperature, retries, network policy, and
-verifier version constant.
+and 64.4%, respectively. The 8.3-point difference is consistent with the
+depth-filtering hypothesis, but separate task pools and prompts prevent a
+causal attribution to that filter alone.
 
 ## 8. Package the reproduction evidence
 
