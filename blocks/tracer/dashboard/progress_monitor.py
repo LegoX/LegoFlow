@@ -1149,6 +1149,10 @@ def collect_quality_facts(
                     "dataset": dataset_dir.name,
                     "job": dataset_dir.name,
                     "index": idx,
+                    # Where this record lives, so the full conversation can be
+                    # embedded later: an SFT record has no trajectory file, but it
+                    # *is* the trajectory, at this line of this im.jsonl.
+                    "im_path": str(im_file),
                     "instance_id": instance_id,
                     "task_name": task_name,
                     "repo": info.get("repo"),
@@ -1558,6 +1562,7 @@ def build_traj_cards(
             "job": fact.get("job"),
             "dataset": fact.get("dataset"),
             "index": fact.get("index"),
+            "im_path": fact.get("im_path"),
             "instance_id": key,
             "task_name": fact.get("task_name"),
             "repo": fact.get("repo"),
@@ -1823,10 +1828,13 @@ def write_jsonl_shards(path: Path, rows: list[dict[str, Any]], *, max_bytes: int
 def select_embedded_traj_cards(cards: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
     if limit <= 0:
         return []
-    candidates = [
-        card for card in cards
-        if card.get("kind") == "trial" and card.get("trajectory_path") and Path(str(card.get("trajectory_path"))).is_file()
-    ]
+    def has_source(card: dict[str, Any]) -> bool:
+        path = str(card.get("trajectory_path") or "")
+        if path and Path(path).is_file():
+            return True
+        # A converted SFT record is its own trace: one line of an im.jsonl.
+        return bool(card.get("im_path")) and card.get("index") is not None
+    candidates = [card for card in cards if has_source(card)]
     selected: list[dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -1861,6 +1869,37 @@ def select_embedded_traj_cards(cards: list[dict[str, Any]], *, limit: int) -> li
     add_many(sorted([c for c in candidates if c.get("status") in {"pass", "scored"}], key=lambda c: str(c.get("id"))))
     add_many(sorted(candidates, key=lambda c: str(c.get("id"))))
     return selected[:limit]
+
+
+def read_im_records(cards: list[dict[str, Any]]) -> dict[tuple[str, int], Any]:
+    """Fetch the specific im.jsonl lines a set of cards points at.
+
+    One pass per file, stopping at the last line anyone wants: these datasets run
+    to hundreds of megabytes, and seeking to each line separately would re-read
+    the file once per record.
+    """
+    wanted: dict[str, set[int]] = {}
+    for card in cards:
+        path, index = str(card.get("im_path") or ""), card.get("index")
+        if path and index is not None:
+            wanted.setdefault(path, set()).add(int(index))
+
+    out: dict[tuple[str, int], Any] = {}
+    for path, indices in wanted.items():
+        last = max(indices)
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as fh:
+                for i, line in enumerate(fh):
+                    if i in indices:
+                        try:
+                            out[(path, i)] = json.loads(line)
+                        except json.JSONDecodeError:
+                            print(f"WARN: invalid JSON at {path}:{i + 1}", file=sys.stderr)
+                    if i >= last:
+                        break
+        except OSError as exc:
+            print(f"WARN: failed to read {path}: {exc}", file=sys.stderr)
+    return out
 
 
 def read_trajectory_payload(path: Path) -> Any:
@@ -1916,13 +1955,20 @@ def write_embedded_trajectory_shards(
         current_bytes = 0
         shard_index += 1
 
-    for card in select_embedded_traj_cards(cards, limit=limit):
+    selected = select_embedded_traj_cards(cards, limit=limit)
+    im_records = read_im_records(selected)
+    for card in selected:
         trajectory_path = Path(str(card.get("trajectory_path") or ""))
-        try:
-            record = read_trajectory_payload(trajectory_path)
-        except (OSError, ValueError) as exc:
-            print(f"WARN: failed to embed trajectory {trajectory_path}: {exc}", file=sys.stderr)
-            continue
+        if str(card.get("trajectory_path") or ""):
+            try:
+                record = read_trajectory_payload(trajectory_path)
+            except (OSError, ValueError) as exc:
+                print(f"WARN: failed to embed trajectory {trajectory_path}: {exc}", file=sys.stderr)
+                continue
+        else:
+            record = im_records.get((str(card.get("im_path")), int(card.get("index"))))
+            if record is None:
+                continue
         row = {"id": card.get("id"), "record": record}
         line = json.dumps(row, ensure_ascii=False, default=json_default) + "\n"
         line_bytes = len(line.encode("utf-8"))
