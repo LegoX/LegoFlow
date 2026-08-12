@@ -9,7 +9,8 @@
 #
 # Two modes, chosen by whether Cloudflare credentials resolve:
 #
-#   credentials present -> Cloudflare Pages, project `legoflow-<block>`.
+#   credentials present -> Cloudflare Pages, project `legoflow-<block>`, or
+#                          `legoflow-<block>-<suffix>` with PUBLISH_PROJECT_SUFFIX.
 #                          Persistent; survives this process exiting.
 #   no credentials      -> cloudflared quick tunnel over a local static server.
 #                          Ephemeral: a fresh *.trycloudflare.com name each run,
@@ -25,6 +26,10 @@
 #   PUBLISHED_MODE  pages | tunnel | none
 
 PUBLISH_PRODUCTION_BRANCH="${PUBLISH_PRODUCTION_BRANCH:-main}"
+# `legoflow-<block>` may already be taken. Set PUBLISH_PROJECT_SUFFIX=<suffix> to
+# publish as `legoflow-<block>-<suffix>`. The address is still read back from the
+# API, never assembled from the name.
+PUBLISH_PROJECT_SUFFIX="${PUBLISH_PROJECT_SUFFIX:-}"
 # wrangler v4+ needs Node >= 22; v3 also runs on Node 18.
 PUBLISH_WRANGLER_PKG="${PUBLISH_WRANGLER_PKG:-wrangler@3}"
 
@@ -67,7 +72,13 @@ else:
 }
 
 _publish_to_pages() {
-  local block="$1" dir="$2" project="legoflow-$block"
+  # Separate statements: within one `local`, later assignments cannot see earlier
+  # ones, so `project` picked up whatever `block` was in the caller's scope.
+  local block="$1" dir="$2"
+  local project="legoflow-$block"
+  if [[ -n "$PUBLISH_PROJECT_SUFFIX" ]]; then
+    project="$project-$PUBLISH_PROJECT_SUFFIX"
+  fi
 
   _publish_log "deploying $dir to Cloudflare Pages project $project"
   # Idempotent: fails harmlessly when the project already exists.
@@ -153,8 +164,7 @@ publish_dashboard() {
     _publish_log "nothing to publish: $dir does not exist"
     return 1
   fi
-  # Resolve now, while we are still in the caller's directory: wrangler runs from
-  # its own workdir, where a relative path would point somewhere else entirely.
+  # Resolve while still in the caller's directory — wrangler runs from its own.
   dir="$(cd "$dir" && pwd)"
 
   local shared

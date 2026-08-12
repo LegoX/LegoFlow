@@ -38,9 +38,9 @@ live until the `cloudflared` process exits.
 TUNNEL=true ./start_dashboard.sh
 ```
 
-The script auto-discovers `cloudflared` from `PATH`, falling back to
-`/public/storage/yuxin/cloudflared/bin/cloudflared`. Override with
-`CLOUDFLARED_BIN=/path/to/cloudflared` if installed elsewhere. cloudflared's
+The script auto-discovers `cloudflared` from `PATH`, then from the usual local
+install locations (`~/.local/bin`, `/usr/local/bin`, `/opt/cloudflared/bin`).
+Override with `CLOUDFLARED_BIN=/path/to/cloudflared` if installed elsewhere. cloudflared's
 output is redirected to `/tmp/dashboard-tunnel-<port>.log` (override with
 `TUNNEL_LOG=...`), and the public URL is printed in a banner on the dashboard
 terminal once it's ready. If you lost the banner, recover it with:
@@ -58,7 +58,7 @@ If the dashboard is already up (e.g. via `nohup ./start_dashboard.sh &`),
 start the tunnel as an independent process:
 
 ```bash
-nohup /public/storage/yuxin/cloudflared/bin/cloudflared \
+nohup "${CLOUDFLARED_BIN:-cloudflared}" \
   tunnel --url http://127.0.0.1:8091 \
   > /tmp/dashboard-tunnel.log 2>&1 &
 
