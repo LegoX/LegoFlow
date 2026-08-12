@@ -38,11 +38,16 @@ The overall data pipeline is organized as a tree of **blocks**. A block is a con
 Blocks make the pipeline easier to use and easier to change. Because every stage follows the same contract, users can operate the whole system through plugin skills, restart a failed stage from its archived state, swap one block without breaking the others, and inspect artifacts through consistent dashboards. This keeps the workflow approachable for general users while leaving room for advanced analysis and new agent-data domains. See [What is a Block](/docs/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
 
 
-## Where to go next
+## Start by Use Case
 
-- [Getting Started](/docs/getting-started)
-- [End-to-End Showcase](/docs/showcase)
-- [What is a Block](/docs/block-design)
-- Block: [Curator](/docs/blocks/curator) · [Tracer](/docs/blocks/tracer) · [Trainer](/docs/blocks/trainer) · [Evaluator](/docs/blocks/evaluator)
+| I want to... | Go to |
+| --- | --- |
+| Understand why this exists at all | [Motivation](/docs/motivation) |
+| Install it and run something | [Getting Started](/docs/getting-started) |
+| Build verified SWE tasks from GitHub | [Curator](/docs/blocks/curator) |
+| Collect agent trajectories on tasks I already have | [Tracer](/docs/blocks/tracer) |
+| Fine-tune a model on trajectories | [Trainer](/docs/blocks/trainer) |
+| Benchmark a model or a checkpoint | [Evaluator](/docs/blocks/evaluator) |
+| Add a block of my own | [What is a Block](/docs/block-design) |
 
 </div>

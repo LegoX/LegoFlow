@@ -1,0 +1,72 @@
+---
+title: Motivation
+---
+
+Every team that trains a coding model ends up building the same pipeline. Mine
+useful changes out of real repositories. Turn them into tasks that can be graded
+automatically. Roll an agent out against those tasks in isolated environments.
+Filter the rollouts worth learning from. Train. Evaluate. Read the result, form a
+theory about what went wrong, and do it again.
+
+None of those stages is unusually hard on its own. What makes the loop expensive
+is the space between them.
+
+## The failure mode is the handoff
+
+In practice each stage becomes a directory of scripts with its own conventions,
+often owned by a different person. The contracts between them stay informal: a
+path pasted into a message, a filename that "everyone knows" is the verified set,
+a filter applied by hand before training that nobody wrote down. That works while
+one person holds the whole thing in their head, and it degrades from there.
+
+The symptoms are consistent:
+
+- **A stage silently consumes the wrong thing.** Training reads every task
+  directory instead of the verified ones, and nothing complains, because a
+  directory of half-finished candidates looks exactly like a directory of tasks.
+- **A failure cannot be traced back.** A malformed record surfaces during
+  training, three stages away from the conversion step that produced it.
+- **A rerun means redoing everything.** The configuration and code that produced
+  last week's run are gone, so a new attempt cannot be compared with the old one
+  and the old one cannot be reproduced.
+- **Nobody can say what a number means.** A benchmark score exists, but the data
+  it was trained on and the conditions it was measured under were not recorded
+  together.
+
+## What LegoFlow fixes
+
+LegoFlow makes the pipeline a tree of **blocks**, where every block obeys the
+same contract, and the contract targets exactly the failures above.
+
+- **Dependencies are declared in both directions.** A consumer states which
+  upstream output feeds which of its own inputs, and the producer mirrors it. A
+  broken handoff is caught by a preflight check, before a multi-hour job starts.
+- **Each run is archived with its configuration and scripts.** A run can be
+  compared, explained, and rerun later, because the scene that produced it was
+  kept.
+- **Every block looks the same from the outside.** Setup, check, run, inspect,
+  in that order, with the same archive layout and the same kind of dashboard.
+  Learning one block is most of the work of learning the next.
+- **One config per run.** The knobs that decide a run live in one file, so
+  changing one variable and rerunning is a small, reviewable edit rather than an
+  archaeology exercise across scripts.
+
+## Why this matters more with agents
+
+A uniform contract is convenient for a person and load-bearing for an agent. An
+agent operating this pipeline has to decide what to run next, notice that
+something went wrong, find the stage responsible, change one thing, and rerun
+only what that change affected. All four of those depend on structure it can rely
+on rather than conventions it has to infer.
+
+That is not a hypothesis. An agent has run this entire pipeline on its own,
+diagnosed why its first fine-tune plateaued, changed the trajectory selection
+rule, and lifted the SWE-bench Verified solve rate from 56.1% to 64.4% on the
+second attempt. [Running Cascaded Blocks](/docs/running-blocks/cascaded) is the
+procedure it followed.
+
+## Where to go next
+
+- [Getting Started](/docs/getting-started) to install and configure the tree.
+- [What is a Block](/docs/block-design) for the exact contract every block obeys.
+- [Running Cascaded Blocks](/docs/running-blocks/cascaded) for the full run, with numbers.

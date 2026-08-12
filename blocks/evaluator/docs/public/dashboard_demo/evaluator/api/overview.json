@@ -1,0 +1,1 @@
+{"job_count":7,"analyzed_count":0,"scaffolds":[["openhands-sdk",6]],"datasets":[["swebench-verified",6]],"models":[["openai/Qwen3.5-35B-A3B",2],["openai/GLM-5-FP8",1],["openai/deepseek-v4-flash",1],["openai/root-smoke-sft",1]],"total_resolved":450,"total_failed":1067,"overall_resolve_rate":29.66}

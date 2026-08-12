@@ -61,7 +61,7 @@ docs/
 │   ├── meta.json          #   top-level page order
 │   ├── index.mdx          #   motivation / landing
 │   ├── getting-started.mdx
-│   ├── advanced-usages/   #   conversion, scaffolds, scoring, LiteLLM proxy
+│   ├── usage/   #   conversion, scaffolds, scoring, LiteLLM proxy
 │   └── dashboard.mdx
 ├── src/                   # app shell (docs route, layouts, source loader)
 ├── public/_redirects      # Cloudflare Pages root redirect (/ -> /docs)
@@ -76,6 +76,6 @@ docs/
    `description` frontmatter.
 2. Add its slug to the folder's `meta.json` `pages` array to place it in the
    sidebar order.
-3. Link to other pages by their route, e.g. `/docs/advanced-usages/litellm-proxy`.
+3. Link to other pages by their route, e.g. `/docs/usage/litellm-proxy`.
 
 Build outputs (`node_modules/`, `.next/`, `.source/`, `out/`) are gitignored.

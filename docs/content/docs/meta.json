@@ -1,8 +1,9 @@
 {
     "pages": [
         "index",
+        "motivation",
         "getting-started",
-        "showcase",
+        "running-blocks",
         "blocks",
         "block-design",
         "qa"

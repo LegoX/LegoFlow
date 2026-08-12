@@ -1,0 +1,146 @@
+---
+title: Running Cascaded Blocks
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+Cascaded mode is the root block running its children in dependency order. Use it
+once you have run the blocks individually at least once, so the handoffs are
+already familiar and what you want from the root block is coordination.
+
+**In short**: three skills, one brief, and the whole Curator to Tracer to Trainer
+to Evaluator chain runs end to end, pausing at approval gates and archiving each
+stage as it goes. You describe the target, not the steps. This is the exact procedure
+behind the reported end-to-end run, which mined 4,166 verified tasks, collected
+915 solved rollouts, trained on 512 selected trajectories, and moved a base model
+from 7.6% to 64.4% on SWE-bench Verified.
+
+## Step 1: Prepare the Tree
+
+```text
+/root:setup
+```
+
+Checks shared tooling, verifies the root `config.yaml`, and walks into each
+child block's own setup. It does not launch anything.
+
+Credentials come from the environment, never from the prompt and never from a
+tracked file: LLM API keys and base URLs, `GITHUB_TOKENS` for Curator, and
+optionally Docker and Cloudflare credentials. Fill each block's
+`runtime_info.input` for the values that are decisions rather than secrets: model
+names, languages, benchmark, base model path.
+
+## Step 2: Check the Tree
+
+```text
+/root:check
+```
+
+Read-only. It validates configs, dependency handoffs in both directions, pinned
+repos, environments, per-block dry runs, and live LLM endpoints. Fix every
+required failure before continuing; warnings such as missing Cloudflare
+credentials do not block a run.
+
+<Callout title="The root block does not collect PRs" type="warning">
+Root orchestration consumes what is already under `artifacts/collected_prs/`.
+Run `/curator:collect-prs` first and let it finish.
+</Callout>
+
+## Step 3: Run the Tree
+
+```text
+/root:run start the data pipeline
+```
+
+The root skill repeats preflight, shows the resolved run configuration, and waits
+for confirmation before starting expensive work. You can append instructions in
+plain language, and this is where a full experiment is expressed: state the
+target, the resources and the constraints, and let each block resolve its own
+configuration.
+
+A brief for the case-study run looks like this:
+
+> Run a Python-only Curator to Tracer to Trainer to Evaluator experiment. Use
+> `GITHUB_TOKENS` and LLM credentials from environment variables only; never
+> print or commit secrets. Produce enough verified Python tasks to reach a final
+> 512-trajectory training set, full-parameter fine-tune `Qwen3.5-35B-A3B-Base` on
+> 8x H800 80GB GPUs, and evaluate the resulting checkpoint on all 500 SWE-bench
+> Verified tasks under one consistent configuration.
+
+What each stage is expected to produce, and what to hold it to:
+
+| Stage | Target | The condition that matters |
+| --- | --- | --- |
+| Curator | Verified Python tasks | Only tasks that pass NOP and Oracle validation reach the manifest. |
+| Tracer | Solved rollouts | Preserve the raw trajectory and its verified reward; adapt concurrency to endpoint health rather than dropping tasks silently. |
+| Selection | Exactly 512 trajectories | Deduplicate by task, drop malformed and shallow examples, and freeze the set with an ordered manifest. |
+| Trainer | One checkpoint | Derive the training configuration from the model and the GPU topology; keep the resolved config, logs and curves. |
+| Evaluator | One score over 500 tasks | One agent, serving and verifier configuration throughout. Resume infrastructure failures without changing evaluation conditions. |
+
+<Accordions>
+<Accordion title="The full experiment brief, as used for the case study">
+
+> Using this LegoFlow project, run a Python-only Curator -> Tracer -> Trainer -> Evaluator experiment and make the result as reproducible as the available resources allow. Use `GITHUB_TOKENS` and LLM credentials only from secure environment variables; never print or commit secrets or private endpoint details. The base model and evaluation tasks can be downloaded from Hugging Face.
+>
+> Before planning execution, inspect the root and every relevant block's `config.yaml`, `CLAUDE.md`, documentation, scripts, plugin instructions, dependency declarations, and existing artifacts. Prefer the LegoFlow block plugins as the standard operating interface, but use them as guidance rather than an inflexible requirement. Choose the safest interface that preserves each block's setup, validation, approval, execution, and archiving expectations.
+>
+> - **Curator:** produce enough verified Python tasks for the downstream data target. Accept only tasks that pass NOP/Oracle validation, publish an ordered verified-task manifest, and preserve collection and verification evidence.
+> - **Tracer:** use the available teacher-model API to solve the verified tasks and preserve successful raw trajectories. Select concurrency and retry behavior that fit endpoint quota and health; record any routing or runtime adaptation.
+> - **Selection and conversion:** normalize trajectories into the training-compatible format, retain successful rewards, deduplicate by task, remove malformed or shallow examples, and freeze exactly **512** deeply-reasoned, high-quality passed trajectories with an ordered manifest and content hash.
+> - **Trainer:** full-parameter fine-tune `Qwen3.5-35B-A3B-Base` on those 512 trajectories. Derive the training configuration from the model requirements, available GPU topology, relevant block documentation, and previously successful artifacts. Preserve the resolved config, logs, checkpoints, and training curves, and adjust settings when runtime evidence shows a resource or stability problem.
+> - **Evaluator:** serve the resulting checkpoint and evaluate all 500 SWE-bench Verified tasks under one consistent agent, serving, and verifier configuration. Resume infrastructure failures without changing the evaluation conditions, and preserve the ordered task list, retry history, per-task verifier reports, and final result.
+>
+> Monitor every stage through its logs, manifests, archives, and dashboards. When a failure or quality regression appears, document the evidence -> hypothesis -> change -> result chain, update the smallest responsible module, rerun only the affected downstream stages, and preserve failed and improved attempts separately. Do not chase a target score by changing evaluation conditions; optimize for a traceable and reviewable improvement.
+
+</Accordion>
+</Accordions>
+
+<Callout title="Partial pipelines are fine" type="info">
+You can run the full chain, or a slice such as Curator to Tracer when you only
+need trajectory production.
+</Callout>
+
+
+## While It Runs
+
+Handoffs between blocks resolve through declared block outputs, not copied paths:
+Tracer consumes the verified task directory Curator publishes, and Trainer
+consumes the trajectory or SFT directory Tracer publishes. A broken edge is a
+preflight failure, not a mid-run surprise.
+
+Watch each stage through its own dashboard and its archive. When a failure or a
+quality regression appears, the loop is: read the evidence, form a hypothesis,
+change the smallest responsible thing, rerun only the stages that change affects,
+and keep the failed attempt as well as the improved one. That is exactly the loop
+the case study documents, where re-filtering trajectories for reasoning depth
+moved the solve rate from 56.1% to 64.4%.
+
+## The Result
+
+The case-study run produced, in order:
+
+| Stage | Output |
+| --- | --- |
+| Curator | 4,166 verified Python tasks. |
+| Tracer | 915 solved rollouts, kept with their verified rewards. |
+| Selection | 512 trajectories, filtered for reasoning depth rather than coverage. |
+| Trainer | One full-parameter fine-tune of `Qwen3.5-35B-A3B-Base`, loss converging from 0.524 to 0.229. |
+| Evaluator | 64.4% on the 500 SWE-bench Verified tasks, against 7.6% for the untrained base model. |
+
+The interesting number is not the last one but the gap between two attempts. A
+first run over the same rollout pool, selected for reasoning coverage, reached
+56.1%. Re-selecting the same pool for reasoning depth reached 64.4%. Nothing else
+changed: same teacher model, same tasks, same training recipe.
+
+## What Reproducible Means Here
+
+Exact tasks, trajectories, corrections and scores will not repeat bit for bit.
+Live GitHub state, model sampling, provider revisions, endpoint health, retries,
+container dependencies, GPU kernels and scheduling all move underneath a run. An
+agent's self-corrections depend on the failures it happens to see, so a second
+run may take a different corrective path.
+
+What LegoFlow makes reproducible is procedural and structural: declared
+dependencies make every handoff explicit, run archives preserve the configuration
+and code that produced a result, and the uniform lifecycle lets you rerun one
+stage without disturbing the rest.

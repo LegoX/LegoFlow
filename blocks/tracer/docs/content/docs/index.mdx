@@ -13,16 +13,19 @@ convert successful trajectories into SFT data. One `config.yaml` pins the
 [Harbor](https://github.com/SWE-Lego/harbor) and `swe_data_process` runtimes
 and declares every external input and downstream output.
 
-```text
-curator ─▶ tracer ─▶ trainer
-```
 
 ![Tracer workflow from verified task intake to trajectories and SFT data](/figures/tracer.png)
 
-Tracer admits only verified, unprocessed tasks, routes model traffic through a
-per-job LiteLLM proxy, and runs agents in Harbor containers. Each rollout keeps
-its verified reward and full-turn trace, which can then be scored, converted to
-SFT data, and monitored on the live dashboard.
+A run works through the diagram above from left to right. Tracer picks up the
+tasks Curator has verified, skipping any it has already run. For each task it
+starts a container, puts a coding agent inside it, and lets the agent work until
+it succeeds, fails or runs out of time. The agent's model calls go through a
+proxy, which is what records the conversation turn by turn.
+
+What comes out is one directory per task holding two things: whether the task's
+own tests passed, and the complete trace of how the agent got there. From those,
+you can score the rollouts, convert the good ones into training data, and watch
+all of it on the dashboard.
 
 Tracer provides:
 
@@ -44,5 +47,5 @@ Tracer provides:
 
 - [Getting Started](/docs/blocks/tracer/getting-started) — operate through the plugin or run the underlying commands
 - [Design](/docs/blocks/tracer/design) — understand task intake, proxying, rollout, conversion, and dashboard flow
-- [Advanced Guides](/docs/blocks/tracer/advanced-usages/trajectory-conversion) — conversion, scaffolds, scoring, and LiteLLM proxy details
+- [Usage](/docs/blocks/tracer/usage/trajectory-conversion) — conversion, scaffolds, scoring, and LiteLLM proxy details
 - [Dashboard](/docs/blocks/tracer/dashboard) — monitor progress locally or online

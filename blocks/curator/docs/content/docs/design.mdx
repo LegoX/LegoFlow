@@ -2,35 +2,65 @@
 title: Design
 ---
 
-This page explains what Curator does behind each command. The mechanism follows
-the workflow in [Overview](/docs): collect useful pull requests, turn them into
-Harbor tasks, validate each task with baseline agents, and publish the verified
-task pool that Tracer can consume.
+Curator's problem is not finding code changes. GitHub has an unlimited supply of
+those. The problem is turning a merged pull request, which is a record of what
+somebody already did, into a task that can be given to an agent and then judged
+automatically. Everything below follows from that: a task is only useful if a
+solver cannot see the answer, and only trustworthy if a machine can decide
+whether the answer was reached.
 
 ![Curator workflow from pull request discovery to verified task publication](/figures/curator.png)
 
-## 1. Collect PRs
+## Repositories
 
-`/curator:collect-prs` runs `scripts/collect_all_bg.sh`. The script hydrates
-`config.yaml`, installs the pinned `repos/legoflow-curator` package if needed, and starts
-the LegoFlow Curator collector in the background:
+Curator runs one pinned external repository. `/curator:setup` checks it out at
+the commit recorded in `meta_info.repos` in `config.yaml`, and the checkout is
+treated as read-only: local edits are overwritten on the next update, so changes
+belong upstream.
 
-```bash
-python3 repos/legoflow-curator/tools/collect_prs_wo_image.py
-```
+| Repository | Path | Role |
+| --- | --- | --- |
+| [legoflow-curator](https://github.com/SWE-Lego/legoflow-curator) | `repos/legoflow-curator` | The `legoflow-curator` CLI and its tools: PR collection, task generation through the Claude Code path, NOP/Oracle validation, and difficulty scoring. |
 
-The collector reads `runtime_info.input.pr_collection` to decide:
+## 1. Selection is a Filter, Not a Crawl
 
-- which languages to search;
-- how many repositories and PRs to collect;
-- how many PRs to keep from each repository;
-- where the language-specific PR id files should land.
+The goal is explicitly not to collect every PR. Selection runs as three stages,
+each narrowing the set before the next one spends more to look closer:
+repositories, then pull requests inside them, then the tasks those PRs can
+actually become. The ordering is the whole point. Stage one costs a few GitHub
+search queries, stage two costs one metadata fetch per PR, and stage three costs
+a container build plus two verification runs per candidate. Putting the cheap
+filters first is what keeps a language sweep affordable.
 
-The goal is not to collect every PR. Curator is looking for PRs that are small
-enough, recent enough, and contextualized enough to become reproducible coding
-tasks.
+### Stage 1: repositories
 
-The output of this stage is a PR pool:
+Search is repository-first, driven by `pr_collection.filters` in `config.yaml`:
+
+| Filter | What it is really asking |
+| --- | --- |
+| `min_stars`, `min_merged_prs` | Does this project have review discipline? Both are proxies for merged changes being real, reviewed fixes rather than drive-by commits. |
+| `min_language_percentage` | Is the target language actually this codebase's language? In a repo where it is a minority, the container ends up building a toolchain for code the task never touches, and failures turn into build problems rather than code problems. |
+| `max_days_since_push` | Is the project still alive? An abandoned repo pins dependencies that no longer resolve, so its tasks fail at image build time, sometimes long after collection. |
+
+`repo_num` caps how many qualifying repositories are kept per language.
+
+### Stage 2: pull requests
+
+Inside each surviving repository, at most `max_prs_per_repo` candidates are kept,
+filtered again:
+
+| Filter | What it is really asking |
+| --- | --- |
+| `min_issue_body_length` | Is there a stated problem to work from? The linked issue is the raw material for `instruction.md`; without one there is nothing to write a task from except the diff, which is the answer. |
+| `min_files_changed`, `max_files_changed`, `max_lines_changed` | Is the change one coherent unit of work? Below the floor, the fix is a one-liner and the task is ambiguous. Above the ceiling, the PR has bundled a refactor with the fix and the tests no longer isolate a single behavior. |
+
+Some languages cannot meet the global thresholds. The collector therefore keeps a
+per-language override table that takes precedence over these values (C, for
+instance, runs with lower star and merged-PR floors and a wider file budget).
+Those overrides live in the collector rather than in `config.yaml`, on the view
+that they are properties of the ecosystem, not knobs for a run.
+
+The output is one candidate list per language:
 
 ```text
 artifacts/collected_prs/
@@ -39,47 +69,21 @@ artifacts/collected_prs/
 └── ...
 ```
 
-Each line records one candidate PR id. Logs are written under
-`artifacts/logs/collect_all_<timestamp>.log`.
+### Stage 3: tasks
 
-## 2. Generate Task Candidates
+Generation applies the last filter, because some things can only be judged once
+the PR is opened up. `--min-source-files` and `--max-source-files` set the
+yield-versus-difficulty dial: a floor of `1` keeps the most PRs, including small
+fixes, and the shipped per-language scripts use `2` to drop single-file trivia.
+`--no-require-issue` relaxes the linked-issue requirement when a language's pool
+is too thin without it.
 
-`/curator:create-tasks` launches the language workers through
-`scripts/start.sh`. The first pass chooses the LLM mode from
-`runtime_info.input.llm_api.cc_provider_mode`:
+Whatever survives here is still only a candidate. Nothing counts as a task until
+the two baselines in section 3 agree.
 
-- `openai_proxy` starts the OpenAI-compatible proxy before generation;
-- `native` uses the native Anthropic path directly.
+## 2. The Visibility Boundary
 
-Then `scripts/create_all_bg.sh` fans out to the enabled language scripts, such
-as `scripts/create_py.sh`. Each language script reads its own timeout,
-concurrency, and task cap through `scripts/read_params.py`, then calls:
-
-```bash
-legoflow-curator create
-```
-
-For Python, the handoff is roughly:
-
-```bash
-legoflow-curator create \
-  --input-ids-file artifacts/collected_prs/python_pr_ids.txt \
-  --output artifacts/swe_tasks/py-cc \
-  --state-dir artifacts/state/legoflow-curator-py \
-  --timeout ... \
-  --cc-timeout ...
-```
-
-This is the point where noisy PR history becomes a task candidate. LegoFlow Curator pulls
-the PR context, prepares the repository state, asks the coding model to create a
-clear task, and separates the materials that should be visible to a solver from
-the materials used only for validation.
-
-## 3. Assemble Harbor Tasks
-
-Each generated candidate is written as a
-[Harbor](https://www.harborframework.com/) task directory. A typical task looks
-like this:
+Each surviving candidate becomes a Harbor task directory:
 
 ```text
 artifacts/swe_tasks/py-cc/<task_id>/
@@ -95,60 +99,51 @@ artifacts/swe_tasks/py-cc/<task_id>/
     └── test.sh
 ```
 
-The important boundary is simple: `instruction.md` is what a future agent reads;
-`solution/` and `tests/` are for verification. That keeps the benchmark usable
-without leaking the reference fix into the prompt.
+The layout encodes the single rule the whole dataset depends on: `instruction.md`
+is what a future agent reads, and `solution/` and `tests/` exist only for
+verification. Generation is asked to state the problem without describing the
+patch, because the reference fix reaching the prompt does not produce a wrong
+score, it produces a convincing one. That kind of leak is invisible in the
+resulting numbers, which is why it is enforced by structure rather than by
+review.
 
-## 4. Validate And Score
+## 3. Two Baselines Decide What Counts as Verifiable
 
-Curator does not trust a task just because the directory exists. During
-`legoflow-curator create`, Harbor runs the baseline agents:
+A task directory existing proves nothing. During generation, Harbor runs two
+baseline agents against every candidate:
 
-- **NOP baseline**: the buggy task should fail, giving reward `0`.
-- **Oracle pass**: applying the ground-truth fix should pass, giving reward `1`.
+- **NOP baseline**: change nothing. The tests must fail, reward `0`.
+- **Oracle pass**: apply the ground-truth fix. The tests must pass, reward `1`.
 
-Only tasks that pass both checks are appended to:
+Both bounds are needed, and each one rules out a different failure. Without the
+NOP run, a task whose tests already pass would be accepted and would be scored as
+solved by an agent that did nothing. Without the Oracle run, a task whose tests
+can never pass, because the environment is broken or the fix is incomplete, would
+be accepted and would be scored as failed no matter how good the agent is. Only
+candidates that fail before and pass after are appended to:
 
 ```text
 artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt
 ```
 
-Curator also records analysis metadata. Difficulty is computed from task
-features and written back into `task.toml`; tags and categories are used by the
-dashboard pages for quality review and slice-level analysis.
+Difficulty and the semantic tags are computed here too and written back into each
+task's own `task.toml`, so the metadata travels with the task rather than living
+in a side index that can drift.
 
-## 5. Publish Verified Tasks
+## 4. The Manifest is the Contract
 
-At the end of `scripts/start.sh`, Curator starts a lightweight aggregator:
+`verifiable_tasks.txt` is the only authoritative statement of what Curator
+produced. The task directory tree is not: it also holds candidates that are
+half-generated, failed validation, or are still being written by a running worker.
 
-```bash
-python scripts/extract_verified_tasks.py
-```
+This is why downstream blocks filter through the manifest instead of scanning
+directories. Tracer's staging step reads it and links only the listed ids, which
+is what lets Curator keep generating into the same pool while Tracer is already
+rolling out against it.
 
-The aggregator reads each language's `verifiable_tasks.txt`, copies only those
-verified task directories, and writes a combined manifest:
-
-```text
-artifacts/merged_swe_tasks/
-├── <task_id>/
-├── <task_id>/
-└── verifiable_tasks.txt
-```
-
-This merged directory is the clean downstream contract. Tracer should read this
-pool instead of scanning every intermediate task directory.
-
-## Command Gates
-
-The mechanism above is exposed through a small set of plugin skills:
-
-| Command | What it gates |
-| --- | --- |
-| `/curator:setup` | Initializes `repos/legoflow-curator`, installs the environment, and hydrates runtime inputs. |
-| `/curator:check` | Validates config, repo pin, GitHub tokens, LLM endpoint, and Docker before work starts. |
-| `/curator:collect-prs` | Runs the Discover stage and writes PR pools. |
-| `/curator:create-tasks` | Runs Prepare, Assembly, and Verification. |
-| `/curator:dashboard` | Scores finished tasks and visualizes dataset tags and difficulty. |
+The merged pool at `artifacts/merged_swe_tasks/` is the same contract in
+materialized form, built by an aggregator that runs alongside generation, so the
+downstream side always has one directory to point at.
 
 For the shortest runnable path, see [Getting Started](/docs/blocks/curator/getting-started).
 For the exact files written by each stage, see [Output Format](/docs/blocks/curator/outputs).

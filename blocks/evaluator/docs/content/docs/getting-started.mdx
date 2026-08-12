@@ -33,7 +33,7 @@ runtime, or proxy port. Once `config.yaml` is right, the skills take over.
 
 For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
 `runtime_info.input` pieces below. For every field, see the
-<a href="/docs/blocks/evaluator/advanced-usages/configuration">Configuration Guide</a>.
+<a href="/docs/blocks/evaluator/usage/configuration">Configuration Guide</a>.
 
 ### Benchmark Config
 
@@ -77,7 +77,7 @@ that model directory:
 {"runtime_info:\n  input:\n    local_model_serving:\n      model_path: artifacts/models/Qwen3.5-35B-A3B\n      model_name: Qwen3.5-35B-A3B\n\n    llm_api:\n      api_key: dummy-key                         # must match the vLLM server key\n      api_base_url: http://<GPU_NODE_IP>:8000/v1\n      model: openai/Qwen3.5-35B-A3B"}
 </ConfigSnippet>
 
-See [Local Model Evaluation](/docs/blocks/evaluator/advanced-usages/local-model-evaluation)
+See [Local Model Evaluation](/docs/blocks/evaluator/usage/local-model-evaluation)
 for the vLLM serving steps.
 
 ### Harbor Job Config
@@ -125,7 +125,7 @@ Before launching the benchmark, run:
 This is read-only. It checks config, Harbor repo state, environments, benchmark
 registry, LLM endpoint, proxy port, Docker, and agent runtime. For exact pass
 conditions, see
-[Validation Checks](/docs/blocks/evaluator/advanced-usages/validation-checks).
+[Validation Checks](/docs/blocks/evaluator/usage/validation-checks).
 
 Fix required failures before continuing. If you are using a local checkpoint,
 also make sure the vLLM endpoint is already serving before the check.
@@ -161,8 +161,8 @@ artifacts/jobs/<job>/analysis/
 ```
 
 For benchmark selection and proxy details, see
-[Select Benchmark](/docs/blocks/evaluator/advanced-usages/select-benchmark) and
-[LiteLLM Proxy](/docs/blocks/evaluator/advanced-usages/litellm-proxy). For the
+[Select Benchmark](/docs/blocks/evaluator/usage/select-benchmark) and
+[LiteLLM Proxy](/docs/blocks/evaluator/usage/litellm-proxy). For the
 full artifact layout, see [Output Format](/docs/blocks/evaluator/outputs).
 
 ## Final Outputs

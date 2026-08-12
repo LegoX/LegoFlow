@@ -1,0 +1,121 @@
+---
+title: Running Block by Block (Recommended)
+---
+
+There are two ways to run LegoFlow: one block at a time, or the whole pipeline from
+the root block with [cascaded runs](/docs/running-blocks/cascaded). By default, we recommend users to run the block one by one.
+Running a single block each time gives you a much clearer sense of what each stage consumes, produces, and checks, before you ask the root block to run everything.
+
+Every block follows the same lifecycle: `setup` prepares dependencies, `check`
+validates without side effects, `run` does the work and archives it, and
+`dashboard` inspects the result. Each block's own Getting Started page explains
+how to fill its `config.yaml` and which credentials it expects.
+
+### Step 1: Task Curation
+
+Curator turns source signals such as GitHub PRs and issues into verified SWE
+tasks. Start from [Curator Getting Started](/docs/blocks/curator/getting-started).
+
+|  | Skill | Purpose |
+| --- | --- | --- |
+| 1 | `/curator:setup` | Prepare Curator dependencies, repositories, GitHub tokens, and LLM inputs. |
+| 2 | `/curator:check` | Validate Curator config, repo pins, tokens, Docker, and LLM endpoint readiness. |
+| 3 | `/curator:collect-prs` | Collect candidate PRs for downstream task generation. |
+| 4 | `/curator:create-tasks` | Generate and validate SWE tasks from the collected candidates. |
+| * | `/curator:dashboard` | Inspect curated task statistics, filters, and dataset quality signals. |
+
+Details: [Configuration Guide](/docs/blocks/curator/usage/configuration).
+
+### Step 2: Trajectory Rollout
+
+Tracer takes curated tasks and rolls out coding agents in isolated environments.
+Start from [Tracer Getting Started](/docs/blocks/tracer/getting-started).
+
+|  | Skill | Purpose |
+| --- | --- | --- |
+| 1 | `/tracer:setup` | Prepare rollout repositories, environments, task sources, agent runtimes, and LLM inputs. |
+| 2 | `/tracer:check` | Validate Tracer config, task source, proxy port, runtime image, repos, and endpoint readiness. |
+| 3 | `/tracer:run` | Launch trajectory rollout jobs for the configured tasks and agent scaffold. |
+| * | `/tracer:dashboard` | Monitor rollout jobs, trajectory status, archives, and SFT conversion progress. |
+
+Details: [Configuration Guide](/docs/blocks/tracer/usage/configuration) and
+[Output Format](/docs/blocks/tracer/outputs).
+
+### Step 3: Training
+
+Trainer converts trajectories into training-ready data and launches training.
+Start from [Trainer Getting Started](/docs/blocks/trainer/getting-started), which
+also lists the hardware a run actually needs.
+
+|  | Skill | Purpose |
+| --- | --- | --- |
+| 1 | `/trainer:setup` | Prepare training repositories, Python environment, data conversion stack, and GPU-side dependencies. |
+| 2 | `/trainer:check` | Validate trajectory source, model path, DeepSpeed config, GPU visibility, and training environment. |
+| 3 | `/trainer:run` | Convert trajectories and launch the configured training job. |
+| * | `/trainer:dashboard` | Inspect training status, metrics, artifacts, and run comparisons. |
+
+Details: [Configuration Guide](/docs/blocks/trainer/usage/configuration) and
+[Output Format](/docs/blocks/trainer/outputs).
+
+### Step 4: Evaluation
+
+Evaluator runs benchmarks and analysis over a model endpoint or a trained
+checkpoint. Start from [Evaluator Getting Started](/docs/blocks/evaluator/getting-started).
+
+|  | Skill | Purpose |
+| --- | --- | --- |
+| 1 | `/evaluator:setup` | Prepare benchmark assets, Harbor environment, LiteLLM proxy, model endpoint, and agent runtime. |
+| 2 | `/evaluator:check` | Validate benchmark registry, runtime image, agent bind mount, proxy port, and completion readiness. |
+| 3 | `/evaluator:run` | Run evaluation jobs for the configured model or checkpoint. |
+| * | `/evaluator:dashboard` | Inspect evaluation jobs, scores, trajectories, and analysis reports. |
+
+Details: [Configuration Guide](/docs/blocks/evaluator/usage/configuration) and
+[Local Model Evaluation](/docs/blocks/evaluator/usage/local-model-evaluation).
+
+## After a Run
+
+Every block writes its runtime materials to its own `artifacts/` directory:
+environment snapshots, run logs, outputs, intermediate caches, and archives.
+There are two ways in, and they answer different questions.
+
+### The Run Archive
+
+Each run copies the exact configuration and scripts it executed into an archive,
+so a result stays explainable after the block config has moved on:
+
+```text
+artifacts/index.yaml                    # one line per run: id, status, timestamps
+artifacts/archives/run_NNN/
+├── metadata.yaml                       # what ran, when, with which repo commits
+├── config.yaml                         # the config as it was at run time
+└── scripts/                            # the scripts as they were at run time
+```
+
+Start at `artifacts/index.yaml` when you want to know **what happened**: which
+run is newest, whether it completed, and where its archive is. Open the archived
+`config.yaml` when you want to know **under what conditions**, especially when
+comparing two runs that produced different numbers.
+
+### The Dashboard
+
+Open a dashboard when you want to know **whether the result is any good**:
+
+```text
+/<block>:dashboard
+```
+
+Each block's board reads that block's artifacts directly, with no separate
+database, so it is always as current as the files on disk.
+
+| Block | What its board answers |
+| --- | --- |
+| [Curator](/docs/blocks/curator/dashboard) | How many verified tasks exist, and how they are distributed across language, difficulty, and tags. |
+| [Tracer](/docs/blocks/tracer/dashboard) | Which rollouts resolved, which failed repeatedly, and whether the trajectories are ready for training. |
+| [Trainer](/docs/blocks/trainer/dashboard) | Whether training is healthy, and how this run compares with earlier ones. |
+| [Evaluator](/docs/blocks/evaluator/dashboard) | The benchmark resolve rate, and which task categories the failures came from. |
+
+Each dashboard page links a static demo snapshot, so you can see what a board
+looks like before you have run anything.
+
+See [What is a Block](/docs/block-design) for how archives and dashboards fit
+into the block contract.
