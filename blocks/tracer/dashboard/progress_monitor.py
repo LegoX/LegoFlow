@@ -3000,6 +3000,7 @@ def render_html(
     sft_dir: Path,
     harbor_jobs_dir: Path,
     index_path: Path,
+    r2_api: bool = False,
 ) -> str:
     jobs_sorted = sorted(jobs, key=lambda j: j.get("started_at") or "", reverse=True)
     sft_sorted = sorted(sft, key=lambda s: s["job"])
@@ -3023,6 +3024,7 @@ def render_html(
     # per-trajectory scores); `sft` gates the surfaces that count converted LF
     # data at all. A block that rolled out trials but converted nothing has
     # neither, and must not show either as a row of zeros.
+    r2_api_js = "true" if r2_api else "false"
     has_sft = bool(sft)
     gate_rules = [
         rule for present, rule in (
@@ -3423,6 +3425,9 @@ let currentTraj = null;
 let trajVisibleCards = [];
 let trajActiveTab = 'details';
 const TRAJ_SAMPLE_SIZE = 10;
+// Whether /api/traj can actually serve a trace that is not embedded. Without the
+// R2 binding it answers 503, so offering the control would fail on every click.
+const R2_API_AVAILABLE = {r2_api_js};
 let subscoreSort = {{field: 'composite_score', dir: 'desc'}};
 
 function currentTheme() {{
@@ -4042,12 +4047,18 @@ function selectTrajectory(card, button) {{
   const traceNote = card.embedded_available
     ? 'Embedded in this page — opens offline, no backend needed.'
     : (card.full_available
-       ? 'Not embedded: this trace is larger than the per-record embed cap. Opening it needs the TRACER_TRAJ_BUCKET R2 binding; without it, use the local path above.'
+       ? (R2_API_AVAILABLE
+          ? 'Not embedded: this trace is larger than the per-record embed cap, so it is fetched from R2 on demand.'
+          : 'Not embedded: this trace is larger than the per-record embed cap, and this board has no R2 backend to fetch it from. It is readable at the local path above, on the machine that produced it.')
        : (card.kind === 'quality'
           ? 'This row is a converted SFT record, not a Harbor rollout, so there is no separate trajectory file to open. Its conversation lives inside the dataset\\'s im.jsonl, which is not published with this board — the Preview tab shows a bounded excerpt.'
           : 'No trajectory file was recorded for this run, so there is nothing to open.'));
   const error = card.exception_type ? `<dt>Exception</dt><dd>${{escapeHtml(card.exception_type)}}</dd>` : '';
-  const loadAction = card.embedded_available || card.full_available
+  // A local path proves nothing to a remote reader: it names a file on the machine
+  // that built the board. Offer the control only when the trace is embedded here,
+  // or when a backend was declared that can fetch it.
+  const canLoad = card.embedded_available || (card.full_available && R2_API_AVAILABLE);
+  const loadAction = canLoad
     ? `<button id="loadFullTraj" type="button">${{card.embedded_available ? 'Open embedded trace' : 'Load full'}}</button>`
     : '';
   // Head / tabs / one scrolling pane — curator's sample-viewer shape. Splitting
@@ -4107,7 +4118,11 @@ async function loadFullTrajectory(card) {{
     const data = card.embedded_available ? await loadEmbeddedTrajectory(card) : await fetchRemoteTrajectory(card);
     renderFullTrajectory(box, card, data);
   }} catch (err) {{
-    box.textContent = `Full trajectory is not available through /api/traj in this environment.\\nR2 key: ${{card.r2_key || '-'}}\\nLocal path: ${{card.trajectory_path || card.path || '-'}}\\n${{err}}`;
+    box.classList.remove('json-hl');
+    box.textContent =
+      `This trace is not embedded in the page, and /api/traj could not serve it (${{err}}).\\n`
+      + `Opening it needs the TRACER_TRAJ_BUCKET R2 binding on the Pages project, with the `
+      + `object uploaded.\\n\\nR2 key:     ${{card.r2_key || '-'}}\\nLocal path: ${{card.trajectory_path || card.path || '-'}}`;
   }}
 }}
 
@@ -4819,6 +4834,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="Maximum full trajectory JSON records to embed into data/traj_embedded shards. 0 disables embedding.")
     p.add_argument("--embedded-traj-max-bytes", type=int, default=DEFAULT_EMBEDDED_TRAJ_MAX_BYTES,
                    help="Maximum total bytes for embedded full trajectory JSON shards. 0 disables embedding.")
+    p.add_argument("--r2-api", action="store_true",
+                   help="Offer 'Load full' for traces that are not embedded. Only useful when the "
+                        "Pages project has the TRACER_TRAJ_BUCKET R2 binding and the objects have "
+                        "been uploaded; without it /api/traj answers 503, so the control is hidden "
+                        "by default rather than failing on every click.")
     p.add_argument("--embedded-traj-max-record-bytes", type=int, default=EMBEDDED_TRAJ_MAX_RECORD_BYTES,
                    help="Skip embedding any single trajectory larger than this. A record cannot be "
                         "split across shards, so one huge trace would both blow the per-file limit of "
@@ -4915,6 +4935,7 @@ def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
         args.sft_dir.resolve(),
         args.harbor_jobs_dir.resolve(),
         args.index_file.resolve(),
+        r2_api=bool(args.r2_api),
     )
     atomic_write_text(args.output_html, html_doc)
     return totals

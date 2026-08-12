@@ -242,6 +242,12 @@ while true; do
   if [[ "$DASHBOARD_INCLUDE_SAMPLES" == "0" ]]; then
     sample_args=(--no-include-samples "${sample_args[@]}")
   fi
+  # Only this loop knows whether the objects a non-embedded trace needs were
+  # actually uploaded. Without them /api/traj answers 503, so the page hides the
+  # control rather than offering one that fails on every click.
+  if [[ "$TRACER_R2_UPLOAD" == "1" && -n "$TRACER_R2_BUCKET" ]]; then
+    sample_args+=(--r2-api)
+  fi
   if uv run --no-project --script "$DASHBOARD_SCRIPT" \
       --output-html "$PUBLIC_DIR/index.html" \
       --cache-file "$CACHE_FILE" \
