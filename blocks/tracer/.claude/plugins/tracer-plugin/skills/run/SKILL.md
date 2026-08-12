@@ -30,9 +30,11 @@ steps that keep the task-consumption contract correct.
 scripts/dryrun.sh
 ```
 
-Must pass: config, both managed repos, all three envs, task dirs, and the
-`sft_conversion` block. If tasks are missing, run `/tracer:setup` first (or
-`TRAJGEN_PREPARE_TASKS=1 scripts/start.sh` to re-prepare inline).
+Must pass: config, both managed repos, all three envs, and the
+`sft_conversion` block. Preflight does **not** require staged tasks — an
+unstaged block is just one that has not run yet, and `start.sh` stages before it
+launches. It does check that the task *source* exists, which staging cannot
+conjure.
 
 Optionally inspect the exact Harbor command without launching:
 
@@ -62,7 +64,8 @@ scripts/start.sh --update-repos  # refresh Harbor first (or TRAJGEN_UPDATE_REPOS
 `start.sh` performs, in order:
 
 1. dryrun preflight;
-2. optionally `scripts/prepare_tasks.sh` when `TRAJGEN_PREPARE_TASKS=1`;
+2. `scripts/prepare_tasks.sh`, which stages the task pool (set
+   `TRAJGEN_PREPARE_TASKS=0` to skip when it is already staged);
 3. generate the per-job LiteLLM config from `runtime_info.input.llm_api` +
    `litellm_proxy` and **start the proxy** on `runtime_info.input.litellm_proxy.port`;
 4. build and run the Harbor command from `config.yaml`, adding one
