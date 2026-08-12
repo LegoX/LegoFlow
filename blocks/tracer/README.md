@@ -35,7 +35,7 @@ blocks/tracer/
 ├── docs/                # fumadocs site (user-facing docs) → Cloudflare Pages
 │   ├── content/docs/    #   MDX: motivation, getting-started, core-concepts, run-jobs, sft-data, dashboard, reference
 │   ├── src/             #   minimal Next.js + fumadocs app shell
-│   └── deploy_cloudflare_pages.sh  # build (static export) + deploy to swe-tracer-docs
+│   └── deploy_cloudflare_pages.sh  # build (static export) + deploy to legoflow-tracer-docs
 ├── dashboard/           # progress board: progress_monitor.py + Cloudflare sync + site/
 ├── memory/notes.md      # long-form notes, repo policy, decisions
 ├── scripts/             # update_repos, setup env, prepare_tasks, dryrun, start, convert, clean
@@ -88,13 +88,13 @@ generic lifecycle (`/root:check`, `/root:run`); these are tracer-specific:
 ## Where things live
 
 - **Run it**: `scripts/` (or the skills above). `scripts/start.sh` runs the job; `scripts/dryrun.sh` validates without side effects.
-- **Read status and quality**: `config.yaml` → `status` and `artifacts/index.yaml` (newest entry). For a visual view, the dashboard at <https://swe-tracer-databoard.pages.dev/> includes instance/trajectory analysis by programming language/domain/category/difficulty/source/model/scaffold/job, status, artifact tables, bounded previews, and optional R2 full trajectory loading.
+- **Read status and quality**: `config.yaml` → `status` and `artifacts/index.yaml` (newest entry). For a visual view, the dashboard published to the `legoflow-tracer` Pages project includes instance/trajectory analysis by programming language/domain/category/difficulty/source/model/scaffold/job, status, artifact tables, bounded previews, and optional R2 full trajectory loading.
 - **Outputs**: trajectories under `artifacts/jobs/`, SFT data under `artifacts/sft_data/`.
 - **History**: per-run snapshots under `artifacts/archives/run_NNN/`.
 
 ## Links
 
-- **Docs site**: <https://swe-tracer-docs.pages.dev> (source under [`docs/content/docs/`](docs/content/docs/); fumadocs site published to Cloudflare Pages)
+- **Docs site**: source under [`docs/content/docs/`](docs/content/docs/); fumadocs site published to the `legoflow-tracer-docs` Cloudflare Pages project by [`docs/deploy_cloudflare_pages.sh`](docs/deploy_cloudflare_pages.sh)
 - [`docs/content/docs/getting-started.mdx`](docs/content/docs/getting-started.mdx) — step-by-step setup and first job
 - [`docs/content/docs/dashboard.mdx`](docs/content/docs/dashboard.mdx) — progress board and Cloudflare sync reference
 - [`docs/content/docs/reference/config-variants.mdx`](docs/content/docs/reference/config-variants.mdx) — config variants + how to build/deploy the docs site

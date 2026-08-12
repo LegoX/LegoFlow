@@ -229,7 +229,12 @@ if [[ "$UPDATE_REPOS" == "1" ]]; then
   bash "$BLOCK_DIR/scripts/update_repos.sh"
 fi
 
-if [[ "${TRAJGEN_PREPARE_TASKS:-0}" == "1" ]]; then
+# Stage by default. Preflight no longer fails on an unstaged block — an unstaged
+# block is simply one that has not run yet — so a launch has to do the staging
+# itself, or Harbor is pointed at a directory nobody filled. Staging is
+# idempotent (a valid dataset directory is reused) and, now that a local pool is
+# linked rather than copied, close to free. Set TRAJGEN_PREPARE_TASKS=0 to skip.
+if [[ "${TRAJGEN_PREPARE_TASKS:-1}" != "0" ]]; then
   bash "$BLOCK_DIR/scripts/prepare_tasks.sh" --config "$CONFIG"
 fi
 
@@ -327,6 +332,30 @@ JOB_DIR="$(abspath "$JOB_DIR_RAW")"
 HARBOR_DATASET_PATH="$(abspath "$HARBOR_DATASET_PATH_RAW")"
 HARBOR_JOBS_DIR="$(abspath "$HARBOR_JOBS_DIR_RAW")"
 mkdir -p "$(dirname "$HARBOR_DATASET_PATH")" "$HARBOR_JOBS_DIR" "$JOB_DIR"
+
+# The launch-time gate. Preflight deliberately does not fail on missing staging,
+# so this is the last point where an empty dataset can be caught: without it
+# Harbor runs against a directory that does not exist and reports no work rather
+# than an error, which reads as "nothing to do" instead of "nothing was staged".
+if ! "${PYTHON:-python3}" - "$HARBOR_DATASET_PATH" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+if not root.is_dir():
+    print(f"ERROR: task directory does not exist: {root}", file=sys.stderr)
+    raise SystemExit(1)
+tasks = [p for p in root.iterdir() if (p / "task.toml").is_file()]
+if not tasks:
+    print(f"ERROR: no Harbor tasks under {root}", file=sys.stderr)
+    raise SystemExit(1)
+print(f"Tasks:      {len(tasks)} staged at {root}")
+PY
+then
+  echo "ERROR: refusing to launch Harbor with no tasks staged." >&2
+  echo "       Check runtime_info.input.task_source, then run: bash scripts/prepare_tasks.sh" >&2
+  exit 1
+fi
 cp "$CONFIG" "$JOB_DIR/config.yaml"
 
 export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"

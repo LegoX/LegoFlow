@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { getActiveProfile } from "./SettingsPanel";
 import { useT } from "../i18n";
+import { IS_STATIC, apiUrl } from "../api/staticMode";
 
 interface Props {
   runId: string | null;
@@ -202,7 +203,7 @@ export default function AnalysisPanel({ runId }: Props) {
   const profile = getActiveProfile();
 
   useEffect(() => {
-    fetch("/api/analysis/demo-reports")
+    fetch(apiUrl("/api/analysis/demo-reports"))
       .then((r) => r.json())
       .then((data: Report[]) => {
         const demos = data.map((d) => ({ ...d, isDemo: true }));
@@ -224,6 +225,12 @@ export default function AnalysisPanel({ runId }: Props) {
   const generate = useCallback(async () => {
     if (!runId || !profile) return;
     setShowConfirm(false);
+    // No server to call in a published snapshot — say so instead of POSTing
+    // into a 404 and surfacing it as a generic failure.
+    if (IS_STATIC) {
+      setError(t("analysis.staticMode"));
+      return;
+    }
     setGenerating(true);
     setError(null);
     setProgress(t("analysis.buildingCtx"));

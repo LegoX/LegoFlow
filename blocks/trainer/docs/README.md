@@ -4,7 +4,8 @@ User-facing documentation for the [trainer](../CLAUDE.md) block, built as a
 [fumadocs](https://fumadocs.dev/) (Next.js) site and deployed to Cloudflare
 Pages as a static export.
 
-Live site: **<https://swe-trainer-docs.pages.dev>**
+Not currently deployed. `bash deploy_cloudflare_pages.sh` publishes it to the
+Pages project `legoflow-trainer-docs` and prints the URL Cloudflare assigned.
 
 The prose lives in `content/docs/`; everything else is the minimal app shell
 needed to render and deploy it. This is the *documentation* site — the live
@@ -43,8 +44,8 @@ npx serve out      # preview the exported site
 bash deploy_cloudflare_pages.sh
 ```
 
-Builds and deploys `out/` to the `swe-trainer-docs` Cloudflare Pages project
-(published at <https://swe-trainer-docs.pages.dev>). It activates Node 22 via nvm,
+Builds and deploys `out/` to the `legoflow-trainer-docs` Cloudflare Pages project.
+It activates Node 22 via nvm,
 asserts Node >= 20, and reuses the same Cloudflare credentials as the tracer
 dashboard (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` from `.env.cf` or
 `~/.config/trajgen_progress_cloudflare.env`). Override the project with

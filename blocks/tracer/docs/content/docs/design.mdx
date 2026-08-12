@@ -24,10 +24,17 @@ artifacts/tasks/<dataset>/
 ```
 
 For local Curator output, Tracer looks for `verifiable_tasks.txt`. If the
-manifest exists, only listed task IDs are copied. If it is missing, Tracer
-copies every valid Harbor task directory. This is the manifest gate in the
+manifest exists, only listed task IDs are staged. If it is missing, Tracer
+stages every valid Harbor task directory. This is the manifest gate in the
 diagram: verified Curator tasks get through; unfinished or failed task
 candidates stay out.
+
+A local source is staged by **linking, not copying**: the dataset directory is
+real, and holds one symlink per task id pointing back at Curator's pool. Nothing
+is duplicated on disk, and a staged batch never drifts from the pool Curator
+keeps writing to. Linking per task rather than linking the pool as a whole is
+what lets the manifest gate above still apply. A Hugging Face source is copied
+out of its downloaded snapshot instead.
 
 Tracer also keeps a consumption ledger:
 

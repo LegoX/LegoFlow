@@ -42,9 +42,12 @@ echo "[server] Running (PID $SERVER_PID)"
 
 # Optional Cloudflare quick tunnel for public access (requires cloudflared)
 if [ "$TUNNEL" = "true" ]; then
+  # PATH first, then the usual local install locations.
   CLOUDFLARED_BIN="${CLOUDFLARED_BIN:-$(command -v cloudflared 2>/dev/null || true)}"
-  if [ -z "$CLOUDFLARED_BIN" ] && [ -x /public/storage/yuxin/cloudflared/bin/cloudflared ]; then
-    CLOUDFLARED_BIN=/public/storage/yuxin/cloudflared/bin/cloudflared
+  if [ -z "$CLOUDFLARED_BIN" ]; then
+    for candidate in "$HOME/.local/bin/cloudflared" /usr/local/bin/cloudflared /opt/cloudflared/bin/cloudflared; do
+      [ -x "$candidate" ] && { CLOUDFLARED_BIN="$candidate"; break; }
+    done
   fi
   if [ -z "$CLOUDFLARED_BIN" ]; then
     echo "[tunnel] cloudflared not found; set CLOUDFLARED_BIN or install it. Skipping tunnel." >&2

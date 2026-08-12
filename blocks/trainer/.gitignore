@@ -48,5 +48,9 @@ __pycache__/
 artifacts/env
 # Symlinked smoke dataset (the dir-form rule above misses the symlink)
 artifacts/data/examples
+# Same trap for runs/logs staged in from another checkout: the dir-form rules
+# above match a directory, never a symlink pointing at one.
+artifacts/model
+artifacts/logs
 # Editor/sync backup artifacts (e.g. .efc_<hashes>_<name>)
 .efc_*

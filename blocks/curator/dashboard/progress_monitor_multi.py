@@ -40,6 +40,28 @@ CONFIG_PATH = BLOCK_ROOT / "config.yaml"
 DEFAULT_OUTPUT = DASHBOARD_ROOT / "site" / "index.html"
 
 
+def display_path(value: Any, block_dir: Path = BLOCK_DIR) -> str:
+    """A path fit to publish: relative to the block, and never naming the host.
+
+    A pool linked in from another checkout has no useful relative form, so keep
+    the recognisable tail from `artifacts/` and drop everything above it.
+    """
+    text = str(value or "")
+    if not text:
+        return ""
+    path = Path(text)
+    if not path.is_absolute():
+        return text
+    try:
+        return str(path.relative_to(block_dir))
+    except ValueError:
+        pass
+    parts = path.parts
+    if "artifacts" in parts:
+        return "external:" + str(Path(*parts[parts.index("artifacts"):]))
+    return "external:" + "/".join(parts[-3:])
+
+
 def _resolve(path_str: str, base: Path) -> Path:
     """Config paths may be absolute, or relative to the config file's own
     directory — which for the block's real config.yaml is the block root."""
@@ -189,7 +211,10 @@ def aggregate_batch(name: str, path: Path, external: bool = False) -> dict[str, 
     return {
         "id": name,
         "name": name,
-        "path": str(path),
+        # Published, so block-relative: an absolute path names the operator's
+        # home directory and checkout on a public URL, and tells a reader
+        # nothing they can act on — the files are on the machine that built it.
+        "path": display_path(path),
         "external": external,
         "exists": path.is_dir(),
         "total": total,
@@ -811,7 +836,7 @@ def render_info(batches: list[dict[str, Any]], prs: dict[str, Any],
     ]) or "<tr><td colspan='3'>none configured</td></tr>"
 
     pr_rows = rows([
-        (d["name"], d["dir"], "" if d["exists"] else "<em>not found</em>")
+        (d["name"], display_path(d["dir"]), "" if d["exists"] else "<em>not found</em>")
         for d in (prs.get("dirs") or [])
     ]) or "<tr><td colspan='3'>none configured</td></tr>"
 
@@ -822,7 +847,7 @@ def render_info(batches: list[dict[str, Any]], prs: dict[str, Any],
 
     return (
         f"<div class='mini'>batches are the subdirectories of "
-        f"{html.escape(str(tasks_root))}; a symlink there joins the board like any "
+        f"{html.escape(display_path(tasks_root))}; a symlink there joins the board like any "
         f"other batch</div>"
         "<div class='sub'>Task batches</div>"
         f"<table>{task_rows}</table>"

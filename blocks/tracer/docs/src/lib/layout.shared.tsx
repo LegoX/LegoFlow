@@ -18,12 +18,16 @@ export function baseOptions(): BaseLayoutProps {
         text: "docs",
         active: "nested-url",
       },
-      {
-        url: "https://swe-tracer-databoard.pages.dev/",
-        text: "dashboard",
-        active: "none",
-        external: true,
-      },
+      ...(process.env.NEXT_PUBLIC_DASHBOARD_URL
+        ? [
+            {
+              url: process.env.NEXT_PUBLIC_DASHBOARD_URL,
+              text: "dashboard",
+              active: "none" as const,
+              external: true,
+            },
+          ]
+        : []),
     ],
     themeSwitch: {
       enabled: true,

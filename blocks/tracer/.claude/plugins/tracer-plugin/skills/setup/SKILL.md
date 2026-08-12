@@ -141,7 +141,7 @@ zero, point the user at `/tracer:run`. Setup is done.
 
 ### task_source
 
-Production runs use `provider: local` pointing at curator's verified tasks — the dependency is declared in `meta_info.dependencies.from` (`task_source.dataset_name: {from: curator.output.swe_tasks_dir, when: {task_source.provider: local}}`), mirrored by curator's own `dependencies.to.swe_tasks_dir`. `prepare_tasks.sh` filters the source dir through its `verifiable_tasks.txt` manifest before copying into `artifacts/tasks/`.
+Production runs use `provider: local` pointing at curator's verified tasks — the dependency is declared in `meta_info.dependencies.from` (`task_source.dataset_name: {from: curator.output.swe_tasks_dir, when: {task_source.provider: local}}`), mirrored by curator's own `dependencies.to.swe_tasks_dir`. `prepare_tasks.sh` filters the source dir through its `verifiable_tasks.txt` manifest before staging into `artifacts/tasks/` — one symlink per task id, not a copy.
 
 
 ### sft_conversion

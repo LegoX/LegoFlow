@@ -102,8 +102,9 @@ echo "INFO: smoke log -> $LOG"
 echo "INFO: warming harbor CLI cache"
 "$BLOCK_DIR/artifacts/env/harbor-uv/bin/harbor" --help >/dev/null 2>&1 || true
 
-# prepare_tasks.sh must run before start.sh — start.sh's dryrun gate checks
-# that artifacts/tasks/<dataset>/ is populated and refuses to launch otherwise.
+# prepare_tasks.sh must run before start.sh. Not because dryrun gates on it — it
+# reports staging without failing on it — but because Harbor has nothing to roll
+# out until artifacts/tasks/<dataset>/ is populated.
 echo "INFO: preparing tasks from HF dataset (see log)"
 if ! bash "$BLOCK_DIR/scripts/prepare_tasks.sh" >>"$LOG" 2>&1; then
   echo "FAIL: prepare_tasks.sh exited non-zero — see $LOG"

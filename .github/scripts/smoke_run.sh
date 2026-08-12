@@ -117,7 +117,9 @@ esac
 
 case "$BLOCK" in
   tracer)
-    echo "INFO: tracer — running prepare_tasks.sh (dryrun.sh requires staged tasks)"
+    # dryrun.sh no longer requires staged tasks, but the smoke run still needs
+    # them: without staging there is nothing for Harbor to roll out.
+    echo "INFO: tracer — running prepare_tasks.sh (Harbor needs staged tasks)"
     if ! bash scripts/prepare_tasks.sh; then
       echo "FAIL: prepare_tasks.sh exited non-zero — terminal artifact will not appear"
     fi

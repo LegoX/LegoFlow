@@ -9,7 +9,8 @@
 #
 # Two modes, chosen by whether Cloudflare credentials resolve:
 #
-#   credentials present -> Cloudflare Pages, project `legoflow-<block>`.
+#   credentials present -> Cloudflare Pages, project `legoflow-<block>`, or
+#                          `legoflow-<block>-<suffix>` with PUBLISH_PROJECT_SUFFIX.
 #                          Persistent; survives this process exiting.
 #   no credentials      -> cloudflared quick tunnel over a local static server.
 #                          Ephemeral: a fresh *.trycloudflare.com name each run,
@@ -25,21 +26,30 @@
 #   PUBLISHED_MODE  pages | tunnel | none
 
 PUBLISH_PRODUCTION_BRANCH="${PUBLISH_PRODUCTION_BRANCH:-main}"
+# `legoflow-<block>` may already be taken. Set PUBLISH_PROJECT_SUFFIX=<suffix> to
+# publish as `legoflow-<block>-<suffix>`. The address is still read back from the
+# API, never assembled from the name.
+PUBLISH_PROJECT_SUFFIX="${PUBLISH_PROJECT_SUFFIX:-}"
+# Where a generated suffix is remembered, so re-deploys keep replacing the same
+# board instead of creating a new one each time.
+PUBLISH_STATE_DIR="${PUBLISH_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/legoflow}"
 # wrangler v4+ needs Node >= 22; v3 also runs on Node 18.
 PUBLISH_WRANGLER_PKG="${PUBLISH_WRANGLER_PKG:-wrangler@3}"
 
 _publish_log() { printf '[publish] %s\n' "$*" >&2; }
 
 _publish_wrangler() {
-  local workdir="${PUBLISH_WRANGLER_WORKDIR:-${TMPDIR:-/tmp}/legoflow-wrangler}"
+  # Per-user: a shared /tmp name is owned by whoever created it first, and the
+  # next user on the machine cannot write to it.
+  local workdir="${PUBLISH_WRANGLER_WORKDIR:-${TMPDIR:-/tmp}/legoflow-wrangler-$(id -u)}"
   mkdir -p "$workdir"
   (cd "$workdir" && npx --yes "$PUBLISH_WRANGLER_PKG" "$@")
 }
 
 # The canonical hostname Cloudflare assigned this project. Never build it from the
 # project name: `*.pages.dev` subdomains are globally unique, so a taken name is
-# silently given a suffix (project `swe-databoard` answers on
-# `swe-databoard-ems.pages.dev`). Guessing prints an address that 404s.
+# silently given a suffix (a project named `foo` can answer on `foo-ems.pages.dev`
+# — we have hit this). Guessing prints an address that 404s.
 _publish_pages_url() {
   local project="$1" response
   response="$(curl -sS --max-time 25 \
@@ -66,13 +76,78 @@ else:
 ' 2>/dev/null
 }
 
+_publish_random_suffix() {
+  LC_ALL=C tr -dc 'a-z' </dev/urandom 2>/dev/null | head -c 6
+}
+
+# Does this project exist on *our* account? Distinguishes "already ours, reuse it"
+# from "the name belongs to someone else", which look the same from a failed
+# create.
+_publish_project_is_ours() {
+  local project="$1"
+  curl -sS --max-time 25 \
+    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+    "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$project" \
+    2>/dev/null | grep -q '"success": *true'
+}
+
+# The name to publish under: an explicit suffix wins, then one remembered from a
+# previous run, then the plain name.
+_publish_project_name() {
+  local block="$1" state="$PUBLISH_STATE_DIR/pages-project-$block"
+  if [[ -n "$PUBLISH_PROJECT_SUFFIX" ]]; then
+    printf 'legoflow-%s-%s' "$block" "$PUBLISH_PROJECT_SUFFIX"
+  elif [[ -s "$state" ]]; then
+    tr -d '[:space:]' < "$state"
+  else
+    printf 'legoflow-%s' "$block"
+  fi
+}
+
+_publish_remember_project() {
+  local block="$1" project="$2"
+  mkdir -p "$PUBLISH_STATE_DIR" 2>/dev/null || return 0
+  printf '%s\n' "$project" > "$PUBLISH_STATE_DIR/pages-project-$block" 2>/dev/null || true
+}
+
+# Settle on a project we can actually publish to. Reuse ours; otherwise create.
+# If the name is taken by another account, try a random suffix and remember what
+# worked, so the next deploy replaces this board rather than making another one.
+_publish_claim_project() {
+  local block="$1" project attempt
+  project="$(_publish_project_name "$block")"
+  if _publish_project_is_ours "$project"; then
+    printf '%s' "$project"; return 0
+  fi
+  if _publish_wrangler pages project create "$project" \
+      --production-branch "$PUBLISH_PRODUCTION_BRANCH" >/dev/null 2>&1; then
+    _publish_remember_project "$block" "$project"
+    printf '%s' "$project"; return 0
+  fi
+  if [[ -n "$PUBLISH_PROJECT_SUFFIX" ]]; then
+    _publish_log "could not create or claim $project"
+    return 1
+  fi
+  for attempt in 1 2 3; do
+    project="legoflow-$block-$(_publish_random_suffix)"
+    if _publish_wrangler pages project create "$project" \
+        --production-branch "$PUBLISH_PRODUCTION_BRANCH" >/dev/null 2>&1; then
+      _publish_log "name was taken; publishing as $project (remembered for next time)"
+      _publish_remember_project "$block" "$project"
+      printf '%s' "$project"; return 0
+    fi
+  done
+  _publish_log "could not claim a Pages project for $block after 3 attempts"
+  return 1
+}
+
 _publish_to_pages() {
-  local block="$1" dir="$2" project="legoflow-$block"
+  # Separate statements: within one `local`, later assignments cannot see earlier
+  # ones, so `project` picked up whatever `block` was in the caller's scope.
+  local block="$1" dir="$2" project
+  project="$(_publish_claim_project "$block")" || return 1
 
   _publish_log "deploying $dir to Cloudflare Pages project $project"
-  # Idempotent: fails harmlessly when the project already exists.
-  _publish_wrangler pages project create "$project" \
-    --production-branch "$PUBLISH_PRODUCTION_BRANCH" >/dev/null 2>&1 || true
 
   if ! _publish_wrangler pages deploy "$dir" \
       --project-name "$project" \
@@ -118,7 +193,7 @@ _publish_via_tunnel() {
     return 1
   fi
 
-  local log="${TMPDIR:-/tmp}/legoflow-tunnel-$port.log"
+  local log="${TMPDIR:-/tmp}/legoflow-tunnel-$(id -u)-$port.log"
   : > "$log"
   "$bin" tunnel --url "http://127.0.0.1:$port" >"$log" 2>&1 &
   PUBLISH_TUNNEL_PID=$!
@@ -153,6 +228,8 @@ publish_dashboard() {
     _publish_log "nothing to publish: $dir does not exist"
     return 1
   fi
+  # Resolve while still in the caller's directory — wrangler runs from its own.
+  dir="$(cd "$dir" && pwd)"
 
   local shared
   shared="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/shared_credentials.sh"

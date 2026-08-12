@@ -7,7 +7,10 @@ const STORAGE_KEY = "lf-dashboard-lang";
 export function getSavedLang(): Lang {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved === "zh" || saved === "en") return saved;
-  return navigator.language.startsWith("zh") ? "zh" : "en";
+  // English by default, regardless of the browser's locale: this board is shared
+  // and read by people who do not share one. A visitor who prefers Chinese
+  // switches once and the choice is remembered.
+  return "en";
 }
 
 export function saveLang(lang: Lang) {
@@ -167,6 +170,10 @@ const dict: Record<string, Record<Lang, string>> = {
     zh: "正在调用 LLM API（可能需要 1-2 分钟）...",
   },
   "analysis.failed": { en: "Generation failed", zh: "生成失败" },
+  "analysis.staticMode": {
+    en: "Report generation needs the local dashboard server; this is a published snapshot. Run ./start_dashboard.sh to generate one.",
+    zh: "生成报告需要本地 dashboard 服务，当前是已发布的静态快照。请运行 ./start_dashboard.sh 后再生成。",
+  },
   "analysis.download": { en: "Download as markdown", zh: "下载为 Markdown" },
   "analysis.delete": { en: "Delete report", zh: "删除报告" },
   "analysis.yourReports": { en: "Your Reports", zh: "我的报告" },

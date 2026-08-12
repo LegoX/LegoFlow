@@ -492,9 +492,10 @@ PY
     fi
     # NOT $STAGE_DIR: it was filled from curator moments ago by the copy above,
     # which already rmtree's it first. Clearing it here deleted this run's own
-    # task source, so prepare_tasks.sh had nothing to stage and tracer's dryrun
-    # failed with "Harbor tasks are not prepared" — harbor never launched and the
-    # stage sat out its whole budget waiting for a job that did not exist.
+    # task source, so prepare_tasks.sh had nothing to stage — harbor never
+    # launched and the stage sat out its whole budget waiting for a job that did
+    # not exist. (dryrun.sh used to fail loudly on this; it now only reports
+    # staging, so an empty source shows up as a harbor no-op instead.)
     for _stale in "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" \
                   "${_sft_stale[@]}"; do
       [[ -e "$_stale" ]] || continue

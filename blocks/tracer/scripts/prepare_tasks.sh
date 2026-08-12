@@ -13,7 +13,13 @@ Usage:
   bash scripts/prepare_tasks.sh --config config.yaml
   bash scripts/prepare_tasks.sh --config config.some-variant.yaml --overwrite
 
-Prepares Harbor task directories under artifacts/tasks/<dataset>.
+Stages Harbor task directories under artifacts/tasks/<dataset>.
+
+A local source (provider: local) is staged by symlinking each task into place —
+one link per task id, so a verifiable_tasks.txt manifest still filters what is
+staged, and nothing is duplicated on disk. A huggingface source is copied out of
+its downloaded snapshot.
+
 Existing valid task directories are reused. Existing invalid directories require
 --overwrite before they are replaced.
 EOF
@@ -131,44 +137,60 @@ shutil.copytree(src, dst, symlinks=True)
 PY
 }
 
-copy_harbor_tasks_filtered() {
+# Stage a local task pool by linking, not copying. Harbor reads each task dir
+# through the link, so the staged tree costs nothing and never drifts from the
+# pool curator keeps writing to. The directory itself is real: one symlink per
+# task is what lets the manifest filter still apply, which a single link to the
+# whole pool could not do.
+link_harbor_tasks() {
   local src="$1"
   local dst="$2"
-  local manifest="$3"
+  local manifest="${3:-}"
   python3 - "$src" "$dst" "$manifest" <<'PY'
 from pathlib import Path
 import shutil
 import sys
 
-src = Path(sys.argv[1])
+src = Path(sys.argv[1]).resolve()
 dst = Path(sys.argv[2])
-manifest = Path(sys.argv[3])
+manifest = Path(sys.argv[3]) if sys.argv[3] else None
 
-with manifest.open(encoding="utf-8") as fh:
-    allowed = {line.strip() for line in fh if line.strip() and not line.startswith("#")}
-
-if not allowed:
-    print(f"ERROR: manifest is empty: {manifest}", file=sys.stderr)
-    sys.exit(1)
+if manifest is not None:
+    with manifest.open(encoding="utf-8") as fh:
+        allowed = sorted({
+            line.strip() for line in fh
+            if line.strip() and not line.startswith("#")
+        })
+    if not allowed:
+        print(f"ERROR: manifest is empty: {manifest}", file=sys.stderr)
+        sys.exit(1)
+else:
+    allowed = sorted(p.name for p in src.iterdir() if p.is_dir())
 
 dst.parent.mkdir(parents=True, exist_ok=True)
-if dst.exists():
+if dst.is_symlink() or dst.is_file():
+    dst.unlink()
+elif dst.exists():
     shutil.rmtree(dst)
 dst.mkdir(parents=True)
 
-copied = 0
+linked = 0
 missing = []
-for task_id in sorted(allowed):
+for task_id in allowed:
     src_task = src / task_id
     if not src_task.is_dir():
         missing.append(task_id)
         continue
-    shutil.copytree(src_task, dst / task_id, symlinks=True)
-    copied += 1
+    # Absolute target: the staged dir is read from several working directories
+    # (Harbor, the dashboard, dryrun), and a relative link would only resolve
+    # from one of them.
+    (dst / task_id).symlink_to(src_task, target_is_directory=True)
+    linked += 1
 
 for task_id in missing:
     print(f"WARN: manifest entry missing from source: {task_id}", file=sys.stderr)
-print(f"filtered:{copied}/{len(allowed)} copied (manifest={manifest.name})")
+scope = f"manifest={manifest.name}" if manifest is not None else "no manifest — every task dir"
+print(f"linked:{linked}/{len(allowed)} ({scope})")
 PY
 }
 
@@ -358,11 +380,11 @@ case "$PROVIDER" in
     fi
     MANIFEST="$VALID_ROOT/verifiable_tasks.txt"
     if [[ -f "$MANIFEST" ]]; then
-      echo "Manifest found: $MANIFEST — copying only listed tasks."
-      copy_harbor_tasks_filtered "$VALID_ROOT" "$TARGET_DIR" "$MANIFEST"
+      echo "Manifest found: $MANIFEST — linking only listed tasks."
+      link_harbor_tasks "$VALID_ROOT" "$TARGET_DIR" "$MANIFEST"
     else
-      echo "No verifiable_tasks.txt in source — copying all task dirs."
-      copy_harbor_tasks "$VALID_ROOT" "$TARGET_DIR"
+      echo "No verifiable_tasks.txt in source — linking all task dirs."
+      link_harbor_tasks "$VALID_ROOT" "$TARGET_DIR" ""
     fi
     ;;
   huggingface)

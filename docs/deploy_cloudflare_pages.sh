@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the LegoFlow root docs (fumadocs/Next.js static export) and deploy
 # to a dedicated Cloudflare Pages project. Independent of the per-block docs
-# projects (e.g. swe-tracer-docs); this one defaults to legoflow-docs.
+# projects (e.g. legoflow-tracer-docs); this one defaults to legoflow-docs.
 #
 # Reuses the same Cloudflare credentials pattern as the tracer dashboard sync:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
@@ -89,4 +89,6 @@ npx --yes "$WRANGLER_PKG" pages deploy "$OUT_DIR" \
   --branch "$BRANCH_NAME" \
   --commit-dirty=true
 
-log "Done. The public URL is printed above (https://$PROJECT_NAME.pages.dev)."
+# Do not assemble the address from the project name: a taken `*.pages.dev`
+# subdomain is silently given a suffix, so the guess can be a link that 404s.
+log "Done. Use the deployment URL wrangler printed above; project: $PROJECT_NAME."

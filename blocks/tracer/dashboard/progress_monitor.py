@@ -50,6 +50,10 @@ CACHE_VERSION = 1
 DEFAULT_EMBEDDED_TRAJ_LIMIT = 120
 DEFAULT_EMBEDDED_TRAJ_MAX_BYTES = 40_000_000
 EMBEDDED_TRAJ_SHARD_BYTES = 8_000_000
+# One trajectory is one JSONL line and cannot be split, so an outsized trace sets
+# its shard's size alone — big enough to break the host's per-file limit, and to
+# eat the whole budget. Skip those; they keep their local path and R2 key.
+EMBEDDED_TRAJ_MAX_RECORD_BYTES = 4_000_000
 TRAJECTORY_ARTIFACT_NAMES = ("litellm-trajectory.jsonl", "trajectory.json")
 
 SCAFFOLD_PATTERNS: list[tuple[re.Pattern[str], str]] = [
@@ -154,13 +158,30 @@ WEIGHTED_SUBSCORE_KEYS = sorted(
     (key for key, weight in TQS_WEIGHTS.items() if weight > 0),
     key=lambda key: (-TQS_WEIGHTS[key], key),
 )
+# Acronym spelled out, then what it measures. Wording follows
+# swe_data_process/rule_score.py, which computes these. Zero-weight entries are
+# diagnostics: shown, but they do not move composite_score.
 SUBSCORE_LABELS = {
-    "composite_score": "Trajectory score",
-    "sub_score": "sub submission completeness",
-    "stp_score": "stp step efficiency",
-    "tvr_score": "tvr test verification",
-    "fec_score": "fec file-edit concentration",
-    "dpi_score": "dpi dirty-pattern penalty",
+    "composite_score": "Trajectory score — weighted sum of the subscores below (Σw = 1.00)",
+    "sub_score": "SUB — submission completeness: whether the run delivered a complete patch",
+    "stp_score": "STP — step efficiency: reaching the same result in fewer steps scores higher",
+    "tvr_score": "TVR — test verification: whether the run wrote and ran tests to check its own fix",
+    "fec_score": "FEC — file-edit concentration: edits focused on few files rather than scattered "
+                 "(raised to the 5th power before weighting)",
+    "dpi_score": "DPI — dirty-pattern penalty: truncation, edits never committed, loops, repeated "
+                 "errors (cubed before weighting)",
+    "oec_score": "OEC — observation entropy collapse: tool output stops carrying new information "
+                 "(diagnostic, weight 0)",
+    "iac_score": "IAC — intent/action consistency: actions match the stated intent "
+                 "(diagnostic, weight 0)",
+    "ped_score": "PED — post-error strategy diversity: the approach varies after an error "
+                 "(diagnostic, weight 0)",
+    "psn_score": "PSN — progressive scope narrowing: the search narrows toward the fix "
+                 "(diagnostic, weight 0)",
+    "tte_score": "TTE — tool transition entropy: how varied the tool-to-tool transitions are "
+                 "(diagnostic, weight 0)",
+    "scp_score": "SCP — time to first effective edit: how long before the first edit that sticks "
+                 "(diagnostic, weight 0)",
 }
 def render_rubric_html() -> str:
     """The trajectory-quality rubric, rendered from the same weights the score
@@ -477,11 +498,11 @@ def parse_scalar(raw: str) -> Any:
 def read_status(index_path: Path) -> dict[str, Any]:
     """Read the latest run from artifacts/index.yaml without a YAML dependency."""
     if not index_path.is_file():
-        return {"_error": f"{index_path} not found"}
+        return {"_error": f"{display_path(index_path)} not found"}
     try:
         lines = index_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
-        return {"_error": f"failed to read {index_path}: {exc}"}
+        return {"_error": f"failed to read {display_path(index_path)}: {exc}"}
 
     start: int | None = None
     for i, line in enumerate(lines):
@@ -930,6 +951,26 @@ def find_trial_trajectory(trial_dir: Path) -> Path | None:
     return None
 
 
+def trial_model_name(model_info: dict[str, Any], config_agent: dict[str, Any]) -> str:
+    """The model a trial ran against — the teacher, on a distillation run.
+
+    What the agent reported, then what it was configured with, then the agent
+    environment for scaffolds that record it only there.
+    """
+    reported = str(model_info.get("name") or "").strip()
+    if reported:
+        return reported
+    configured = str(config_agent.get("model_name") or "").strip()
+    if configured:
+        return configured
+    env = config_agent.get("env") if isinstance(config_agent.get("env"), dict) else {}
+    for key in ("ANTHROPIC_MODEL", "OPENAI_MODEL", "MODEL"):
+        value = str(env.get(key) or "").strip()
+        if value:
+            return value
+    return "unknown"
+
+
 def collect_trial_facts(
     harbor_jobs_dir: Path,
     job_names: list[str],
@@ -962,6 +1003,8 @@ def collect_trial_facts(
             info = task_info(task_dim, task_name)
             agent_info = data.get("agent_info") if isinstance(data.get("agent_info"), dict) else {}
             model_info = agent_info.get("model_info") if isinstance(agent_info.get("model_info"), dict) else {}
+            trial_config = data.get("config") if isinstance(data.get("config"), dict) else {}
+            config_agent = trial_config.get("agent") if isinstance(trial_config.get("agent"), dict) else {}
             agent_result = data.get("agent_result") if isinstance(data.get("agent_result"), dict) else {}
             exception_info = data.get("exception_info")
             reward = extract_reward(data)
@@ -985,7 +1028,9 @@ def collect_trial_facts(
                 "difficulty": info.get("difficulty"),
                 "source": str(data.get("source") or "unknown"),
                 "scaffold": normalize_scaffold(agent_info.get("name"), job_name),
-                "model": str(model_info.get("name") or "unknown"),
+                # Harbor fills model_info only for agents that report it. When it
+                # does not, the model is still in this result.json's launch config.
+                "model": trial_model_name(model_info, config_agent),
                 "provider": str(model_info.get("provider") or "unknown"),
                 "status": trial_status(reward, exception_info),
                 "reward": reward,
@@ -1094,6 +1139,9 @@ def collect_quality_facts(
                     "dataset": dataset_dir.name,
                     "job": dataset_dir.name,
                     "index": idx,
+                    # An SFT record has no trajectory file — it *is* the
+                    # trajectory, at this line. Remember where, so it can be embedded.
+                    "im_path": str(im_file),
                     "instance_id": instance_id,
                     "task_name": task_name,
                     "repo": info.get("repo"),
@@ -1503,6 +1551,7 @@ def build_traj_cards(
             "job": fact.get("job"),
             "dataset": fact.get("dataset"),
             "index": fact.get("index"),
+            "im_path": fact.get("im_path"),
             "instance_id": key,
             "task_name": fact.get("task_name"),
             "repo": fact.get("repo"),
@@ -1768,10 +1817,13 @@ def write_jsonl_shards(path: Path, rows: list[dict[str, Any]], *, max_bytes: int
 def select_embedded_traj_cards(cards: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
     if limit <= 0:
         return []
-    candidates = [
-        card for card in cards
-        if card.get("kind") == "trial" and card.get("trajectory_path") and Path(str(card.get("trajectory_path"))).is_file()
-    ]
+    def has_source(card: dict[str, Any]) -> bool:
+        path = str(card.get("trajectory_path") or "")
+        if path and Path(path).is_file():
+            return True
+        # A converted SFT record is its own trace: one line of an im.jsonl.
+        return bool(card.get("im_path")) and card.get("index") is not None
+    candidates = [card for card in cards if has_source(card)]
     selected: list[dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -1808,6 +1860,56 @@ def select_embedded_traj_cards(cards: list[dict[str, Any]], *, limit: int) -> li
     return selected[:limit]
 
 
+RECORD_PATH_KEYS = ("trajectory_output_path",)
+
+
+def strip_record_paths(node: Any, block_dir: Path = BLOCK_DIR) -> Any:
+    """Rewrite host paths Harbor recorded inside a trajectory payload.
+
+    Named metadata keys only. Message content stays as it was — rewriting it
+    would make the published trace disagree with the one on disk.
+    """
+    if isinstance(node, dict):
+        return {
+            k: (display_path(v, block_dir) if k in RECORD_PATH_KEYS and isinstance(v, str)
+                else strip_record_paths(v, block_dir))
+            for k, v in node.items()
+        }
+    if isinstance(node, list):
+        return [strip_record_paths(v, block_dir) for v in node]
+    return node
+
+
+def read_im_records(cards: list[dict[str, Any]]) -> dict[tuple[str, int], Any]:
+    """Fetch the specific im.jsonl lines a set of cards points at.
+
+    One pass per file, stopping at the last line wanted — these run to hundreds
+    of megabytes, and per-record seeking would re-read the file each time.
+    """
+    wanted: dict[str, set[int]] = {}
+    for card in cards:
+        path, index = str(card.get("im_path") or ""), card.get("index")
+        if path and index is not None:
+            wanted.setdefault(path, set()).add(int(index))
+
+    out: dict[tuple[str, int], Any] = {}
+    for path, indices in wanted.items():
+        last = max(indices)
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as fh:
+                for i, line in enumerate(fh):
+                    if i in indices:
+                        try:
+                            out[(path, i)] = json.loads(line)
+                        except json.JSONDecodeError:
+                            print(f"WARN: invalid JSON at {path}:{i + 1}", file=sys.stderr)
+                    if i >= last:
+                        break
+        except OSError as exc:
+            print(f"WARN: failed to read {path}: {exc}", file=sys.stderr)
+    return out
+
+
 def read_trajectory_payload(path: Path) -> Any:
     text = path.read_text(encoding="utf-8", errors="ignore")
     try:
@@ -1833,6 +1935,7 @@ def write_embedded_trajectory_shards(
     limit: int,
     max_total_bytes: int,
     shard_max_bytes: int = EMBEDDED_TRAJ_SHARD_BYTES,
+    max_record_bytes: int = EMBEDDED_TRAJ_MAX_RECORD_BYTES,
 ) -> list[str]:
     for stale in data_dir.glob("traj_embedded.*.jsonl"):
         stale.unlink(missing_ok=True)
@@ -1844,6 +1947,7 @@ def write_embedded_trajectory_shards(
     current_bytes = 0
     total_bytes = 0
     shard_index = 0
+    oversized = 0
 
     def shard_rel(index: int) -> str:
         return str(Path("data") / f"traj_embedded.{index:03d}.jsonl")
@@ -1859,16 +1963,27 @@ def write_embedded_trajectory_shards(
         current_bytes = 0
         shard_index += 1
 
-    for card in select_embedded_traj_cards(cards, limit=limit):
+    selected = select_embedded_traj_cards(cards, limit=limit)
+    im_records = read_im_records(selected)
+    for card in selected:
         trajectory_path = Path(str(card.get("trajectory_path") or ""))
-        try:
-            record = read_trajectory_payload(trajectory_path)
-        except (OSError, ValueError) as exc:
-            print(f"WARN: failed to embed trajectory {trajectory_path}: {exc}", file=sys.stderr)
-            continue
+        if str(card.get("trajectory_path") or ""):
+            try:
+                record = read_trajectory_payload(trajectory_path)
+            except (OSError, ValueError) as exc:
+                print(f"WARN: failed to embed trajectory {trajectory_path}: {exc}", file=sys.stderr)
+                continue
+        else:
+            record = im_records.get((str(card.get("im_path")), int(card.get("index"))))
+            if record is None:
+                continue
+        record = strip_record_paths(record)
         row = {"id": card.get("id"), "record": record}
         line = json.dumps(row, ensure_ascii=False, default=json_default) + "\n"
         line_bytes = len(line.encode("utf-8"))
+        if max_record_bytes and line_bytes > max_record_bytes:
+            oversized += 1
+            continue
         if current and current_bytes + line_bytes > shard_max_bytes:
             flush()
         if total_bytes and total_bytes + line_bytes > max_total_bytes:
@@ -1882,6 +1997,10 @@ def write_embedded_trajectory_shards(
         current_bytes += line_bytes
         total_bytes += line_bytes
     flush()
+    if oversized:
+        print(f"NOTE: {oversized} trajectory record(s) exceeded "
+              f"{max_record_bytes / 1_000_000:.0f} MB and were not embedded; "
+              "they remain reachable by local path / R2 key", file=sys.stderr)
     return exports
 
 
@@ -1938,6 +2057,58 @@ def write_worker_script(output_html: Path) -> None:
     atomic_write_text(output_html.parent / "_worker.js", WORKER_JS)
 
 
+# Path fields that reach the published page, in cards, task rows and the summary.
+PUBLISHED_PATH_KEYS = ("path", "trajectory_path", "im_path", "lf_path")
+# Same treatment, but the value is a list of paths.
+PUBLISHED_PATH_LIST_KEYS = ("trajectory_paths",)
+
+
+def display_path(value: Any, block_dir: Path = BLOCK_DIR) -> str:
+    """A path fit to publish: block-relative, and never naming the host.
+
+    Absolute paths are shipped inside the page and its data files, where they
+    disclose the operator's home directory and layout while telling a reader
+    nothing actionable. A pool linked in from elsewhere has no useful relative
+    form, so keep the tail from `artifacts/` and drop what is above it.
+    """
+    text = str(value or "")
+    if not text:
+        return ""
+    path = Path(text)
+    if not path.is_absolute():
+        return text
+    try:
+        return str(path.relative_to(block_dir))
+    except ValueError:
+        pass
+    parts = path.parts
+    if "artifacts" in parts:
+        return "external:" + str(Path(*parts[parts.index("artifacts"):]))
+    return "external:" + "/".join(parts[-3:])
+
+
+def strip_published_paths(
+    *row_lists: list[dict[str, Any]],
+    block_dir: Path = BLOCK_DIR,
+) -> None:
+    """Rewrite path fields in place, once embedding has read what it needed.
+
+    The same list objects reach both the exports and the HTML, so one pass here
+    covers every published copy.
+    """
+    for rows in row_lists:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            for key in PUBLISHED_PATH_KEYS:
+                if isinstance(row.get(key), str) and row[key]:
+                    row[key] = display_path(row[key], block_dir)
+            for key in PUBLISHED_PATH_LIST_KEYS:
+                if isinstance(row.get(key), list):
+                    row[key] = [display_path(v, block_dir) if isinstance(v, str) else v
+                               for v in row[key]]
+
+
 def write_data_exports(
     output_html: Path,
     *,
@@ -1951,6 +2122,7 @@ def write_data_exports(
     totals: dict[str, Any],
     harbor_jobs_dir: Path,
     embedded_traj_limit: int,
+    embedded_traj_max_record_bytes: int = EMBEDDED_TRAJ_MAX_RECORD_BYTES,
     embedded_traj_max_bytes: int,
 ) -> None:
     data_dir = output_html.parent / "data"
@@ -1961,6 +2133,9 @@ def write_data_exports(
         if not key.startswith("__") and row.get("path")
     }
     task_rows = sorted(task_rows_by_name.values(), key=lambda x: str(x.get("task_name")))
+    # Facts and instances are written first, so they are sanitised first. Cards
+    # wait until embedding has read the real locations, further down.
+    strip_published_paths(trial_facts, quality_facts, instances)
     trial_fact_exports = write_jsonl_shards(data_dir / "trial_fact.jsonl", trial_facts)
     instance_exports = write_jsonl_shards(data_dir / "instances.jsonl", instances)
     embedded_traj_exports = write_embedded_trajectory_shards(
@@ -1968,10 +2143,13 @@ def write_data_exports(
         traj_cards,
         limit=embedded_traj_limit,
         max_total_bytes=embedded_traj_max_bytes,
+        max_record_bytes=embedded_traj_max_record_bytes,
     )
+    # Everything above needed real paths; nothing below may publish them.
+    strip_published_paths(traj_cards, task_rows)
     summary = {
         "generated_at": now_bjt().isoformat(),
-        "harbor_jobs_dir": str(harbor_jobs_dir),
+        "harbor_jobs_dir": display_path(harbor_jobs_dir),
         **(analysis.get("summary") or {}),
         "coverage": totals.get("coverage") or {},
         "segment_count": len(analysis.get("segments") or []),
@@ -2160,12 +2338,17 @@ def build_coverage_summary(
     quality_facts: list[dict[str, Any]],
     instances: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    languages, language_counts = ranked_values(quality_facts, "language")
+    # Language, model and scaffold belong to the rollout, not to the conversion —
+    # every trial carries them. Prefer the converted set when there is one, since
+    # the other SFT surfaces describe it; fall back to the trials.
+    dimension_facts = quality_facts or trial_facts
+    languages, language_counts = ranked_values(dimension_facts, "language")
     dataset_jobs = meaningful_values(sft, "job")
-    models = meaningful_values(quality_facts, "model")
-    scaffolds = meaningful_values(quality_facts, "scaffold")
+    models = meaningful_values(dimension_facts, "model")
+    scaffolds = meaningful_values(dimension_facts, "scaffold")
     processed_instances = {fact_instance_key(fact) for fact in trial_facts}
     return {
+        "dimensions_from": "sft" if quality_facts else "trials",
         "valid_trajs": sum((row.get("count") or 0) for row in sft),
         "valid_tokens": sum((row.get("total_tokens") or 0) for row in sft),
         "data_sources_count": len(dataset_jobs),
@@ -2527,24 +2710,72 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .subscore-matrix-table td.num { text-align: right; }
 .subscore-matrix-table th.score-sep, .subscore-matrix-table td.score-sep { border-right: 2px solid var(--line); }
 .subscore-matrix-table th.segment-sort { cursor: pointer; }
-/* The sampled list owns the page; the detail opens in a dialog, the way
-   curator's task samples do, so the panel is not permanently half-empty. */
-.traj-layout { display: block; }
-.traj-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
-.traj-row:last-child { border-bottom: 0; }
-.traj-row .traj-card { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
-.traj-open { flex: 0 0 auto; align-self: stretch; border: 0; border-left: 1px solid var(--line);
-  border-radius: 0; background: var(--panel); color: var(--muted); padding: 0 14px;
-  font-size: 12px; font-weight: 650; white-space: nowrap; cursor: pointer; }
-.traj-open:hover { color: var(--ink); background: var(--button-hover); border-color: var(--line); }
+/* Trajectory inspector — the same fixed two-pane dialog curator uses for sample
+   tasks: the sampled trajectories on the left, the selected one on the right.
+   Fixed rather than content-sized so the dialog does not jump between a card with
+   no preview and one carrying a full turn-by-turn trace. */
 .traj-box { width: min(1160px, 95vw); height: min(760px, 88vh); max-height: none; }
-.traj-body { padding: 0; min-height: 0; flex: 1; overflow: auto; }
-.traj-body .traj-view { border: 0; border-radius: 0; min-height: 0; padding: 22px 28px 26px; }
-.traj-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; max-height: 760px; overflow-y: auto; background: var(--panel); }
-.traj-card { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 11px 12px; background: var(--panel); }
-.traj-card.active { background: var(--active-row); }
-.traj-card-title { font-weight: 680; overflow-wrap: anywhere; }
-.traj-card-meta { color: var(--muted); font-size: 12px; margin-top: 3px; overflow-wrap: anywhere; }
+.traj-body { padding: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 0; flex: 1; overflow: hidden; }
+.traj-side { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px;
+  background: var(--panel-soft); min-height: 0; }
+.traj-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+.traj-filters { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px;
+  margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+.traj-filters input, .traj-filters select { width: 100%; font-size: 12px; }
+.traj-filter-row { display: flex; gap: 6px; }
+.traj-filter-row select { flex: 1 1 auto; min-width: 0; }
+.traj-filter-row button { flex: 0 0 auto; font-size: 12px; }
+.traj-filters .hint { font-size: 11px; color: var(--muted); }
+/* Highlighted JSON always sits on the dark editor surface, in both themes —
+   curator's file pane does the same. One surface means one token palette that is
+   guaranteed to have contrast, instead of two that have to be kept in step. */
+.json-hl { background: #1a1714; color: #f0ede7; border: 1px solid #302a24; }
+.json-hl .json-key { color: #9ec7c2; }
+.json-hl .json-str { color: #c9a26a; }
+.json-hl .json-num { color: #e0a06f; }
+.json-hl .json-lit { color: #b48ead; }
+.traj-picker { display: flex; flex-direction: column; gap: 5px; }
+.traj-group { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  margin: 10px 0 2px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.traj-group:first-child { margin-top: 0; }
+.traj-group-name { font-size: 11px; font-weight: 650; color: var(--fg-dim); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.traj-group-n { font-size: 10.5px; color: var(--fg-faint); white-space: nowrap; }
+.traj-pick { display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  background: transparent; border: 1px solid transparent; border-radius: 8px;
+  padding: 8px 10px; cursor: pointer; font: inherit; font-size: 12px; color: var(--text);
+  text-align: left; width: 100%; min-width: 0; }
+.traj-pick:hover { border-color: var(--line); background: var(--panel); }
+.traj-pick.active { background: var(--accent-soft); border-color: var(--accent-border); }
+.traj-pick .sid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.traj-pick .smeta { color: var(--muted); font-size: 10.5px; }
+
+.traj-head { padding: 14px 20px 12px; border-bottom: 1px solid var(--line); }
+.traj-head .t { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+  font-weight: 650; word-break: break-all; line-height: 1.4; }
+.traj-head .m { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+.traj-head .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.traj-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 20px 0; }
+.traj-tab { background: transparent; border: 1px solid transparent; color: var(--fg-dim);
+  border-radius: 8px 8px 0 0; padding: 6px 12px; cursor: pointer; font: inherit;
+  font-size: 12px; white-space: nowrap; }
+.traj-tab:hover { color: var(--text); }
+.traj-tab.active { background: var(--panel-soft); border-color: var(--line);
+  border-bottom-color: var(--panel-soft); color: var(--text); font-weight: 650; }
+.traj-tab .sz { color: var(--fg-faint); font-size: 10.5px; margin-left: 6px; }
+.traj-pane { flex: 1; min-height: 0; margin: 0 20px 20px; border: 1px solid var(--line);
+  border-radius: 0 10px 10px 10px; background: var(--panel-soft); overflow: auto;
+  padding: 16px 18px; }
+.traj-pane > .empty, .traj-pane .empty { color: var(--muted); font-size: 12.5px; }
+.traj-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.traj-pane .detail-preview { max-height: none; margin-top: 0; background: var(--panel); }
+.traj-pane .json-block { max-height: none; background: var(--panel); }
+.traj-pane .kv { margin: 0; }
+.traj-pane h2 { font-size: 13px; margin: 18px 0 8px; }
+.traj-pane h2:first-child { margin-top: 0; }
 .traj-view { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); min-height: 520px; padding: 14px; }
 .step-row { width: 100%; display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; padding: 9px 11px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; background: var(--panel); }
 .step-row:hover, .step-row.active { background: var(--active-row); border-color: var(--line); }
@@ -2600,7 +2831,7 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
   .update-status { white-space: normal; flex-basis: 100%; }
   .content { padding: 16px; }
   .header-top { display: block; }
-  .kpis, .status-grid, .samples-layout, .split-layout, .traj-layout { grid-template-columns: 1fr; }
+  .kpis, .status-grid, .samples-layout, .split-layout { grid-template-columns: 1fr; }
   .panel-head { display: block; }
   .mini-bar-row { grid-template-columns: 1fr; gap: 4px; }
   .mini-bar-value { text-align: left; }
@@ -2711,15 +2942,32 @@ def render_task_difficulty_cell(segment: dict[str, Any]) -> str:
     return f"{html.escape(value)}{note_html}"
 
 
-def render_job_segment_row(job: dict[str, Any], segment: dict[str, Any] | None = None) -> str:
+def render_job_segment_row(
+    job: dict[str, Any] | None,
+    segment: dict[str, Any] | None = None,
+    fallback_name: str = "",
+) -> str:
+    """One row per job-shaped thing: a Harbor job, an imported dataset, or both.
+
+    A dataset that arrived already converted has no Harbor job behind it, so run
+    status does not apply and is reported as such rather than as "running".
+    """
     segment = segment or {}
-    job_name = str(job.get("job") or segment.get("value") or "unknown")
+    has_job = bool(job)
+    job = job or {}
+    job_name = str(job.get("job") or fallback_name or segment.get("value") or "unknown")
     job_id = str(job.get("id") or "-")
     job_path = str(job.get("path") or "")
     job_color = stable_identity_color(job_name)
     scaffold = str(job.get("scaffold") or "unknown")
-    status = status_badge(job.get("finished_at")) if job else '<span class="muted">-</span>'
-    progress = progress_bar(job.get("n_trials"), job.get("n_total_trials")) if job else '<span class="muted">-</span>'
+    status = (
+        status_badge(job.get("finished_at")) if has_job
+        else '<span class="muted" title="not produced by a Harbor job in this block">n/a</span>'
+    )
+    progress = (
+        progress_bar(job.get("n_trials"), job.get("n_total_trials")) if has_job
+        else '<span class="muted">-</span>'
+    )
     pass_rate = fmt_pct(segment.get("pass_rate"))
     token_cell = (
         f'valid {html.escape(fmt_token_units(segment.get("avg_quality_tokens")))}'
@@ -2812,6 +3060,7 @@ def render_html(
     sft_dir: Path,
     harbor_jobs_dir: Path,
     index_path: Path,
+    r2_api: bool = False,
 ) -> str:
     jobs_sorted = sorted(jobs, key=lambda j: j.get("started_at") or "", reverse=True)
     sft_sorted = sorted(sft, key=lambda s: s["job"])
@@ -2825,12 +3074,29 @@ def render_html(
         ("Harbor job dir", harbor_jobs_dir, None),
         ("Run index", index_path, None),
     ]
-    rubric_html = render_rubric_html()
+    # Scores come only from converted SFT data, which is optional. Empty axes read
+    # as "scored nothing" rather than "nothing was scored", so drop the surfaces.
+    has_quality = bool((analysis.get("summary") or {}).get("quality_count"))
+    rubric_html = render_rubric_html() if has_quality else ""
+    # Two absences: `quality` gates the score surfaces, `sft` gates the counters of
+    # converted data. A block that converted nothing has neither.
+    r2_api_js = "true" if r2_api else "false"
+    has_sft = bool(sft)
+    gate_rules = [
+        rule for present, rule in (
+            (has_quality, "[data-requires-quality]"),
+            (has_sft, "[data-requires-sft]"),
+        ) if not present
+    ]
+    quality_gate_css = (
+        f"<style>{','.join(gate_rules)}{{display:none !important}}</style>"
+        if gate_rules else ""
+    )
     info_html = (
         "<div class='sub'>Sources</div><table>"
         + "".join(
             f"<tr><td>{html.escape(name)}</td>"
-            f"<td class='mono'>{html.escape(str(path))}</td>"
+            f"<td class='mono'>{html.escape(display_path(path))}</td>"
             f"<td>{'' if n is None else f'{n:,} found'}"
             f"{'' if Path(path).exists() else '<em>not found</em>'}</td></tr>"
             for name, path, n in _sources
@@ -2881,9 +3147,20 @@ def render_html(
     avg_score_text = f"{avg_score:.4f}" if isinstance(avg_score, (int, float)) else "-"
     p50_score_text = f"{p50_score:.4f}" if isinstance(p50_score, (int, float)) else "-"
     pass_rate_text = fmt_pct(pass_rate) if isinstance(pass_rate, (int, float)) else "-"
-    language_hint = html.escape(compact_values(coverage.get("languages") or []))
-    model_hint = html.escape(compact_values(coverage.get("models") or coverage.get("teacher_models") or []))
-    scaffold_hint = html.escape(compact_values(coverage.get("scaffolds") or []))
+    # These three count over the converted set when there is one, and over all
+    # rolled-out trials otherwise — different denominators under the same label,
+    # so say which is in force rather than leaving it to be guessed.
+    _dim_scope = (
+        "across converted SFT data" if coverage.get("dimensions_from") == "sft"
+        else "across all trials"
+    )
+    def _hint(values: Any) -> str:
+        text = compact_values(values or [])
+        return html.escape(f"{text} · {_dim_scope}" if text else _dim_scope)
+
+    language_hint = _hint(coverage.get("languages"))
+    model_hint = _hint(coverage.get("models") or coverage.get("teacher_models"))
+    scaffold_hint = _hint(coverage.get("scaffolds"))
     segment_dims = [dim for dim in analysis.get("dims", SEGMENT_DIMS) if dim in SEGMENT_DIMS]
     job_segments = {
         str(segment.get("value") or ""): segment
@@ -2904,7 +3181,7 @@ def render_html(
         key=lambda name: -safe_float(job_segments.get(name, {}).get("job_finished_ts") or 0),
     )
     job_segment_rows = "".join(
-        render_job_segment_row(job_by_name.get(name) or {"job": name}, job_segments.get(name))
+        render_job_segment_row(job_by_name.get(name), job_segments.get(name), name)
         for name in job_segment_names
     )
     difficulty_title = html.escape("easy=1, medium=2, hard=3; unknown is excluded from the score and shown as a warning.")
@@ -2995,6 +3272,7 @@ def render_html(
 }})();
 </script>
 <style>{CSS}</style>
+{quality_gate_css}
 </head>
 <body>
 <div class="app-shell">
@@ -3022,7 +3300,7 @@ def render_html(
       </div>
       <div class="topbar-actions">
         <span class="update-status">Updated {html.escape(now_str)} &middot; refresh {refresh_seconds}s</span>
-        <button id="metricsToggle" class="icon-btn" type="button" aria-label="Trajectory scoring rubric" title="How the trajectory quality score is computed">{ICON_METRICS}</button>
+        <button id="metricsToggle" class="icon-btn" type="button" data-requires-quality aria-label="Trajectory scoring rubric" title="How the trajectory quality score is computed">{ICON_METRICS}</button>
         <button id="infoToggle" class="icon-btn" type="button" aria-label="Dashboard info" title="What this board is reading">{ICON_INFO}</button>
         <button id="refreshNow" class="icon-btn refresh-btn" type="button" aria-label="Refresh dashboard" title="Refresh dashboard">{icon_refresh}</button>
         <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="Toggle black and white theme" title="Toggle theme"><span class="theme-moon">{icon_moon}</span><span class="theme-sun">{icon_sun}</span></button>
@@ -3035,12 +3313,23 @@ def render_html(
         <div class="sub">metrics, preview and the full turn-by-turn trace when available</div></div>
       <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
     </div>
-    <div class="modal-body traj-body">
-      <div id="trajView" class="traj-view empty">Select a trajectory to inspect.</div>
+    <div class="traj-body">
+      <div class="traj-side">
+        <div class="traj-filters">
+          <input id="trajSearch" placeholder="Search instance, source, language, status">
+          <select id="trajSource"><option value="">All sources</option></select>
+          <div class="traj-filter-row">
+            <span id="trajSampleInfo" class="hint"></span>
+            <button id="trajResample" type="button">Resample</button>
+          </div>
+        </div>
+        <div id="trajList" class="traj-picker"></div>
+      </div>
+      <div class="traj-main" id="trajView"></div>
     </div>
   </div>
 </div>
-<div class="modal" id="metricsPanel" role="dialog" aria-modal="true" hidden>
+<div class="modal" id="metricsPanel" role="dialog" aria-modal="true" data-requires-quality hidden>
   <div class="modal-box">
     <div class="modal-head">
       <div><h3>Trajectory scoring rubric</h3>
@@ -3063,13 +3352,13 @@ def render_html(
 <main class="content">
   <section id="overview" class="section active" data-title="Overview" data-subtitle="Monitor generation health, pass rate, quality score, and data coverage.">
     <div class="grid kpis">
-    <div class="card"><div class="label">Valid Trajectories</div>
+    <div class="card" data-requires-sft><div class="label">Valid Trajectories</div>
       <div class="value">{fmt_num(coverage.get('valid_trajs'))}</div>
       <div class="sub">for SFT in LF format</div></div>
-    <div class="card"><div class="label">Valid Tokens</div>
+    <div class="card" data-requires-sft><div class="label">Valid Tokens</div>
       <div class="value">{fmt_tokens_b(coverage.get('valid_tokens'))}</div>
       <div class="sub">for SFT in LF format</div></div>
-    <div class="card"><div class="label">Data Sources</div>
+    <div class="card" data-requires-sft><div class="label">Data Sources</div>
       <div class="value">{fmt_num(coverage.get('data_sources_count'))}</div>
       <div class="sub">SFT dataset jobs</div></div>
     <div class="card"><div class="label">Languages</div>
@@ -3097,7 +3386,7 @@ def render_html(
           <p class="hint">Based on valid SFT/LF trajectories with task language labels.</p></div></div>
         <div id="languageBars" class="mini-bars"></div>
       </section>
-      <section class="panel">
+      <section class="panel" data-requires-quality>
         <div class="panel-head"><div><h2>Trajectory Quality Score Distribution</h2>
           <p class="hint">Score histogram from exported SFT quality facts.</p></div></div>
         <div id="scoreHistogram" class="mini-bars"></div>
@@ -3110,7 +3399,7 @@ def render_html(
   </section>
 
   <section id="trajectories" class="section" data-title="Trajectories" data-subtitle="Compare trajectory sources, sample concrete runs, and inspect turn-by-turn tool behavior.">
-    <section class="panel">
+    <section class="panel" data-requires-sft>
       <div class="panel-head"><div><h2>Valid Trajectories</h2>
         <p class="hint">Valid reward=1 trajectories converted for SFT, grouped by source job.</p></div>
         <div class="actions"><button class="copy-btn" data-copy="data/traj_cards.jsonl">Copy cards</button></div></div>
@@ -3133,7 +3422,7 @@ def render_html(
         </table>
       </div>
     </section>
-    <section class="panel">
+    <section class="panel" data-requires-quality>
       <div class="panel-head"><div><h2>Trajectory Quality Score Matrix</h2>
         <p class="hint">Click column headers to sort. Only non-zero trajectory-score weights (Σw=1.00).</p></div></div>
       <div class="table-wrap">
@@ -3145,30 +3434,8 @@ def render_html(
     </section>
     <section class="panel">
       <div class="panel-head"><div><h2>Trajectory Sampler</h2>
-        <p class="hint">Embedded full trajectories load locally from data/traj_embedded shards; other cards fall back to /api/traj and the local path.</p></div>
-        <div class="actions"><button id="trajResample" type="button">Resample</button></div></div>
-      <div class="toolbar">
-        <input id="trajSearch" placeholder="Search instance, source, language, status">
-        <select id="trajSource"><option value="">All sources</option></select>
-        <select id="trajLanguage"><option value="">All programming languages</option></select>
-        <select id="trajMode">
-          <option value="low">Lowest score / failures</option>
-          <option value="high">Highest score</option>
-          <option value="error">Most errors</option>
-          <option value="clean">Clean / pass</option>
-          <option value="random">Random sample</option>
-        </select>
-        <select id="trajSampleSize">
-          <option value="10">10 cards</option>
-          <option value="20" selected>20 cards</option>
-          <option value="50">50 cards</option>
-          <option value="100">100 cards</option>
-        </select>
-      </div>
-      <div class="traj-layout">
-        <div class="card-title">Sampled Trajectories <span id="trajSampleInfo" class="hint"></span></div>
-        <div id="trajList" class="traj-list step-list"></div>
-      </div>
+        <p class="hint">Search, filter and sample concrete trajectories, then read one turn by turn. Opens as a dialog so the trace gets the whole screen.</p></div>
+        <div class="actions"><button id="openSampler" type="button">Open sampler</button></div></div>
     </section>
   </section>
 
@@ -3208,6 +3475,13 @@ const tqsWeights = {json.dumps(TQS_WEIGHTS, ensure_ascii=False)};
 const subscoreLabels = {json.dumps(SUBSCORE_LABELS, ensure_ascii=False)};
 let currentSample = null;
 let currentTraj = null;
+// What the sampler is showing; the dialog's left pane lists exactly this.
+let trajVisibleCards = [];
+let trajActiveTab = 'details';
+const TRAJ_SAMPLE_SIZE = 10;
+// Whether /api/traj can actually serve a trace that is not embedded. Without the
+// R2 binding it answers 503, so offering the control would fail on every click.
+const R2_API_AVAILABLE = {r2_api_js};
 let subscoreSort = {{field: 'composite_score', dir: 'desc'}};
 
 function currentTheme() {{
@@ -3438,29 +3712,12 @@ function seededShuffle(rows, seed) {{
   return arr;
 }}
 
-function trajSortCards(cards, mode) {{
+// One rule: a random draw, preferring trajectories that can be opened. Resample
+// advances the seed.
+function trajSampleCards(cards) {{
   const available = cards.filter(card => trajAvailabilityRank(card) < 2);
   const pool = available.length ? available : cards;
-  const availCmp = (a, b) => trajAvailabilityRank(a) - trajAvailabilityRank(b);
-  if (mode === 'random') return seededShuffle(pool, trajSampleSeed);
-  if (mode === 'high') {{
-    return pool.slice().sort((a, b) => availCmp(a, b) || trajNumeric(b, ['score', 'reward'], -1) - trajNumeric(a, ['score', 'reward'], -1) || String(a.id).localeCompare(String(b.id)));
-  }}
-  if (mode === 'error') {{
-    return pool.slice().sort((a, b) => availCmp(a, b) || trajErrorValue(b) - trajErrorValue(a) || String(a.id).localeCompare(String(b.id)));
-  }}
-  if (mode === 'clean') {{
-    return pool.filter(card => card.status === 'pass' || card.status === 'scored' || trajErrorValue(card) === 0)
-      .sort((a, b) => availCmp(a, b) || trajNumeric(b, ['score', 'reward'], -1) - trajNumeric(a, ['score', 'reward'], -1) || String(a.id).localeCompare(String(b.id)));
-  }}
-  return pool.slice().sort((a, b) => {{
-    const availability = availCmp(a, b);
-    if (availability) return availability;
-    const statusRank = card => card.status === 'error' ? 0 : card.status === 'fail' ? 1 : card.kind === 'quality' ? 2 : 3;
-    const ar = statusRank(a), br = statusRank(b);
-    if (ar !== br) return ar - br;
-    return trajNumeric(a, ['score', 'reward'], 999) - trajNumeric(b, ['score', 'reward'], 999) || String(a.id).localeCompare(String(b.id));
-  }});
+  return seededShuffle(pool, trajSampleSeed);
 }}
 
 function topCountLabel(counts) {{
@@ -3712,7 +3969,7 @@ function renderSubscoreMatrix() {{
     return `<th class="num segment-sort ${{cls}} ${{active ? 'active ' + subscoreSort.dir : ''}}" data-subscore-sort="${{escapeHtml(field)}}" title="${{escapeHtml(title)}}"><div>${{escapeHtml(label)}}${{active ? arrow : ''}}</div>${{weightHtml}}</th>`;
   }};
   head.innerHTML = `<tr>
-    <th class="segment-sort ${{subscoreSort.field === 'source' ? 'active ' + subscoreSort.dir : ''}}" data-subscore-sort="source">Data Source${{subscoreSort.field === 'source' ? arrow : ''}}</th>
+    <th class="segment-sort ${{subscoreSort.field === 'source' ? 'active ' + subscoreSort.dir : ''}}" data-subscore-sort="source" title="The Harbor job or imported dataset these trajectories came from. One row per batch.">Data Source${{subscoreSort.field === 'source' ? arrow : ''}}</th>
     ${{th('Score', 'composite_score', {{cls: 'score-sep', title: subscoreLabels.composite_score || 'Trajectory score', weight: 'composite'}})}}
     ${{keys.map(key => th(key.replace('_score', ''), key, {{
       title: subscoreLabels[key] || key,
@@ -3748,68 +4005,70 @@ function renderTrajectoryList() {{
   const list = $('#trajList');
   if (!list) return;
   const q = ($('#trajSearch')?.value || '').toLowerCase();
-  const lang = $('#trajLanguage')?.value || '';
   const source = $('#trajSource')?.value || '';
-  const mode = $('#trajMode')?.value || 'low';
-  const sampleSize = Number($('#trajSampleSize')?.value || 20);
-  let cards = trajCardData
-    .filter(card => !lang || card.language === lang)
+  const matched = trajCardData
     .filter(card => !source || trajSourceName(card) === source)
     .filter(card => {{
       if (!q) return true;
       const hay = [card.id, card.instance_id, card.task_name, card.job, card.dataset, card.source, card.language, card.status, card.model, card.scaffold, card.exception_type].join(' ').toLowerCase();
       return hay.includes(q);
     }});
-  const total = cards.length;
-  cards = trajSortCards(cards, mode).slice(0, Number.isFinite(sampleSize) ? sampleSize : 20);
+
+  // Per batch, not from one pool: a global draw lets the largest batch crowd out
+  // the rest, and the availability preference can drop a whole batch that has no
+  // reachable trace. Ten from each means every batch shows up.
+  const groups = new Map();
+  for (const card of matched) {{
+    const key = trajSourceName(card) || 'unknown';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(card);
+  }}
+  const sections = [...groups.entries()]
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+    .map(([name, list]) => ({{name, total: list.length,
+                             cards: trajSampleCards(list).slice(0, TRAJ_SAMPLE_SIZE)}}));
+  const cards = sections.flatMap(section => section.cards);
+  trajVisibleCards = cards;
   const info = $('#trajSampleInfo');
-  if (info) info.textContent = `${{cards.length}} / ${{total}} shown`;
+  if (info) {{
+    info.textContent = sections.length
+      ? `${{cards.length}} shown · up to ${{TRAJ_SAMPLE_SIZE}} per batch · ${{sections.length}} batch${{sections.length === 1 ? '' : 'es'}}`
+      : 'nothing matches';
+  }}
   if (!cards.length) {{
     list.innerHTML = '<div class="empty">No trajectory cards match the current filters.</div>';
     const view = $('#trajView');
-    if (view) view.innerHTML = 'No trajectory selected.';
+    if (view) view.innerHTML = '<div class="traj-pane"><div class="empty">No trajectory selected.</div></div>';
     currentTraj = null;
     return;
   }}
-  // A <button> cannot legally contain another <button>, so the row is a wrapper
-  // holding the card and its Inspect control side by side — same shape curator
-  // uses for its Samples rows.
-  list.innerHTML = cards.map((card, idx) => `
-    <div class="traj-row">
-    <button class="step-row traj-card ${{idx === 0 ? 'active' : ''}}" data-id="${{escapeHtml(card.id)}}">
-      <span class="id">#${{idx + 1}}</span>
-      <span class="step-row-body">
-        <span class="desc" title="${{escapeHtml(card.instance_id || card.task_name || card.id)}}">${{escapeHtml(card.instance_id || card.task_name || card.id)}}</span>
-        <span class="step-badges">
-          <span class="step-badge ${{card.status === 'error' ? 'bad' : card.status === 'fail' ? 'warn' : 'good'}}">${{escapeHtml(card.status || card.kind || '-')}}</span>
-          <span class="step-badge accent">score ${{formatMaybe(card.score)}}</span>
-          <span class="step-badge">reward ${{formatMaybe(card.reward)}}</span>
-          <span class="step-badge">${{formatMaybe(card.turns)}} turns</span>
-          <span class="step-badge">${{formatMaybe(card.tool_calls)}} calls</span>
-          ${{card.embedded_available ? '<span class="step-badge good">embedded</span>' : ''}}
-        </span>
-        <span class="traj-card-meta">${{escapeHtml(trajSourceName(card))}} · ${{escapeHtml(card.language || 'unknown')}} · ${{escapeHtml(card.model || '-')}}</span>
-      </span>
-    </button>
-    <button class="traj-open" type="button" title="Inspect this trajectory">Inspect</button>
-    </div>
-  `).join('');
-  $$('.traj-card', list).forEach((btn, idx) => btn.addEventListener('click', () => openTrajectory(cards[idx], btn)));
-  $$('.traj-open', list).forEach((btn, idx) => btn.addEventListener('click', () => {{
-    openTrajectory(cards[idx], $$('.traj-card', list)[idx]);
-  }}));
-  // Prime the detail without opening the dialog, so the first Inspect is instant.
-  selectTrajectory(cards[0], $('.traj-card', list));
+  // Narrow rows — an id and one line of metadata, curator's sample-row shape —
+  // under a heading per batch, so it is always clear which batch a row came from.
+  let n = 0;
+  list.innerHTML = sections.map(section => {{
+    const rows = section.cards.map(card => {{
+      const idx = n++;
+      return `
+    <button class="traj-pick ${{idx === 0 ? 'active' : ''}}" data-i="${{idx}}" data-id="${{escapeHtml(card.id)}}">
+      <span class="sid">#${{idx + 1}} ${{escapeHtml(card.instance_id || card.task_name || card.id)}}</span>
+      <span class="smeta">${{escapeHtml(card.status || card.kind || '-')}} · score ${{formatMaybe(card.score)}} · ${{formatMaybe(card.turns)}} turns · ${{escapeHtml(card.language || 'unknown')}}${{card.embedded_available ? ' · embedded' : ''}}</span>
+    </button>`;
+    }}).join('');
+    return `<div class="traj-group"><span class="traj-group-name" title="${{escapeHtml(section.name)}}">${{escapeHtml(section.name)}}</span>`
+         + `<span class="traj-group-n">${{section.cards.length}} of ${{section.total}}</span></div>${{rows}}`;
+  }}).join('');
+  $$('.traj-pick', list).forEach(btn => btn.addEventListener('click', () => selectTrajectory(cards[Number(btn.dataset.i)], btn)));
+  // Prime the detail so the dialog never opens on an empty right pane.
+  selectTrajectory(cards[0], $('.traj-pick', list));
 }}
 
-// Selecting renders; opening also raises the dialog. Keeping them apart lets the
-// list preselect a card on every re-render without popping a dialog open.
-function openTrajectory(card, button) {{
-  selectTrajectory(card, button);
+// The sampler is the dialog. Opening it renders the current sample if that has
+// not happened yet, so the page carries no standing trajectory list.
+function openSampler() {{
   const panel = document.getElementById('trajPanel');
-  const title = document.getElementById('trajPanelTitle');
-  if (title) title.textContent = card.instance_id || card.task_name || card.id || 'Trajectory';
-  if (panel) panel.hidden = false;
+  if (!panel) return;
+  if (!trajVisibleCards.length) renderTrajectoryList();
+  panel.hidden = false;
 }}
 
 function scoreBreakdown(card) {{
@@ -3820,19 +4079,38 @@ function scoreBreakdown(card) {{
 
 function selectTrajectory(card, button) {{
   currentTraj = card;
-  $$('.traj-card').forEach(item => item.classList.remove('active'));
+  $$('.traj-pick').forEach(item => item.classList.remove('active'));
   if (button) button.classList.add('active');
+  const dialogTitle = document.getElementById('trajPanelTitle');
+  if (dialogTitle) dialogTitle.textContent = card.instance_id || card.task_name || card.id || 'Trajectory';
   const view = $('#trajView');
   view.classList.remove('empty');
-  const preview = card.preview ? `<h2>Preview</h2><div class="detail-preview">${{escapeHtml(card.preview)}}</div>` : '';
+  // No heading: the tab it lives under already names it.
+  const preview = card.preview ? `<div class="detail-preview">${{escapeHtml(card.preview)}}</div>` : '';
+  // Say up front whether this trace can be opened here: only embedded ones load
+  // from the page, everything else needs the R2 binding.
+  // Three distinct reasons a trace does or does not open, and they call for three
+  // different sentences. The generic "not reachable" line read as a fault when the
+  // usual case is simply an SFT record, which never had a trajectory file at all.
+  const traceNote = card.embedded_available
+    ? 'Embedded in this page — opens offline, no backend needed.'
+    : (card.full_available
+       ? (R2_API_AVAILABLE
+          ? 'Not embedded: this trace is larger than the per-record embed cap, so it is fetched from R2 on demand.'
+          : 'Not embedded: this trace is larger than the per-record embed cap, and this board has no R2 backend to fetch it from. It is readable at the local path above, on the machine that produced it.')
+       : (card.kind === 'quality'
+          ? 'This row is a converted SFT record, not a Harbor rollout, so there is no separate trajectory file to open. Its conversation lives inside the dataset\\'s im.jsonl, which is not published with this board — the Preview tab shows a bounded excerpt.'
+          : 'No trajectory file was recorded for this run, so there is nothing to open.'));
   const error = card.exception_type ? `<dt>Exception</dt><dd>${{escapeHtml(card.exception_type)}}</dd>` : '';
-  const loadAction = card.embedded_available || card.full_available
+  // A local path proves nothing to a remote reader. Offer the control only when
+  // the trace is embedded, or a backend was declared that can fetch it.
+  const canLoad = card.embedded_available || (card.full_available && R2_API_AVAILABLE);
+  const loadAction = canLoad
     ? `<button id="loadFullTraj" type="button">${{card.embedded_available ? 'Open embedded trace' : 'Load full'}}</button>`
     : '';
-  view.innerHTML = `
-    <div class="panel-head"><div><h2>${{escapeHtml(card.instance_id || card.task_name || card.id)}}</h2>
-      <p class="hint">${{escapeHtml(card.kind)}} · ${{escapeHtml(card.job || card.dataset || '-')}} · ${{escapeHtml(card.status || '-')}}</p></div>
-      <div class="actions"><button class="copy-btn" data-copy="${{escapeHtml(card.r2_key || '')}}">Copy R2 key</button><button class="copy-btn" data-copy="${{escapeHtml(card.path || card.trajectory_path || '')}}">Copy local path</button>${{loadAction}}</div></div>
+  // Head / tabs / one scrolling pane, as curator's sample viewer. Tabs keep the
+  // dialog a fixed size whatever the card carries.
+  const details = `
     <dl class="kv">
       <dt>Language</dt><dd>${{escapeHtml(card.language || 'unknown')}}</dd>
       <dt>Domain</dt><dd>${{escapeHtml(card.domain || 'unknown')}} · ${{escapeHtml(card.category || 'unknown')}} · ${{escapeHtml(card.difficulty || 'unknown')}}</dd>
@@ -3844,11 +4122,37 @@ function selectTrajectory(card, button) {{
       <dt>Local</dt><dd><code>${{escapeHtml(card.trajectory_path || card.path || '-')}}</code></dd>
       ${{error}}
     </dl>
-    ${{scoreBreakdown(card)}}
-    ${{preview}}
-    <div id="fullTrajResult" class="json-block hidden"></div>
-  `;
-  $('#loadFullTraj')?.addEventListener('click', () => loadFullTrajectory(card));
+    ${{scoreBreakdown(card)}}`;
+  const tabs = [
+    {{key: 'details', label: 'Details', body: details}},
+    {{key: 'preview', label: 'Preview',
+     body: preview || '<div class="empty">no preview was embedded for this trajectory</div>'}},
+    {{key: 'trace', label: 'Full trace',
+     body: `<div class="traj-actions">${{loadAction}}</div>`
+           + `<div class="empty">${{traceNote}}</div>`
+           + '<div id="fullTrajResult" class="json-block hidden"></div>'}},
+  ];
+  view.innerHTML = `
+    <div class="traj-head">
+      <div class="t">${{escapeHtml(card.instance_id || card.task_name || card.id)}}</div>
+      <div class="m">${{escapeHtml(card.kind)}} · ${{escapeHtml(card.job || card.dataset || '-')}} · ${{escapeHtml(card.status || '-')}}</div>
+      <div class="actions">
+        <button class="copy-btn" data-copy="${{escapeHtml(card.r2_key || '')}}">Copy R2 key</button>
+        <button class="copy-btn" data-copy="${{escapeHtml(card.path || card.trajectory_path || '')}}">Copy local path</button>
+      </div>
+    </div>
+    <div class="traj-tabs">${{tabs.map(t => `<button class="traj-tab" data-tab="${{t.key}}">${{t.label}}</button>`).join('')}}</div>
+    <div class="traj-pane" id="trajPane"></div>`;
+
+  function showTab(key) {{
+    const tab = tabs.find(t => t.key === key) || tabs[0];
+    trajActiveTab = tab.key;
+    $('#trajPane').innerHTML = tab.body;
+    $$('.traj-tab', view).forEach(b => b.classList.toggle('active', b.dataset.tab === tab.key));
+    $('#loadFullTraj')?.addEventListener('click', () => loadFullTrajectory(card));
+  }}
+  $$('.traj-tab', view).forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  showTab(trajActiveTab);
 }}
 
 async function loadFullTrajectory(card) {{
@@ -3860,7 +4164,11 @@ async function loadFullTrajectory(card) {{
     const data = card.embedded_available ? await loadEmbeddedTrajectory(card) : await fetchRemoteTrajectory(card);
     renderFullTrajectory(box, card, data);
   }} catch (err) {{
-    box.textContent = `Full trajectory is not available through /api/traj in this environment.\\nR2 key: ${{card.r2_key || '-'}}\\nLocal path: ${{card.trajectory_path || card.path || '-'}}\\n${{err}}`;
+    box.classList.remove('json-hl');
+    box.textContent =
+      `This trace is not embedded in the page, and /api/traj could not serve it (${{err}}).\\n`
+      + `Opening it needs the TRACER_TRAJ_BUCKET R2 binding on the Pages project, with the `
+      + `object uploaded.\\n\\nR2 key:     ${{card.r2_key || '-'}}\\nLocal path: ${{card.trajectory_path || card.path || '-'}}`;
   }}
 }}
 
@@ -3907,13 +4215,39 @@ function contentToText(content) {{
   return String(content);
 }}
 
+// Escape first, tokenize second — the other order eats the markup just inserted.
+// Only & < > are escaped: the tokenizer needs quotes to find string boundaries,
+// and a bare quote is harmless in element content. Strings match whole, so a
+// number inside one is never mis-coloured.
+function highlightJson(value) {{
+  let text;
+  try {{
+    text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  }} catch (err) {{
+    return escapeHtml(String(value));
+  }}
+  if (text === undefined || text === null) return '';
+  const escaped = String(text).replace(/[&<>]/g, ch => ({{'&': '&amp;', '<': '&lt;', '>': '&gt;'}}[ch]));
+  return escaped.replace(
+    /("(?:\\\\.|[^"\\\\])*")(\s*:)?|\\b(?:true|false|null)\\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g,
+    (match, str, colon) => {{
+      if (str !== undefined) {{
+        return colon !== undefined && colon !== null
+          ? `<span class="json-key">${{str}}</span>${{colon}}`
+          : `<span class="json-str">${{str}}</span>`;
+      }}
+      if (/^(?:true|false|null)$/.test(match)) return `<span class="json-lit">${{match}}</span>`;
+      return `<span class="json-num">${{match}}</span>`;
+    }});
+}}
+
 function renderFullTrajectory(box, card, data) {{
   const record = normalizeTrajectoryPayload(data);
   box.classList.remove('json-block');
   box.innerHTML = '';
   if (!record || typeof record !== 'object') {{
-    box.classList.add('json-block');
-    box.textContent = JSON.stringify(data, null, 2);
+    box.classList.add('json-block', 'json-hl');
+    box.innerHTML = highlightJson(data);
     return;
   }}
   const wrap = document.createElement('div');
@@ -3929,42 +4263,16 @@ function renderFullTrajectory(box, card, data) {{
       <p class="hint">${{escapeHtml(trajSourceName(card))}} · ${{escapeHtml(card.model || '-')}} · ${{escapeHtml(card.language || 'unknown')}}</p>
     </div>
   `;
-  if (Array.isArray(record.steps)) renderStepsTrace(wrap, record);
-  else if (Array.isArray(record.messages)) renderMessagesTrace(wrap, record);
-  else {{
-    const pre = document.createElement('pre');
-    pre.className = 'block-pre';
-    pre.textContent = JSON.stringify(record, null, 2);
-    wrap.appendChild(pre);
-  }}
+  // One rendering for every payload. Splitting into turns was a second, busier
+  // view of the same bytes, and which one you got depended on the payload shape.
+  const pre = document.createElement('pre');
+  pre.className = 'block-pre json-hl';
+  pre.innerHTML = highlightJson(record);
+  wrap.appendChild(pre);
   box.appendChild(wrap);
 }}
 
-function renderStepsTrace(root, record) {{
-  const steps = record.steps || [];
-  const system = steps.find(step => step.source === 'system');
-  const user = steps.find(step => step.source === 'user');
-  if (system) root.appendChild(prefaceCard('system prompt', contentToText(system.message), false));
-  if (user) root.appendChild(prefaceCard('user task', contentToText(user.message), true));
-  const list = document.createElement('div');
-  list.className = 'turns-list';
-  steps.filter(step => step.source === 'agent' || step.tool_calls || step.observation).forEach((step, idx) => {{
-    list.appendChild(stepTurnCard(step, idx, idx < 2));
-  }});
-  root.appendChild(list);
-}}
 
-function renderMessagesTrace(root, record) {{
-  const messages = record.messages || [];
-  const system = messages.find(msg => msg.role === 'system');
-  const firstUser = messages.find(msg => msg.role === 'user');
-  if (system) root.appendChild(prefaceCard('system prompt', contentToText(system.content), false));
-  if (firstUser) root.appendChild(prefaceCard('user task', contentToText(firstUser.content), true));
-  const list = document.createElement('div');
-  list.className = 'turns-list';
-  buildMessageTurns(messages).forEach((turn, idx) => list.appendChild(messageTurnCard(turn, idx, idx < 2)));
-  root.appendChild(list);
-}}
 
 function prefaceCard(label, text, open) {{
   const details = document.createElement('details');
@@ -3974,47 +4282,8 @@ function prefaceCard(label, text, open) {{
   return details;
 }}
 
-function stepTurnCard(step, idx, open) {{
-  const toolCalls = Array.isArray(step.tool_calls) ? step.tool_calls : [];
-  const observations = Array.isArray(step.observation?.results) ? step.observation.results : [];
-  return turnCardShell(idx, open, toolCalls.map(toolNameFromStepCall), observations.length, body => {{
-    const text = contentToText(step.message);
-    if (text.trim()) body.appendChild(traceBlock('thought', 'assistant', text));
-    for (const call of toolCalls) body.appendChild(actionBlock(call));
-    for (const obs of observations) body.appendChild(observationBlock(obs.content, obs.source_call_id));
-    if (!body.children.length) body.appendChild(emptySmall('(empty turn)'));
-  }});
-}}
 
-function buildMessageTurns(messages) {{
-  const turns = [];
-  let current = null;
-  for (const msg of messages) {{
-    if (msg.role === 'assistant') {{
-      current = {{assistant: msg, tools: []}};
-      turns.push(current);
-    }} else if (msg.role === 'tool') {{
-      if (!current) {{ current = {{assistant: null, tools: []}}; turns.push(current); }}
-      current.tools.push(msg);
-    }} else if (msg.role === 'user' && current) {{
-      current.tools.push({{role: 'user', content: msg.content, _user: true}});
-    }}
-  }}
-  return turns;
-}}
 
-function messageTurnCard(turn, idx, open) {{
-  const assistant = turn.assistant || {{}};
-  const toolCalls = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
-  return turnCardShell(idx, open, toolCalls.map(toolNameFromMessageCall), turn.tools.length, body => {{
-    if (assistant.reasoning_content) body.appendChild(traceBlock('thought', 'thought / reasoning', assistant.reasoning_content));
-    const text = contentToText(assistant.content);
-    if (text.trim()) body.appendChild(traceBlock('thought', 'assistant', text));
-    for (const call of toolCalls) body.appendChild(actionBlock(call));
-    for (const obs of turn.tools) body.appendChild(observationBlock(contentToText(obs.content), obs._user ? 'user feedback' : 'observation'));
-    if (!body.children.length) body.appendChild(emptySmall('(empty turn)'));
-  }});
-}}
 
 function turnCardShell(idx, open, toolNames, obsCount, fillBody) {{
   const card = document.createElement('div');
@@ -4345,7 +4614,7 @@ $$('th[data-source-sort]').forEach(th => th.addEventListener('click', () => {{
   }};
   renderTrajectorySourceTable();
 }}));
-['trajSearch','trajMode','trajLanguage','trajSource','trajSampleSize'].forEach(id => {{
+['trajSearch','trajSource'].forEach(id => {{
   const el = $('#' + id);
   if (el) el.addEventListener('input', renderTrajectoryList);
   if (el) el.addEventListener('change', renderTrajectoryList);
@@ -4354,6 +4623,7 @@ $('#trajResample')?.addEventListener('click', () => {{
   trajSampleSeed += 1;
   renderTrajectoryList();
 }});
+$('#openSampler')?.addEventListener('click', openSampler);
 $$('th.sortable').forEach(th => th.addEventListener('click', () => sortTable(th)));
 $('#copySampleId')?.addEventListener('click', () => copyText(currentSample?.instance_id || ''));
 $('#themeToggle')?.addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
@@ -4363,7 +4633,6 @@ $('#refreshNow')?.addEventListener('click', event => {{
   btn.setAttribute('aria-busy', 'true');
   window.location.reload();
 }});
-populateSelect('trajLanguage', new Set(trajCardData.map(row => row.language || 'unknown')));
 populateSelect('trajSource', new Set([
   ...trajCardData.map(row => trajSourceName(row)),
   ...trajSourceSummaryData.map(row => row.source || 'unknown'),
@@ -4385,8 +4654,120 @@ renderSegments();
 # CLI
 # ---------------------------------------------------------------------------
 
+def _batch_note(child: Path) -> str:
+    """Say where a batch really lives when its name does not.
+
+    Staged pools are symlinks, so the contents can sit anywhere on disk.
+    """
+    if not child.is_symlink():
+        return ""
+    return f"-> {child.resolve()}"
+
+
+def discover_sources(block_dir: Path = BLOCK_DIR) -> dict[str, Any]:
+    """Resolve what the board reads. Fixed locations under artifacts/, never
+    configured.
+
+    * Tasks — every immediate child of `artifacts/tasks/` is one batch, holding
+      one harbor task per child of its own (a real dir of symlinks, as staged).
+    * Jobs  — every immediate child of `artifacts/jobs/` is one Harbor job.
+    * SFT   — every immediate child of `artifacts/sft_data/` is one converted
+      dataset. Optional: with none, the board simply carries no score surfaces.
+    """
+    artifacts = block_dir / "artifacts"
+
+    def children(root: Path) -> list[Path]:
+        if not root.is_dir():
+            return []
+        return sorted(
+            (c for c in root.iterdir() if c.is_dir() and not c.name.startswith(".")),
+            key=lambda c: c.name,
+        )
+
+    tasks_root = artifacts / "tasks"
+    task_batches = []
+    for child in children(tasks_root):
+        n_tasks = sum(1 for t in child.iterdir() if (t / "task.toml").is_file())
+        n_other = sum(1 for t in child.iterdir() if t.is_dir() and not (t / "task.toml").is_file())
+        task_batches.append({
+            "name": child.name, "path": child, "tasks": n_tasks,
+            "ignored": n_other, "note": _batch_note(child),
+        })
+
+    jobs_root = artifacts / "jobs"
+    jobs = []
+    for child in children(jobs_root):
+        trials = sum(1 for t in child.iterdir() if t.is_dir() and not t.name.startswith("."))
+        jobs.append({
+            "name": child.name, "path": child, "trials": trials,
+            "summarized": (child / "result.json").is_file(), "note": _batch_note(child),
+        })
+
+    sft_root = artifacts / "sft_data"
+    sft = []
+    for child in children(sft_root):
+        present = [n for n in ("lf.json", "lf.stats.json", "im.jsonl") if (child / n).is_file()]
+        sft.append({"name": child.name, "path": child, "files": present,
+                    "note": _batch_note(child)})
+
+    return {
+        "tasks_root": tasks_root, "task_batches": task_batches,
+        "jobs_root": jobs_root, "jobs": jobs,
+        "sft_root": sft_root, "sft": sft,
+        "index_file": artifacts / "index.yaml",
+    }
+
+
+def print_source_report(sources: dict[str, Any]) -> int:
+    """Print the resolved sources for an operator to confirm before rendering.
+
+    Read-only and cheap: no trajectory is opened or parsed.
+    """
+    line = "=" * 70
+    out = [line, "tracer dashboard sources", line]
+
+    def section(label: str, root: Path, rows: list[str], empty: str) -> None:
+        out.append(f"  {label:<22} {root}")
+        out.extend(rows or [f"    {empty}"])
+
+    section(
+        "task batches", sources["tasks_root"],
+        [
+            f"    {b['name']:<38} {b['tasks']} task(s)"
+            + (f" · {b['ignored']} non-task dir(s) ignored" if b["ignored"] else "")
+            + (f"\n      {b['note']}" if b["note"] else "")
+            for b in sources["task_batches"]
+        ],
+        "none staged — prepare_tasks.sh links them in at launch",
+    )
+    section(
+        "harbor jobs", sources["jobs_root"],
+        [
+            f"    {j['name']:<38} {j['trials']} trial dir(s)"
+            + ("" if j["summarized"] else " · no result.json (still running or aborted)")
+            for j in sources["jobs"]
+        ],
+        "no jobs yet",
+    )
+    section(
+        "sft data", sources["sft_root"],
+        [f"    {s['name']:<38} {', '.join(s['files']) or 'no converted files'}"
+         for s in sources["sft"]],
+        "none — optional; the board omits trajectory-score surfaces without it",
+    )
+
+    idx = sources["index_file"]
+    out.append(f"  {'run index':<22} {idx}" + ("" if idx.is_file() else "  (absent)"))
+    out.append(line)
+    print("\n".join(out))
+    return 0
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--report-only", action="store_true",
+                   help="Print the resolved sources and the batches found under each, then exit. "
+                        "Writes nothing; run this and confirm before rendering.")
     p.add_argument("--output-html", type=Path, default=DEFAULT_HTML)
     p.add_argument("--cache-file", type=Path, default=DEFAULT_CACHE)
     p.add_argument("--index-file", type=Path, default=DEFAULT_INDEX,
@@ -4427,6 +4808,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help="Maximum full trajectory JSON records to embed into data/traj_embedded shards. 0 disables embedding.")
     p.add_argument("--embedded-traj-max-bytes", type=int, default=DEFAULT_EMBEDDED_TRAJ_MAX_BYTES,
                    help="Maximum total bytes for embedded full trajectory JSON shards. 0 disables embedding.")
+    p.add_argument("--r2-api", action="store_true",
+                   help="Offer 'Load full' for traces that are not embedded. Only useful when the "
+                        "Pages project has the TRACER_TRAJ_BUCKET R2 binding and the objects have "
+                        "been uploaded; without it /api/traj answers 503, so the control is hidden "
+                        "by default rather than failing on every click.")
+    p.add_argument("--embedded-traj-max-record-bytes", type=int, default=EMBEDDED_TRAJ_MAX_RECORD_BYTES,
+                   help="Skip embedding any single trajectory larger than this. A record cannot be "
+                        "split across shards, so one huge trace would both blow the per-file limit of "
+                        "the host and eat the whole budget. 0 disables the cap.")
     return p.parse_args(argv)
 
 
@@ -4499,9 +4889,18 @@ def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
         totals=totals,
         harbor_jobs_dir=args.harbor_jobs_dir.resolve(),
         embedded_traj_limit=embedded_traj_limit,
+        embedded_traj_max_record_bytes=max(0, int(args.embedded_traj_max_record_bytes or 0)),
         embedded_traj_max_bytes=embedded_traj_max_bytes,
     )
     write_worker_script(args.output_html)
+    # Second and last moment for this: write_data_exports sanitised what it wrote,
+    # and these lists reach only the HTML. Both have to happen after embedding,
+    # which is the one step that still needs the real locations.
+    strip_published_paths(
+        jobs, sft,
+        analysis.get("quality_examples") or [],
+        analysis.get("trial_examples") or [],
+    )
     html_doc = render_html(
         jobs,
         sft,
@@ -4518,6 +4917,7 @@ def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
         args.sft_dir.resolve(),
         args.harbor_jobs_dir.resolve(),
         args.index_file.resolve(),
+        r2_api=bool(args.r2_api),
     )
     atomic_write_text(args.output_html, html_doc)
     return totals
@@ -4541,6 +4941,8 @@ def maybe_open_browser(path: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
+    if args.report_only:
+        return print_source_report(discover_sources())
     interval = int(args.loop) if args.loop is not None else args.refresh
     server: ThreadingHTTPServer | None = None
     if args.serve:
