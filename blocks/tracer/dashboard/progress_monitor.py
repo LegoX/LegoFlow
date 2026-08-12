@@ -50,12 +50,9 @@ CACHE_VERSION = 1
 DEFAULT_EMBEDDED_TRAJ_LIMIT = 120
 DEFAULT_EMBEDDED_TRAJ_MAX_BYTES = 40_000_000
 EMBEDDED_TRAJ_SHARD_BYTES = 8_000_000
-# One trajectory is one JSONL line and cannot be split across shards, so a single
-# outsized trace sets its shard's size on its own. Two consequences, both seen in
-# practice: a 26.8 MB trace produced a shard Cloudflare Pages refuses (25 MiB per
-# file), and a handful of such traces swallowed the whole byte budget, leaving
-# almost every other trajectory unembedded. Skip them instead — they keep their
-# local path and R2 key, so nothing is lost that was ever reachable offline.
+# One trajectory is one JSONL line and cannot be split, so an outsized trace sets
+# its shard's size alone — big enough to break the host's per-file limit, and to
+# eat the whole budget. Skip those; they keep their local path and R2 key.
 EMBEDDED_TRAJ_MAX_RECORD_BYTES = 4_000_000
 TRAJECTORY_ARTIFACT_NAMES = ("litellm-trajectory.jsonl", "trajectory.json")
 
@@ -161,11 +158,9 @@ WEIGHTED_SUBSCORE_KEYS = sorted(
     (key for key, weight in TQS_WEIGHTS.items() if weight > 0),
     key=lambda key: (-TQS_WEIGHTS[key], key),
 )
-# Column tooltips: the acronym spelled out, then what it measures. Taken from the
-# section headings in swe_data_process/rule_score.py, which is what computes them —
-# so these stay descriptions of the real metric rather than a second, drifting
-# definition. The zero-weight entries are diagnostics: computed and shown, but
-# they do not move composite_score.
+# Acronym spelled out, then what it measures. Wording follows
+# swe_data_process/rule_score.py, which computes these. Zero-weight entries are
+# diagnostics: shown, but they do not move composite_score.
 SUBSCORE_LABELS = {
     "composite_score": "Trajectory score — weighted sum of the subscores below (Σw = 1.00)",
     "sub_score": "SUB — submission completeness: whether the run delivered a complete patch",
@@ -503,11 +498,11 @@ def parse_scalar(raw: str) -> Any:
 def read_status(index_path: Path) -> dict[str, Any]:
     """Read the latest run from artifacts/index.yaml without a YAML dependency."""
     if not index_path.is_file():
-        return {"_error": f"{index_path} not found"}
+        return {"_error": f"{display_path(index_path)} not found"}
     try:
         lines = index_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
-        return {"_error": f"failed to read {index_path}: {exc}"}
+        return {"_error": f"failed to read {display_path(index_path)}: {exc}"}
 
     start: int | None = None
     for i, line in enumerate(lines):
@@ -959,10 +954,8 @@ def find_trial_trajectory(trial_dir: Path) -> Path | None:
 def trial_model_name(model_info: dict[str, Any], config_agent: dict[str, Any]) -> str:
     """The model a trial ran against — the teacher, on a distillation run.
 
-    Preference order: what the agent reported, then what it was configured with.
-    The env fallback covers scaffolds that carry the model only in the agent
-    environment (claude-code sets ANTHROPIC_MODEL; OpenAI-path scaffolds set
-    OPENAI_MODEL).
+    What the agent reported, then what it was configured with, then the agent
+    environment for scaffolds that record it only there.
     """
     reported = str(model_info.get("name") or "").strip()
     if reported:
@@ -1035,11 +1028,8 @@ def collect_trial_facts(
                 "difficulty": info.get("difficulty"),
                 "source": str(data.get("source") or "unknown"),
                 "scaffold": normalize_scaffold(agent_info.get("name"), job_name),
-                # Harbor fills agent_info.model_info only for agents that report it;
-                # claude-code leaves it null. The model the trial actually ran is
-                # still right there in the same result.json, under the config it was
-                # launched with — so read that rather than reporting "unknown" for
-                # every trial of a whole distillation run.
+                # Harbor fills model_info only for agents that report it. When it
+                # does not, the model is still in this result.json's launch config.
                 "model": trial_model_name(model_info, config_agent),
                 "provider": str(model_info.get("provider") or "unknown"),
                 "status": trial_status(reward, exception_info),
@@ -1149,9 +1139,8 @@ def collect_quality_facts(
                     "dataset": dataset_dir.name,
                     "job": dataset_dir.name,
                     "index": idx,
-                    # Where this record lives, so the full conversation can be
-                    # embedded later: an SFT record has no trajectory file, but it
-                    # *is* the trajectory, at this line of this im.jsonl.
+                    # An SFT record has no trajectory file — it *is* the
+                    # trajectory, at this line. Remember where, so it can be embedded.
                     "im_path": str(im_file),
                     "instance_id": instance_id,
                     "task_name": task_name,
@@ -1871,12 +1860,31 @@ def select_embedded_traj_cards(cards: list[dict[str, Any]], *, limit: int) -> li
     return selected[:limit]
 
 
+RECORD_PATH_KEYS = ("trajectory_output_path",)
+
+
+def strip_record_paths(node: Any, block_dir: Path = BLOCK_DIR) -> Any:
+    """Rewrite host paths Harbor recorded inside a trajectory payload.
+
+    Named metadata keys only. Message content stays as it was — rewriting it
+    would make the published trace disagree with the one on disk.
+    """
+    if isinstance(node, dict):
+        return {
+            k: (display_path(v, block_dir) if k in RECORD_PATH_KEYS and isinstance(v, str)
+                else strip_record_paths(v, block_dir))
+            for k, v in node.items()
+        }
+    if isinstance(node, list):
+        return [strip_record_paths(v, block_dir) for v in node]
+    return node
+
+
 def read_im_records(cards: list[dict[str, Any]]) -> dict[tuple[str, int], Any]:
     """Fetch the specific im.jsonl lines a set of cards points at.
 
-    One pass per file, stopping at the last line anyone wants: these datasets run
-    to hundreds of megabytes, and seeking to each line separately would re-read
-    the file once per record.
+    One pass per file, stopping at the last line wanted — these run to hundreds
+    of megabytes, and per-record seeking would re-read the file each time.
     """
     wanted: dict[str, set[int]] = {}
     for card in cards:
@@ -1969,6 +1977,7 @@ def write_embedded_trajectory_shards(
             record = im_records.get((str(card.get("im_path")), int(card.get("index"))))
             if record is None:
                 continue
+        record = strip_record_paths(record)
         row = {"id": card.get("id"), "record": record}
         line = json.dumps(row, ensure_ascii=False, default=json_default) + "\n"
         line_bytes = len(line.encode("utf-8"))
@@ -2048,6 +2057,58 @@ def write_worker_script(output_html: Path) -> None:
     atomic_write_text(output_html.parent / "_worker.js", WORKER_JS)
 
 
+# Path fields that reach the published page, in cards, task rows and the summary.
+PUBLISHED_PATH_KEYS = ("path", "trajectory_path", "im_path", "lf_path")
+# Same treatment, but the value is a list of paths.
+PUBLISHED_PATH_LIST_KEYS = ("trajectory_paths",)
+
+
+def display_path(value: Any, block_dir: Path = BLOCK_DIR) -> str:
+    """A path fit to publish: block-relative, and never naming the host.
+
+    Absolute paths are shipped inside the page and its data files, where they
+    disclose the operator's home directory and layout while telling a reader
+    nothing actionable. A pool linked in from elsewhere has no useful relative
+    form, so keep the tail from `artifacts/` and drop what is above it.
+    """
+    text = str(value or "")
+    if not text:
+        return ""
+    path = Path(text)
+    if not path.is_absolute():
+        return text
+    try:
+        return str(path.relative_to(block_dir))
+    except ValueError:
+        pass
+    parts = path.parts
+    if "artifacts" in parts:
+        return "external:" + str(Path(*parts[parts.index("artifacts"):]))
+    return "external:" + "/".join(parts[-3:])
+
+
+def strip_published_paths(
+    *row_lists: list[dict[str, Any]],
+    block_dir: Path = BLOCK_DIR,
+) -> None:
+    """Rewrite path fields in place, once embedding has read what it needed.
+
+    The same list objects reach both the exports and the HTML, so one pass here
+    covers every published copy.
+    """
+    for rows in row_lists:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            for key in PUBLISHED_PATH_KEYS:
+                if isinstance(row.get(key), str) and row[key]:
+                    row[key] = display_path(row[key], block_dir)
+            for key in PUBLISHED_PATH_LIST_KEYS:
+                if isinstance(row.get(key), list):
+                    row[key] = [display_path(v, block_dir) if isinstance(v, str) else v
+                               for v in row[key]]
+
+
 def write_data_exports(
     output_html: Path,
     *,
@@ -2072,6 +2133,9 @@ def write_data_exports(
         if not key.startswith("__") and row.get("path")
     }
     task_rows = sorted(task_rows_by_name.values(), key=lambda x: str(x.get("task_name")))
+    # Facts and instances are written first, so they are sanitised first. Cards
+    # wait until embedding has read the real locations, further down.
+    strip_published_paths(trial_facts, quality_facts, instances)
     trial_fact_exports = write_jsonl_shards(data_dir / "trial_fact.jsonl", trial_facts)
     instance_exports = write_jsonl_shards(data_dir / "instances.jsonl", instances)
     embedded_traj_exports = write_embedded_trajectory_shards(
@@ -2081,9 +2145,11 @@ def write_data_exports(
         max_total_bytes=embedded_traj_max_bytes,
         max_record_bytes=embedded_traj_max_record_bytes,
     )
+    # Everything above needed real paths; nothing below may publish them.
+    strip_published_paths(traj_cards, task_rows)
     summary = {
         "generated_at": now_bjt().isoformat(),
-        "harbor_jobs_dir": str(harbor_jobs_dir),
+        "harbor_jobs_dir": display_path(harbor_jobs_dir),
         **(analysis.get("summary") or {}),
         "coverage": totals.get("coverage") or {},
         "segment_count": len(analysis.get("segments") or []),
@@ -2272,12 +2338,9 @@ def build_coverage_summary(
     quality_facts: list[dict[str, Any]],
     instances: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    # Language, model and scaffold are properties of the rollout, not of the SFT
-    # conversion — every trial carries them. Reading them only off quality facts
-    # meant a block that had rolled out hundreds of trials but converted nothing
-    # reported zero languages and zero models, which reads as "we generated
-    # nothing". Prefer the converted set when it exists, since that is what the
-    # rest of the SFT surfaces describe, and fall back to the trials otherwise.
+    # Language, model and scaffold belong to the rollout, not to the conversion —
+    # every trial carries them. Prefer the converted set when there is one, since
+    # the other SFT surfaces describe it; fall back to the trials.
     dimension_facts = quality_facts or trial_facts
     languages, language_counts = ranked_values(dimension_facts, "language")
     dataset_jobs = meaningful_values(sft, "job")
@@ -2886,11 +2949,8 @@ def render_job_segment_row(
 ) -> str:
     """One row per job-shaped thing: a Harbor job, an imported dataset, or both.
 
-    A dataset that arrived already converted — an open dataset symlinked into
-    sft_data/ — has no Harbor job behind it. Run status simply does not apply to
-    it, so it is reported as such. Passing a stand-in `{"job": name}` here used to
-    make `finished_at` look merely absent, which rendered as "running": the board
-    claiming a rollout was still in flight for data that was never rolled out.
+    A dataset that arrived already converted has no Harbor job behind it, so run
+    status does not apply and is reported as such rather than as "running".
     """
     segment = segment or {}
     has_job = bool(job)
@@ -3014,16 +3074,12 @@ def render_html(
         ("Harbor job dir", harbor_jobs_dir, None),
         ("Run index", index_path, None),
     ]
-    # Trajectory scores come only from converted SFT data, which is optional.
-    # With none, every score surface would render as an empty axis or a dash —
-    # which reads as "these trajectories scored nothing" rather than "nothing was
-    # scored". Drop those surfaces instead of showing hollow ones.
+    # Scores come only from converted SFT data, which is optional. Empty axes read
+    # as "scored nothing" rather than "nothing was scored", so drop the surfaces.
     has_quality = bool((analysis.get("summary") or {}).get("quality_count"))
     rubric_html = render_rubric_html() if has_quality else ""
-    # Two separate absences. `quality` gates the score surfaces (they need parsed
-    # per-trajectory scores); `sft` gates the surfaces that count converted LF
-    # data at all. A block that rolled out trials but converted nothing has
-    # neither, and must not show either as a row of zeros.
+    # Two absences: `quality` gates the score surfaces, `sft` gates the counters of
+    # converted data. A block that converted nothing has neither.
     r2_api_js = "true" if r2_api else "false"
     has_sft = bool(sft)
     gate_rules = [
@@ -3040,7 +3096,7 @@ def render_html(
         "<div class='sub'>Sources</div><table>"
         + "".join(
             f"<tr><td>{html.escape(name)}</td>"
-            f"<td class='mono'>{html.escape(str(path))}</td>"
+            f"<td class='mono'>{html.escape(display_path(path))}</td>"
             f"<td>{'' if n is None else f'{n:,} found'}"
             f"{'' if Path(path).exists() else '<em>not found</em>'}</td></tr>"
             for name, path, n in _sources
@@ -3419,9 +3475,7 @@ const tqsWeights = {json.dumps(TQS_WEIGHTS, ensure_ascii=False)};
 const subscoreLabels = {json.dumps(SUBSCORE_LABELS, ensure_ascii=False)};
 let currentSample = null;
 let currentTraj = null;
-// What the sampler is currently showing. The inspector's left pane lists exactly
-// this, so switching trajectories inside the dialog never escapes the filters the
-// operator set outside it.
+// What the sampler is showing; the dialog's left pane lists exactly this.
 let trajVisibleCards = [];
 let trajActiveTab = 'details';
 const TRAJ_SAMPLE_SIZE = 10;
@@ -3658,10 +3712,8 @@ function seededShuffle(rows, seed) {{
   return arr;
 }}
 
-// One sampling rule: a random draw, preferring trajectories that can actually be
-// opened. Resample advances the seed to draw a different set. The ranking modes
-// this replaced (lowest score, highest score, most errors, clean) were four ways
-// of ordering a list nobody was ordering.
+// One rule: a random draw, preferring trajectories that can be opened. Resample
+// advances the seed.
 function trajSampleCards(cards) {{
   const available = cards.filter(card => trajAvailabilityRank(card) < 2);
   const pool = available.length ? available : cards;
@@ -3962,12 +4014,9 @@ function renderTrajectoryList() {{
       return hay.includes(q);
     }});
 
-  // Sample per batch, not from one pool. Drawing globally let the largest batch
-  // crowd out every other one — and because the availability preference inside
-  // the draw discards cards with no reachable trace, an imported dataset (which
-  // has none) could be excluded from every draw entirely, so a whole batch was
-  // silently invisible. Ten from each batch means each batch always shows up,
-  // whatever its size.
+  // Per batch, not from one pool: a global draw lets the largest batch crowd out
+  // the rest, and the availability preference can drop a whole batch that has no
+  // reachable trace. Ten from each means every batch shows up.
   const groups = new Map();
   for (const card of matched) {{
     const key = trajSourceName(card) || 'unknown';
@@ -4038,9 +4087,8 @@ function selectTrajectory(card, button) {{
   view.classList.remove('empty');
   // No heading: the tab it lives under already names it.
   const preview = card.preview ? `<div class="detail-preview">${{escapeHtml(card.preview)}}</div>` : '';
-  // Say up front whether this trace can actually be opened here. Only embedded
-  // traces load from the page itself; everything else needs the R2 binding, and
-  // offering an identical-looking button for both is what made "load" look broken.
+  // Say up front whether this trace can be opened here: only embedded ones load
+  // from the page, everything else needs the R2 binding.
   // Three distinct reasons a trace does or does not open, and they call for three
   // different sentences. The generic "not reachable" line read as a fault when the
   // usual case is simply an SFT record, which never had a trajectory file at all.
@@ -4054,16 +4102,14 @@ function selectTrajectory(card, button) {{
           ? 'This row is a converted SFT record, not a Harbor rollout, so there is no separate trajectory file to open. Its conversation lives inside the dataset\\'s im.jsonl, which is not published with this board — the Preview tab shows a bounded excerpt.'
           : 'No trajectory file was recorded for this run, so there is nothing to open.'));
   const error = card.exception_type ? `<dt>Exception</dt><dd>${{escapeHtml(card.exception_type)}}</dd>` : '';
-  // A local path proves nothing to a remote reader: it names a file on the machine
-  // that built the board. Offer the control only when the trace is embedded here,
-  // or when a backend was declared that can fetch it.
+  // A local path proves nothing to a remote reader. Offer the control only when
+  // the trace is embedded, or a backend was declared that can fetch it.
   const canLoad = card.embedded_available || (card.full_available && R2_API_AVAILABLE);
   const loadAction = canLoad
     ? `<button id="loadFullTraj" type="button">${{card.embedded_available ? 'Open embedded trace' : 'Load full'}}</button>`
     : '';
-  // Head / tabs / one scrolling pane — curator's sample-viewer shape. Splitting
-  // the content into tabs keeps the dialog a fixed size whether a card carries a
-  // preview and a full trace or neither.
+  // Head / tabs / one scrolling pane, as curator's sample viewer. Tabs keep the
+  // dialog a fixed size whatever the card carries.
   const details = `
     <dl class="kv">
       <dt>Language</dt><dd>${{escapeHtml(card.language || 'unknown')}}</dd>
@@ -4169,14 +4215,10 @@ function contentToText(content) {{
   return String(content);
 }}
 
-// JSON syntax highlighting for raw trace payloads.
-//
-// Order matters: escape first, tokenize second. Escaping afterwards would eat
-// the markup just inserted. Only & < > are escaped — quotes are deliberately
-// left alone, because the tokenizer needs them to find string boundaries, and
-// this text is inserted as element content where a bare quote is harmless.
-// Strings are matched whole, so a number or the word `null` inside a string is
-// consumed as part of that string and never mis-coloured.
+// Escape first, tokenize second — the other order eats the markup just inserted.
+// Only & < > are escaped: the tokenizer needs quotes to find string boundaries,
+// and a bare quote is harmless in element content. Strings match whole, so a
+// number inside one is never mis-coloured.
 function highlightJson(value) {{
   let text;
   try {{
@@ -4221,10 +4263,8 @@ function renderFullTrajectory(box, card, data) {{
       <p class="hint">${{escapeHtml(trajSourceName(card))}} · ${{escapeHtml(card.model || '-')}} · ${{escapeHtml(card.language || 'unknown')}}</p>
     </div>
   `;
-  // One rendering for every payload: the record as highlighted JSON. Splitting a
-  // trace into turns and labelling tool calls was a second, busier presentation
-  // of the same bytes, and which one you got depended on the payload's shape —
-  // a Harbor trajectory came out as JSON, an SFT record as turns.
+  // One rendering for every payload. Splitting into turns was a second, busier
+  // view of the same bytes, and which one you got depended on the payload shape.
   const pre = document.createElement('pre');
   pre.className = 'block-pre json-hl';
   pre.innerHTML = highlightJson(record);
@@ -4615,11 +4655,9 @@ renderSegments();
 # ---------------------------------------------------------------------------
 
 def _batch_note(child: Path) -> str:
-    """Say where a batch really lives when the name does not.
+    """Say where a batch really lives when its name does not.
 
-    Staged task pools are symlinks (see scripts/prepare_tasks.sh), so a batch's
-    contents can sit anywhere on disk. An operator confirming sources needs to
-    see the destination, not just the link name.
+    Staged pools are symlinks, so the contents can sit anywhere on disk.
     """
     if not child.is_symlink():
         return ""
@@ -4683,8 +4721,7 @@ def discover_sources(block_dir: Path = BLOCK_DIR) -> dict[str, Any]:
 def print_source_report(sources: dict[str, Any]) -> int:
     """Print the resolved sources for an operator to confirm before rendering.
 
-    Read-only, and deliberately cheap: it opens no trajectories and parses no
-    trajectory JSON, so it can be run before every render.
+    Read-only and cheap: no trajectory is opened or parsed.
     """
     line = "=" * 70
     out = [line, "tracer dashboard sources", line]
@@ -4856,6 +4893,14 @@ def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
         embedded_traj_max_bytes=embedded_traj_max_bytes,
     )
     write_worker_script(args.output_html)
+    # Second and last moment for this: write_data_exports sanitised what it wrote,
+    # and these lists reach only the HTML. Both have to happen after embedding,
+    # which is the one step that still needs the real locations.
+    strip_published_paths(
+        jobs, sft,
+        analysis.get("quality_examples") or [],
+        analysis.get("trial_examples") or [],
+    )
     html_doc = render_html(
         jobs,
         sft,
