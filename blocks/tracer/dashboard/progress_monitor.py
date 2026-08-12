@@ -4221,42 +4221,18 @@ function renderFullTrajectory(box, card, data) {{
       <p class="hint">${{escapeHtml(trajSourceName(card))}} · ${{escapeHtml(card.model || '-')}} · ${{escapeHtml(card.language || 'unknown')}}</p>
     </div>
   `;
-  if (Array.isArray(record.steps)) renderStepsTrace(wrap, record);
-  else if (Array.isArray(record.messages)) renderMessagesTrace(wrap, record);
-  else {{
-    const pre = document.createElement('pre');
-    pre.className = 'block-pre json-hl';
-    pre.innerHTML = highlightJson(record);
-    wrap.appendChild(pre);
-  }}
+  // One rendering for every payload: the record as highlighted JSON. Splitting a
+  // trace into turns and labelling tool calls was a second, busier presentation
+  // of the same bytes, and which one you got depended on the payload's shape —
+  // a Harbor trajectory came out as JSON, an SFT record as turns.
+  const pre = document.createElement('pre');
+  pre.className = 'block-pre json-hl';
+  pre.innerHTML = highlightJson(record);
+  wrap.appendChild(pre);
   box.appendChild(wrap);
 }}
 
-function renderStepsTrace(root, record) {{
-  const steps = record.steps || [];
-  const system = steps.find(step => step.source === 'system');
-  const user = steps.find(step => step.source === 'user');
-  if (system) root.appendChild(prefaceCard('system prompt', contentToText(system.message), false));
-  if (user) root.appendChild(prefaceCard('user task', contentToText(user.message), true));
-  const list = document.createElement('div');
-  list.className = 'turns-list';
-  steps.filter(step => step.source === 'agent' || step.tool_calls || step.observation).forEach((step, idx) => {{
-    list.appendChild(stepTurnCard(step, idx, idx < 2));
-  }});
-  root.appendChild(list);
-}}
 
-function renderMessagesTrace(root, record) {{
-  const messages = record.messages || [];
-  const system = messages.find(msg => msg.role === 'system');
-  const firstUser = messages.find(msg => msg.role === 'user');
-  if (system) root.appendChild(prefaceCard('system prompt', contentToText(system.content), false));
-  if (firstUser) root.appendChild(prefaceCard('user task', contentToText(firstUser.content), true));
-  const list = document.createElement('div');
-  list.className = 'turns-list';
-  buildMessageTurns(messages).forEach((turn, idx) => list.appendChild(messageTurnCard(turn, idx, idx < 2)));
-  root.appendChild(list);
-}}
 
 function prefaceCard(label, text, open) {{
   const details = document.createElement('details');
@@ -4266,47 +4242,8 @@ function prefaceCard(label, text, open) {{
   return details;
 }}
 
-function stepTurnCard(step, idx, open) {{
-  const toolCalls = Array.isArray(step.tool_calls) ? step.tool_calls : [];
-  const observations = Array.isArray(step.observation?.results) ? step.observation.results : [];
-  return turnCardShell(idx, open, toolCalls.map(toolNameFromStepCall), observations.length, body => {{
-    const text = contentToText(step.message);
-    if (text.trim()) body.appendChild(traceBlock('thought', 'assistant', text));
-    for (const call of toolCalls) body.appendChild(actionBlock(call));
-    for (const obs of observations) body.appendChild(observationBlock(obs.content, obs.source_call_id));
-    if (!body.children.length) body.appendChild(emptySmall('(empty turn)'));
-  }});
-}}
 
-function buildMessageTurns(messages) {{
-  const turns = [];
-  let current = null;
-  for (const msg of messages) {{
-    if (msg.role === 'assistant') {{
-      current = {{assistant: msg, tools: []}};
-      turns.push(current);
-    }} else if (msg.role === 'tool') {{
-      if (!current) {{ current = {{assistant: null, tools: []}}; turns.push(current); }}
-      current.tools.push(msg);
-    }} else if (msg.role === 'user' && current) {{
-      current.tools.push({{role: 'user', content: msg.content, _user: true}});
-    }}
-  }}
-  return turns;
-}}
 
-function messageTurnCard(turn, idx, open) {{
-  const assistant = turn.assistant || {{}};
-  const toolCalls = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
-  return turnCardShell(idx, open, toolCalls.map(toolNameFromMessageCall), turn.tools.length, body => {{
-    if (assistant.reasoning_content) body.appendChild(traceBlock('thought', 'thought / reasoning', assistant.reasoning_content));
-    const text = contentToText(assistant.content);
-    if (text.trim()) body.appendChild(traceBlock('thought', 'assistant', text));
-    for (const call of toolCalls) body.appendChild(actionBlock(call));
-    for (const obs of turn.tools) body.appendChild(observationBlock(contentToText(obs.content), obs._user ? 'user feedback' : 'observation'));
-    if (!body.children.length) body.appendChild(emptySmall('(empty turn)'));
-  }});
-}}
 
 function turnCardShell(idx, open, toolNames, obsCount, fillBody) {{
   const card = document.createElement('div');
