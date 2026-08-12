@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, ArrowDown, Pause, Play, FileText } from "lucide-react";
+import { IS_STATIC, apiUrl } from "../api/staticMode";
 
 interface Props {
   runId: string | null;
@@ -32,7 +33,7 @@ export default function LogsPanel({ runId, refreshInterval }: Props) {
 
   const fetchFiles = useCallback(async () => {
     try {
-      const res = await fetch(`/api/log-files`);
+      const res = await fetch(apiUrl(`/api/log-files`));
       if (!res.ok) return;
       const data: LogFile[] = await res.json();
       setFiles(data);
@@ -52,12 +53,14 @@ export default function LogsPanel({ runId, refreshInterval }: Props) {
       });
       if (selectedFile) params.set("file", selectedFile);
       const res = await fetch(
-        `/api/runs/${runId}/logs?${params.toString()}`,
+        apiUrl(`/api/runs/${runId}/logs?${params.toString()}`),
       );
       if (!res.ok) return;
       const data: LogChunk = await res.json();
       if (data.lines.length > 0) {
-        if (lastOffsetRef.current === 0) {
+        // A static export answers every offset with the same snapshot, so
+        // appending would duplicate the tail on each poll — always replace.
+        if (IS_STATIC || lastOffsetRef.current === 0) {
           setLines(data.lines);
         } else {
           setLines((prev) => [...prev, ...data.lines].slice(-2000));
@@ -93,7 +96,8 @@ export default function LogsPanel({ runId, refreshInterval }: Props) {
   }, [runId, selectedFile]);
 
   useEffect(() => {
-    if (paused) return;
+    // Nothing to poll for in a static export — the snapshot never changes.
+    if (paused || IS_STATIC) return;
     const id = setInterval(fetchLogs, refreshInterval * 1000);
     return () => clearInterval(id);
   }, [fetchLogs, refreshInterval, paused]);
