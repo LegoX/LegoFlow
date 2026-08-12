@@ -2,6 +2,7 @@
     "pages": [
         "index",
         "getting-started",
+        "showcase",
         "blocks",
         "block-design",
         "qa"
