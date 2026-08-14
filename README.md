@@ -3,7 +3,6 @@
 [中文版](./README_zh.md)
 
 [![Documentation](https://img.shields.io/badge/docs-legoflow--docs.pages.dev-brightgreen.svg?style=flat)](https://legoflow-docs.pages.dev/docs)
-[![CI](https://img.shields.io/github/actions/workflow/status/LegoX/SWE-Lego-Live/ci.yml?branch=dev&label=CI&logo=github)](https://github.com/LegoX/SWE-Lego-Live/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **LegoFlow** is an agentic pipeline for coding-agent data. It curates verified SWE tasks from real GitHub repositories, rolls agents out against them, converts the trajectories into training data, fine-tunes, and evaluates. Every stage follows the same contract, so a person and an agent operate it the same way.
@@ -61,8 +60,8 @@ Credentials come from the environment, never from a tracked file. Do not put sec
 ### 1. Clone
 
 ```bash
-git clone --recurse-submodules git@github.com:LegoX/SWE-Lego-Live.git
-cd SWE-Lego-Live
+git clone --recurse-submodules https://github.com/SWE-Lego/SWE-Lego-Live LegoFlow
+cd LegoFlow
 ```
 
 If you already cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.
@@ -172,7 +171,7 @@ Known gaps, stated plainly:
 
 ## Contributing
 
-Issues and pull requests are welcome at [LegoX/SWE-Lego-Live](https://github.com/LegoX/SWE-Lego-Live).
+Issues and pull requests are welcome on [GitHub](https://github.com/SWE-Lego/SWE-Lego-Live).
 
 New stages are scaffolded with `/root:create`, which produces the full directory tree wired to the block contract. A block is finished when `check` passes on a fresh clone, a run archives itself, and another block can consume its output without being told a path by hand. See [Adding Your Own Block](https://legoflow-docs.pages.dev/docs/block-design).
 
@@ -183,14 +182,14 @@ New stages are scaffolded with `/root:create`, which produces the full directory
   title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
   author = {The LegoFlow Team},
   year   = {2026},
-  url    = {https://github.com/LegoX/SWE-Lego-Live}
+  url    = {https://github.com/SWE-Lego/SWE-Lego-Live}
 }
 ```
 
 ## Acknowledgements
 
 LegoFlow builds on [Harbor](https://www.harborframework.com/) for isolated task execution,
-[LLaMA-Factory](https://github.com/LegoX/LLaMA-Factory) and [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) for training,
+[LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory) and [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) for training,
 [LiteLLM](https://github.com/BerriAI/litellm) for trajectory capture,
 [vLLM](https://github.com/vllm-project/vllm) for serving local checkpoints,
 [Claude Code](https://claude.com/claude-code) and the Claude Agent SDK for agent operation,

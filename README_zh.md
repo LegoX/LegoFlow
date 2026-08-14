@@ -3,7 +3,6 @@
 [English](./README.md)
 
 [![Documentation](https://img.shields.io/badge/docs-legoflow--docs.pages.dev-brightgreen.svg?style=flat)](https://legoflow-docs.pages.dev/docs)
-[![CI](https://img.shields.io/github/actions/workflow/status/LegoX/SWE-Lego-Live/ci.yml?branch=dev&label=CI&logo=github)](https://github.com/LegoX/SWE-Lego-Live/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **LegoFlow** 是一条面向编程智能体数据的 agentic 流水线。它从真实的 GitHub 仓库中构建可验证的 SWE 任务，让智能体在这些任务上做 rollout，把轨迹转换成训练数据，再完成微调与评测。每个阶段遵循同一份契约，因此人和智能体可以用同样的方式操作它。
@@ -61,8 +60,8 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone --recurse-submodules git@github.com:LegoX/SWE-Lego-Live.git
-cd SWE-Lego-Live
+git clone --recurse-submodules https://github.com/SWE-Lego/SWE-Lego-Live LegoFlow
+cd LegoFlow
 ```
 
 如果已经克隆但漏了 `--recurse-submodules`，补跑 `git submodule update --init --recursive`。
@@ -172,7 +171,7 @@ claude plugin install evaluator@evaluator-block
 
 ## 参与贡献
 
-欢迎在 [LegoX/SWE-Lego-Live](https://github.com/LegoX/SWE-Lego-Live) 提 issue 和 PR。
+欢迎在 [GitHub](https://github.com/SWE-Lego/SWE-Lego-Live) 提 issue 和 PR。
 
 新阶段用 `/root:create` 生成脚手架，它会产出符合 block 契约的完整目录树。一个 block 算完成的标准是：在全新克隆上 `check` 能通过，一次运行会自我归档，并且下游 block 无需手工告知路径就能消费它的输出。见 [Adding Your Own Block](https://legoflow-docs.pages.dev/docs/block-design)。
 
@@ -183,14 +182,14 @@ claude plugin install evaluator@evaluator-block
   title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
   author = {The LegoFlow Team},
   year   = {2026},
-  url    = {https://github.com/LegoX/SWE-Lego-Live}
+  url    = {https://github.com/SWE-Lego/SWE-Lego-Live}
 }
 ```
 
 ## 致谢
 
 LegoFlow 构建在这些项目之上：[Harbor](https://www.harborframework.com/) 提供隔离的任务执行环境，
-[LLaMA-Factory](https://github.com/LegoX/LLaMA-Factory) 与 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 负责训练，
+[LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory) 与 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 负责训练，
 [LiteLLM](https://github.com/BerriAI/litellm) 负责轨迹采集，
 [vLLM](https://github.com/vllm-project/vllm) 用于本地 checkpoint 的推理服务，
 [Claude Code](https://claude.com/claude-code) 与 Claude Agent SDK 负责智能体操作，
