@@ -37,13 +37,35 @@ LegoFlow is an easy and interactive framework for code data engineering, part of
 
 ## News
 
-🔥 **2026-08-12**: We release LegoFlow v0.1, the initial version of a fully agentic pipeline for software-engineering data.
+|                     |                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| 🔥 **2026-08-12** | We release LegoFlow v0.1, the initial version of a fully agentic pipeline for software-engineering data. |
 
 ## Architecture
 
+Everything in LegoFlow is a **block**. One block owns one stage of the pipeline, and packages it so that a person and a coding agent drive it exactly the same way:
+
+
+| Inside a block | What it holds                                                   |
+| -------------- | --------------------------------------------------------------- |
+| `config.yaml`  | What the stage needs and what it produces. One file, one run    |
+| `scripts/`     | How it executes: `start.sh`, `dryrun.sh`, `clean.sh`, `stop.sh` |
+| `repos/`       | Third-party code, pinned to a commit and read-only              |
+| `artifacts/`   | Everything a run leaves behind, including its own archive       |
+| `dashboard/`   | Reads those artifacts. Never writes to them                     |
+
+
+Two rules give the shape its value:
+
+> **Declaration comes before execution.** A consumer names the upstream output that feeds each of its own inputs, and the producer mirrors it. A broken handoff is caught by preflight, before a multi-hour job starts.
+>
+> **A run stays inside the block.** Delete a block's `artifacts/` and you lose that block's history, and nothing else.
+
+Nothing in that definition is specific to the four blocks that ship with LegoFlow, which is why the shape nests: the root is simply the block at the top, obeying the same contract as everything under it.
+
 ![LegoFlow block tree](docs/public/figures/my-version-coding-repos-expandable.png)
 
-The pipeline is a tree of **blocks**. The root block orchestrates four children:
+The root orchestrates four children:
 
 
 | Block                                                                       | What it does                                                                               | Built on                             |
@@ -54,7 +76,7 @@ The pipeline is a tree of **blocks**. The root block orchestrates four children:
 | [`blocks/evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis              | Harbor, vLLM                         |
 
 
-A block owns one stage and is packaged so that both a person and an agent can drive it: `config.yaml` declares what it needs and what it produces, `scripts/` execute it, `artifacts/` hold everything a run leaves behind, and `dashboard/` reads those artifacts without mutating them. The config is one-shot per run, so changing one variable and rerunning is a small reviewable edit. Nothing in the shape is specific to these four blocks, and the root obeys the same contract as everything under it.
+Because the config is one-shot per run, changing one variable and rerunning is a small, reviewable edit rather than an archaeology exercise across scripts.
 
 For the full contract, see [What is a Block](https://legoflow-docs.pages.dev/docs/block-design).
 
@@ -65,71 +87,65 @@ You need Claude Code, an OpenAI-compatible LLM endpoint, GitHub token(s) via `GI
 ```bash
 git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
 cd LegoFlow
+```
 
-for b in . blocks/curator blocks/tracer blocks/trainer blocks/evaluator; do
-  claude plugin marketplace add "$b/.claude/plugins"
-done
-for p in root@root-block curator@curator-block tracer@tracer \
-         trainer@trainer-block evaluator@evaluator-block; do
-  claude plugin install "$p"
-done
+Each block ships its own plugin. Register the five local marketplaces, then install one plugin from each:
+
+```bash
+claude plugin marketplace add ./.claude/plugins                     # root
+claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/tracer/.claude/plugins
+claude plugin marketplace add ./blocks/trainer/.claude/plugins
+claude plugin marketplace add ./blocks/evaluator/.claude/plugins
+
+claude plugin install root@root-block
+claude plugin install curator@curator-block
+claude plugin install tracer@tracer                                 # note: not tracer-block
+claude plugin install trainer@trainer-block
+claude plugin install evaluator@evaluator-block
 ```
 
 Run `/reload-plugins`, then `/root:setup`. Every block then answers the same four skills: `setup`, `check`, `run`, `dashboard`.
 
-Run the blocks one at a time first ([Running Block by Block](https://legoflow-docs.pages.dev/docs/running-blocks/block-by-block)); once each has run on its own, `/root:run start the data pipeline` drives the whole chain ([Running Cascaded Blocks](https://legoflow-docs.pages.dev/docs/running-blocks/cascaded)).
+## Example Usages
+
+Two ways LegoFlow gets used: one block at a time, and the whole chain in one go.
+
+### Running Individual Blocks
+
+Every block runs on its own, and every block is worth running on its own first. They all answer the same four skills, so learning one is most of the work of learning the next:
+
+`setup` prepares dependencies · `check` validates with no side effects · `run` does the work and archives it · `dashboard` shows what came out.
 
 
+| Block         | What you can do with it                                                                                                                                     | Start here                                                                                 |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **Curator**   | Turn GitHub PRs and issues into verified SWE tasks across 8+ languages, each one a pinned container with a bug, a ground-truth fix, and tests that grade it | [Curator setup →](https://legoflow-docs.pages.dev/docs/blocks/curator/getting-started)     |
+| **Tracer**    | Roll a coding agent out over tasks you already have, capture every trajectory with its verified reward, and convert the good ones into SFT data             | [Tracer setup →](https://legoflow-docs.pages.dev/docs/blocks/tracer/getting-started)       |
+| **Trainer**   | Fine-tune on those trajectories with LLaMA-Factory and DeepSpeed ZeRO-3, starting from a rollout job or a ready-made Hugging Face dataset                   | [Trainer setup →](https://legoflow-docs.pages.dev/docs/blocks/trainer/getting-started)     |
+| **Evaluator** | Benchmark any API endpoint or local checkpoint on SWE-bench Verified, Terminal-Bench and a dozen others, then analyse the failures by tag                   | [Evaluator setup →](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) |
 
-## Examples
 
-Two ways LegoFlow gets used: one block on its own, and the whole chain driven end to end.
+### Running the Full Pipeline
 
-### SWE Task Collection with Curator
-
-The first example is one block on its own. Curator turns real pull requests into tasks that can be graded automatically, and you drive it with three skills rather than by reading its scripts:
-
-```text
-/curator:check          # preflight: tokens, LLM endpoint, Docker. No side effects
-/curator:collect-prs    # mine candidate PRs from GitHub
-/curator:create-tasks   # build each task, then verify it actually grades
-```
-
-Collection writes one candidate list per language:
-
-```text
-artifacts/collected_prs/python_pr_ids.txt      # tox-dev/tox:pr-3813, ...
-```
-
-Creation builds a runnable environment per PR and keeps only what survives verification:
+Once each block has run on its own, the root drives all four in dependency order. You describe the target, not the steps:
 
 ```text
-artifacts/swe_tasks/py-cc/
-├── tox-dev__tox-3813/
-│   ├── instruction.md            # the problem statement the agent sees
-│   ├── environment/Dockerfile    # the image the task runs in
-│   ├── environment/bug.patch     # reintroduces the bug
-│   ├── solution/fix.patch        # the ground-truth fix
-│   └── tests/test.sh             # writes the reward
-└── verifiable_tasks.txt          # the manifest: only ids that passed
+/root:setup
+/root:check
+/root:run start the data pipeline
 ```
 
-A task is admitted only if it grades both ways: the untouched repo must score 0, and the ground-truth fix must score 1. Anything that cannot tell those two apart is not a task worth training on. `verifiable_tasks.txt` is what downstream reads — Tracer stages tasks by filtering through that manifest, never by scanning the directory.
-
-See [Curator](https://legoflow-docs.pages.dev/docs/blocks/curator).
-
-### End-to-End Result
-
-The second example is the whole pipeline at once. An agent was given one brief — build Python SWE data, train a base model on it, and measure the result — and it ran all four blocks itself, pausing at each approval gate. What came out of each stage:
+The chain pauses at every approval gate and archives each stage as it goes. Below is a real run: an agent was given one brief — build Python SWE data, train a base model on it, measure the result — and took it from there.
 
 
 | Stage     | Output                                                                                       |
 | --------- | -------------------------------------------------------------------------------------------- |
-| Curator   | 4,166 verified Python tasks.                                                                 |
-| Tracer    | 915 solved rollouts, kept with their verified rewards.                                       |
-| Selection | 512 trajectories, filtered for reasoning depth rather than coverage.                         |
-| Trainer   | One full-parameter fine-tune of `Qwen3.5-35B-A3B-Base`, loss converging from 0.524 to 0.229. |
-| Evaluator | 64.4% on the 500 SWE-bench Verified tasks, against 7.6% for the untrained base model.        |
+| Curator   | 4,166 verified Python tasks                                                                  |
+| Tracer    | 915 solved rollouts, kept with their verified rewards                                        |
+| Selection | 512 trajectories, filtered for reasoning depth rather than coverage                          |
+| Trainer   | One full-parameter fine-tune of `Qwen3.5-35B-A3B-Base`, loss 0.524 → 0.229                   |
+| Evaluator | **64.4%** on the 500 SWE-bench Verified tasks, against **7.6%** for the untrained base model |
 
 
 The interesting number is not the last one. A first attempt over the same rollout pool, selected for reasoning coverage, reached 56.1%. The agent read that result, changed the trajectory selection rule to reasoning depth, and reran only the stages that change affected: 64.4%. Same teacher model, same tasks, same training recipe.
@@ -144,6 +160,8 @@ Datasets produced by LegoFlow and released for reuse. Every row names the teache
 | ID                  | Teacher Model | Scaffold      | Data Samples | Training Result                                           | HF Link                                                                                                 |
 | ------------------- | ------------- | ------------- | ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
+
+
 
 
 ## Roadmap
