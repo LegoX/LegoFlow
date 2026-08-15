@@ -2,8 +2,8 @@
 
 [English](./README.md)
 
-[![Documentation](https://img.shields.io/badge/docs-legoflow--docs.pages.dev-brightgreen.svg?style=flat)](https://legoflow-docs.pages.dev/docs)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[Documentation](https://legoflow-docs.pages.dev/docs)
+[License](LICENSE)
 
 **LegoFlow** 是一条面向编程智能体数据的 agentic 流水线。它从真实的 GitHub 仓库中构建可验证的 SWE 任务，让智能体在这些任务上做 rollout，把轨迹转换成训练数据，再完成微调与评测。每个阶段遵循同一份契约，因此人和智能体可以用同样的方式操作它。
 
@@ -17,8 +17,8 @@
 ## 最新动态
 
 - **2026-08-12** — 文档围绕设计原则与读者意图重写，站点已上线：[legoflow-docs.pages.dev](https://legoflow-docs.pages.dev/docs)。
-- **2026-08-11** — 发布由智能体驱动的端到端实验：SWE-bench Verified 7.6% → 64.4%。见 [Running Cascaded Blocks](https://legoflow-docs.pages.dev/docs/running-blocks/cascaded)。
-- **2026-08-10** — 四个 block 的实时看板统一，可一键发布到 Cloudflare Pages。
+
+
 
 ## 核心特性
 
@@ -27,24 +27,30 @@
 - **每一次运行都会归档。** 退出钩子会把当时的配置和脚本快照下来，无论运行是成功、失败还是被信号中断。`artifacts/index.yaml` 就是时间线，最新一条即当前状态。
 - **每个 block 都有实时看板。** 看板直接读取该 block 的 `artifacts/`，不依赖任何数据库，因此永远和磁盘上的文件一样新。
 
+
+
 ## 系统设计
 
-![LegoFlow block tree](docs/public/figures/my-version-coding-repos-expandable.png)
+LegoFlow block tree
 
 整条流水线是一棵 **block** 树。根 block 编排四个子 block：
 
-| Block | 职责 | 底层依赖 |
-|---|---|---|
-| [`blocks/curator`](https://legoflow-docs.pages.dev/docs/blocks/curator) | 从 GitHub PR、issue 以及在线论坛中构建高质量 SWE 与编程任务 | GitHub API、Docker、Claude Agent SDK |
-| [`blocks/tracer`](https://legoflow-docs.pages.dev/docs/blocks/tracer) | 采集带可验证奖励的高质量轨迹，支持多种编程 scaffold | Harbor、逐任务的 LiteLLM 代理 |
-| [`blocks/trainer`](https://legoflow-docs.pages.dev/docs/blocks/trainer) | 把 rollout 轨迹转成可训练格式，并启动端到端训练 | LLaMA-Factory、DeepSpeed ZeRO-3 |
-| [`blocks/evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator) | 在编程 benchmark 上评测 checkpoint，并支持按 rubric 与标签做细粒度分析 | Harbor、vLLM |
+
+| Block                                                                       | 职责                                                 | 底层依赖                               |
+| --------------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------- |
+| `[blocks/curator](https://legoflow-docs.pages.dev/docs/blocks/curator)`     | 从 GitHub PR、issue 以及在线论坛中构建高质量 SWE 与编程任务           | GitHub API、Docker、Claude Agent SDK |
+| `[blocks/tracer](https://legoflow-docs.pages.dev/docs/blocks/tracer)`       | 采集带可验证奖励的高质量轨迹，支持多种编程 scaffold                     | Harbor、逐任务的 LiteLLM 代理             |
+| `[blocks/trainer](https://legoflow-docs.pages.dev/docs/blocks/trainer)`     | 把 rollout 轨迹转成可训练格式，并启动端到端训练                       | LLaMA-Factory、DeepSpeed ZeRO-3     |
+| `[blocks/evaluator](https://legoflow-docs.pages.dev/docs/blocks/evaluator)` | 在编程 benchmark 上评测 checkpoint，并支持按 rubric 与标签做细粒度分析 | Harbor、vLLM                        |
+
 
 一个 block 只负责一个阶段，并被封装成人和智能体都能驱动的形态：`config.yaml` 声明它需要什么、产出什么，`scripts/` 负责执行，`artifacts/` 保存一次运行留下的全部内容，`dashboard/` 只读取这些产物而不修改它们。配置是每次运行一次性的，因此改一个变量再跑一遍，只是一次小而可评审的改动。这套形态本身与这四个 block 无关，根 block 也遵守和它下面所有节点相同的契约。
 
 完整契约见 [What is a Block](https://legoflow-docs.pages.dev/docs/block-design)。
 
 ## 快速开始
+
+
 
 ### 前置条件
 
@@ -60,7 +66,7 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone --recurse-submodules https://github.com/SWE-Lego/SWE-Lego-Live LegoFlow
+git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
 cd LegoFlow
 ```
 
@@ -127,18 +133,17 @@ claude plugin install evaluator@evaluator-block
 
 一次由智能体驱动的全链路运行，仅使用 Python 任务：
 
-| 阶段 | 产出 |
-|---|---|
-| Curator | 4,166 个已验证的 Python 任务。 |
-| Tracer | 915 条成功解决的 rollout，连同其可验证奖励一并保留。 |
-| Selection | 512 条轨迹，按推理深度而非覆盖度筛选。 |
-| Trainer | 对 `Qwen3.5-35B-A3B-Base` 做一次全参数微调，loss 从 0.524 收敛到 0.229。 |
-| Evaluator | 在 500 道 SWE-bench Verified 上达到 64.4%，未训练的基座模型为 7.6%。 |
 
-<p align="center">
-  <img src="docs/public/showcase/live-e2e-20260730/solve-rate-comparison.png" width="46%" alt="SWE-bench Verified solve rate" />
-  <img src="docs/public/showcase/live-e2e-20260730/training-loss.png" width="46%" alt="Training loss" />
-</p>
+| 阶段        | 产出                                                        |
+| --------- | --------------------------------------------------------- |
+| Curator   | 4,166 个已验证的 Python 任务。                                    |
+| Tracer    | 915 条成功解决的 rollout，连同其可验证奖励一并保留。                          |
+| Selection | 512 条轨迹，按推理深度而非覆盖度筛选。                                     |
+| Trainer   | 对 `Qwen3.5-35B-A3B-Base` 做一次全参数微调，loss 从 0.524 收敛到 0.229。 |
+| Evaluator | 在 500 道 SWE-bench Verified 上达到 64.4%，未训练的基座模型为 7.6%。      |
+
+
+
 
 真正值得看的不是最后那个数字。第一次尝试在同一批 rollout 上按推理覆盖度筛选，只达到 56.1%。智能体读完结果，把轨迹筛选规则改成推理深度，只重跑了受这次改动影响的阶段：64.4%。teacher 模型、任务集合、训练配方都没有变。
 
@@ -146,18 +151,22 @@ claude plugin install evaluator@evaluator-block
 
 ## 文档导航
 
-| 我想…… | 去这里 |
-|---|---|
-| 了解这个项目为什么存在 | [Motivation](https://legoflow-docs.pages.dev/docs/motivation) |
-| 先装上并跑起来 | [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started) |
-| 一次只跑一个阶段 | [Running Block by Block](https://legoflow-docs.pages.dev/docs/running-blocks/block-by-block) |
-| 从根 block 跑完整条链路 | [Running Cascaded Blocks](https://legoflow-docs.pages.dev/docs/running-blocks/cascaded) |
-| 从 GitHub 构建可验证的 SWE 任务 | [Curator](https://legoflow-docs.pages.dev/docs/blocks/curator) |
-| 在已有任务上采集智能体轨迹 | [Tracer](https://legoflow-docs.pages.dev/docs/blocks/tracer) |
-| 用轨迹微调模型 | [Trainer](https://legoflow-docs.pages.dev/docs/blocks/trainer) |
-| 评测一个模型或 checkpoint | [Evaluator](https://legoflow-docs.pages.dev/docs/blocks/evaluator) |
-| 自己加一个 block | [What is a Block](https://legoflow-docs.pages.dev/docs/block-design) |
-| 出问题了 | [Q&A](https://legoflow-docs.pages.dev/docs/qa) |
+
+| 我想……                   | 去这里                                                                                          |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| 了解这个项目为什么存在            | [Motivation](https://legoflow-docs.pages.dev/docs/motivation)                                |
+| 先装上并跑起来                | [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started)                      |
+| 一次只跑一个阶段               | [Running Block by Block](https://legoflow-docs.pages.dev/docs/running-blocks/block-by-block) |
+| 从根 block 跑完整条链路        | [Running Cascaded Blocks](https://legoflow-docs.pages.dev/docs/running-blocks/cascaded)      |
+| 从 GitHub 构建可验证的 SWE 任务 | [Curator](https://legoflow-docs.pages.dev/docs/blocks/curator)                               |
+| 在已有任务上采集智能体轨迹          | [Tracer](https://legoflow-docs.pages.dev/docs/blocks/tracer)                                 |
+| 用轨迹微调模型                | [Trainer](https://legoflow-docs.pages.dev/docs/blocks/trainer)                               |
+| 评测一个模型或 checkpoint     | [Evaluator](https://legoflow-docs.pages.dev/docs/blocks/evaluator)                           |
+| 自己加一个 block            | [What is a Block](https://legoflow-docs.pages.dev/docs/block-design)                         |
+| 出问题了                   | [Q&A](https://legoflow-docs.pages.dev/docs/qa)                                               |
+
+
+
 
 ## 路线图
 
@@ -169,9 +178,11 @@ claude plugin install evaluator@evaluator-block
 - 已在 Harbor registry 上验证过 11 个 benchmark，其余条目尚未用本项目的智能体验证。
 - 配置参考分散在四个 block 各自的 Configuration Guide 中，目前还没有统一的参考页和 changelog。
 
+
+
 ## 参与贡献
 
-欢迎在 [GitHub](https://github.com/SWE-Lego/SWE-Lego-Live) 提 issue 和 PR。
+欢迎在 [GitHub](https://github.com/LegoX/SWE-Lego-Live) 提 issue 和 PR。
 
 新阶段用 `/root:create` 生成脚手架，它会产出符合 block 契约的完整目录树。一个 block 算完成的标准是：在全新克隆上 `check` 能通过，一次运行会自我归档，并且下游 block 无需手工告知路径就能消费它的输出。见 [Adding Your Own Block](https://legoflow-docs.pages.dev/docs/block-design)。
 
@@ -182,14 +193,16 @@ claude plugin install evaluator@evaluator-block
   title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
   author = {The LegoFlow Team},
   year   = {2026},
-  url    = {https://github.com/SWE-Lego/SWE-Lego-Live}
+  url    = {https://github.com/LegoX/SWE-Lego-Live}
 }
 ```
+
+
 
 ## 致谢
 
 LegoFlow 构建在这些项目之上：[Harbor](https://www.harborframework.com/) 提供隔离的任务执行环境，
-[LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory) 与 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 负责训练，
+[LLaMA-Factory](https://github.com/LegoX/LLaMA-Factory) 与 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 负责训练，
 [LiteLLM](https://github.com/BerriAI/litellm) 负责轨迹采集，
 [vLLM](https://github.com/vllm-project/vllm) 用于本地 checkpoint 的推理服务，
 [Claude Code](https://claude.com/claude-code) 与 Claude Agent SDK 负责智能体操作，

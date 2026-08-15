@@ -70,14 +70,15 @@ internal_path_markers = (
 
 legacy_brand = "SWE" + "-Lego-" + "Live"
 legacy_re = re.compile(re.escape(legacy_brand), re.IGNORECASE)
-root_repo_url = "https://github.com/SWE-Lego/" + legacy_brand
+root_repo_url = "https://github.com/LegoX/" + legacy_brand
 allowed_root_url = re.compile(
     re.escape(root_repo_url) + r"(?=$|[\s)\]}>\"',;])"
 )
+# LegoX is the current brand LegoFlow ships under, not a legacy name, so it is
+# deliberately absent here.
 legacy_component_markers = (
     "swe" + "gen",
     "swe-" + "live",
-    "Lego" + "X",
 )
 
 credential_patterns = (
