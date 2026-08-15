@@ -5,9 +5,21 @@
   </picture>
 </p>
 
-**Easy and Interactive Code Data Engineering**
+<p align="center"><b>Easy and Interactive Code Data Engineering</b></p>
 
-[中文版](./README_zh.md) · [Documentation](https://legoflow-docs.pages.dev/docs) · [License](LICENSE)
+<p align="center">
+  <a href="https://legoflow-docs.pages.dev/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
+  &nbsp;·&nbsp;
+  <a href="https://huggingface.co/SWE-Lego"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
+  &nbsp;·&nbsp;
+  <a href="https://legox.pages.dev/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
+  &nbsp;·&nbsp;
+  <a href="https://legox.pages.dev/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
+  &nbsp;·&nbsp;
+  <a href="LICENSE"><img src="docs/public/figures/icon-license.svg" height="15" alt=""> License</a>
+  &nbsp;·&nbsp;
+  <a href="./README_zh.md"><img src="docs/public/figures/icon-lang.svg" height="15" alt=""> ZH</a>
+</p>
 
 ---
 
@@ -43,8 +55,6 @@ The pipeline is a tree of **blocks**. The root block orchestrates four children:
 
 
 A block owns one stage and is packaged so that both a person and an agent can drive it: `config.yaml` declares what it needs and what it produces, `scripts/` execute it, `artifacts/` hold everything a run leaves behind, and `dashboard/` reads those artifacts without mutating them. The config is one-shot per run, so changing one variable and rerunning is a small reviewable edit. Nothing in the shape is specific to these four blocks, and the root obeys the same contract as everything under it.
-
-![The block structure](docs/public/figures/block-definition-editable.png)
 
 For the full contract, see [What is a Block](https://legoflow-docs.pages.dev/docs/block-design).
 
@@ -133,7 +143,7 @@ Datasets produced by LegoFlow and released for reuse. Every row names the teache
 
 | ID                  | Teacher Model | Scaffold      | Data Samples | Training Result                                           | HF Link                                                                                                 |
 | ------------------- | ------------- | ------------- | ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | [samples_for_llama_factory_sft](https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft) |
+| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
 
 
 ## Roadmap

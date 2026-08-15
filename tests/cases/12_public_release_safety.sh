@@ -140,10 +140,9 @@ for mode, rel in tracked:
     # exactly where a real leak would hide.
     demo_snapshot = "/dashboard_demo/" in rel
     # The Chinese README is a deliberate translation, so CJK is its whole point.
-    # The English README may name it, and nothing else may.
+    # Nothing else is exempt: the English README links to it through an icon and
+    # a latin label, so a CJK hit there is a real finding.
     cjk_waived = demo_snapshot or rel == "README_zh.md"
-    if rel == "README.md":
-        searchable = searchable.replace("[中文版](./README_zh.md)", "")
     # PR #89 owns the remaining legacy Dashboard migration surfaces. Ignore
     # their exact compatibility identifiers here so PR #88 can stay conflict
     # free while continuing to scan the rest of each mixed-purpose file.

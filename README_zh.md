@@ -1,9 +1,25 @@
-# LegoFlow
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/public/figures/legoflow-wordmark-dark.svg">
+    <img alt="LegoFlow" src="docs/public/figures/legoflow-wordmark-light.svg" width="380">
+  </picture>
+</p>
 
-[English](./README.md)
+<p align="center"><b>简单、可交互的代码数据工程</b></p>
 
-[Documentation](https://legoflow-docs.pages.dev/docs)
-[License](LICENSE)
+<p align="center">
+  <a href="https://legoflow-docs.pages.dev/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
+  &nbsp;·&nbsp;
+  <a href="https://huggingface.co/SWE-Lego"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
+  &nbsp;·&nbsp;
+  <a href="https://legox.pages.dev/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
+  &nbsp;·&nbsp;
+  <a href="https://legox.pages.dev/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
+  &nbsp;·&nbsp;
+  <a href="LICENSE"><img src="docs/public/figures/icon-license.svg" height="15" alt=""> License</a>
+  &nbsp;·&nbsp;
+  <a href="./README.md"><img src="docs/public/figures/icon-lang.svg" height="15" alt=""> EN</a>
+</p>
 
 **LegoFlow** 是一条面向编程智能体数据的 agentic 流水线。它从真实的 GitHub 仓库中构建可验证的 SWE 任务，让智能体在这些任务上做 rollout，把轨迹转换成训练数据，再完成微调与评测。每个阶段遵循同一份契约，因此人和智能体可以用同样的方式操作它。
 
