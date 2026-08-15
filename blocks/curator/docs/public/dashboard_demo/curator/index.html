@@ -1,0 +1,1800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+(function () {
+  var base = new URL('.', location.href).href;
+  function rebase(u) {
+    if (typeof u === 'string' && u.charAt(0) === '/' && u.charAt(1) !== '/') return base + u.slice(1);
+    return u;
+  }
+  var f = window.fetch;
+  if (f) {
+    window.fetch = function (input, init) {
+      if (typeof input === 'string') return f.call(this, rebase(input), init);
+      if (input && typeof input.url === 'string') {
+        try {
+          var p = new URL(input.url);
+          if (p.origin === location.origin) return f.call(this, rebase(p.pathname + p.search), init);
+        } catch (e) {}
+      }
+      return f.call(this, input, init);
+    };
+  }
+  var open = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (m, u) {
+    arguments[1] = rebase(u);
+    return open.apply(this, arguments);
+  };
+})();
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LegoFlow-Curator</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiNiMzQzMWYiLz48dGV4dCB4PSIzMiIgeT0iNDIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJHZW9yZ2lhLHNlcmlmIiBmb250LXdlaWdodD0iNzAwIiBmb250LXNpemU9IjMwIiBmaWxsPSIjZmFmYWY3Ij5MRjwvdGV4dD48L3N2Zz4=">
+<style>
+/* Palette: .claude/plugins/root-plugin/resources/DASHBOARD_PALETTE.md.
+   Light is the default and dark is opt-in via :root[data-theme="dark"], matching
+   the tracer dashboard's theme model (and the docs site's own light-first look). */
+:root {
+  color-scheme: light;
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --c-bg: #fafaf7; --c-bg-2: #ffffff; --c-panel: #ffffff; --c-border: #e6e3da;
+  --c-fg: #111111; --c-fg-dim: #4a453e; --c-fg-mute: #6b6b66; --c-fg-faint: #8c8c85;
+  --c-accent: #b3431f; --c-accent-soft: #b3431f1f; --c-accent-border: #b3431f80;
+  --c-good: #3f8f2f; --c-bad: #d03b3b; --c-warn: #c8860d; --c-violet: #4a3aa7;
+  --c-track: #e6e3da;
+  /* bar fills carry no text and repeat dozens of times per page, so they use a
+     softened tint of the accent; the brand colour itself is unchanged */
+  --c-accent-fill: #c96a45;
+  --c-method-bg: #b3431f14; --c-method-head: #b3431f;
+  font-size: 15px;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --c-bg: #14110e; --c-bg-2: #1a171480; --c-panel: #1a1714; --c-border: #302a2499;
+  --c-fg: #f0ede7; --c-fg-dim: #c9c2b6; --c-fg-mute: #a9a297; --c-fg-faint: #8a847a;
+  --c-accent: #efa07c; --c-accent-soft: #efa07c33; --c-accent-border: #efa07c80;
+  --c-good: #4a9440; --c-bad: #d03b3b; --c-warn: #fab219; --c-violet: #9085e9;
+  --c-track: #302a24;
+  --c-accent-fill: #c9805f;
+  --c-method-bg: #efa07c1f; --c-method-head: #f5c9b4;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--c-bg); color: var(--c-fg);
+  font-family: var(--font-sans); -webkit-font-smoothing: antialiased; height: 100vh; }
+code, pre, .mono { font-family: var(--font-mono); }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--c-fg-faint); border-radius: 3px; }
+.layout { display: flex; height: 100vh; overflow: hidden; }
+.sidebar { width: 240px; flex-shrink: 0; border-right: 1px solid var(--c-border);
+  background: var(--c-panel); display: flex; flex-direction: column; overflow: hidden; }
+:root[data-theme="dark"] .sidebar { background: linear-gradient(180deg, #12100d 0%, var(--c-bg) 100%); }
+.sidebar-logo { padding: 14px 16px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: 10px; }
+.logo-mark { width: 32px; height: 28px; border-radius: 7px; background: var(--c-accent);
+  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 13px; }
+.logo-title { font-size: 15px; font-weight: 650; line-height: 1.25; }
+
+.nav { padding: 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 2px; }
+.nav-item { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
+  background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
+  padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.nav-item:hover { background: var(--c-accent-soft); color: var(--c-fg); }
+.nav-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: var(--c-accent); }
+.nav-icon { flex: 0 0 auto; width: 18px; text-align: center; opacity: .85; }
+.nav-count { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--c-fg-mute); }
+.sidebar-section { padding: 10px 8px; flex: 1; overflow: auto; }
+.section-label { text-transform: uppercase; font-size: 11px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 700; }
+.sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 5px 8px; font-size: 13px; }
+.sidebar-stat .l { color: var(--c-fg-mute); }
+.sidebar-stat .v { font-weight: 650; font-family: var(--font-mono); }
+
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { padding: 10px 24px; border-bottom: 1px solid var(--c-border); display: flex;
+  align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; }
+.topbar h1 { font-size: 17px; margin: 0; font-weight: 650; }
+.topbar .sub { font-size: 13px; color: var(--c-fg-mute); margin-top: 2px; }
+.topbar-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center;
+  justify-content: center; flex: 0 0 36px; background: var(--c-bg-2); border: 1px solid var(--c-border);
+  color: var(--c-fg-dim); border-radius: 8px; cursor: pointer; }
+.icon-btn:hover { color: var(--c-fg); border-color: var(--c-accent-border); }
+.icon { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme-toggle .theme-sun { display: none; }
+.theme-toggle .theme-moon { display: block; }
+:root[data-theme="dark"] .theme-toggle .theme-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .theme-moon { display: none; }
+
+.content { flex: 1; overflow: auto; padding: 18px 24px 32px; }
+/* Modal — a centred dialog over a dimmed page. Generous gutters, a quiet header
+   rule, and one clear column of content: the dialog should read like a page, not
+   a tooltip that grew. */
+.modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center;
+  justify-content: center; padding: 32px 24px; background: rgba(17, 17, 17, .32); }
+:root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .5); }
+.modal[hidden] { display: none; }
+.modal-box { width: min(920px, 94vw); max-height: min(80vh, 780px); display: flex;
+  flex-direction: column; background: var(--c-panel); border: 1px solid var(--c-border);
+  border-radius: 16px; box-shadow: 0 24px 64px rgba(0, 0, 0, .18); overflow: hidden; }
+:root[data-theme="dark"] .modal-box { box-shadow: 0 24px 64px rgba(0, 0, 0, .6); }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 20px; padding: 22px 28px 18px; border-bottom: 1px solid var(--c-border); }
+.modal-head h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em;
+  line-height: 1.3; }
+.modal-head .sub { color: var(--c-fg-mute); font-size: 12.5px; margin-top: 5px;
+  line-height: 1.5; }
+.modal-close { background: transparent; border: 1px solid transparent; color: var(--c-fg-mute);
+  border-radius: 9px; width: 30px; height: 30px; cursor: pointer; font-size: 19px;
+  line-height: 1; flex: 0 0 30px; }
+.modal-close:hover { color: var(--c-fg); border-color: var(--c-border);
+  background: var(--c-bg-2); }
+.modal-body { padding: 22px 28px 26px; overflow: auto; }
+
+/* Definition rows read better than a bordered grid for a handful of settings. */
+.modal-body table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.modal-body td { padding: 8px 0; border-bottom: 1px solid var(--c-border);
+  vertical-align: top; text-align: left; line-height: 1.5; }
+.modal-body tr:last-child td { border-bottom: 0; }
+.modal-body td:first-child { color: var(--c-fg-mute); width: 27%; padding-right: 20px;
+  white-space: nowrap; }
+.modal-body td.mono { font-family: var(--font-mono); font-size: 11.5px; word-break: break-all;
+  color: var(--c-fg); }
+.modal-body .sub { color: var(--c-fg-faint); font-size: 11px; margin: 22px 0 6px;
+  text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+.modal-body .sub:first-child { margin-top: 0; }
+.modal-body .mini { margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--c-border); line-height: 1.6; }
+.modal-body .method-card { background: transparent; border: 0; padding: 0; }
+.modal-body .method-card h3 { display: none; }
+.modal-body .method-body { font-size: 13px; line-height: 1.75; }
+.modal-body .method-body .mh { margin: 14px 0 4px; }
+.section-head { font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--c-fg-mute); margin: 22px 0 10px; }
+.section-head:first-child { margin-top: 4px; }
+
+/* Collapsible sections. Statistics stays open — it is the reason to open the page;
+   everything denser is one click away, via native details/summary so it works
+   without JS. */
+.fold { margin: 18px 0 0; }
+.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
+  gap: 8px; padding: 9px 12px; border: 1px solid var(--c-border); border-radius: 10px;
+  background: var(--c-panel); font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--c-fg-mute); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary:hover { color: var(--c-fg); border-color: var(--c-accent-border); }
+.fold > summary .caret { transition: transform .15s ease; flex: 0 0 auto; }
+.fold[open] > summary .caret { transform: rotate(90deg); }
+.fold[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  color: var(--c-fg); }
+.fold > summary .hint { margin-left: auto; text-transform: none; letter-spacing: 0;
+  font-weight: 500; font-size: 11.5px; color: var(--c-fg-faint); }
+.fold-body { border: 1px solid var(--c-border); border-top: 0;
+  border-radius: 0 0 10px 10px; padding: 14px; }
+.page { display: none; }
+.page.active { display: block; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; }
+.card .k { font-size: 12px; color: var(--c-fg-mute); line-height: 1.35; }
+.card .v { font-size: 22px; font-weight: 700; font-family: var(--font-mono);
+  margin-top: 4px; line-height: 1.15; }
+.card .v small { display: block; font-size: 11px; color: var(--c-fg-mute);
+  font-weight: 500; margin-top: 3px; letter-spacing: .01em; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.panel h2 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
+.panel h2 span { color: var(--c-fg-mute); font-weight: 400; font-size: 13px; margin-left: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--c-border); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.stacked { display: flex; height: 9px; border-radius: 5px; overflow: hidden; background: var(--c-track); min-width: 110px; }
+.stacked.empty { color: var(--c-fg-mute); font-size: 12px; background: transparent; }
+.seg { opacity: .82; }
+.seg.easy { background: var(--c-good); } .seg.medium { background: var(--c-warn); } .seg.hard { background: var(--c-bad); }
+/* Label bar and its legend on one line, order statistics beside them: the two
+   tables this replaces spent a full row each on seven short numbers. */
+.diff-split { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.4fr);
+  gap: 10px 28px; align-items: center; }
+.diff-bar .stacked { height: 11px; }
+.diff-bar .mini { display: none; }
+.diff-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px;
+  font-size: 11.5px; color: var(--c-fg-mute); }
+.diff-legend b { color: var(--c-fg); font-family: var(--font-mono); font-weight: 650;
+  margin-left: 3px; }
+.diff-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+  margin-right: 5px; vertical-align: -1px; opacity: .82; }
+.diff-legend .dot.easy { background: var(--c-good); }
+.diff-legend .dot.medium { background: var(--c-warn); }
+.diff-legend .dot.hard { background: var(--c-bad); }
+.diff-stats th, .diff-stats td { padding: 5px 8px; }
+@media (max-width: 820px) { .diff-split { grid-template-columns: 1fr; } }
+.mini { font-size: 12px; color: var(--c-fg-mute); margin-top: 2px; font-family: var(--font-mono); }
+
+/* Distribution bars. The old layout was a flex row with a fixed 230px label and a
+   fixed 150px count, which left a wide dead gutter on short labels; and every list
+   ran as one tall single column. Now each row is a 3-column grid sized to content,
+   and the list itself flows into as many columns as the card is wide. */
+/* Wide gutters between column groups, tight ones inside a row: the label should
+   read as attached to its own bar, not float between two of them. */
+.tag-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 2px 44px; align-content: start; }
+.tag-row { display: grid; grid-template-columns: minmax(64px, 118px) minmax(80px, 1fr) 74px;
+  column-gap: 7px; align-items: center; padding: 2px 0; font-size: 12.5px; }
+.tag-row .tag-count { padding-left: 4px; }
+.tag-name { font-family: var(--font-mono); font-size: 12px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-track { height: 7px; background: var(--c-track); border-radius: 4px; overflow: hidden; }
+.tag-fill { display: block; height: 100%; background: var(--c-accent-fill); }
+.tag-count { text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 11.5px; }
+.tag-card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; }
+.tag-card h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
+.tag-card h3 { display: flex; align-items: center; gap: 6px; }
+.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 12px; }
+.help-btn { margin-left: auto; flex: 0 0 auto; width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--c-border); border-radius: 999px;
+  color: var(--c-fg-mute); cursor: pointer; }
+.help-btn:hover { color: var(--c-accent); border-color: var(--c-accent-border); }
+.help-btn .icon { width: 13px; height: 13px; }
+.muted { color: var(--c-fg-dim); font-size: 13px; }
+
+/* Task List: one row per dataset, tracer's Jobs list shape. */
+.ds-list { display: flex; flex-direction: column; gap: 8px; }
+.ds-line { display: flex; align-items: stretch; gap: 8px; }
+.ds-line .ds-row { flex: 1; min-width: 0; }
+.samples-btn { flex: 0 0 auto; align-self: stretch; background: var(--c-bg-2);
+  border: 1px solid var(--c-border); color: var(--c-fg-dim); border-radius: 10px;
+  padding: 0 14px; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 650;
+  white-space: nowrap; }
+.samples-btn:hover:not(:disabled) { color: var(--c-accent); border-color: var(--c-accent-border); }
+.samples-btn:disabled { opacity: .45; cursor: default; }
+.samples-btn .n { color: var(--c-fg-mute); font-weight: 500; margin-left: 5px; }
+.modal-wide { width: min(1040px, 100%); max-height: min(86vh, 900px); }
+/* Metric columns are sized to their own labels rather than sharing one fraction,
+   so "Easy / medium / hard" cannot squeeze "Mean diff." into two lines. */
+.ds-row { display: grid;
+  grid-template-columns: minmax(200px, 2fr) repeat(5, max-content) minmax(150px, 1fr);
+  gap: 10px 18px; align-items: center; width: 100%; text-align: left; cursor: pointer;
+  background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
+  padding: 12px 14px; color: var(--c-fg); font: inherit; font-size: 13px; }
+.ds-row:hover { border-color: var(--c-accent-border); }
+.ds-row.active { border-color: var(--c-accent-border); background: var(--c-accent-soft); }
+/* Each cell stacks a label over a value. The inner spans are not themselves grid
+   items, so they must be blockified explicitly — left inline they sit side by side,
+   margin-top does nothing, and ellipsis never engages, so a long path overflows
+   into the next column. min-width:0 lets a grid item shrink below its content. */
+.ds-row > span { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.ds-row .name, .ds-row .desc, .ds-row .k, .ds-row .v { display: block; }
+.ds-row .name { font-weight: 650; font-size: 14px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.ds-row .desc { color: var(--c-fg-mute); font-size: 11.5px; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.ds-row .k { color: var(--c-fg-mute); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .04em; white-space: nowrap; line-height: 1.3; }
+.ds-row .v { font-family: var(--font-mono); font-weight: 650; font-size: 14px;
+  margin-top: 3px; line-height: 1.2; white-space: nowrap; }
+@media (max-width: 1100px) {
+  .ds-row { grid-template-columns: minmax(160px, 1.6fr) repeat(auto-fit, minmax(84px, max-content)); }
+  .ds-line { flex-wrap: wrap; }
+}
+.ds-detail { margin-top: 14px; }
+.ds-panel { display: none; }
+.ds-panel.active { display: block; }
+.back-link { background: transparent; border: 0; color: var(--c-accent); cursor: pointer;
+  font: inherit; font-size: 13px; padding: 0 0 8px; }
+
+/* Sample task viewer — a fixed-size two-pane dialog: the ten samples on the left,
+   the selected task's files on the right. Fixed rather than content-sized so the
+   dialog does not jump between a 600-byte instruction and a 24 KB patch. */
+.samples-box { width: min(1160px, 95vw); height: min(760px, 88vh); max-height: none; }
+.samples-body { padding: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 0; flex: 1; overflow: hidden; }
+.samples-side { border-right: 1px solid var(--c-border); overflow-y: auto;
+  padding: 12px; background: var(--c-bg-2); min-height: 0; }
+.samples-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+.sample-list { display: flex; flex-direction: column; gap: 5px; }
+.sample-row { display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  background: transparent; border: 1px solid transparent; border-radius: 8px;
+  padding: 8px 10px; cursor: pointer; font: inherit; font-size: 12px; color: var(--c-fg);
+  text-align: left; width: 100%; min-width: 0; }
+.sample-row:hover { border-color: var(--c-border); background: var(--c-panel); }
+.sample-row.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); }
+.sample-row .sid { font-family: var(--font-mono); font-size: 11.5px; width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sample-row .smeta { color: var(--c-fg-mute); font-size: 10.5px; }
+
+.sample-head { padding: 14px 20px 12px; border-bottom: 1px solid var(--c-border); }
+.sample-head .t { font-family: var(--font-mono); font-size: 13px; font-weight: 650;
+  word-break: break-all; line-height: 1.4; }
+.sample-head .m { color: var(--c-fg-mute); font-size: 11.5px; margin-top: 4px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 20px 0; }
+.tab { background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
+  border-radius: 8px 8px 0 0; padding: 6px 12px; cursor: pointer; font: inherit;
+  font-size: 12px; white-space: nowrap; }
+.tab:hover { color: var(--c-fg); }
+.tab.active { background: var(--code-bg); border-color: var(--code-border);
+  border-bottom-color: var(--code-bg); color: var(--code-fg); font-weight: 650; }
+.tab .sz { color: var(--c-fg-faint); font-size: 10.5px; margin-left: 6px; }
+
+/* The file pane is an editor, not a page: its own dark surface in both themes,
+   a line-number gutter, and syntax colour. */
+:root { --code-bg: #1b1815; --code-border: #2b2621; --code-fg: #e8e2d8;
+  --code-gutter: #6a6058; --code-comment: #8a7f72; --code-str: #c9a26a;
+  --code-kw: #e0a06f; --code-var: #9ec7c2; --code-meta: #b48ead; }
+.sample-body { flex: 1; min-height: 0; margin: 0 20px 20px; border: 1px solid var(--code-border);
+  border-radius: 0 10px 10px 10px; background: var(--code-bg); overflow: hidden;
+  display: flex; }
+.sample-pre { margin: 0; padding: 14px 16px 14px 0; overflow: auto; flex: 1;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--code-fg);
+  white-space: pre; tab-size: 4; }
+.sample-pre code { display: block; min-width: max-content; }
+.sample-pre .ln { display: inline-block; width: 3.2em; padding-right: 1em; margin-right: .9em;
+  text-align: right; color: var(--code-gutter); border-right: 1px solid var(--code-border);
+  user-select: none; }
+.sample-pre .cm { color: var(--code-comment); font-style: italic; }
+.sample-pre .st { color: var(--code-str); }
+.sample-pre .kw { color: var(--code-kw); font-weight: 600; }
+.sample-pre .va { color: var(--code-var); }
+.sample-pre .mt { color: var(--code-meta); }
+.sample-pre .add { color: #86b87a; }
+.sample-pre .del { color: #d98080; }
+.sample-pre .hunk { color: #7fa6c9; }
+.method-card { grid-column: 1 / -1; background: var(--c-method-bg);
+  border: 1px solid var(--c-accent-border); border-radius: 10px; padding: 14px 18px; }
+.method-card h3 { font-size: 15px; margin: 0 0 10px; font-weight: 700; color: var(--c-method-head); }
+.method-card h3 span { color: var(--c-accent); font-weight: 500; font-size: 13px; margin-left: 6px; }
+.method-body { font-size: 13px; line-height: 1.7; color: var(--c-fg); }
+.method-body strong { color: var(--c-fg); font-weight: 700; }
+.method-body .mh { display: inline-block; color: var(--c-method-head); font-weight: 800; font-size: 13.5px; margin: 3px 0 1px; }
+.method-body .dim { color: var(--c-violet); font-weight: 700; }
+.method-body code { color: var(--c-accent); background: var(--c-accent-soft); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.wide-card { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<div style="background:#b3431f;color:#faf9f7;font:14px/1.5 system-ui,sans-serif;padding:10px 16px;text-align:center">Demo only. A static snapshot of the LegoFlow Curator dashboard.</div>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">LF</div>
+      <div class="logo-title">Curator Dashboard</div>
+    </div>
+    <div class="nav">
+      <div class="section-label">Views</div>
+      <button class="nav-item active" data-page="overview">
+        <span class="nav-icon">◧</span><span class="nav-label">Overview</span></button>
+      <button class="nav-item" data-page="collection">
+        <span class="nav-icon">⚑</span><span class="nav-label">PR Collection</span>
+        <span class="nav-count">8,818</span></button>
+      <button class="nav-item" data-page="tasks">
+        <span class="nav-icon">☰</span><span class="nav-label">Task List</span>
+        <span class="nav-count">7</span></button>
+    </div>
+    <div class="sidebar-section">
+      <div class="section-label">Global</div>
+      <div class="sidebar-stat"><span class="l">Batches</span><span class="v">7</span></div>
+      <div class="sidebar-stat"><span class="l">Unique tasks</span><span class="v">926</span></div>
+      <div class="sidebar-stat"><span class="l">Verified</span><span class="v">270</span></div>
+      <div class="sidebar-stat"><span class="l">Tagged</span><span class="v">926</span></div>
+      <div class="sidebar-stat"><span class="l">Mean difficulty</span><span class="v">7.32</span></div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="page-title">Overview</h1>
+        <div class="sub" id="page-sub">7 batches · 926 unique tasks · 270 verified</div>
+      </div>
+      <div class="topbar-actions">
+        <button id="metricsToggle" class="icon-btn" type="button"
+          aria-label="Scoring and tagging" title="How difficulty and tags are produced"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"></path><path d="M7 19v-7"></path><path d="M12 19V5"></path><path d="M17 19v-10"></path></svg></button>
+        <button id="infoToggle" class="icon-btn" type="button"
+          aria-label="Dashboard info" title="What this board is reading"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-5"></path><path d="M12 8h.01"></path></svg></button>
+        <button id="themeToggle" class="icon-btn theme-toggle" type="button"
+          aria-label="Toggle theme" title="Toggle theme"><span class="theme-moon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.7 8.7 0 0 1 9.5 3.5a7 7 0 1 0 11 11Z"></path></svg></span><span class="theme-sun"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg></span></button>
+      </div>
+    </div>
+    <div class="content">
+      
+<div class="page active" id="page-overview">
+  <div class="section-head">Statistics</div>
+  <div class="cards">
+    <div class="card"><div class="k">Repos</div><div class="v">822</div></div>
+    <div class="card"><div class="k">PRs collected</div><div class="v">8,818</div></div>
+    <div class="card"><div class="k">Tasks</div><div class="v">926</div></div>
+    <div class="card"><div class="k">Verified</div><div class="v">270</div></div>
+    <div class="card"><div class="k">PR retention</div><div class="v">5.1%
+      <small>qualifying / scanned</small></div></div>
+    <div class="card"><div class="k">Task creation</div><div class="v">29.2%
+      <small>verified / attempted</small></div></div>
+    <div class="card"><div class="k">Mean difficulty</div><div class="v">7.32</div></div>
+    <div class="card"><div class="k">Median difficulty</div><div class="v">7.4</div></div>
+    <div class="card"><div class="k">Tagged</div><div class="v">926</div></div>
+  </div>
+
+  <details class="fold">
+    <summary><svg class="caret icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="M9 6l6 6-6 6"></path></svg>Pipeline funnel
+      <span class="hint">repos &rarr; PRs &rarr; tasks, and success by language</span></summary>
+    <div class="fold-body">
+      
+  <div class="panel">
+    <h2>From repos to verified tasks <span>each stage against the one above</span></h2>
+    <table>
+      <tr><th>Stage</th><th>Count</th><th>Kept</th></tr>
+      <tr><td>Repos searched</td><td>33,783</td><td>&mdash;</td></tr>
+      <tr><td>Repos with qualifying PRs</td><td>803</td><td>2.4%</td></tr>
+      <tr><td>PRs scanned</td><td>159,534</td><td>&mdash;</td></tr>
+      <tr><td>PRs merged</td><td>124,916</td><td>78.3%</td></tr>
+      <tr><td>PRs qualifying</td><td>8,075</td><td>5.1%</td></tr>
+      <tr><td>Tasks attempted</td><td>926</td><td>11.5%</td></tr>
+      <tr><td>Tasks verified</td><td>270</td><td>29.2%</td></tr>
+    </table>
+    <div class="mini">imported datasets are excluded from the task rows &mdash; they have no PR provenance</div>
+  </div>
+
+      <div class="panel" style="margin-bottom:0">
+        <h2>Task creation success <span>by language &mdash; verified / attempted</span></h2>
+        <div class="tag-rows"><div class="tag-row"><span class="tag-name">Go</span><span class="tag-track"><span class="tag-fill" style="width:40.56%"></span></span><span class="tag-count">40.6% (58/143)</span></div>
+<div class="tag-row"><span class="tag-name">Java</span><span class="tag-track"><span class="tag-fill" style="width:36.79%"></span></span><span class="tag-count">36.8% (39/106)</span></div>
+<div class="tag-row"><span class="tag-name">C++</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">33.3% (31/93)</span></div>
+<div class="tag-row"><span class="tag-name">TypeScript</span><span class="tag-track"><span class="tag-fill" style="width:30.00%"></span></span><span class="tag-count">30.0% (36/120)</span></div>
+<div class="tag-row"><span class="tag-name">JavaScript</span><span class="tag-track"><span class="tag-fill" style="width:25.83%"></span></span><span class="tag-count">25.8% (31/120)</span></div>
+<div class="tag-row"><span class="tag-name">C</span><span class="tag-track"><span class="tag-fill" style="width:23.15%"></span></span><span class="tag-count">23.1% (25/108)</span></div>
+<div class="tag-row"><span class="tag-name">solidity</span><span class="tag-track"><span class="tag-fill" style="width:23.08%"></span></span><span class="tag-count">23.1% (9/39)</span></div>
+<div class="tag-row"><span class="tag-name">Python</span><span class="tag-track"><span class="tag-fill" style="width:21.55%"></span></span><span class="tag-count">21.5% (39/181)</span></div>
+<div class="tag-row"><span class="tag-name">ruby</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">20.0% (2/10)</span></div>
+<div class="tag-row"><span class="tag-name">bash</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0.0% (0/3)</span></div>
+<div class="tag-row"><span class="tag-name">fortran</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0.0% (0/1)</span></div>
+<div class="tag-row"><span class="tag-name">r</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0.0% (0/1)</span></div>
+<div class="tag-row"><span class="tag-name">shell</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0.0% (0/1)</span></div></div>
+        <div class="mini">language is read from each task's task.toml, not its directory</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="fold">
+    <summary><svg class="caret icon" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="M9 6l6 6-6 6"></path></svg>Task composition
+      <span class="hint">difficulty, language, area, topic and bug-class distributions</span></summary>
+    <div class="fold-body">
+
+  
+
+  <div class="panel">
+    <h2>Difficulty distribution <span>All batches</span></h2>
+    <div class="diff-split">
+      <div>
+        <div class="diff-bar"><div class="stacked"><div class="seg medium" style="width:83.153%" title="medium: 770"></div><div class="seg hard" style="width:16.847%" title="hard: 156"></div></div><div class="mini">0 / 770 / 156</div></div>
+        <div class="diff-legend">
+          <span><i class="dot easy"></i>easy <b>0</b></span>
+          <span><i class="dot medium"></i>medium <b>770</b></span>
+          <span><i class="dot hard"></i>hard <b>156</b></span>
+        </div>
+      </div>
+      <table class="diff-stats">
+        <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
+        <tr>
+          <td>258</td>
+          <td>3.7</td>
+          <td>6.1</td>
+          <td>7.4</td>
+          <td>7.32</td>
+          <td>8.7</td>
+          <td>10.0</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <section class="tag-card"><h3>Score bins</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">&lt;=3</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0 (0.0%)</span></div>
+<div class="tag-row"><span class="tag-name">3.1-5</span><span class="tag-track"><span class="tag-fill" style="width:20.20%"></span></span><span class="tag-count">20 (7.8%)</span></div>
+<div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:82.83%"></span></span><span class="tag-count">82 (31.8%)</span></div>
+<div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:57.58%"></span></span><span class="tag-count">57 (22.1%)</span></div>
+<div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">99 (38.4%)</span></div></div></section>
+    <section class="tag-card"><h3>Languages</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">Python</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">181 (19.5%)</span></div>
+<div class="tag-row"><span class="tag-name">Go</span><span class="tag-track"><span class="tag-fill" style="width:79.01%"></span></span><span class="tag-count">143 (15.4%)</span></div>
+<div class="tag-row"><span class="tag-name">TypeScript</span><span class="tag-track"><span class="tag-fill" style="width:66.30%"></span></span><span class="tag-count">120 (13.0%)</span></div>
+<div class="tag-row"><span class="tag-name">JavaScript</span><span class="tag-track"><span class="tag-fill" style="width:66.30%"></span></span><span class="tag-count">120 (13.0%)</span></div>
+<div class="tag-row"><span class="tag-name">C</span><span class="tag-track"><span class="tag-fill" style="width:59.67%"></span></span><span class="tag-count">108 (11.7%)</span></div>
+<div class="tag-row"><span class="tag-name">Java</span><span class="tag-track"><span class="tag-fill" style="width:58.56%"></span></span><span class="tag-count">106 (11.4%)</span></div>
+<div class="tag-row"><span class="tag-name">C++</span><span class="tag-track"><span class="tag-fill" style="width:51.38%"></span></span><span class="tag-count">93 (10.0%)</span></div>
+<div class="tag-row"><span class="tag-name">solidity</span><span class="tag-track"><span class="tag-fill" style="width:21.55%"></span></span><span class="tag-count">39 (4.2%)</span></div>
+<div class="tag-row"><span class="tag-name">ruby</span><span class="tag-track"><span class="tag-fill" style="width:5.52%"></span></span><span class="tag-count">10 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">bash</span><span class="tag-track"><span class="tag-fill" style="width:1.66%"></span></span><span class="tag-count">3 (0.3%)</span></div>
+<div class="tag-row"><span class="tag-name">fortran</span><span class="tag-track"><span class="tag-fill" style="width:0.55%"></span></span><span class="tag-count">1 (0.1%)</span></div>
+<div class="tag-row"><span class="tag-name">r</span><span class="tag-track"><span class="tag-fill" style="width:0.55%"></span></span><span class="tag-count">1 (0.1%)</span></div>
+<div class="tag-row"><span class="tag-name">shell</span><span class="tag-track"><span class="tag-fill" style="width:0.55%"></span></span><span class="tag-count">1 (0.1%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card"><h3>Area / tier</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">531 (57.3%)</span></div>
+<div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:52.73%"></span></span><span class="tag-count">280 (30.2%)</span></div>
+<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:12.24%"></span></span><span class="tag-count">65 (7.0%)</span></div>
+<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:8.29%"></span></span><span class="tag-count">44 (4.8%)</span></div>
+<div class="tag-row"><span class="tag-name">fullstack</span><span class="tag-track"><span class="tag-fill" style="width:0.94%"></span></span><span class="tag-count">5 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">embedded</span><span class="tag-track"><span class="tag-fill" style="width:0.19%"></span></span><span class="tag-count">1 (0.1%)</span></div></div></section>
+    <section class="tag-card"><h3>Top topics</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">smart-contracts</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">24 (2.6%)</span></div>
+<div class="tag-row"><span class="tag-name">autosubmit</span><span class="tag-track"><span class="tag-fill" style="width:83.33%"></span></span><span class="tag-count">20 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:70.83%"></span></span><span class="tag-count">17 (1.8%)</span></div>
+<div class="tag-row"><span class="tag-name">podio</span><span class="tag-track"><span class="tag-fill" style="width:66.67%"></span></span><span class="tag-count">16 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">terraform</span><span class="tag-track"><span class="tag-fill" style="width:62.50%"></span></span><span class="tag-count">15 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">vscode</span><span class="tag-track"><span class="tag-fill" style="width:54.17%"></span></span><span class="tag-count">13 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:50.00%"></span></span><span class="tag-count">12 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">ibc</span><span class="tag-track"><span class="tag-fill" style="width:45.83%"></span></span><span class="tag-count">11 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">logging</span><span class="tag-track"><span class="tag-fill" style="width:41.67%"></span></span><span class="tag-count">10 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">networking</span><span class="tag-track"><span class="tag-fill" style="width:41.67%"></span></span><span class="tag-count">10 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">ethereum</span><span class="tag-track"><span class="tag-fill" style="width:41.67%"></span></span><span class="tag-count">10 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">concurrency</span><span class="tag-track"><span class="tag-fill" style="width:37.50%"></span></span><span class="tag-count">9 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:37.50%"></span></span><span class="tag-count">9 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">api</span><span class="tag-track"><span class="tag-fill" style="width:29.17%"></span></span><span class="tag-count">7 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">rpc</span><span class="tag-track"><span class="tag-fill" style="width:29.17%"></span></span><span class="tag-count">7 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">error-handling</span><span class="tag-track"><span class="tag-fill" style="width:25.00%"></span></span><span class="tag-count">6 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">data-structures</span><span class="tag-track"><span class="tag-fill" style="width:25.00%"></span></span><span class="tag-count">6 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">telemetry</span><span class="tag-track"><span class="tag-fill" style="width:25.00%"></span></span><span class="tag-count">6 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">postgresql</span><span class="tag-track"><span class="tag-fill" style="width:25.00%"></span></span><span class="tag-count">6 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">lsp</span><span class="tag-track"><span class="tag-fill" style="width:25.00%"></span></span><span class="tag-count">6 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">robotics</span><span class="tag-track"><span class="tag-fill" style="width:25.00%"></span></span><span class="tag-count">6 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">cryptography</span><span class="tag-track"><span class="tag-fill" style="width:20.83%"></span></span><span class="tag-count">5 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">hydra</span><span class="tag-track"><span class="tag-fill" style="width:20.83%"></span></span><span class="tag-count">5 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">database</span><span class="tag-track"><span class="tag-fill" style="width:20.83%"></span></span><span class="tag-count">5 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">blockchain</span><span class="tag-track"><span class="tag-fill" style="width:20.83%"></span></span><span class="tag-count">5 (0.5%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">51 (5.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:84.31%"></span></span><span class="tag-count">43 (4.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:45.10%"></span></span><span class="tag-count">23 (2.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:37.25%"></span></span><span class="tag-count">19 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:37.25%"></span></span><span class="tag-count">19 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">unknown-defect</span><span class="tag-track"><span class="tag-fill" style="width:29.41%"></span></span><span class="tag-count">15 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:29.41%"></span></span><span class="tag-count">15 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:27.45%"></span></span><span class="tag-count">14 (1.5%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-implementation</span><span class="tag-track"><span class="tag-fill" style="width:21.57%"></span></span><span class="tag-count">11 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:21.57%"></span></span><span class="tag-count">11 (1.2%)</span></div>
+<div class="tag-row"><span class="tag-name">feature-implementation</span><span class="tag-track"><span class="tag-fill" style="width:17.65%"></span></span><span class="tag-count">9 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:17.65%"></span></span><span class="tag-count">9 (1.0%)</span></div>
+<div class="tag-row"><span class="tag-name">feature-addition</span><span class="tag-track"><span class="tag-fill" style="width:15.69%"></span></span><span class="tag-count">8 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-error-handling</span><span class="tag-track"><span class="tag-fill" style="width:15.69%"></span></span><span class="tag-count">8 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:13.73%"></span></span><span class="tag-count">7 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">resource-leak</span><span class="tag-track"><span class="tag-fill" style="width:11.76%"></span></span><span class="tag-count">6 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">backward-compatibility</span><span class="tag-track"><span class="tag-fill" style="width:7.84%"></span></span><span class="tag-count">4 (0.4%)</span></div>
+<div class="tag-row"><span class="tag-name">state-management</span><span class="tag-track"><span class="tag-fill" style="width:7.84%"></span></span><span class="tag-count">4 (0.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-function-implementation</span><span class="tag-track"><span class="tag-fill" style="width:5.88%"></span></span><span class="tag-count">3 (0.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-api</span><span class="tag-track"><span class="tag-fill" style="width:5.88%"></span></span><span class="tag-count">3 (0.3%)</span></div></div></section>
+  </div>
+
+</div>
+  </details>
+
+</div>
+
+      
+<div class="page" id="page-collection">
+  <div class="cards">
+    <div class="card"><div class="k">Repos searched</div><div class="v">33,783</div></div>
+    <div class="card"><div class="k">Repos with qualifying PRs</div><div class="v">803</div></div>
+    <div class="card"><div class="k">PRs scanned</div><div class="v">159,534</div></div>
+    <div class="card"><div class="k">PRs qualifying</div><div class="v">8,075</div></div>
+    <div class="card"><div class="k">Tasks produced</div><div class="v">926</div></div>
+    <div class="card"><div class="k">PR &rarr; task</div><div class="v">10.5%</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Collection funnel <span>by language</span></h2>
+    <div class="tbl-wrap">
+      <table>
+        <tr><th>Language</th><th>Repos searched</th><th>Repos kept</th><th>PRs scanned</th>
+            <th>PRs qualifying</th><th>PRs collected</th><th>Repos collected</th>
+            <th>Tasks produced</th><th>PR &rarr; task</th></tr>
+        <tr><td><strong>Go</strong></td><td>2,820</td><td>100</td><td>17,272</td><td>1,521</td><td>1,621</td><td>102</td><td>143</td><td>8.8%</td></tr><tr><td><strong>C++</strong></td><td>4,519</td><td>100</td><td>23,891</td><td>1,205</td><td>1,326</td><td>104</td><td>93</td><td>7.0%</td></tr><tr><td><strong>TypeScript</strong></td><td>2,489</td><td>101</td><td>23,286</td><td>1,216</td><td>1,268</td><td>102</td><td>120</td><td>9.5%</td></tr><tr><td><strong>Java</strong></td><td>4,321</td><td>100</td><td>20,042</td><td>984</td><td>1,165</td><td>104</td><td>106</td><td>9.1%</td></tr><tr><td><strong>Python</strong></td><td>5,431</td><td>101</td><td>10,453</td><td>967</td><td>1,140</td><td>107</td><td>181</td><td>15.9%</td></tr><tr><td><strong>JavaScript</strong></td><td>6,467</td><td>101</td><td>30,413</td><td>837</td><td>890</td><td>101</td><td>120</td><td>13.5%</td></tr><tr><td><strong>Rust</strong></td><td>2,732</td><td>100</td><td>17,026</td><td>737</td><td>787</td><td>101</td><td>0</td><td>0.0%</td></tr><tr><td><strong>C</strong></td><td>5,004</td><td>100</td><td>17,151</td><td>608</td><td>621</td><td>101</td><td>108</td><td>17.4%</td></tr>
+      </table>
+    </div>
+    
+    
+  </div>
+
+  <div class="grid2">
+    <section class="tag-card"><h3>Repos dropped <span>by reason</span></h3>
+      <div class="tag-rows"><div class="tag-row"><span class="tag-name">inactive</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">14,853 (51.0%)</span></div>
+<div class="tag-row"><span class="tag-name">no_ci_config</span><span class="tag-track"><span class="tag-fill" style="width:37.75%"></span></span><span class="tag-count">5,607 (19.2%)</span></div>
+<div class="tag-row"><span class="tag-name">low_pr_count</span><span class="tag-track"><span class="tag-fill" style="width:33.28%"></span></span><span class="tag-count">4,943 (17.0%)</span></div>
+<div class="tag-row"><span class="tag-name">no_dep_files</span><span class="tag-track"><span class="tag-fill" style="width:17.94%"></span></span><span class="tag-count">2,664 (9.1%)</span></div>
+<div class="tag-row"><span class="tag-name">excluded_name</span><span class="tag-track"><span class="tag-fill" style="width:6.34%"></span></span><span class="tag-count">941 (3.2%)</span></div>
+<div class="tag-row"><span class="tag-name">low_language_pct</span><span class="tag-track"><span class="tag-fill" style="width:0.87%"></span></span><span class="tag-count">129 (0.4%)</span></div></div>
+    </section>
+    <section class="tag-card"><h3>PRs dropped <span>by reason</span></h3>
+      <div class="tag-rows"><div class="tag-row"><span class="tag-name">no_test_files</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">88,827 (59.8%)</span></div>
+<div class="tag-row"><span class="tag-name">not_merged</span><span class="tag-track"><span class="tag-fill" style="width:38.06%"></span></span><span class="tag-count">33,809 (22.8%)</span></div>
+<div class="tag-row"><span class="tag-name">excluded_title</span><span class="tag-track"><span class="tag-fill" style="width:14.41%"></span></span><span class="tag-count">12,801 (8.6%)</span></div>
+<div class="tag-row"><span class="tag-name">too_many_lines</span><span class="tag-track"><span class="tag-fill" style="width:7.65%"></span></span><span class="tag-count">6,798 (4.6%)</span></div>
+<div class="tag-row"><span class="tag-name">no_linked_issue</span><span class="tag-track"><span class="tag-fill" style="width:5.72%"></span></span><span class="tag-count">5,077 (3.4%)</span></div>
+<div class="tag-row"><span class="tag-name">only_test_files</span><span class="tag-track"><span class="tag-fill" style="width:0.82%"></span></span><span class="tag-count">730 (0.5%)</span></div>
+<div class="tag-row"><span class="tag-name">file_count_out_of_range</span><span class="tag-track"><span class="tag-fill" style="width:0.56%"></span></span><span class="tag-count">495 (0.3%)</span></div>
+<div class="tag-row"><span class="tag-name">no_diff</span><span class="tag-track"><span class="tag-fill" style="width:0.02%"></span></span><span class="tag-count">21 (0.0%)</span></div>
+<div class="tag-row"><span class="tag-name">empty_patch</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">2 (0.0%)</span></div></div>
+    </section>
+    <section class="tag-card"><h3>Most-collected repositories <span>top 12 by PR count</span></h3>
+      <table><tr><th>Repository</th><th>PRs</th></tr><tr><td class='mono'>operator-framework/api</td><td>50</td></tr><tr><td class='mono'>Ptt-official-app/pttbbs-backend</td><td>50</td></tr><tr><td class='mono'>linode/cluster-api-provider-linode</td><td>50</td></tr><tr><td class='mono'>pingcap/tiunimanager</td><td>50</td></tr><tr><td class='mono'>optimizely/agent</td><td>50</td></tr><tr><td class='mono'>sirgwain/craig-stars</td><td>50</td></tr><tr><td class='mono'>device-management-toolkit/console</td><td>50</td></tr><tr><td class='mono'>smartcontractkit/chainlink-common</td><td>50</td></tr><tr><td class='mono'>gardener/gardener-extension-provider-openstack</td><td>50</td></tr><tr><td class='mono'>schmitthub/clawker</td><td>50</td></tr><tr><td class='mono'>localstack/lstk</td><td>50</td></tr><tr><td class='mono'>descope/terraform-provider-descope</td><td>50</td></tr></table>
+    </section>
+    <section class="tag-card"><h3>Collection filters <span>configuration, not measurements</span>
+      <button class="help-btn" id="filterHelp" type="button" aria-label="What these mean"
+        title="What each threshold means"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.6 9.4a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.8.7-.8 1.2v.5"></path><path d="M12 17h.01"></path></svg></button></h3>
+      <div class='sub'>Repository-level</div><table><tr><td>min_stars</td><td class='mono'>30</td></tr><tr><td>min_merged_prs</td><td class='mono'>5</td></tr><tr><td>min_language_percentage</td><td class='mono'>0.4</td></tr><tr><td>max_days_since_push</td><td class='mono'>1095</td></tr></table><div class='sub'>Pull-request-level</div><table><tr><td>min_issue_body_length</td><td class='mono'>10</td></tr><tr><td>min_files_changed</td><td class='mono'>1</td></tr><tr><td>max_files_changed</td><td class='mono'>25</td></tr><tr><td>max_lines_changed</td><td class='mono'>1500</td></tr></table>
+    </section>
+  </div>
+</div>
+
+      
+<div class="page" id="page-tasks">
+  <div class="ds-list">
+      <div class="ds-line">
+        <button class="ds-row" data-ds="c-cc">
+          <span><span class="name">c-cc</span>
+            <span class="desc">external:artifacts/swe_tasks/c-cc</span></span>
+          <span><span class="k">Tasks</span><span class="v">141</span></span>
+          <span><span class="k">Verified</span><span class="v">35</span></span>
+          <span><span class="k">Yield</span><span class="v">24.8%</span></span>
+          <span><span class="k">Tagged</span><span class="v">141</span></span>
+          <span><span class="k">Mean diff.</span><span class="v">7.04</span></span>
+          <span><span class="k">Easy / medium / hard</span><div class="stacked"><div class="seg medium" style="width:87.943%" title="medium: 124"></div><div class="seg hard" style="width:12.057%" title="hard: 17"></div></div><div class="mini">0 / 124 / 17</div></span>
+        </button>
+        <button class="samples-btn" data-samples="c-cc" title="Open 10 sample tasks">Samples <span class="n">10</span></button>
+      </div>
+      <div class="ds-line">
+        <button class="ds-row" data-ds="cpp-cc">
+          <span><span class="name">cpp-cc</span>
+            <span class="desc">external:artifacts/swe_tasks/cpp-cc</span></span>
+          <span><span class="k">Tasks</span><span class="v">89</span></span>
+          <span><span class="k">Verified</span><span class="v">29</span></span>
+          <span><span class="k">Yield</span><span class="v">32.6%</span></span>
+          <span><span class="k">Tagged</span><span class="v">89</span></span>
+          <span><span class="k">Mean diff.</span><span class="v">7.83</span></span>
+          <span><span class="k">Easy / medium / hard</span><div class="stacked"><div class="seg medium" style="width:76.404%" title="medium: 68"></div><div class="seg hard" style="width:23.596%" title="hard: 21"></div></div><div class="mini">0 / 68 / 21</div></span>
+        </button>
+        <button class="samples-btn" data-samples="cpp-cc" title="Open 10 sample tasks">Samples <span class="n">10</span></button>
+      </div>
+      <div class="ds-line">
+        <button class="ds-row" data-ds="go-cc">
+          <span><span class="name">go-cc</span>
+            <span class="desc">external:artifacts/swe_tasks/go-cc</span></span>
+          <span><span class="k">Tasks</span><span class="v">144</span></span>
+          <span><span class="k">Verified</span><span class="v">59</span></span>
+          <span><span class="k">Yield</span><span class="v">41.0%</span></span>
+          <span><span class="k">Tagged</span><span class="v">144</span></span>
+          <span><span class="k">Mean diff.</span><span class="v">6.98</span></span>
+          <span><span class="k">Easy / medium / hard</span><div class="stacked"><div class="seg medium" style="width:79.167%" title="medium: 114"></div><div class="seg hard" style="width:20.833%" title="hard: 30"></div></div><div class="mini">0 / 114 / 30</div></span>
+        </button>
+        <button class="samples-btn" data-samples="go-cc" title="Open 10 sample tasks">Samples <span class="n">10</span></button>
+      </div>
+      <div class="ds-line">
+        <button class="ds-row" data-ds="java-cc">
+          <span><span class="name">java-cc</span>
+            <span class="desc">external:artifacts/swe_tasks/java-cc</span></span>
+          <span><span class="k">Tasks</span><span class="v">115</span></span>
+          <span><span class="k">Verified</span><span class="v">40</span></span>
+          <span><span class="k">Yield</span><span class="v">34.8%</span></span>
+          <span><span class="k">Tagged</span><span class="v">115</span></span>
+          <span><span class="k">Mean diff.</span><span class="v">7.16</span></span>
+          <span><span class="k">Easy / medium / hard</span><div class="stacked"><div class="seg medium" style="width:83.478%" title="medium: 96"></div><div class="seg hard" style="width:16.522%" title="hard: 19"></div></div><div class="mini">0 / 96 / 19</div></span>
+        </button>
+        <button class="samples-btn" data-samples="java-cc" title="Open 10 sample tasks">Samples <span class="n">10</span></button>
+      </div>
+      <div class="ds-line">
+        <button class="ds-row" data-ds="js-cc">
+          <span><span class="name">js-cc</span>
+            <span class="desc">external:artifacts/swe_tasks/js-cc</span></span>
+          <span><span class="k">Tasks</span><span class="v">154</span></span>
+          <span><span class="k">Verified</span><span class="v">34</span></span>
+          <span><span class="k">Yield</span><span class="v">22.1%</span></span>
+          <span><span class="k">Tagged</span><span class="v">154</span></span>
+          <span><span class="k">Mean diff.</span><span class="v">7.50</span></span>
+          <span><span class="k">Easy / medium / hard</span><div class="stacked"><div class="seg medium" style="width:85.065%" title="medium: 131"></div><div class="seg hard" style="width:14.935%" title="hard: 23"></div></div><div class="mini">0 / 131 / 23</div></span>
+        </button>
+        <button class="samples-btn" data-samples="js-cc" title="Open 10 sample tasks">Samples <span class="n">10</span></button>
+      </div>
+      <div class="ds-line">
+        <button class="ds-row" data-ds="py-cc">
+          <span><span class="name">py-cc</span>
+            <span class="desc">external:artifacts/swe_tasks/py-cc</span></span>
+          <span><span class="k">Tasks</span><span class="v">159</span></span>
+          <span><span class="k">Verified</span><span class="v">31</span></span>
+          <span><span class="k">Yield</span><span class="v">19.5%</span></span>
+          <span><span class="k">Tagged</span><span class="v">159</span></span>
+          <span><span class="k">Mean diff.</span><span class="v">7.65</span></span>
+          <span><span class="k">Easy / medium / hard</span><div class="stacked"><div class="seg medium" style="width:86.792%" title="medium: 138"></div><div class="seg hard" style="width:13.208%" title="hard: 21"></div></div><div class="mini">0 / 138 / 21</div></span>
+        </button>
+        <button class="samples-btn" data-samples="py-cc" title="Open 10 sample tasks">Samples <span class="n">10</span></button>
+      </div>
+      <div class="ds-line">
+        <button class="ds-row" data-ds="ts-cc">
+          <span><span class="name">ts-cc</span>
+            <span class="desc">external:artifacts/swe_tasks/ts-cc</span></span>
+          <span><span class="k">Tasks</span><span class="v">124</span></span>
+          <span><span class="k">Verified</span><span class="v">42</span></span>
+          <span><span class="k">Yield</span><span class="v">33.9%</span></span>
+          <span><span class="k">Tagged</span><span class="v">124</span></span>
+          <span><span class="k">Mean diff.</span><span class="v">7.42</span></span>
+          <span><span class="k">Easy / medium / hard</span><div class="stacked"><div class="seg medium" style="width:79.839%" title="medium: 99"></div><div class="seg hard" style="width:20.161%" title="hard: 25"></div></div><div class="mini">0 / 99 / 25</div></span>
+        </button>
+        <button class="samples-btn" data-samples="ts-cc" title="Open 10 sample tasks">Samples <span class="n">10</span></button>
+      </div></div>
+  <div class="ds-detail" id="ds-detail" hidden>
+    <button class="back-link" id="ds-back">&larr; All batches</button>
+    
+<div class="ds-panel" data-ds="c-cc">
+  <div class="cards">
+    <div class="card"><div class="k">Total tasks</div><div class="v">141</div></div>
+    <div class="card"><div class="k">Mean difficulty</div><div class="v">7.04</div></div>
+    <div class="card"><div class="k">Median difficulty</div><div class="v">7.0</div></div>
+    <div class="card"><div class="k">Avg patch lines</div><div class="v">&mdash;</div></div>
+    <div class="card"><div class="k">Avg patch files</div><div class="v">&mdash;</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Difficulty distribution <span>c-cc</span></h2>
+    <div class="diff-split">
+      <div>
+        <div class="diff-bar"><div class="stacked"><div class="seg medium" style="width:87.943%" title="medium: 124"></div><div class="seg hard" style="width:12.057%" title="hard: 17"></div></div><div class="mini">0 / 124 / 17</div></div>
+        <div class="diff-legend">
+          <span><i class="dot easy"></i>easy <b>0</b></span>
+          <span><i class="dot medium"></i>medium <b>124</b></span>
+          <span><i class="dot hard"></i>hard <b>17</b></span>
+        </div>
+      </div>
+      <table class="diff-stats">
+        <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
+        <tr>
+          <td>34</td>
+          <td>4.4</td>
+          <td>5.8</td>
+          <td>7.0</td>
+          <td>7.04</td>
+          <td>8.4</td>
+          <td>9.7</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <section class="tag-card"><h3>Score bins</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">&lt;=3</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0 (0.0%)</span></div>
+<div class="tag-row"><span class="tag-name">3.1-5</span><span class="tag-track"><span class="tag-fill" style="width:30.77%"></span></span><span class="tag-count">4 (11.8%)</span></div>
+<div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">13 (38.2%)</span></div>
+<div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:61.54%"></span></span><span class="tag-count">8 (23.5%)</span></div>
+<div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:69.23%"></span></span><span class="tag-count">9 (26.5%)</span></div></div></section>
+    <section class="tag-card"><h3>Languages</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">C</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">108 (76.6%)</span></div>
+<div class="tag-row"><span class="tag-name">Python</span><span class="tag-track"><span class="tag-fill" style="width:12.04%"></span></span><span class="tag-count">13 (9.2%)</span></div>
+<div class="tag-row"><span class="tag-name">ruby</span><span class="tag-track"><span class="tag-fill" style="width:9.26%"></span></span><span class="tag-count">10 (7.1%)</span></div>
+<div class="tag-row"><span class="tag-name">C++</span><span class="tag-track"><span class="tag-fill" style="width:7.41%"></span></span><span class="tag-count">8 (5.7%)</span></div>
+<div class="tag-row"><span class="tag-name">fortran</span><span class="tag-track"><span class="tag-fill" style="width:0.93%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">r</span><span class="tag-track"><span class="tag-fill" style="width:0.93%"></span></span><span class="tag-count">1 (0.7%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card"><h3>Area / tier</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">87 (61.7%)</span></div>
+<div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:50.57%"></span></span><span class="tag-count">44 (31.2%)</span></div>
+<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:8.05%"></span></span><span class="tag-count">7 (5.0%)</span></div>
+<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:2.30%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">embedded</span><span class="tag-track"><span class="tag-fill" style="width:1.15%"></span></span><span class="tag-count">1 (0.7%)</span></div></div></section>
+    <section class="tag-card"><h3>Top topics</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">6 (4.3%)</span></div>
+<div class="tag-row"><span class="tag-name">logging</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">6 (4.3%)</span></div>
+<div class="tag-row"><span class="tag-name">data-structures</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">6 (4.3%)</span></div>
+<div class="tag-row"><span class="tag-name">memory-management</span><span class="tag-track"><span class="tag-fill" style="width:66.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">kernel</span><span class="tag-track"><span class="tag-fill" style="width:66.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">assembler</span><span class="tag-track"><span class="tag-fill" style="width:66.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">bootloader</span><span class="tag-track"><span class="tag-fill" style="width:66.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">cryptography</span><span class="tag-track"><span class="tag-fill" style="width:66.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">concurrency</span><span class="tag-track"><span class="tag-fill" style="width:66.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">getopt</span><span class="tag-track"><span class="tag-fill" style="width:50.00%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">error-handling</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">build</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">filesystem</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">os-kernel</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">compiler</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">sorting</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">window-manager</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">networking</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">geophysics</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">cryptocurrency</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">crypto</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">secp256k1</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">display</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">scheduler</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">string-parsing</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.4%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">10 (7.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:60.00%"></span></span><span class="tag-count">6 (4.3%)</span></div>
+<div class="tag-row"><span class="tag-name">unknown-defect</span><span class="tag-track"><span class="tag-fill" style="width:50.00%"></span></span><span class="tag-count">5 (3.5%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:40.00%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-function-implementation</span><span class="tag-track"><span class="tag-fill" style="width:30.00%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:30.00%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-api</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">algorithm-implementation</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-error-handling</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">misra-compliance</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">command-line-parsing</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">lock-contention</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">template-pattern</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">memory-overhead</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">api-compatibility-fix</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-cleanup-api</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">incorrect-path</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-platform-support</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">1 (0.7%)</span></div></div></section>
+  </div>
+
+</div>
+
+<div class="ds-panel" data-ds="cpp-cc">
+  <div class="cards">
+    <div class="card"><div class="k">Total tasks</div><div class="v">89</div></div>
+    <div class="card"><div class="k">Mean difficulty</div><div class="v">7.83</div></div>
+    <div class="card"><div class="k">Median difficulty</div><div class="v">8.1</div></div>
+    <div class="card"><div class="k">Avg patch lines</div><div class="v">&mdash;</div></div>
+    <div class="card"><div class="k">Avg patch files</div><div class="v">&mdash;</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Difficulty distribution <span>cpp-cc</span></h2>
+    <div class="diff-split">
+      <div>
+        <div class="diff-bar"><div class="stacked"><div class="seg medium" style="width:76.404%" title="medium: 68"></div><div class="seg hard" style="width:23.596%" title="hard: 21"></div></div><div class="mini">0 / 68 / 21</div></div>
+        <div class="diff-legend">
+          <span><i class="dot easy"></i>easy <b>0</b></span>
+          <span><i class="dot medium"></i>medium <b>68</b></span>
+          <span><i class="dot hard"></i>hard <b>21</b></span>
+        </div>
+      </div>
+      <table class="diff-stats">
+        <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
+        <tr>
+          <td>28</td>
+          <td>4.4</td>
+          <td>7.0</td>
+          <td>8.1</td>
+          <td>7.83</td>
+          <td>9.2</td>
+          <td>10.0</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <section class="tag-card"><h3>Score bins</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">&lt;=3</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0 (0.0%)</span></div>
+<div class="tag-row"><span class="tag-name">3.1-5</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (7.1%)</span></div>
+<div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">5 (17.9%)</span></div>
+<div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:40.00%"></span></span><span class="tag-count">6 (21.4%)</span></div>
+<div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">15 (53.6%)</span></div></div></section>
+    <section class="tag-card"><h3>Languages</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">C++</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">85 (95.5%)</span></div>
+<div class="tag-row"><span class="tag-name">Python</span><span class="tag-track"><span class="tag-fill" style="width:4.71%"></span></span><span class="tag-count">4 (4.5%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card"><h3>Area / tier</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">48 (53.9%)</span></div>
+<div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:85.42%"></span></span><span class="tag-count">41 (46.1%)</span></div></div></section>
+    <section class="tag-card"><h3>Top topics</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">podio</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">16 (18.0%)</span></div>
+<div class="tag-row"><span class="tag-name">hydra</span><span class="tag-track"><span class="tag-fill" style="width:31.25%"></span></span><span class="tag-count">5 (5.6%)</span></div>
+<div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:25.00%"></span></span><span class="tag-count">4 (4.5%)</span></div>
+<div class="tag-row"><span class="tag-name">rendering</span><span class="tag-track"><span class="tag-fill" style="width:25.00%"></span></span><span class="tag-count">4 (4.5%)</span></div>
+<div class="tag-row"><span class="tag-name">opencv</span><span class="tag-track"><span class="tag-fill" style="width:18.75%"></span></span><span class="tag-count">3 (3.4%)</span></div>
+<div class="tag-row"><span class="tag-name">concurrency</span><span class="tag-track"><span class="tag-fill" style="width:18.75%"></span></span><span class="tag-count">3 (3.4%)</span></div>
+<div class="tag-row"><span class="tag-name">pipeline</span><span class="tag-track"><span class="tag-fill" style="width:12.50%"></span></span><span class="tag-count">2 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">h264</span><span class="tag-track"><span class="tag-fill" style="width:12.50%"></span></span><span class="tag-count">2 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">multimedia</span><span class="tag-track"><span class="tag-fill" style="width:12.50%"></span></span><span class="tag-count">2 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">video-processing</span><span class="tag-track"><span class="tag-fill" style="width:12.50%"></span></span><span class="tag-count">2 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">point-cloud</span><span class="tag-track"><span class="tag-fill" style="width:12.50%"></span></span><span class="tag-count">2 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">alpaka</span><span class="tag-track"><span class="tag-fill" style="width:12.50%"></span></span><span class="tag-count">2 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">iterators</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">templates</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">compilation</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">code-generation</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">schema-evolution</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">websocket</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">file-io</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">aprapipes</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">streaming</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">gpu</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">openh264</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">video-encoding</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">egl</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (1.1%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">6 (6.7%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:50.00%"></span></span><span class="tag-count">3 (3.4%)</span></div>
+<div class="tag-row"><span class="tag-name">unknown-defect</span><span class="tag-track"><span class="tag-fill" style="width:50.00%"></span></span><span class="tag-count">3 (3.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:50.00%"></span></span><span class="tag-count">3 (3.4%)</span></div>
+<div class="tag-row"><span class="tag-name">feature-implementation</span><span class="tag-track"><span class="tag-fill" style="width:50.00%"></span></span><span class="tag-count">3 (3.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-module-implementation</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (2.2%)</span></div>
+<div class="tag-row"><span class="tag-name">schema-migration</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">forward-iterator-concept</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">glob-expansion</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-hash-specialization</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-interface</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">code-generation</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-standard-support</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">environment-configuration</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">abi-stability</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div>
+<div class="tag-row"><span class="tag-name">misleading-api</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (1.1%)</span></div></div></section>
+  </div>
+
+</div>
+
+<div class="ds-panel" data-ds="go-cc">
+  <div class="cards">
+    <div class="card"><div class="k">Total tasks</div><div class="v">144</div></div>
+    <div class="card"><div class="k">Mean difficulty</div><div class="v">6.98</div></div>
+    <div class="card"><div class="k">Median difficulty</div><div class="v">7.2</div></div>
+    <div class="card"><div class="k">Avg patch lines</div><div class="v">&mdash;</div></div>
+    <div class="card"><div class="k">Avg patch files</div><div class="v">&mdash;</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Difficulty distribution <span>go-cc</span></h2>
+    <div class="diff-split">
+      <div>
+        <div class="diff-bar"><div class="stacked"><div class="seg medium" style="width:79.167%" title="medium: 114"></div><div class="seg hard" style="width:20.833%" title="hard: 30"></div></div><div class="mini">0 / 114 / 30</div></div>
+        <div class="diff-legend">
+          <span><i class="dot easy"></i>easy <b>0</b></span>
+          <span><i class="dot medium"></i>medium <b>114</b></span>
+          <span><i class="dot hard"></i>hard <b>30</b></span>
+        </div>
+      </div>
+      <table class="diff-stats">
+        <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
+        <tr>
+          <td>56</td>
+          <td>3.7</td>
+          <td>5.7</td>
+          <td>7.2</td>
+          <td>6.98</td>
+          <td>8.3</td>
+          <td>9.4</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <section class="tag-card"><h3>Score bins</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">&lt;=3</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0 (0.0%)</span></div>
+<div class="tag-row"><span class="tag-name">3.1-5</span><span class="tag-track"><span class="tag-fill" style="width:30.00%"></span></span><span class="tag-count">6 (10.7%)</span></div>
+<div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">20 (35.7%)</span></div>
+<div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:60.00%"></span></span><span class="tag-count">12 (21.4%)</span></div>
+<div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:90.00%"></span></span><span class="tag-count">18 (32.1%)</span></div></div></section>
+    <section class="tag-card"><h3>Languages</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">Go</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">143 (99.3%)</span></div>
+<div class="tag-row"><span class="tag-name">Python</span><span class="tag-track"><span class="tag-fill" style="width:0.70%"></span></span><span class="tag-count">1 (0.7%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card"><h3>Area / tier</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">121 (84.0%)</span></div>
+<div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:15.70%"></span></span><span class="tag-count">19 (13.2%)</span></div>
+<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:3.31%"></span></span><span class="tag-count">4 (2.8%)</span></div></div></section>
+    <section class="tag-card"><h3>Top topics</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">terraform</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">15 (10.4%)</span></div>
+<div class="tag-row"><span class="tag-name">ibc</span><span class="tag-track"><span class="tag-fill" style="width:73.33%"></span></span><span class="tag-count">11 (7.6%)</span></div>
+<div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">5 (3.5%)</span></div>
+<div class="tag-row"><span class="tag-name">networking</span><span class="tag-track"><span class="tag-fill" style="width:26.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">p2p</span><span class="tag-track"><span class="tag-fill" style="width:26.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">proxy</span><span class="tag-track"><span class="tag-fill" style="width:26.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">cosmos-sdk</span><span class="tag-track"><span class="tag-fill" style="width:26.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">redfish</span><span class="tag-track"><span class="tag-fill" style="width:26.67%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">retry</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">database</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">grpc</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">kubernetes-operator</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">blockchain</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">terraform-provider</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">linting</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">config</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">cache</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">webhooks</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">opentelemetry</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">logr</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">mcp</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">state-machine</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">scheduler</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">caching</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">configuration</span><span class="tag-track"><span class="tag-fill" style="width:13.33%"></span></span><span class="tag-count">2 (1.4%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">14 (9.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:42.86%"></span></span><span class="tag-count">6 (4.2%)</span></div>
+<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">4 (2.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:21.43%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:21.43%"></span></span><span class="tag-count">3 (2.1%)</span></div>
+<div class="tag-row"><span class="tag-name">false-positive</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-parsing</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-implementation</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">backward-compatibility</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-endpoint-support</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-attribute</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-field-support</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.4%)</span></div>
+<div class="tag-row"><span class="tag-name">incorrect-parsing</span><span class="tag-track"><span class="tag-fill" style="width:7.14%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">whitespace-handling</span><span class="tag-track"><span class="tag-fill" style="width:7.14%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-function-resolution</span><span class="tag-track"><span class="tag-fill" style="width:7.14%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">error-context-propagation</span><span class="tag-track"><span class="tag-fill" style="width:7.14%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">panic-recovery</span><span class="tag-track"><span class="tag-fill" style="width:7.14%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-timeout</span><span class="tag-track"><span class="tag-fill" style="width:7.14%"></span></span><span class="tag-count">1 (0.7%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:7.14%"></span></span><span class="tag-count">1 (0.7%)</span></div></div></section>
+  </div>
+
+</div>
+
+<div class="ds-panel" data-ds="java-cc">
+  <div class="cards">
+    <div class="card"><div class="k">Total tasks</div><div class="v">115</div></div>
+    <div class="card"><div class="k">Mean difficulty</div><div class="v">7.16</div></div>
+    <div class="card"><div class="k">Median difficulty</div><div class="v">7.1</div></div>
+    <div class="card"><div class="k">Avg patch lines</div><div class="v">&mdash;</div></div>
+    <div class="card"><div class="k">Avg patch files</div><div class="v">&mdash;</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Difficulty distribution <span>java-cc</span></h2>
+    <div class="diff-split">
+      <div>
+        <div class="diff-bar"><div class="stacked"><div class="seg medium" style="width:83.478%" title="medium: 96"></div><div class="seg hard" style="width:16.522%" title="hard: 19"></div></div><div class="mini">0 / 96 / 19</div></div>
+        <div class="diff-legend">
+          <span><i class="dot easy"></i>easy <b>0</b></span>
+          <span><i class="dot medium"></i>medium <b>96</b></span>
+          <span><i class="dot hard"></i>hard <b>19</b></span>
+        </div>
+      </div>
+      <table class="diff-stats">
+        <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
+        <tr>
+          <td>37</td>
+          <td>4.0</td>
+          <td>5.9</td>
+          <td>7.1</td>
+          <td>7.16</td>
+          <td>8.5</td>
+          <td>9.7</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <section class="tag-card"><h3>Score bins</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">&lt;=3</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0 (0.0%)</span></div>
+<div class="tag-row"><span class="tag-name">3.1-5</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">3 (8.1%)</span></div>
+<div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">15 (40.5%)</span></div>
+<div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">5 (13.5%)</span></div>
+<div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:93.33%"></span></span><span class="tag-count">14 (37.8%)</span></div></div></section>
+    <section class="tag-card"><h3>Languages</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">Java</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">106 (92.2%)</span></div>
+<div class="tag-row"><span class="tag-name">TypeScript</span><span class="tag-track"><span class="tag-fill" style="width:5.66%"></span></span><span class="tag-count">6 (5.2%)</span></div>
+<div class="tag-row"><span class="tag-name">Python</span><span class="tag-track"><span class="tag-fill" style="width:1.89%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">JavaScript</span><span class="tag-track"><span class="tag-fill" style="width:0.94%"></span></span><span class="tag-count">1 (0.9%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card"><h3>Area / tier</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">82 (71.3%)</span></div>
+<div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:37.80%"></span></span><span class="tag-count">31 (27.0%)</span></div>
+<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:1.22%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:1.22%"></span></span><span class="tag-count">1 (0.9%)</span></div></div></section>
+    <section class="tag-card"><h3>Top topics</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">rpc</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">7 (6.1%)</span></div>
+<div class="tag-row"><span class="tag-name">lsp</span><span class="tag-track"><span class="tag-fill" style="width:85.71%"></span></span><span class="tag-count">6 (5.2%)</span></div>
+<div class="tag-row"><span class="tag-name">selenium</span><span class="tag-track"><span class="tag-fill" style="width:71.43%"></span></span><span class="tag-count">5 (4.3%)</span></div>
+<div class="tag-row"><span class="tag-name">spring-boot</span><span class="tag-track"><span class="tag-fill" style="width:71.43%"></span></span><span class="tag-count">5 (4.3%)</span></div>
+<div class="tag-row"><span class="tag-name">rest-api</span><span class="tag-track"><span class="tag-fill" style="width:57.14%"></span></span><span class="tag-count">4 (3.5%)</span></div>
+<div class="tag-row"><span class="tag-name">hbase</span><span class="tag-track"><span class="tag-fill" style="width:57.14%"></span></span><span class="tag-count">4 (3.5%)</span></div>
+<div class="tag-row"><span class="tag-name">jackson</span><span class="tag-track"><span class="tag-fill" style="width:57.14%"></span></span><span class="tag-count">4 (3.5%)</span></div>
+<div class="tag-row"><span class="tag-name">cose</span><span class="tag-track"><span class="tag-fill" style="width:57.14%"></span></span><span class="tag-count">4 (3.5%)</span></div>
+<div class="tag-row"><span class="tag-name">n4js</span><span class="tag-track"><span class="tag-fill" style="width:57.14%"></span></span><span class="tag-count">4 (3.5%)</span></div>
+<div class="tag-row"><span class="tag-name">simulacron</span><span class="tag-track"><span class="tag-fill" style="width:42.86%"></span></span><span class="tag-count">3 (2.6%)</span></div>
+<div class="tag-row"><span class="tag-name">pay-publicapi</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">idempotency</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">refactoring</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">oauth</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">cassandra</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">codegen</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">sonarqube</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">content-assist</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">typescript</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">json-schema</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">pagination</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">error-handling</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">validation</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">api</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.9%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">6 (5.2%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:83.33%"></span></span><span class="tag-count">5 (4.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:83.33%"></span></span><span class="tag-count">5 (4.3%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:50.00%"></span></span><span class="tag-count">3 (2.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:50.00%"></span></span><span class="tag-count">3 (2.6%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-error-mapping</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">unknown-defect</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-implementation</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">type-mapping</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-constructor</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-completion-provider</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">2 (1.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-parameter-support</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">invalid-request</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">api-gateway</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">invalid-input</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-field</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">pii-leak</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">conditional-field-inclusion</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (0.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-error-handling</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">1 (0.9%)</span></div></div></section>
+  </div>
+
+</div>
+
+<div class="ds-panel" data-ds="js-cc">
+  <div class="cards">
+    <div class="card"><div class="k">Total tasks</div><div class="v">154</div></div>
+    <div class="card"><div class="k">Mean difficulty</div><div class="v">7.50</div></div>
+    <div class="card"><div class="k">Median difficulty</div><div class="v">7.8</div></div>
+    <div class="card"><div class="k">Avg patch lines</div><div class="v">&mdash;</div></div>
+    <div class="card"><div class="k">Avg patch files</div><div class="v">&mdash;</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Difficulty distribution <span>js-cc</span></h2>
+    <div class="diff-split">
+      <div>
+        <div class="diff-bar"><div class="stacked"><div class="seg medium" style="width:85.065%" title="medium: 131"></div><div class="seg hard" style="width:14.935%" title="hard: 23"></div></div><div class="mini">0 / 131 / 23</div></div>
+        <div class="diff-legend">
+          <span><i class="dot easy"></i>easy <b>0</b></span>
+          <span><i class="dot medium"></i>medium <b>131</b></span>
+          <span><i class="dot hard"></i>hard <b>23</b></span>
+        </div>
+      </div>
+      <table class="diff-stats">
+        <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
+        <tr>
+          <td>32</td>
+          <td>4.0</td>
+          <td>6.8</td>
+          <td>7.8</td>
+          <td>7.50</td>
+          <td>8.8</td>
+          <td>9.7</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <section class="tag-card"><h3>Score bins</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">&lt;=3</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0 (0.0%)</span></div>
+<div class="tag-row"><span class="tag-name">3.1-5</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">3 (9.4%)</span></div>
+<div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:40.00%"></span></span><span class="tag-count">6 (18.8%)</span></div>
+<div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:53.33%"></span></span><span class="tag-count">8 (25.0%)</span></div>
+<div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">15 (46.9%)</span></div></div></section>
+    <section class="tag-card"><h3>Languages</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">JavaScript</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">115 (74.7%)</span></div>
+<div class="tag-row"><span class="tag-name">solidity</span><span class="tag-track"><span class="tag-fill" style="width:27.83%"></span></span><span class="tag-count">32 (20.8%)</span></div>
+<div class="tag-row"><span class="tag-name">TypeScript</span><span class="tag-track"><span class="tag-fill" style="width:4.35%"></span></span><span class="tag-count">5 (3.2%)</span></div>
+<div class="tag-row"><span class="tag-name">Python</span><span class="tag-track"><span class="tag-fill" style="width:1.74%"></span></span><span class="tag-count">2 (1.3%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card"><h3>Area / tier</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">84 (54.5%)</span></div>
+<div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:38.10%"></span></span><span class="tag-count">32 (20.8%)</span></div>
+<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:30.95%"></span></span><span class="tag-count">26 (16.9%)</span></div>
+<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:10.71%"></span></span><span class="tag-count">9 (5.8%)</span></div>
+<div class="tag-row"><span class="tag-name">fullstack</span><span class="tag-track"><span class="tag-fill" style="width:3.57%"></span></span><span class="tag-count">3 (1.9%)</span></div></div></section>
+    <section class="tag-card"><h3>Top topics</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">smart-contracts</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">18 (11.7%)</span></div>
+<div class="tag-row"><span class="tag-name">vscode</span><span class="tag-track"><span class="tag-fill" style="width:72.22%"></span></span><span class="tag-count">13 (8.4%)</span></div>
+<div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:44.44%"></span></span><span class="tag-count">8 (5.2%)</span></div>
+<div class="tag-row"><span class="tag-name">postgresql</span><span class="tag-track"><span class="tag-fill" style="width:27.78%"></span></span><span class="tag-count">5 (3.2%)</span></div>
+<div class="tag-row"><span class="tag-name">openstack</span><span class="tag-track"><span class="tag-fill" style="width:27.78%"></span></span><span class="tag-count">5 (3.2%)</span></div>
+<div class="tag-row"><span class="tag-name">ethereum</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">pm2</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">obsidian</span><span class="tag-track"><span class="tag-fill" style="width:16.67%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">defi</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">aragon</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">web3</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">postgres</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">networking</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">pivotaltracker</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">vscode-extension</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">mongoose</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">discord</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">sails.js</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">sails</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">bull</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">redis</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">error-handling</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">governance</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">egg-orm</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">2 (1.3%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">14 (9.1%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:57.14%"></span></span><span class="tag-count">8 (5.2%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-validation</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">4 (2.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">4 (2.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">4 (2.6%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-implementation</span><span class="tag-track"><span class="tag-fill" style="width:21.43%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-error-handling</span><span class="tag-track"><span class="tag-fill" style="width:21.43%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">feature-addition</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">unknown-defect</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">optimization</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">gas-optimization</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-state-update</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-retry-logic</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-method-implementation</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">feature-implementation</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">api-change</span><span class="tag-track"><span class="tag-fill" style="width:7.14%"></span></span><span class="tag-count">1 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-field-extraction</span><span class="tag-track"><span class="tag-fill" style="width:7.14%"></span></span><span class="tag-count">1 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">gas-limit-vulnerability</span><span class="tag-track"><span class="tag-fill" style="width:7.14%"></span></span><span class="tag-count">1 (0.6%)</span></div></div></section>
+  </div>
+
+</div>
+
+<div class="ds-panel" data-ds="py-cc">
+  <div class="cards">
+    <div class="card"><div class="k">Total tasks</div><div class="v">159</div></div>
+    <div class="card"><div class="k">Mean difficulty</div><div class="v">7.65</div></div>
+    <div class="card"><div class="k">Median difficulty</div><div class="v">8.1</div></div>
+    <div class="card"><div class="k">Avg patch lines</div><div class="v">&mdash;</div></div>
+    <div class="card"><div class="k">Avg patch files</div><div class="v">&mdash;</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Difficulty distribution <span>py-cc</span></h2>
+    <div class="diff-split">
+      <div>
+        <div class="diff-bar"><div class="stacked"><div class="seg medium" style="width:86.792%" title="medium: 138"></div><div class="seg hard" style="width:13.208%" title="hard: 21"></div></div><div class="mini">0 / 138 / 21</div></div>
+        <div class="diff-legend">
+          <span><i class="dot easy"></i>easy <b>0</b></span>
+          <span><i class="dot medium"></i>medium <b>138</b></span>
+          <span><i class="dot hard"></i>hard <b>21</b></span>
+        </div>
+      </div>
+      <table class="diff-stats">
+        <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
+        <tr>
+          <td>30</td>
+          <td>4.4</td>
+          <td>6.3</td>
+          <td>8.1</td>
+          <td>7.65</td>
+          <td>9.0</td>
+          <td>9.7</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <section class="tag-card"><h3>Score bins</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">&lt;=3</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0 (0.0%)</span></div>
+<div class="tag-row"><span class="tag-name">3.1-5</span><span class="tag-track"><span class="tag-fill" style="width:6.25%"></span></span><span class="tag-count">1 (3.3%)</span></div>
+<div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:50.00%"></span></span><span class="tag-count">8 (26.7%)</span></div>
+<div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:31.25%"></span></span><span class="tag-count">5 (16.7%)</span></div>
+<div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">16 (53.3%)</span></div></div></section>
+    <section class="tag-card"><h3>Languages</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">Python</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">157 (98.7%)</span></div>
+<div class="tag-row"><span class="tag-name">JavaScript</span><span class="tag-track"><span class="tag-fill" style="width:1.27%"></span></span><span class="tag-count">2 (1.3%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card"><h3>Area / tier</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">73 (45.9%)</span></div>
+<div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:72.60%"></span></span><span class="tag-count">53 (33.3%)</span></div>
+<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:39.73%"></span></span><span class="tag-count">29 (18.2%)</span></div>
+<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:4.11%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">fullstack</span><span class="tag-track"><span class="tag-fill" style="width:1.37%"></span></span><span class="tag-count">1 (0.6%)</span></div></div></section>
+    <section class="tag-card"><h3>Top topics</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">autosubmit</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">20 (12.6%)</span></div>
+<div class="tag-row"><span class="tag-name">robotics</span><span class="tag-track"><span class="tag-fill" style="width:30.00%"></span></span><span class="tag-count">6 (3.8%)</span></div>
+<div class="tag-row"><span class="tag-name">graphql</span><span class="tag-track"><span class="tag-fill" style="width:25.00%"></span></span><span class="tag-count">5 (3.1%)</span></div>
+<div class="tag-row"><span class="tag-name">chemistry</span><span class="tag-track"><span class="tag-fill" style="width:20.00%"></span></span><span class="tag-count">4 (2.5%)</span></div>
+<div class="tag-row"><span class="tag-name">logging</span><span class="tag-track"><span class="tag-fill" style="width:15.00%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">django</span><span class="tag-track"><span class="tag-fill" style="width:15.00%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:15.00%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">asapdiscovery</span><span class="tag-track"><span class="tag-fill" style="width:15.00%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">signal-processing</span><span class="tag-track"><span class="tag-fill" style="width:15.00%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">simulation</span><span class="tag-track"><span class="tag-fill" style="width:15.00%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">docking</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">dask</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">alchemiscale</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">machine-learning</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">alchemy</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">sqlalchemy</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">httpx</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">http</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">pygame</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">numpy</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">config-parsing</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">argparse</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">couchbase</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">owlready2</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">acme</span><span class="tag-track"><span class="tag-fill" style="width:10.00%"></span></span><span class="tag-count">2 (1.3%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">missing-feature</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">9 (5.7%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:55.56%"></span></span><span class="tag-count">5 (3.1%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-functionality</span><span class="tag-track"><span class="tag-fill" style="width:55.56%"></span></span><span class="tag-count">5 (3.1%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:44.44%"></span></span><span class="tag-count">4 (2.5%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">feature-addition</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">type-handling-inconsistency</span><span class="tag-track"><span class="tag-fill" style="width:33.33%"></span></span><span class="tag-count">3 (1.9%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-parameter</span><span class="tag-track"><span class="tag-fill" style="width:22.22%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:22.22%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:22.22%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">feature-enhancement</span><span class="tag-track"><span class="tag-fill" style="width:22.22%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-error-handling</span><span class="tag-track"><span class="tag-fill" style="width:22.22%"></span></span><span class="tag-count">2 (1.3%)</span></div>
+<div class="tag-row"><span class="tag-name">language-migration</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">1 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">fuzzy-search</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">1 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-sensitive-data-redaction</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">1 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-path-sanitization</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">1 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">validation-error</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">1 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">emcee</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">1 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">incorrect-output-format</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">1 (0.6%)</span></div>
+<div class="tag-row"><span class="tag-name">data-parsing</span><span class="tag-track"><span class="tag-fill" style="width:11.11%"></span></span><span class="tag-count">1 (0.6%)</span></div></div></section>
+  </div>
+
+</div>
+
+<div class="ds-panel" data-ds="ts-cc">
+  <div class="cards">
+    <div class="card"><div class="k">Total tasks</div><div class="v">124</div></div>
+    <div class="card"><div class="k">Mean difficulty</div><div class="v">7.42</div></div>
+    <div class="card"><div class="k">Median difficulty</div><div class="v">7.5</div></div>
+    <div class="card"><div class="k">Avg patch lines</div><div class="v">&mdash;</div></div>
+    <div class="card"><div class="k">Avg patch files</div><div class="v">&mdash;</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Difficulty distribution <span>ts-cc</span></h2>
+    <div class="diff-split">
+      <div>
+        <div class="diff-bar"><div class="stacked"><div class="seg medium" style="width:79.839%" title="medium: 99"></div><div class="seg hard" style="width:20.161%" title="hard: 25"></div></div><div class="mini">0 / 99 / 25</div></div>
+        <div class="diff-legend">
+          <span><i class="dot easy"></i>easy <b>0</b></span>
+          <span><i class="dot medium"></i>medium <b>99</b></span>
+          <span><i class="dot hard"></i>hard <b>25</b></span>
+        </div>
+      </div>
+      <table class="diff-stats">
+        <tr><th>count</th><th>min</th><th>p25</th><th>median</th><th>mean</th><th>p75</th><th>max</th></tr>
+        <tr>
+          <td>41</td>
+          <td>5.0</td>
+          <td>6.2</td>
+          <td>7.5</td>
+          <td>7.42</td>
+          <td>8.5</td>
+          <td>10.0</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <section class="tag-card"><h3>Score bins</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">&lt;=3</span><span class="tag-track"><span class="tag-fill" style="width:0.00%"></span></span><span class="tag-count">0 (0.0%)</span></div>
+<div class="tag-row"><span class="tag-name">3.1-5</span><span class="tag-track"><span class="tag-fill" style="width:6.67%"></span></span><span class="tag-count">1 (2.4%)</span></div>
+<div class="tag-row"><span class="tag-name">5.1-7</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">15 (36.6%)</span></div>
+<div class="tag-row"><span class="tag-name">7.1-8</span><span class="tag-track"><span class="tag-fill" style="width:86.67%"></span></span><span class="tag-count">13 (31.7%)</span></div>
+<div class="tag-row"><span class="tag-name">&gt;8</span><span class="tag-track"><span class="tag-fill" style="width:80.00%"></span></span><span class="tag-count">12 (29.3%)</span></div></div></section>
+    <section class="tag-card"><h3>Languages</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">TypeScript</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">109 (87.9%)</span></div>
+<div class="tag-row"><span class="tag-name">solidity</span><span class="tag-track"><span class="tag-fill" style="width:6.42%"></span></span><span class="tag-count">7 (5.6%)</span></div>
+<div class="tag-row"><span class="tag-name">bash</span><span class="tag-track"><span class="tag-fill" style="width:2.75%"></span></span><span class="tag-count">3 (2.4%)</span></div>
+<div class="tag-row"><span class="tag-name">Python</span><span class="tag-track"><span class="tag-fill" style="width:1.83%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">JavaScript</span><span class="tag-track"><span class="tag-fill" style="width:1.83%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">shell</span><span class="tag-track"><span class="tag-fill" style="width:0.92%"></span></span><span class="tag-count">1 (0.8%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card"><h3>Area / tier</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">backend</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">79 (63.7%)</span></div>
+<div class="tag-row"><span class="tag-name">library</span><span class="tag-track"><span class="tag-fill" style="width:21.52%"></span></span><span class="tag-count">17 (13.7%)</span></div>
+<div class="tag-row"><span class="tag-name">cli</span><span class="tag-track"><span class="tag-fill" style="width:18.99%"></span></span><span class="tag-count">15 (12.1%)</span></div>
+<div class="tag-row"><span class="tag-name">frontend</span><span class="tag-track"><span class="tag-fill" style="width:15.19%"></span></span><span class="tag-count">12 (9.7%)</span></div>
+<div class="tag-row"><span class="tag-name">fullstack</span><span class="tag-track"><span class="tag-fill" style="width:1.27%"></span></span><span class="tag-count">1 (0.8%)</span></div></div></section>
+    <section class="tag-card"><h3>Top topics</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">ethereum</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">7 (5.6%)</span></div>
+<div class="tag-row"><span class="tag-name">smart-contracts</span><span class="tag-track"><span class="tag-fill" style="width:85.71%"></span></span><span class="tag-count">6 (4.8%)</span></div>
+<div class="tag-row"><span class="tag-name">api</span><span class="tag-track"><span class="tag-fill" style="width:71.43%"></span></span><span class="tag-count">5 (4.0%)</span></div>
+<div class="tag-row"><span class="tag-name">eth-rpc-adapter</span><span class="tag-track"><span class="tag-fill" style="width:71.43%"></span></span><span class="tag-count">5 (4.0%)</span></div>
+<div class="tag-row"><span class="tag-name">ethers</span><span class="tag-track"><span class="tag-fill" style="width:71.43%"></span></span><span class="tag-count">5 (4.0%)</span></div>
+<div class="tag-row"><span class="tag-name">react</span><span class="tag-track"><span class="tag-fill" style="width:57.14%"></span></span><span class="tag-count">4 (3.2%)</span></div>
+<div class="tag-row"><span class="tag-name">polkadot</span><span class="tag-track"><span class="tag-fill" style="width:42.86%"></span></span><span class="tag-count">3 (2.4%)</span></div>
+<div class="tag-row"><span class="tag-name">github-actions</span><span class="tag-track"><span class="tag-fill" style="width:42.86%"></span></span><span class="tag-count">3 (2.4%)</span></div>
+<div class="tag-row"><span class="tag-name">angular</span><span class="tag-track"><span class="tag-fill" style="width:42.86%"></span></span><span class="tag-count">3 (2.4%)</span></div>
+<div class="tag-row"><span class="tag-name">telemetry</span><span class="tag-track"><span class="tag-fill" style="width:42.86%"></span></span><span class="tag-count">3 (2.4%)</span></div>
+<div class="tag-row"><span class="tag-name">ethereum-rpc</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">eth-providers</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">json-schema</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">testing</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">codex</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">sqlite</span><span class="tag-track"><span class="tag-fill" style="width:28.57%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">polkadot-js</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">health-check</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">yargs</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">gas</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">ci-cd</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">eth-rpc</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">blockchain</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">transcript</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">openai</span><span class="tag-track"><span class="tag-fill" style="width:14.29%"></span></span><span class="tag-count">1 (0.8%)</span></div></div></section>
+  </div>
+
+  <div class="grid2" style="margin-top:18px;">
+    <section class="tag-card wide-card"><h3>Bug classes</h3><div class="tag-rows"><div class="tag-row"><span class="tag-name">incomplete-validation</span><span class="tag-track"><span class="tag-fill" style="width:100.00%"></span></span><span class="tag-count">11 (8.9%)</span></div>
+<div class="tag-row"><span class="tag-name">wrong-default</span><span class="tag-track"><span class="tag-fill" style="width:45.45%"></span></span><span class="tag-count">5 (4.0%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-fallback</span><span class="tag-track"><span class="tag-fill" style="width:27.27%"></span></span><span class="tag-count">3 (2.4%)</span></div>
+<div class="tag-row"><span class="tag-name">state-management</span><span class="tag-track"><span class="tag-fill" style="width:27.27%"></span></span><span class="tag-count">3 (2.4%)</span></div>
+<div class="tag-row"><span class="tag-name">memory-leak</span><span class="tag-track"><span class="tag-fill" style="width:18.18%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">incomplete-implementation</span><span class="tag-track"><span class="tag-fill" style="width:18.18%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">api-migration</span><span class="tag-track"><span class="tag-fill" style="width:18.18%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-implementation</span><span class="tag-track"><span class="tag-fill" style="width:18.18%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-metadata-propagation</span><span class="tag-track"><span class="tag-fill" style="width:18.18%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">race-condition</span><span class="tag-track"><span class="tag-fill" style="width:18.18%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">unknown-defect</span><span class="tag-track"><span class="tag-fill" style="width:18.18%"></span></span><span class="tag-count">2 (1.6%)</span></div>
+<div class="tag-row"><span class="tag-name">api-contract-update</span><span class="tag-track"><span class="tag-fill" style="width:9.09%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">state-consistency</span><span class="tag-track"><span class="tag-fill" style="width:9.09%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">optional-field-handling</span><span class="tag-track"><span class="tag-fill" style="width:9.09%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-tag-support</span><span class="tag-track"><span class="tag-fill" style="width:9.09%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">missing-lookup-logic</span><span class="tag-track"><span class="tag-fill" style="width:9.09%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">rpc-interface-update</span><span class="tag-track"><span class="tag-fill" style="width:9.09%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">caching</span><span class="tag-track"><span class="tag-fill" style="width:9.09%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">null-pointer-exception</span><span class="tag-track"><span class="tag-fill" style="width:9.09%"></span></span><span class="tag-count">1 (0.8%)</span></div>
+<div class="tag-row"><span class="tag-name">caching-optimization</span><span class="tag-track"><span class="tag-fill" style="width:9.09%"></span></span><span class="tag-count">1 (0.8%)</span></div></div></section>
+  </div>
+
+</div>
+
+  </div>
+</div>
+
+<div class="modal" id="samplesPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box samples-box">
+    <div class="modal-head">
+      <div><h3 id="samplesTitle">Sample tasks</h3>
+        <div class="sub" id="samplesSub">pick one to see what a task contains</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="samples-body">
+      <div class="samples-side"><div class="sample-list" id="samplesList"></div></div>
+      <div class="samples-main" id="samplesView"></div>
+    </div>
+  </div>
+</div>
+
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="metricsPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3>Difficulty scoring &amp; semantic tagging</h3>
+        <div class="sub">how each task's difficulty and 4-tag metadata are produced</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">    <section class="tag-card method-card"><h3>Methodology <span>unified difficulty &amp; tagging</span></h3>
+      <div class="method-body">
+      <span class="mh">Difficulty Scoring (1&ndash;10 scale)</span><br>
+      Composite weighted score over 5 dimensions:<br>
+      &bull; <span class="dim">Patch scope (30%)</span>: lines changed, files affected, hunks count<br>
+      &bull; <span class="dim">Logic complexity (25%)</span>: control-flow depth, branching, algorithmic sophistication<br>
+      &bull; <span class="dim">Context breadth (20%)</span>: cross-module dependencies, API surface understanding<br>
+      &bull; <span class="dim">Test complexity (15%)</span>: fixture setup, mock requirements, edge-case coverage<br>
+      &bull; <span class="dim">Instruction complexity (10%)</span>: problem-statement clarity, implicit requirements<br>
+      Each dimension is log-scaled, then the weighted sum is mapped to 1&ndash;10 and binned into
+      <strong>easy</strong> (&le;4.0), <strong>medium</strong> (4.1&ndash;7.0), <strong>hard</strong> (&gt;7.0).<br><br>
+      <span class="mh">Semantic Tagging</span><br>
+      Each task is labelled with a 4-tuple <code>[language, area, topic, bug_class]</code>:<br>
+      &bull; <span class="dim">language</span>: primary programming language (python, javascript, go, &hellip;)<br>
+      &bull; <span class="dim">area</span>: architectural tier &isin; {backend, frontend, fullstack, cli, library, framework}<br>
+      &bull; <span class="dim">topic</span>: functional domain / library (auth, database, api, numpy, &hellip;)<br>
+      &bull; <span class="dim">bug_class</span>: root-cause category (logic-error, type-mismatch, race-condition, &hellip;)</div>
+    </section></div>
+  </div>
+</div>
+
+<div class="modal" id="filterHelpPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3>Collection filters</h3>
+        <div class="sub">the thresholds a repository and a pull request must clear to be collected</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body"><div class='sub'>Repository filters</div><div class='mini' style='margin:0 0 8px'>Applied while searching GitHub, before any pull request is looked at.</div><table><tr><td>min_stars<div class='mini' style='margin:2px 0 0'>SWEGEN_PR_MIN_STARS</div></td><td>Repository must have at least this many GitHub stars.</td></tr><tr><td>min_merged_prs<div class='mini' style='margin:2px 0 0'>SWEGEN_PR_MIN_MERGED_PRS</div></td><td>Repository must already have at least this many merged pull requests.</td></tr><tr><td>min_language_percentage<div class='mini' style='margin:2px 0 0'>SWEGEN_PR_MIN_LANGUAGE_PERCENTAGE</div></td><td>The target language must make up at least this fraction of the repository&#x27;s code.</td></tr><tr><td>max_days_since_push<div class='mini' style='margin:2px 0 0'>SWEGEN_PR_MAX_DAYS_SINCE_PUSH</div></td><td>Skip repositories whose last push is older than this many days.</td></tr></table><div class='sub'>Pull request filters</div><div class='mini' style='margin:0 0 8px'>Applied to each pull request inside a repository that passed the stage above.</div><table><tr><td>min_issue_body_length<div class='mini' style='margin:2px 0 0'>SWEGEN_PR_MIN_ISSUE_BODY_LENGTH</div></td><td>The pull request&#x27;s linked issue must have a body at least this many characters long — short issues rarely describe a task.</td></tr><tr><td>min_files_changed<div class='mini' style='margin:2px 0 0'>SWEGEN_PR_MIN_FILES_CHANGED</div></td><td>The pull request must touch at least this many files.</td></tr><tr><td>max_files_changed<div class='mini' style='margin:2px 0 0'>SWEGEN_PR_MAX_FILES_CHANGED</div></td><td>The pull request must touch no more than this many files.</td></tr><tr><td>max_lines_changed<div class='mini' style='margin:2px 0 0'>SWEGEN_PR_MAX_LINES_CHANGED</div></td><td>Additions plus deletions must not exceed this.</td></tr></table><div class='mini'>Each threshold can also be set through the environment variable shown under its name; the value in config.yaml is used when that is unset. Per-language overrides live in the collector and win over both.</div></div>
+  </div>
+</div>
+
+<div class="modal" id="infoPanel" role="dialog" aria-modal="true" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3>What this board is reading</h3>
+        <div class="sub">resolved from config.yaml at render time</div></div>
+      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body"><div class='mini'>batches are the subdirectories of artifacts/swe_tasks; a symlink there joins the board like any other batch</div><div class='sub'>Task batches</div><table><tr><td>c-cc</td><td class='mono'>external:artifacts/swe_tasks/c-cc</td><td>141 tasks</td></tr><tr><td>cpp-cc</td><td class='mono'>external:artifacts/swe_tasks/cpp-cc</td><td>89 tasks</td></tr><tr><td>go-cc</td><td class='mono'>external:artifacts/swe_tasks/go-cc</td><td>144 tasks</td></tr><tr><td>java-cc</td><td class='mono'>external:artifacts/swe_tasks/java-cc</td><td>115 tasks</td></tr><tr><td>js-cc</td><td class='mono'>external:artifacts/swe_tasks/js-cc</td><td>154 tasks</td></tr><tr><td>py-cc</td><td class='mono'>external:artifacts/swe_tasks/py-cc</td><td>159 tasks</td></tr><tr><td>ts-cc</td><td class='mono'>external:artifacts/swe_tasks/ts-cc</td><td>124 tasks</td></tr></table><div class='sub'>PR collection</div><table><tr><td>collected_prs</td><td class='mono'>artifacts/collected_prs</td><td></td></tr></table><div class='mini'>Collected PR and repo counts are read from the id lists on every render. The funnel above them — repos searched, PRs scanned, and the drop reasons — counts rows the collector discarded and never wrote down, so it can only come from its own report, generated 2026-07-17T01:13:29.571815.</div><div class='sub'>Collection filters</div><table><tr><td>min_stars</td><td class='mono'>30</td><td></td></tr><tr><td>min_merged_prs</td><td class='mono'>5</td><td></td></tr><tr><td>min_language_percentage</td><td class='mono'>0.4</td><td></td></tr><tr><td>max_days_since_push</td><td class='mono'>1095</td><td></td></tr><tr><td>min_issue_body_length</td><td class='mono'>10</td><td></td></tr><tr><td>min_files_changed</td><td class='mono'>1</td><td></td></tr><tr><td>max_files_changed</td><td class='mono'>25</td><td></td></tr><tr><td>max_lines_changed</td><td class='mono'>1500</td><td></td></tr></table><div class='mini'>language, difficulty and tags come from each task's task.toml, never from its directory name</div></div>
+  </div>
+</div>
+<script>
+var SAMPLE_INDEX = {"c-cc": {"file": "data/samples-c-cc.json", "count": 10, "tasks": [{"task_name": "acassen__gtp-guard-48", "language": "C", "difficulty": "medium"}, {"task_name": "acassen__gtp-guard-59", "language": "C", "difficulty": "medium"}, {"task_name": "ajmandourah__ladispad-8", "language": "C", "difficulty": "medium"}, {"task_name": "andy5995__canfigger-38", "language": "C", "difficulty": "medium"}, {"task_name": "andy5995__canfigger-48", "language": "C", "difficulty": "hard"}, {"task_name": "andy5995__canfigger-52", "language": "C", "difficulty": "hard"}, {"task_name": "andy5995__canfigger-55", "language": "C", "difficulty": "medium"}, {"task_name": "aremmell__libsir-126", "language": "C", "difficulty": "medium"}, {"task_name": "aremmell__libsir-129", "language": "C", "difficulty": "medium"}, {"task_name": "aremmell__libsir-149", "language": "C", "difficulty": "medium"}]}, "cpp-cc": {"file": "data/samples-cpp-cc.json", "count": 10, "tasks": [{"task_name": "aidasoft__podio-472", "language": "C++", "difficulty": "hard"}, {"task_name": "aidasoft__podio-720", "language": "C++", "difficulty": "medium"}, {"task_name": "aidasoft__podio-729", "language": "C++", "difficulty": "hard"}, {"task_name": "aidasoft__podio-736", "language": "C++", "difficulty": "medium"}, {"task_name": "aidasoft__podio-738", "language": "C++", "difficulty": "medium"}, {"task_name": "aidasoft__podio-743", "language": "C++", "difficulty": "medium"}, {"task_name": "aidasoft__podio-748", "language": "Python", "difficulty": "hard"}, {"task_name": "aidasoft__podio-758", "language": "C++", "difficulty": "medium"}, {"task_name": "aidasoft__podio-761", "language": "C++", "difficulty": "hard"}, {"task_name": "aidasoft__podio-773", "language": "C++", "difficulty": "medium"}]}, "go-cc": {"file": "data/samples-go-cc.json", "count": 10, "tasks": [{"task_name": "4meepo__tagalign-20", "language": "Go", "difficulty": "medium"}, {"task_name": "abhinav__requiredfield-39", "language": "Go", "difficulty": "medium"}, {"task_name": "abhinav__requiredfield-51", "language": "Go", "difficulty": "medium"}, {"task_name": "abhinav__requiredfield-52", "language": "Go", "difficulty": "hard"}, {"task_name": "abhinav__requiredfield-58", "language": "Go", "difficulty": "medium"}, {"task_name": "alexfalkowski__go-service-2871", "language": "Go", "difficulty": "medium"}, {"task_name": "alexfalkowski__go-service-2872", "language": "Go", "difficulty": "medium"}, {"task_name": "alexfalkowski__go-service-2873", "language": "Go", "difficulty": "hard"}, {"task_name": "alexfalkowski__go-service-2877", "language": "Go", "difficulty": "medium"}, {"task_name": "alexfalkowski__go-service-2920", "language": "Go", "difficulty": "medium"}]}, "java-cc": {"file": "data/samples-java-cc.json", "count": 10, "tasks": [{"task_name": "alphagov__pay-publicapi-1632", "language": "Java", "difficulty": "medium"}, {"task_name": "alphagov__pay-publicapi-1635", "language": "Java", "difficulty": "medium"}, {"task_name": "alphagov__pay-publicapi-1644", "language": "Java", "difficulty": "hard"}, {"task_name": "alphagov__pay-publicapi-1656", "language": "Java", "difficulty": "medium"}, {"task_name": "alphagov__pay-publicapi-1664", "language": "Java", "difficulty": "hard"}, {"task_name": "alphagov__pay-publicapi-1702", "language": "Java", "difficulty": "medium"}, {"task_name": "alphagov__pay-publicapi-1705", "language": "Java", "difficulty": "medium"}, {"task_name": "alphagov__pay-publicapi-1714", "language": "Java", "difficulty": "medium"}, {"task_name": "alphagov__pay-publicapi-1729", "language": "Java", "difficulty": "medium"}, {"task_name": "alphagov__pay-publicapi-1752", "language": "Python", "difficulty": "medium"}]}, "js-cc": {"file": "data/samples-js-cc.json", "count": 10, "tasks": [{"task_name": "99x__dynamodb-localhost-45", "language": "JavaScript", "difficulty": "medium"}, {"task_name": "americanexpress__react-seo-12", "language": "JavaScript", "difficulty": "medium"}, {"task_name": "americanexpress__react-seo-23", "language": "JavaScript", "difficulty": "medium"}, {"task_name": "americanexpress__react-seo-26", "language": "JavaScript", "difficulty": "hard"}, {"task_name": "amida-tech__blue-button-127", "language": "JavaScript", "difficulty": "medium"}, {"task_name": "amida-tech__blue-button-33", "language": "Python", "difficulty": "medium"}, {"task_name": "amida-tech__blue-button-57", "language": "JavaScript", "difficulty": "medium"}, {"task_name": "api3dao__api3-dao-131", "language": "solidity", "difficulty": "medium"}, {"task_name": "api3dao__api3-dao-134", "language": "solidity", "difficulty": "medium"}, {"task_name": "api3dao__api3-dao-140", "language": "solidity", "difficulty": "medium"}]}, "py-cc": {"file": "data/samples-py-cc.json", "count": 10, "tasks": [{"task_name": "actionshrimp__vim-xpath-17", "language": "Python", "difficulty": "medium"}, {"task_name": "adbautoplayer__adbautoplayer-216", "language": "Python", "difficulty": "medium"}, {"task_name": "adbautoplayer__adbautoplayer-5", "language": "Python", "difficulty": "hard"}, {"task_name": "adbautoplayer__adbautoplayer-8", "language": "Python", "difficulty": "medium"}, {"task_name": "adbautoplayer__adbautoplayer-9", "language": "Python", "difficulty": "hard"}, {"task_name": "adrn__thejoker-110", "language": "Python", "difficulty": "medium"}, {"task_name": "adrn__thejoker-71", "language": "Python", "difficulty": "medium"}, {"task_name": "adrn__thejoker-81", "language": "Python", "difficulty": "medium"}, {"task_name": "allenai__s2_fos-8", "language": "Python", "difficulty": "medium"}, {"task_name": "anssi-fr__orc2timeline-5", "language": "Python", "difficulty": "hard"}]}, "ts-cc": {"file": "data/samples-ts-cc.json", "count": 10, "tasks": [{"task_name": "42organization__42gg.client-796", "language": "TypeScript", "difficulty": "medium"}, {"task_name": "acalanetwork__bodhi.js-1039", "language": "TypeScript", "difficulty": "medium"}, {"task_name": "acalanetwork__bodhi.js-1043", "language": "TypeScript", "difficulty": "medium"}, {"task_name": "acalanetwork__bodhi.js-1051", "language": "TypeScript", "difficulty": "hard"}, {"task_name": "acalanetwork__bodhi.js-535", "language": "TypeScript", "difficulty": "medium"}, {"task_name": "acalanetwork__bodhi.js-564", "language": "TypeScript", "difficulty": "medium"}, {"task_name": "acalanetwork__bodhi.js-570", "language": "TypeScript", "difficulty": "medium"}, {"task_name": "acalanetwork__bodhi.js-572", "language": "TypeScript", "difficulty": "medium"}, {"task_name": "acalanetwork__bodhi.js-590", "language": "TypeScript", "difficulty": "medium"}, {"task_name": "acalanetwork__bodhi.js-596", "language": "TypeScript", "difficulty": "medium"}]}};
+var PAGE_META = {
+  overview: {title: 'Overview', sub: "7 batches \u00b7 926 unique tasks \u00b7 270 verified"},
+  collection: {title: 'PR Collection', sub: "8,818 PRs from 822 repos"},
+  tasks: {title: 'Task List', sub: "Per-batch breakdown \u2014 pick a batch for its full profile"}
+};
+
+/* Light is the default; dark follows a saved choice, else the OS preference. */
+(function () {
+  var saved = null;
+  try { saved = localStorage.getItem('curator-theme'); } catch (e) {}
+  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = saved || (prefersDark ? 'dark' : 'light');
+})();
+
+/* Two modals, one at a time. Closed by the X, by the backdrop, or by Escape. */
+var MODALS = [['infoToggle', 'infoPanel'], ['metricsToggle', 'metricsPanel'],
+              ['filterHelp', 'filterHelpPanel']]
+  .map(function (p) {
+    return {btn: document.getElementById(p[0]), panel: document.getElementById(p[1])};
+  })
+  .filter(function (d) { return d.btn && d.panel; });
+
+function closeModals() {
+  MODALS.forEach(function (m) { m.panel.hidden = true; });
+  var sp = document.getElementById('samplesPanel');
+  if (sp) { sp.hidden = true; }
+}
+
+MODALS.forEach(function (m) {
+  m.btn.addEventListener('click', function () {
+    var wasHidden = m.panel.hidden;
+    closeModals();
+    m.panel.hidden = !wasHidden;
+  });
+  m.panel.addEventListener('click', function (e) {
+    // the backdrop is the panel itself; clicks inside .modal-box must not close it
+    if (e.target === m.panel || (e.target.hasAttribute && e.target.hasAttribute('data-close'))) {
+      m.panel.hidden = true;
+    }
+  });
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') { closeModals(); }
+});
+
+document.getElementById('themeToggle').addEventListener('click', function () {
+  var el = document.documentElement;
+  var next = el.dataset.theme === 'dark' ? 'light' : 'dark';
+  el.dataset.theme = next;
+  try { localStorage.setItem('curator-theme', next); } catch (e) {}
+});
+
+function showPage(name) {
+  if (!PAGE_META[name]) { name = 'overview'; }
+  document.querySelectorAll('.page').forEach(function (p) {
+    p.classList.toggle('active', p.id === 'page-' + name);
+  });
+  document.querySelectorAll('.nav-item').forEach(function (b) {
+    b.classList.toggle('active', b.dataset.page === name);
+  });
+  var meta = PAGE_META[name];
+  document.getElementById('page-title').textContent = meta.title;
+  document.getElementById('page-sub').textContent = meta.sub;
+  location.hash = name;
+}
+
+document.querySelectorAll('.nav-item').forEach(function (b) {
+  b.addEventListener('click', function () { showPage(b.dataset.page); });
+});
+
+/* Task List: a row opens that dataset's detail; Back returns to the list. */
+var detail = document.getElementById('ds-detail');
+var list = document.querySelector('#page-tasks .ds-list');
+
+document.querySelectorAll('.ds-row').forEach(function (row) {
+  row.addEventListener('click', function () {
+    var id = row.dataset.ds;
+    document.querySelectorAll('.ds-row').forEach(function (o) {
+      o.classList.toggle('active', o === row);
+    });
+    document.querySelectorAll('#ds-detail .ds-panel').forEach(function (p) {
+      p.classList.toggle('active', p.dataset.ds === id);
+    });
+    detail.hidden = false;
+    list.hidden = true;
+    document.getElementById('page-sub').textContent = row.querySelector('.name').textContent;
+  });
+});
+
+/* Sample viewer. The cached JSON per batch is fetched once, then the modal shows
+   a picker over the ten samples and the selected one's files as tabs. */
+var sampleCache = {};
+var samplesModal = document.getElementById('samplesPanel');
+
+function escapeHtml(t) {
+  return String(t).replace(/[&<>]/g, function (c) {
+    return {'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c];
+  });
+}
+
+/* Highlighting tokenises the RAW text and escapes inside the callback, so a rule
+   can never match markup an earlier rule inserted. Each character is consumed once. */
+var RULES = {
+  sh: [
+    ['cm', /#[^\n]*/],
+    ['st', /"(?:\\.|[^"\\])*"|'(?:[^'])*'/],
+    ['va', /\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*/],
+    ['kw', /\b(?:if|then|elif|else|fi|for|while|do|done|case|esac|function|return|export|source|local|set|cd|echo|exit|test)\b/]
+  ],
+  docker: [
+    ['cm', /#[^\n]*/],
+    ['st', /"(?:\\.|[^"\\])*"/],
+    ['kw', /^[ \t]*(?:FROM|RUN|CMD|LABEL|COPY|ADD|ENV|ARG|WORKDIR|ENTRYPOINT|USER|EXPOSE|VOLUME|SHELL|HEALTHCHECK)\b/m],
+    ['va', /\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*/]
+  ],
+  md: [
+    ['mt', /^#{1,6} [^\n]*/m],
+    ['st', /`[^`\n]*`/],
+    ['kw', /\*\*[^*\n]+\*\*/]
+  ]
+};
+
+function kindOf(file) {
+  if (/\.patch$/.test(file)) return 'diff';
+  if (/Dockerfile$/i.test(file)) return 'docker';
+  if (/\.sh$/.test(file)) return 'sh';
+  if (/\.md$/.test(file)) return 'md';
+  return 'plain';
+}
+
+function highlightDiff(text) {
+  return text.split('\n').map(function (line) {
+    var e = escapeHtml(line);
+    if (line.charAt(0) === '+' && line.slice(0, 3) !== '+++') return '<span class="add">' + e + '</span>';
+    if (line.charAt(0) === '-' && line.slice(0, 3) !== '---') return '<span class="del">' + e + '</span>';
+    if (line.slice(0, 2) === '@@') return '<span class="hunk">' + e + '</span>';
+    return e;
+  }).join('\n');
+}
+
+function highlightCode(text, rules) {
+  var parts = rules.map(function (r) { return '(' + r[1].source + ')'; });
+  var flags = 'g' + (rules.some(function (r) { return r[1].flags.indexOf('m') >= 0; }) ? 'm' : '');
+  var re = new RegExp(parts.join('|'), flags);
+  var out = '', last = 0, m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) { out += escapeHtml(text.slice(last, m.index)); }
+    var cls = 'cm';
+    for (var i = 1; i < m.length; i++) {
+      if (m[i] !== undefined) { cls = rules[i - 1][0]; break; }
+    }
+    out += '<span class="' + cls + '">' + escapeHtml(m[0]) + '</span>';
+    last = m.index + m[0].length;
+    if (m[0].length === 0) { re.lastIndex++; }
+  }
+  return out + escapeHtml(text.slice(last));
+}
+
+function renderCode(text, file) {
+  var kind = kindOf(file);
+  var body = kind === 'diff' ? highlightDiff(text)
+           : RULES[kind] ? highlightCode(text, RULES[kind])
+           : escapeHtml(text);
+  return body.split('\n').map(function (line, i) {
+    return '<span class="ln">' + (i + 1) + '</span>' + line;
+  }).join('\n');
+}
+
+function showSample(sample) {
+  var view = document.getElementById('samplesView');
+  var meta = [sample.language, sample.difficulty, sample.area, sample.topic, sample.bug_class]
+    .filter(Boolean).join(' · ');
+  var tabs = sample.parts.map(function (p, i) {
+    var kb = p.bytes >= 1024 ? (p.bytes / 1024).toFixed(1) + ' KB' : p.bytes + ' B';
+    return '<button class="tab' + (i === 0 ? ' active' : '') + '" data-i="' + i + '">' +
+      escapeHtml(p.label) + '<span class="sz">' + kb + '</span></button>';
+  }).join('');
+
+  view.innerHTML =
+    '<div class="sample-head"><div class="t">' + escapeHtml(sample.task_name) + '</div>' +
+    '<div class="m">' + escapeHtml(sample.repo || '') +
+    (meta ? ' &nbsp;|&nbsp; ' + escapeHtml(meta) : '') + '</div></div>' +
+    '<div class="tabs">' + tabs + '</div>' +
+    '<div class="sample-body"><pre class="sample-pre"><code id="samplesPre"></code></pre></div>';
+
+  function show(i) {
+    var part = sample.parts[i];
+    var pre = document.getElementById('samplesPre');
+    pre.innerHTML = renderCode(part.text, part.file);
+    view.querySelectorAll('.tab').forEach(function (t) {
+      t.classList.toggle('active', t.dataset.i === String(i));
+    });
+  }
+  view.querySelectorAll('.tab').forEach(function (t) {
+    t.addEventListener('click', function () { show(parseInt(t.dataset.i, 10)); });
+  });
+  if (sample.parts.length) { show(0); }
+  else { view.innerHTML += '<div class="empty-state">no readable files in this task</div>'; }
+}
+
+function openSamples(batch) {
+  var info = SAMPLE_INDEX[batch];
+  var list = document.getElementById('samplesList');
+  var view = document.getElementById('samplesView');
+  document.getElementById('samplesTitle').textContent = 'Sample tasks — ' + batch;
+  view.innerHTML = '';
+  closeModals();
+  samplesModal.hidden = false;
+
+  if (!info) {
+    view.innerHTML = '<div class="empty-state">no samples cached for this batch</div>';
+    return;
+  }
+  document.getElementById('samplesSub').textContent =
+    info.count + ' of this batch — pick one to see what a task contains';
+  list.innerHTML = info.tasks.map(function (t) {
+    return '<button class="sample-row" data-task="' + escapeHtml(t.task_name) + '">' +
+      '<span class="sid">' + escapeHtml(t.task_name) + '</span>' +
+      '<span class="smeta">' + escapeHtml([t.language, t.difficulty].filter(Boolean).join(' · ')) +
+      '</span></button>';
+  }).join('');
+
+  function pick(row) {
+    list.querySelectorAll('.sample-row').forEach(function (o) {
+      o.classList.toggle('active', o === row);
+    });
+    var s = (sampleCache[batch] || []).filter(function (x) {
+      return x.task_name === row.dataset.task;
+    })[0];
+    if (s) { showSample(s); }
+  }
+  list.querySelectorAll('.sample-row').forEach(function (row) {
+    row.addEventListener('click', function () { pick(row); });
+  });
+
+  if (sampleCache[batch]) { return; }
+  view.innerHTML = '<div class="empty-state">loading…</div>';
+  fetch(info.file).then(function (r) {
+    if (!r.ok) { throw new Error('HTTP ' + r.status); }
+    return r.json();
+  }).then(function (data) {
+    sampleCache[batch] = data;
+    var first = list.querySelector('.sample-row');
+    if (first) { first.click(); } else { view.innerHTML = ''; }
+  }).catch(function (e) {
+    view.innerHTML = '<div class="empty-state">could not load samples: ' +
+      escapeHtml(e.message) + '</div>';
+  });
+}
+
+document.querySelectorAll('.samples-btn[data-samples]').forEach(function (btn) {
+  btn.addEventListener('click', function () { openSamples(btn.dataset.samples); });
+});
+samplesModal.addEventListener('click', function (e) {
+  if (e.target === samplesModal || (e.target.hasAttribute && e.target.hasAttribute('data-close'))) {
+    samplesModal.hidden = true;
+  }
+});
+
+var back = document.getElementById('ds-back');
+if (back) {
+  back.addEventListener('click', function () {
+    detail.hidden = true;
+    list.hidden = false;
+    document.querySelectorAll('.ds-row').forEach(function (o) { o.classList.remove('active'); });
+    document.getElementById('page-sub').textContent = PAGE_META.tasks.sub;
+  });
+}
+
+showPage((location.hash || '').slice(1));
+</script>
+</body>
+</html>

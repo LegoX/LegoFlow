@@ -1,224 +1,149 @@
-# LegoFlow
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/public/figures/legoflow-wordmark-dark.svg">
+    <img alt="LegoFlow" src="docs/public/figures/legoflow-wordmark-light.svg" width="380">
+  </picture>
+</p>
 
-A self-evolving LLM development pipeline. It generates coding-agent training data from real GitHub PRs, runs agent trajectories, and feeds the results into SFT training and benchmark evaluation — all coordinated by an AI agent that monitors progress and tunes parameters automatically.
+<p align="center"><b>Easy and Interactive Code Data Engineering</b></p>
 
+<p align="center">
+  <a href="https://legoflow-docs.pages.dev/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
+  &nbsp;·&nbsp;
+  <a href="https://huggingface.co/SWE-Lego"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
+  &nbsp;·&nbsp;
+  <a href="https://legox.pages.dev/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
+  &nbsp;·&nbsp;
+  <a href="https://legox.pages.dev/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
+  &nbsp;·&nbsp;
+  <a href="LICENSE"><img src="docs/public/figures/icon-license.svg" height="15" alt=""> License</a>
+  &nbsp;·&nbsp;
+  <a href="./README_zh.md"><img src="docs/public/figures/icon-lang.svg" height="15" alt=""> ZH</a>
+</p>
 
-
-## Block Overview
-
-This entire project is built on a **block** abstraction. The pipeline consists of four blocks, run in order. Each has its own `CLAUDE.md` (agent contract), `config.yaml` (inputs, outputs — one-shot per run, no live state), and `scripts/`.
-
-| Block | Role | Primary output |
-|-------|------|----------------|
-| `blocks/curator/` | Converts GitHub PRs → verified SWE tasks | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` |
-| `blocks/tracer/` | Runs an agent on SWE tasks → raw trajectories | `artifacts/jobs/<job>/` (Harbor job dirs) |
-| `blocks/trainer/` | Converts trajectories → sharegpt data, trains with LLaMA-Factory | `artifacts/model/<run>/` (checkpoints) |
-
-
-### What is a Block?
-
-Each unit of work — `curator`, `tracer`, `trainer`, `evaluator` — is a self-contained directory with the same fixed structure:
-
-- `config.yaml` declares the block's inputs, outputs, children, dependencies between children, and (optionally) a remote node it must run on. It is **one-shot per run** — every key is configuration; no live state is stored here.
-- `scripts/start.sh`, `dryrun.sh`, `clean.sh`, `archive_run.sh` are how it actually executes. `start.sh` installs an EXIT trap that fires `archive_run.sh` on completion (success, failure, or signal), producing a `artifacts/archives/run_NNN/` snapshot and appending one entry to `artifacts/index.yaml`.
-- `artifacts/index.yaml` is the live state: the newest entry's `status` field (`completed | failed | interrupted`) tells you what the block last did.
-- Blocks can nest — a parent lists its children under `meta_info.blocks` (roles only), and each child's own `meta_info.dependencies` shows both directions: `from` (the outputs it consumes, wired into its own inputs) and `to` (which of its own outputs feed which sibling, the mirror declared by the producer). The full specification is in [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md).
-
+---
 
 
-### Pipeline Architecture
 
-```
-GitHub PRs
-    │
-    ▼
-┌────────┐  SWE tasks  ┌─────────┐  trajectories  ┌─────────┐  ckpt  ┌───────────┐
-│ curator │ ──────────► │ tracer  │ ─────────────► │ trainer │ ─────► │ evaluator │
-└────────┘             └─────────┘                └─────────┘        └───────────┘
-```
+## About
+
+LegoFlow is an easy and interactive framework for code data engineering, part of the [LegoX](https://legox.pages.dev/) family. The highlights include:
+
+- **Fully Vibe-coding**: LegoFlow turns the complicated, error-prone code data collection procedures (repo and PR collection, task verification, trajectory rollout, and the training-evaluation loop) into well-prepared plugin skills, where users can simply chat and interact with the coding agent (e.g., Claude Code) for real production.
+- **Wide Coverage**: LegoFlow covers over 8+ programming languages and 20+ task tags, and trajectory rollouts across multiple coding scaffolds including Claude Code, OpenCode, OpenHands and Terminus.
+- **High Flexibility**: LegoFlow is designed to ground on **block**, the building unit that allows your coding agent to manage repositories, scripts, configurations and the runtime output of a particular stage.
+- **Live Dashboards**: LegoFlow monitors the data production process through a series of live dashboards. These dashboards are built around carefully designed rubrics for tracking task difficulty, trajectory quality, and model performance.
+- **Self-evolving**: An agent has run the whole loop on its own, diagnosed why its first fine-tune plateaued, and lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. See [the end-to-end run](https://legox.pages.dev/blog/legoflow/).
 
 
-## Project Layout
 
-```
-LegoFlow/
-├── CLAUDE.md                  # root block agent contract
-├── BLOCK_DEFINITION.md        # block system specification
-├── scripts/
-│   ├── dryrun.sh              # validate root block
-│   ├── start.sh               # launch data blocks (curator + tracer); installs EXIT-trap → archive_run.sh
-│   ├── archive_run.sh         # snapshot config + scripts + repo SHAs → artifacts/archives/run_NNN/
-│   └── clean.sh               # remove a run's temporary output; --all wipes artifacts/
-├── dashboard/
-│   └── overview.mdx           # human-readable current state
-├── artifacts/
-│   ├── index.yaml             # append-only run index (newest entry = live state)
-│   └── archives/run_NNN/      # per-run snapshots (metadata.yaml + config.yaml + scripts/)
-└── blocks/
-    ├── curator/                # SWE task generation block (same scripts/ + artifacts/ layout)
-    ├── tracer/               # trajectory generation block
-    ├── trainer/                   # SFT training block
-```
+## News
+
+🔥 **2026-08-12**: We release LegoFlow v0.1, the initial version of a fully agentic pipeline for software-engineering data.
+
+## Architecture
+
+![LegoFlow block tree](docs/public/figures/my-version-coding-repos-expandable.png)
+
+LegoFlow follows the tree structure of **blocks**. The root orchestrates four children:
+
+
+| Block | Role |
+| ----- | ---- |
+| [`curator`](https://legoflow-docs.pages.dev/docs/blocks/curator/getting-started) | Curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums |
+| [`tracer`](https://legoflow-docs.pages.dev/docs/blocks/tracer/getting-started) | Collects high-quality trajectories with verified rewards, across multiple coding scaffolds |
+| [`trainer`](https://legoflow-docs.pages.dev/docs/blocks/trainer/getting-started) | Converts rollout traces into training-ready formats and launches end-to-end training |
+| [`evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis |
+
+
+> [!NOTE]
+> We have a clear definition of **block**. It plays a particular role in the workflow, following the same layout and file structure. A block maintains the relevant repositories (`repos/`), configuration (`config.yaml`) and run scripts (`scripts/`), manages its output in `artifacts/`, and communicates with its adjacent blocks. See [What is a Block](https://legoflow-docs.pages.dev/docs/block-design) for more details.
+
+## Released Datasets
+
+We are actively releasing the latest datasets produced by LegoFlow:
+
+
+| ID                  | Teacher Model | Scaffold      | Data Samples | Training Result                                           | HF Link                                                                                                 |
+| ------------------- | ------------- | ------------- | ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK (v1.14) | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
 
 
 ## Quick Start
 
-Run the pipeline block by block in order: **curator → tracer → trainer**, then evaluate with **evaluator**. Each step produces artifacts the next block depends on. You can also run blocks individually once their inputs and upstream dependencies are satisfied.
-
 ### Prerequisites
 
-- **All blocks**: Claude Code with this repo's block plugin loaded (`/reload-plugins` shows `1 plugin · 3 skills`); `git submodule update --init --recursive` after clone
-- **curator**: GitHub token(s) with `repo` read scope; OpenAI-compatible LLM API; Docker on the run host
-- **tracer**: OpenAI-compatible LLM API; Docker; verified tasks from legoflow-curator (wired via `meta_info.dependencies`)
-- **trainer**: Multi-GPU node (typically 8× GPU); conda env and model paths per `blocks/trainer/CLAUDE.md`; trajectory source (from tracer or an existing job dir)
+- **Claude Code** — the recommended coding agent to drive LegoFlow.
+- **An OpenAI-compatible LLM endpoint** — required by Curator, Tracer and Evaluator.
+- **GitHub token(s)** — supplied through `GITHUB_TOKENS`, for Curator's PR collection.
+- **Docker** — every task and every rollout runs in a container.
+- **A GPU node** — only if you train, or serve a checkpoint yourself. Validated on one node with 8× H800 80GB; multi-node is not wired up.
+- **Docker and Cloudflare credentials** — optional, for authenticated image pulls and for publishing dashboards.
 
-Root `scripts/start.sh` only automates the **data** stage (curator + tracer on the configured remote node). **trainer** and **evaluator** are started from their own directories via `/root:run` or `scripts/start.sh`.
+What each one is for is spelled out in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Each block has its own dependent environment, which can be set up automatically following the corresponding guides. 
 
-### The `Block` Plugin
-
-You don't operate blocks by hand. A Claude Code plugin at `.claude/plugins/root-plugin/` helps you set up and run the whole tree:
-
-- **`/root:create`** — scaffold a new block with the correct structure (config.yaml, scripts, dashboard, artifacts index, optional submodules).
-- **`/root:check`** — recursively sanity-check every block under the current directory: schema, filled inputs, dependency wiring, remote-resource reachability, and live availability of any LLM endpoint declared in `runtime_info.input`. Read-only.
-- **`/root:run`** — preflight every input and dependency for the target block, then execute its `scripts/start.sh` (locally, or in a tmux session over SSH if it's a remote-resource block) and archive the result under `artifacts/archives/run_NNN/`.
-
-Both `/root:check` and `/root:run` take a free-form natural-language argument. The agent reads the whole string and infers the target block (by literal name or unambiguous paraphrase, using each block's `CLAUDE.md` for context); if no block is mentioned it targets the root, and ambiguity (multiple blocks named) triggers a clarification question rather than a guess.
-
-```text
-/root:run                                       # root orchestrator
-/root:run curator                                # blocks/curator
-/root:run curator only 32 verified tasks         # curator + propose config/flag change, confirm, run
-/root:run run curator with 32 verified tasks     # same — block name embedded in sentence
-/root:run run the trajectory generator          # tracer — resolved by paraphrase
-/root:run start the data pipeline               # root — no block mentioned
-/root:run run curator and tracer                # ambiguous — agent asks which one
-```
-
-For `/root:run`, if the instruction implies a config edit or flag injection, the agent proposes the concrete change (file path, old → new value) and confirms before applying. For `/root:check`, the instruction only shapes the report's focus — every check still runs, and no files are ever modified.
-
-
-### 1. Clone
-
+### Environment Setup
+1. Clone the code repository.
 ```bash
-git clone --recurse-submodules <repo-url> LegoFlow
+git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
 cd LegoFlow
 ```
 
-If you already cloned without `--recurse-submodules`, run `git submodule update --init --recursive`.
+2. Install the plugins. Every block ships one. Register its directory as a Claude Code marketplace, then install from it:
 
-### 2. Discover what needs to be filled
-
-Open Claude Code in the repo root, then ask:
-
-```text
-/root:check              # check root + every block
-/root:check curator       # only check the curator block
+```bash
+claude plugin marketplace add ./.claude/plugins
+claude plugin install root@root-block
 ```
 
-On a fresh clone, the report tells you exactly which `runtime_info.input` keys are unfilled, which submodules are missing, whether the remote node is reachable, and whether the configured LLM endpoint exposes the requested model. `/root:check` uses `GET /models`; the separate `/curator:check` adds a small real completion request before generation. You don't need to read each `config.yaml` cold; let the skill point at the gaps.
+   The same holds for `curator`, `tracer`, `trainer` and `evaluator`, whose plugin directories live at `./blocks/<name>/.claude/plugins`. All five pairs are listed in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Run `/reload-plugins` afterwards so the skills load.
 
-Pass a block name (e.g. `/root:check tracer`) when you're iterating on one block and don't want noise from the others.
+### Example Usages
 
-### 3. Fill the gaps
+Users can trigger individual blocks for a particular purpose, or jointly run multiple blocks for a more complicated pipeline.
 
-Edit each `config.yaml` flagged in step 2, setting only keys under `runtime_info.input` (replace every `human` marker; `""` fields are supplied via env/file channels). Upstream block outputs are wired via each block's `meta_info.dependencies` and you do **not** copy paths by hand.
+#### Running Individual Blocks
 
-| Block | What to fill (see that block's `CLAUDE.md` for the full list) |
-|-------|------------------------------------------------------------------|
-| **curator** | Provide PR-collection tokens via `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an ignored token file (never in config.yaml); fill `llm_api` (api_key, api_base_url, pr_model, task_model) |
-| **tracer** | `llm_api` (api_key, api_base_url, model); task source comes from legoflow-curator dependency |
-| **trainer** | `source` (provider, scaffold, job_dir / trajs_dir); `conversion`; `model`; `training`; `infrastructure`; `credentials` (WandB if online) |
+Every block has clear roles and functions. Users can easily trigger these blocks with their pre-defined skills. In general, the steps to trigger a block include:
 
-Re-run `/root:check` until it prints `All blocks healthy — safe to /root:run.`
+- `/block:setup` prepares necessary dependencies and fills in `config.yaml`
+- `/block:check` validates the configuration and run pre-flight check
+- `/block:run` does the work and archives the intermediate output to `artifacts/`
+- `/block:dashboard` helps the user to monitor the running progress and status
 
-### 4. Run the pipeline
+The detailed guides to each individual block can be found at [docs](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/block-by-block).
 
-Invoke `/root:run <block_name>` from the repo root, or `cd` into the block and invoke `/root:run` with no args. Both forms directly execute the selected block's `scripts/start.sh`. Preflight matches `/root:check`; execution runs locally or over SSH + tmux when `meta_info.resources.ip` is set. Each run archives under `artifacts/archives/run_NNN/` automatically — `start.sh`'s EXIT trap fires `scripts/archive_run.sh` regardless of how the run exits (success, error, SIGINT, SIGTERM).
+#### Running Multiple Blocks
 
-**1. curator** — generate and validate SWE tasks:
+Users can also customize the workflow by running multiple blocks. Step-by-step guidance is in [Running Cascaded Blocks](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/cascaded).
 
-```text
-/root:run curator                         # all-language scripts/start.sh
-# for Curator smoke, single-language, or full mode selection:
-cd blocks/curator && /curator:create-tasks
+For example, our previous run with all four blocks shows that Curator built 4,166 verified Python tasks, Tracer solved 915 of them, 512 trajectories were selected for training, and the resulting fine-tune lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified. More details are recorded in the [blog](https://legox.pages.dev/blog/legoflow/).
+
+## Contributing
+
+We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/SWE-Lego-Live). For more details, please refer to the [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development).
+
+## Citation
+
+```bibtex
+@misc{legoflow2026,
+  title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
+  author = {The LegoX Team},
+  year   = {2026},
+  url    = {https://github.com/LegoX/SWE-Lego-Live}
+}
 ```
 
-**2. tracer** — run the agent on verified tasks (after curator has entries in `verifiable_tasks.txt`):
 
-```text
-/root:run tracer
-```
+## Acknowledgements
 
-**3. trainer** — convert trajectories and fine-tune (after tracer job dirs exist; `trajectories_dir` dependency points at tracer output):
+LegoFlow builds on [Harbor](https://www.harborframework.com/) for isolated task execution,
+[LLaMA-Factory](https://github.com/LegoX/LLaMA-Factory) and [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) for training,
+[LiteLLM](https://github.com/BerriAI/litellm) for trajectory capture,
+[vLLM](https://github.com/vllm-project/vllm) for serving local checkpoints,
+[Claude Code](https://claude.com/claude-code) and the Claude Agent SDK for agent operation,
+and [Fumadocs](https://fumadocs.dev/) for the documentation site.
 
-```text
-/root:run trainer
-```
+## License
 
-**4. evaluator** — benchmark the trained checkpoint (after trainer writes `runtime_info.output.checkpoint_path`):
-
-```text
-/root:run evaluator
-```
-
-You can also run the **root orchestrator** to launch the data stage (curator + tracer on the configured remote node) as one step:
-
-```text
-/root:run              # equivalent to: bash scripts/start.sh
-```
-
-`bash scripts/start.sh` directly also works and accepts `--curator-only` / `--tracer-only` for selective launching.
-
-### 5. Monitor
-
-The block's own artifacts are the source of truth — no need to attach to remote tmux unless you want to.
-
-- `artifacts/index.yaml` — timeline. Newest entry's `status` (`completed | failed | interrupted`) tells you what the block last did.
-- `artifacts/archives/run_NNN/metadata.yaml` — detail page for one run: id, block, timestamps, exit code, repo commit SHAs.
-- `artifacts/archives/run_NNN/config.yaml` — frozen snapshot of the config that produced this run.
-- `artifacts/archives/run_NNN/scripts/` — frozen copy of the scripts as they were at run time.
-- `artifacts/archives/run_NNN/session.log`, `monitor.md` — optional, agent-added narratives.
-
-#### Archive format reference
-
-Both files follow a fixed schema. `archive_run.sh` writes them on every run; the contract is documented in `.claude/plugins/root-plugin/references/BLOCK_DEFINITION.md` (§ "Artifacts — Archiving Each Run"), with a worked example at `.claude/plugins/root-plugin/references/example_block/artifacts/`.
-
-**`artifacts/index.yaml`** — one entry appended per run:
-
-```yaml
-runs:
-  - id: run_001
-    started_at: "2026-05-04T08:00:00Z"
-    completed_at: "2026-05-04T10:11:35Z"
-    status: completed          # completed | failed | interrupted
-    archive: artifacts/archives/run_001/
-    notes: ""                  # agent may refine after the run
-```
-
-**`artifacts/archives/run_NNN/metadata.yaml`** — required fields written automatically:
-
-```yaml
-id: run_001
-block: <block_name>
-started_at: "2026-05-04T08:00:00Z"
-completed_at: "2026-05-04T10:11:35Z"
-status: completed              # completed | failed | interrupted
-exit_code: 0
-repos:
-  <name>: <40-char git sha>    # one per dir under repos/; {} if none
-notes: ""
-# Optional, agent-added: stage, results, inputs
-```
-
-The `status` vocabulary is identical in both files and is derived from `start.sh`'s exit code: `0 → completed`, `130/143 → interrupted` (SIGINT/SIGTERM), anything else → `failed`. Field order is fixed (`sort_keys=False` in the YAML writer), so diffs across runs stay readable.
-
-## Adding a New Block
-
-Use `/root:create` to scaffold a new block — it produces the full directory tree (`config.yaml`, `CLAUDE.md`, `dashboard/`, `scripts/{start,dryrun,clean,archive_run}.sh`, `artifacts/index.yaml`, `memory/notes.md`, `blocks/`) wired up to the [`BLOCK_DEFINITION.md`](BLOCK_DEFINITION.md) contract. `archive_run.sh` is copied unmodified from the plugin's canonical template, and the scaffolded `start.sh` includes the EXIT-trap snippet that invokes it — so a newly created block archives every run automatically without any extra wiring.
-
-Two ways to drive it:
-
-- **Intake form** — copy `.claude/plugins/root-plugin/references/BLOCK_INTAKE.md` into your project, fill it in, and paste it back. The agent scaffolds everything from your answers.
-- **Interactive** — describe the block (name, role, parent, inputs/outputs, optional remote node and repos); the agent asks any follow-ups and scaffolds in one pass.
-
-A complete reference scaffold lives at `.claude/plugins/root-plugin/references/example_block/`. After creation, fill in the new block's `runtime_info.input`, then validate the whole tree with `/root:check` before running.
+Apache License 2.0. See [LICENSE](LICENSE).

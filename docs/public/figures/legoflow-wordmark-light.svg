@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="380" height="87" viewBox="0 0 720 165" role="img" aria-label="LegoFlow">
+  <title>LegoFlow</title>
+  <text
+    x="360"
+    y="120"
+    text-anchor="middle"
+    font-family="Georgia, Cambria, 'Times New Roman', Times, serif"
+    font-size="112"
+    font-weight="700"
+    fill="#111111"
+  >Lego<tspan fill="#b3431f">Flow</tspan><tspan fill="#b3431f" font-size="34" dy="-58">&#9679;</tspan></text>
+</svg>

@@ -3,94 +3,73 @@ title: Dashboard
 ---
 
 Curator's dashboard is a dataset analytics view for finished task collections.
-Use `/curator:dashboard` after PR collection and task creation to inspect task
-quality before handing the dataset to Tracer.
+Run `/curator:dashboard` after collection and creation, when you want to see what
+the dataset contains before handing it to Tracer.
 
-## What It Monitors
+A demo dashboard is available [here](/dashboard_demo/curator/).
 
-| Monitor | What it tells you |
-| --- | --- |
-| **Dataset size** | How many verified tasks are available in each curated dataset. |
-| **Language coverage** | Whether the dataset is balanced across Python, JavaScript, TypeScript, Go, C, C++, Java, Rust, and other supported languages. |
-| **Difficulty mix** | Easy/medium/hard buckets and numeric difficulty scores. |
-| **Semantic tags** | The four-tag schema `[language, area, topic, bug_class]`, useful for filtering and balancing. |
-| **Dataset comparison** | How Curator-generated tasks compare with other SWE datasets under the same tag and difficulty rubric. |
-| **Task drilldown** | Per-task metadata, repository identity, problem statement, patch/test signals, difficulty, and tags. |
+## Deployment Mode
 
-This dashboard is not a live generation monitor. While Curator is still
-creating tasks, watch the logs, `verifiable_tasks.txt`, and `artifacts/index.yaml`.
+Both modes read the same files, so the numbers never depend on which one you pick.
+
+- **Local** (default): run `/curator:dashboard`. The board is built and served on
+  this machine, so problem statements, repository names, patches and tags stay
+  here.
+- **Cloud**: run `/curator:dashboard publish to Cloudflare`. With
+  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set, the board is deployed to
+  the Pages project `legoflow-curator`; without them, a temporary
+  `*.trycloudflare.com` tunnel is opened instead. Take the URL from the command
+  output rather than guessing it, because a `*.pages.dev` name that is already
+  taken gets a suffix.
 
 ## Where It Reads From
 
 There is nothing to configure. The board always reads two fixed locations:
 
-| What | Where |
+| Path | What it holds |
 | --- | --- |
-| PR collection | `artifacts/collected_prs/` |
-| Task batches | `artifacts/swe_tasks/*` — each immediate subdirectory is one batch |
+| `artifacts/collected_prs/` | PR ID lists from collection, one file per language. The PR to task funnel is computed from these. |
+| `artifacts/swe_tasks/` | Task batches, one per immediate subdirectory. |
 
-A batch is **named after its directory** — `py-cc`, `go-cc`, and so on. Each must
-hold one Harbor task per immediate child (`task.toml` + `instruction.md`).
+By default those are the tasks Curator collected and generated on this machine.
+To add a third-party dataset:
 
-To show a dataset Curator did not generate, symlink it in; the link's own name
-becomes the batch name:
+1. Download it and convert it into the Harbor task layout: one directory per
+   task, each with `task.toml` and `instruction.md`, matching what an existing
+   `artifacts/swe_tasks/<batch>/` looks like.
+2. Put that directory under `artifacts/swe_tasks/`. Its name becomes the batch
+   name. Imported batches stay out of the PR to task funnel, which only describes
+   tasks the collector sourced.
+3. Tag it, following
+   [Task Tagging](/docs/blocks/curator/usage/task-tagging), because
+   difficulty and the four semantic tags are read from each task's own
+   `task.toml`. An untagged batch still appears, but its difficulty and tag
+   panels stay empty.
 
-```bash
-python3 dashboard/check_task_dir.py /path/to/dataset    # confirm the shape first
-ln -s /path/to/dataset artifacts/swe_tasks/<name>
-```
+<Callout title="Import External Data" type="info">
+The board only reads `artifacts/`. Symlink an outside dataset into
+`artifacts/swe_tasks/`, and the link name becomes the batch name.
+</Callout>
 
-Symlinked batches are marked as such and kept out of the PR → task funnel, which
-only describes tasks the collector sourced.
+Scanning is not free, since every task's `task.toml` is read on each render. A
+pool of tens of thousands of tasks takes minutes to draw, so link the large ones
+in only when you intend to look at them.
 
-Large batches cost real time to scan: every task's `task.toml` is read on each
-render, so a pool of tens of thousands of tasks takes minutes. Link those in only
-when you want them on the board.
+## What It Monitors
 
-## Local Mode
+| Monitor | What it tells you |
+| --- | --- |
+| **Dataset size** | How many verified tasks each batch holds. |
+| **Language coverage** | Whether the dataset is balanced across Python, JavaScript, TypeScript, Go, C, C++, Java, Rust, and the other supported languages. |
+| **Difficulty mix** | Easy/medium/hard buckets and numeric difficulty scores. |
+| **Semantic tags** | The four-tag schema `[language, area, topic, bug_class]`, useful for filtering and balancing. |
+| **Dataset comparison** | How Curator-generated tasks compare with other SWE datasets under the same rubric. |
+| **Task drilldown** | Per-task metadata, repository identity, problem statement, patch and test signals, difficulty, and tags. |
 
-Use local mode when you are developing or reviewing private datasets:
+This is not a live generation monitor. While Curator is still creating tasks,
+watch the logs, `verifiable_tasks.txt` and `artifacts/index.yaml` instead.
 
-```text
-/curator:dashboard
-```
-
-Ask for a local preview when you want to inspect the generated dashboard on the
-current machine. The skill regenerates the dashboard from the current dataset
-metadata and points you to the local preview file or page.
-
-Local mode is the default choice for private task data because it keeps problem
-statements, repository names, patches, and tags on your machine.
-
-## Cloudflare Public Mode
-
-Use Cloudflare mode when you want a public dashboard URL for sharing:
-
-```text
-/curator:dashboard publish to Cloudflare
-```
-
-Publishing goes through `scripts/publish_dashboard.sh`, which picks the mode for
-you:
-
-- **With credentials** — deploys to the Pages project `legoflow-curator`. The
-  project name is fixed; the **URL is read back from the Cloudflare API** after
-  the deploy and printed. Never assemble the address yourself: a `*.pages.dev`
-  subdomain that is already taken is silently given a suffix, so
-  `https://<project>.pages.dev` can be a link that 404s.
-- **Without credentials** — opens a temporary `*.trycloudflare.com` quick tunnel
-  over a local server, so a public link needs no Cloudflare account at all. It is
-  a fresh address each run and lives only as long as the command does.
-
-Supply credentials outside tracked source files:
-
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-
-The API token needs permission to edit Cloudflare Pages for the account. Do not
-publish private task content unless the dataset is intended to be public.
-
-## When To Use It
+## When to Use It
 
 Use `/curator:dashboard` when you want to answer questions like:
 
@@ -101,5 +80,5 @@ Use `/curator:dashboard` when you want to answer questions like:
 - Is the dataset ready for Tracer rollout?
 
 For the scoring rubric and tag schema, see
-[Quality Rubrics](/docs/blocks/curator/advanced-usages/quality-rubrics) and
-[Task Tagging](/docs/blocks/curator/advanced-usages/task-tagging).
+[Quality Rubrics](/docs/blocks/curator/usage/quality-rubrics) and
+[Task Tagging](/docs/blocks/curator/usage/task-tagging).

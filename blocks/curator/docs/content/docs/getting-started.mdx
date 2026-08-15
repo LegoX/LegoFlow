@@ -30,7 +30,7 @@ skills take over.
 
 For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
 four `runtime_info.input` pieces below. For every field, see the
-<a href="/docs/blocks/curator/advanced-usages/configuration">Configuration Guide</a>.
+<a href="/docs/blocks/curator/usage/configuration">Configuration Guide</a>.
 
 ### LLM API Config
 
@@ -107,7 +107,7 @@ Before anything expensive, run:
 
 This is read-only. It checks config, `repos/legoflow-curator`, GitHub tokens, the LLM
 endpoint, and Docker. For exact pass conditions, see
-[Validation Checks](/docs/blocks/curator/advanced-usages/validation-checks).
+[Validation Checks](/docs/blocks/curator/usage/validation-checks).
 A healthy report should look roughly like this:
 
 ```text
@@ -171,7 +171,10 @@ artifacts/swe_tasks/<lang>-cc/<task_id>/
 
 After task creation, Curator should publish a single merged task directory for
 Tracer. During `/curator:create-tasks`, the block starts an aggregator that
-keeps this directory updated as verified tasks appear:
+keeps this directory updated as verified tasks appear: generation and
+`scripts/extract_verified_tasks.py` run side by side, so Tracer always has one
+pool to roll out against and does not have to wait for the whole language sweep
+to finish.
 
 ```text
 artifacts/merged_swe_tasks/
@@ -211,5 +214,5 @@ progress monitor; during generation, watch logs, `verifiable_tasks.txt`, and
 `artifacts/index.yaml`.
 
 For scoring and tagging details, see
-[Quality Rubrics](/docs/blocks/curator/advanced-usages/quality-rubrics) and
-[Task Tagging](/docs/blocks/curator/advanced-usages/task-tagging).
+[Quality Rubrics](/docs/blocks/curator/usage/quality-rubrics) and
+[Task Tagging](/docs/blocks/curator/usage/task-tagging).

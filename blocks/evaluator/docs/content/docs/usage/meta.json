@@ -1,0 +1,12 @@
+{
+  "title": "Usage",
+  "pages": [
+    "configuration",
+    "validation-checks",
+    "select-benchmark",
+    "supported-scaffolds",
+    "litellm-proxy",
+    "local-model-evaluation",
+    "job-analysis"
+  ]
+}

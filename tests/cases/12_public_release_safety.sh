@@ -70,14 +70,15 @@ internal_path_markers = (
 
 legacy_brand = "SWE" + "-Lego-" + "Live"
 legacy_re = re.compile(re.escape(legacy_brand), re.IGNORECASE)
-root_repo_url = "https://github.com/SWE-Lego/" + legacy_brand
+root_repo_url = "https://github.com/LegoX/" + legacy_brand
 allowed_root_url = re.compile(
     re.escape(root_repo_url) + r"(?=$|[\s)\]}>\"',;])"
 )
+# LegoX is the current brand LegoFlow ships under, not a legacy name, so it is
+# deliberately absent here.
 legacy_component_markers = (
     "swe" + "gen",
     "swe-" + "live",
-    "Lego" + "X",
 )
 
 credential_patterns = (
@@ -130,6 +131,18 @@ for mode, rel in tracked:
         continue
 
     searchable = rel + "\n" + text
+    # Published dashboard snapshots are captured output, not prose we write:
+    # their CJK is the boards' own bilingual UI strings plus verbatim task and
+    # issue text, and their legacy identifiers are config keys the boards still
+    # read. Those two checks would only ever fire on content we cannot reword,
+    # so they are waived here. Every other check -- credentials, private keys,
+    # internal addresses, personal paths -- still applies, because a snapshot is
+    # exactly where a real leak would hide.
+    demo_snapshot = "/dashboard_demo/" in rel
+    # The Chinese README is a deliberate translation, so CJK is its whole point.
+    # Nothing else is exempt: the English README links to it through an icon and
+    # a latin label, so a CJK hit there is a real finding.
+    cjk_waived = demo_snapshot or rel == "README_zh.md"
     # PR #89 owns the remaining legacy Dashboard migration surfaces. Ignore
     # their exact compatibility identifiers here so PR #88 can stay conflict
     # free while continuing to scan the rest of each mixed-purpose file.
@@ -141,7 +154,7 @@ for mode, rel in tracked:
         searchable = searchable.replace(dashboard_legacy_marker, "")
 
     match = cjk.search(searchable)
-    if match:
+    if match and not cjk_waived:
         add(rel, searchable, match.start(), "CJK text is not allowed")
 
     folded = searchable.casefold()
@@ -164,12 +177,13 @@ for mode, rel in tracked:
 
     without_allowed_url = allowed_root_url.sub("", searchable)
     match = legacy_re.search(without_allowed_url)
-    if match:
+    if match and not demo_snapshot:
         add(rel, without_allowed_url, match.start(), "legacy product brand")
-    for marker in legacy_component_markers:
-        pos = folded.find(marker.casefold())
-        if pos >= 0:
-            add(rel, searchable, pos, "legacy component brand")
+    if not demo_snapshot:
+        for marker in legacy_component_markers:
+            pos = folded.find(marker.casefold())
+            if pos >= 0:
+                add(rel, searchable, pos, "legacy component brand")
 
     if private_key_marker in searchable:
         add(

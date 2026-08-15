@@ -4,14 +4,7 @@ title: Overview
 
 Evaluator runs registered evaluation benchmarks through Harbor against any configurable upstream LLM, and stores per-task results and trajectories.
 
-It is the evaluation stage of the [LegoFlow](https://github.com/SWE-Lego/SWE-Lego-Live) pipeline — a leaf block with no downstream consumer. Where `tracer` generates training data and `trainer` produces checkpoints, Evaluator measures how good any model is on a chosen benchmark. It mirrors Tracer's runtime shell (a pinned [Harbor](https://github.com/SWE-Lego/harbor) checkout fronted by a per-job LiteLLM proxy), but loads its task set from Harbor's `registry.json` instead of a locally-staged legoflow-curator export.
-
-```text
-curator ─▶ tracer ─▶ trainer
-                              │
-                              ▼
-                            evaluator   ← benchmarks any model (remote API or local checkpoint)
-```
+It is the evaluation stage of the [LegoFlow](https://github.com/LegoX/SWE-Lego-Live) pipeline — a leaf block with no downstream consumer. Where `tracer` generates training data and `trainer` produces checkpoints, Evaluator measures how good any model is on a chosen benchmark. It mirrors Tracer's runtime shell (a pinned [Harbor](https://github.com/SWE-Lego/harbor) checkout fronted by a per-job LiteLLM proxy), but loads its task set from Harbor's `registry.json` instead of a locally-staged legoflow-curator export.
 
 Evaluator provides:
 
@@ -27,6 +20,6 @@ Evaluator provides:
 
 - [Getting Started](/docs/blocks/evaluator/getting-started) — install the dependencies and run your first benchmark
 - [Design](/docs/blocks/evaluator/design) — see how Evaluator resolves benchmarks, starts the proxy, runs Harbor, and analyzes jobs
-- [Advanced Guides](/docs/blocks/evaluator/advanced-usages/configuration) — configuration, benchmark selection, proxy, local model, and job-analysis details
+- [Usage](/docs/blocks/evaluator/usage/configuration) — configuration, benchmark selection, proxy, local model, and job-analysis details
 - [Output Format](/docs/blocks/evaluator/outputs) — find scores, trajectories, verifier reports, analysis, and archives
 - [Dashboard](/docs/blocks/evaluator/dashboard) — browse jobs, reports, and trajectories

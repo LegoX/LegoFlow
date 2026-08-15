@@ -23,7 +23,9 @@ files = [
     block / "tests/smoke/verify.sh",
 ]
 curator_docs_pages = sorted((block / "docs/content/docs").glob("*.mdx"))
-root_docs_pages = sorted((root / "docs/content/docs").glob("*.mdx"))
+# Recursive: the root docs moved the run instructions into running-blocks/, so a
+# top-level glob would let a stale /curator:run reference through unnoticed.
+root_docs_pages = sorted((root / "docs/content/docs").rglob("*.mdx"))
 # Curator's own docs site is exempt from the /curator:run ban: it documents the
 # full plugin surface, adapter included, and describes /curator:run as a
 # compatibility entry point rather than recommending it. The ban still holds
@@ -38,14 +40,21 @@ for path in files:
 if stale:
     raise SystemExit("FAIL: stale public /curator:run references: " + ", ".join(stale))
 
-example_usage = (root / "docs/content/docs/example-usages.mdx").read_text(
-    encoding="utf-8"
-)
-example_words = " ".join(example_usage.split())
-if "directly executes Curator's all-language `scripts/start.sh`" not in example_words:
-    raise SystemExit("FAIL: root docs do not describe direct Curator start.sh execution")
-if "/curator:create-tasks" not in example_usage:
+# The root docs must still name the canonical direct Curator command, and must
+# still say what a block's run skill actually executes. Both used to live on
+# example-usages.mdx; the docs rework split them across the run guide and the
+# block contract page, so assert against whichever page carries them today.
+root_docs_text = {
+    path: path.read_text(encoding="utf-8") for path in root_docs_pages
+}
+if not any("/curator:create-tasks" in text for text in root_docs_text.values()):
     raise SystemExit("FAIL: root docs omit the canonical direct Curator command")
+if not any(
+    "`scripts/start.sh`" in " ".join(text.split())
+    and "/<block>:run" in text
+    for text in root_docs_text.values()
+):
+    raise SystemExit("FAIL: root docs do not describe what a block run executes")
 
 stale_pages_project = []
 for path in curator_docs_pages:

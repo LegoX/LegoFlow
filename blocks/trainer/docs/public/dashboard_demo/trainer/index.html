@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+<script>
+(function () {
+  var base = new URL('.', location.href).href;
+  function rebase(u) {
+    if (typeof u === 'string' && u.charAt(0) === '/' && u.charAt(1) !== '/') return base + u.slice(1);
+    return u;
+  }
+  var f = window.fetch;
+  if (f) {
+    window.fetch = function (input, init) {
+      if (typeof input === 'string') return f.call(this, rebase(input), init);
+      if (input && typeof input.url === 'string') {
+        try {
+          var p = new URL(input.url);
+          if (p.origin === location.origin) return f.call(this, rebase(p.pathname + p.search), init);
+        } catch (e) {}
+      }
+      return f.call(this, input, init);
+    };
+  }
+  var open = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (m, u) {
+    arguments[1] = rebase(u);
+    return open.apply(this, arguments);
+  };
+})();
+</script>
+
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LegoFlow-Trainer</title>
+    <!-- Resolve the theme before first paint: the reader's saved choice, else
+         light. This board opens light regardless of the OS preference. -->
+    <script>
+      (() => {
+        let saved = null;
+        try { saved = localStorage.getItem("trainer-theme"); } catch (e) {}
+        document.documentElement.dataset.theme = saved === "dark" ? "dark" : "light";
+      })();
+    </script>
+    <script type="module" crossorigin src="assets/index-CzFg5mkE.js"></script>
+    <link rel="stylesheet" crossorigin href="assets/index-Zp_Gsrz4.css">
+    <script>window.__TRAINER_STATIC__=true;</script>
+</head>
+  <body class="bg-slate-950 text-slate-200 antialiased">
+<div style="background:#b3431f;color:#faf9f7;font:14px/1.5 system-ui,sans-serif;padding:10px 16px;text-align:center">Demo only. A static snapshot of the LegoFlow Trainer dashboard.</div>
+    <div id="root"></div>
+  </body>
+</html>

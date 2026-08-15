@@ -20,6 +20,28 @@ Before starting, make sure these are available:
 - A base model, either a Hugging Face model ID or a local model directory.
 - Optional wandb and Hugging Face credentials, only if your run needs them.
 
+### Validated environment
+
+Trainer is the one block with a real hardware floor, so it is worth checking
+before you configure anything. What is reported here is what has actually been
+run end to end, not what the code theoretically supports:
+
+| | Validated |
+| --- | --- |
+| GPUs | One node with 8× H800 80GB. A single-node, 8-GPU topology is what the default DeepSpeed ZeRO-3 config and `infrastructure.n_gpus_per_node` assume. |
+| Model scale | Full-parameter SFT of a 35B MoE base model (Qwen3.5-35B-A3B-Base) at a 128k-token context. |
+| Run shape | 512 trajectories, global batch size 64, three epochs, 24 optimizer steps, around 100 minutes of training. |
+| Stack | PyTorch 2.10 with CUDA 12.8 wheels, DeepSpeed ZeRO-3, Liger, and flash-attn, all installed by `scripts/install_env.sh`. |
+
+Smaller models and smaller GPU counts will run, but the shipped defaults are
+tuned for the row above; expect to adjust batch size, gradient accumulation and
+the DeepSpeed config together when you move away from it. Multi-node training is
+not wired up.
+
+The numbers above come from the reported end-to-end run, which also hit two
+failures worth knowing about: host memory exhaustion from `use_unsloth_gc` at
+128k context, and NCCL defaulting to `eth0` on a single multi-GPU host.
+
 If the Trainer slash commands are not visible in Claude Code, see
 [Q&A](/docs/qa#i-am-in-the-repository-root-but-cannot-find-the-plugin-skills).
 
@@ -31,7 +53,7 @@ take over.
 
 For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
 `runtime_info.input` pieces below. For every field, see the
-<a href="/docs/blocks/trainer/advanced-usages/configuration">Configuration Guide</a>.
+<a href="/docs/blocks/trainer/usage/configuration">Configuration Guide</a>.
 
 ### Receive Tracer Output
 
@@ -73,7 +95,7 @@ Keep `max_instances` small for a smoke run:
 The `harbor_job` path uses the same conversion stack documented in Tracer. If
 you already have `lf.json`, prefer `local_lf`.
 
-### Model And Training Config
+### Model and Training Config
 
 Set the base model, chat template, and a unique output directory. Relative
 output directories are stored under `artifacts/model/`.
@@ -91,7 +113,7 @@ The effective global batch size is
 `per_device_train_batch_size x gradient_accumulation_steps x n_gpus_per_node`.
 In the example, that is `1 x 8 x 8 = 64`.
 
-### Checkpoint And Performance Config
+### Checkpoint and Performance Config
 
 These defaults make the example practical for a large full-SFT run:
 
@@ -103,7 +125,7 @@ These defaults make the example practical for a large full-SFT run:
 new `output_dir` for each real run; existing output directories are rejected
 unless overwrite is explicitly enabled.
 
-### Infrastructure And Credentials
+### Infrastructure and Credentials
 
 Keep the GPU count aligned with the node. Credentials can come from environment
 variables instead of the tracked config file.
@@ -137,7 +159,7 @@ Before using GPUs, run:
 This is read-only. It checks config, repo pins, the training environment, source
 data, converter availability, model path, output directory safety, GPU
 visibility, and wandb/HF settings. For exact pass conditions, see
-[Validation Checks](/docs/blocks/trainer/advanced-usages/validation-checks).
+[Validation Checks](/docs/blocks/trainer/usage/validation-checks).
 
 Fix required failures before launching training.
 
