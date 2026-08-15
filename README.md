@@ -43,29 +43,9 @@ LegoFlow is an easy and interactive framework for code data engineering, part of
 
 ## Architecture
 
-Everything in LegoFlow is a **block**. One block owns one stage of the pipeline, and packages it so that a person and a coding agent drive it exactly the same way:
-
-
-| Inside a block | What it holds                                                   |
-| -------------- | --------------------------------------------------------------- |
-| `config.yaml`  | What the stage needs and what it produces. One file, one run    |
-| `scripts/`     | How it executes: `start.sh`, `dryrun.sh`, `clean.sh`, `stop.sh` |
-| `repos/`       | Third-party code, pinned to a commit and read-only              |
-| `artifacts/`   | Everything a run leaves behind, including its own archive       |
-| `dashboard/`   | Reads those artifacts. Never writes to them                     |
-
-
-Two rules give the shape its value:
-
-> **Declaration comes before execution.** A consumer names the upstream output that feeds each of its own inputs, and the producer mirrors it. A broken handoff is caught by preflight, before a multi-hour job starts.
->
-> **A run stays inside the block.** Delete a block's `artifacts/` and you lose that block's history, and nothing else.
-
-Nothing in that definition is specific to the four blocks that ship with LegoFlow, which is why the shape nests: the root is simply the block at the top, obeying the same contract as everything under it.
-
 ![LegoFlow block tree](docs/public/figures/my-version-coding-repos-expandable.png)
 
-The root orchestrates four children:
+The pipeline is a tree of **blocks**. The root orchestrates four children:
 
 
 | Block                                                                       | What it does                                                                               | Built on                             |
@@ -78,34 +58,43 @@ The root orchestrates four children:
 
 Because the config is one-shot per run, changing one variable and rerunning is a small, reviewable edit rather than an archaeology exercise across scripts.
 
-For the full contract, see [What is a Block](https://legoflow-docs.pages.dev/docs/block-design).
+#### What is a Block?
+
+> [!NOTE]
+> Each block plays a particular role, following the same structure. A block maintains its relevant repositories (`repos/`), configuration (`config.yaml`) and run scripts (`scripts/`), manages its output in `artifacts/`, and communicates with its adjacent blocks. More details can be found at [What is a Block](https://legoflow-docs.pages.dev/docs/block-design).
 
 ## Quick Start
 
-You need Claude Code, an OpenAI-compatible LLM endpoint, GitHub token(s) via `GITHUB_TOKENS`, and Docker. Training and self-hosted evaluation also need a GPU node; the validated setup is one node with 8× H800 80GB. Credentials come from the environment, never from a tracked file.
+#### Prerequisites
+
+- **Claude Code** — the recommended way to drive LegoFlow.
+- **An OpenAI-compatible LLM endpoint** — used by Curator, Tracer and Evaluator.
+- **GitHub token(s)** — supplied through `GITHUB_TOKENS`, for Curator's PR collection.
+- **Docker** — every task and every rollout runs in a container.
+- **A GPU node** — only if you train, or serve a checkpoint yourself. Validated on one node with 8× H800 80GB; multi-node is not wired up.
+- **Docker and Cloudflare credentials** — optional, for authenticated image pulls and for publishing dashboards.
+
+Credentials always come from the environment, never from a tracked file. What each one is for is spelled out in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started).
+
+#### Three steps to a first run
+
+**1. Clone the tree.**
 
 ```bash
 git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
 cd LegoFlow
 ```
 
-Each block ships its own plugin. Register the five local marketplaces, then install one plugin from each:
+**2. Install the plugins.** Every block ships one. Register its directory as a Claude Code marketplace, then install from it:
 
 ```bash
-claude plugin marketplace add ./.claude/plugins                     # root
-claude plugin marketplace add ./blocks/curator/.claude/plugins
-claude plugin marketplace add ./blocks/tracer/.claude/plugins
-claude plugin marketplace add ./blocks/trainer/.claude/plugins
-claude plugin marketplace add ./blocks/evaluator/.claude/plugins
-
+claude plugin marketplace add ./.claude/plugins
 claude plugin install root@root-block
-claude plugin install curator@curator-block
-claude plugin install tracer@tracer                                 # note: not tracer-block
-claude plugin install trainer@trainer-block
-claude plugin install evaluator@evaluator-block
 ```
 
-Run `/reload-plugins`, then `/root:setup`. Every block then answers the same four skills: `setup`, `check`, `run`, `dashboard`.
+Do the same for `curator`, `tracer`, `trainer` and `evaluator`, whose plugin directories live at `./blocks/<name>/.claude/plugins`. Marketplace names follow `<name>@<name>-block`, with one exception: tracer's is `tracer@tracer`. All five pairs are listed in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started).
+
+**3. Hand over to a skill.** Run `/reload-plugins`, then `/root:setup` to prepare the workspace. From there every block answers the same four skills — `setup`, `check`, `run`, `dashboard` — so there is no script to read before your first run.
 
 ## Example Usages
 
@@ -164,25 +153,43 @@ Datasets produced by LegoFlow and released for reuse. Every row names the teache
 
 
 
+## Contributing
+
+We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/SWE-Lego-Live).
+
+There are two ways in, and they are easier to keep straight once you know which layer you are on.
+
+**Improve the code a block runs.** Most features live in the repositories a block wraps, not in the block itself. A block never edits the code it runs: every repository is vendored and pinned to a commit. So you change the upstream repository, bump one `commit_id` in `config.yaml`, and rerun the checks.
+
+**Add a stage of your own.** If you already have a workflow worth wrapping — a new data source, a different trainer, another benchmark — `/root:create` scaffolds the whole block: config, scripts, plugin skills and the archive wiring. Declare what it takes in and what it hands on, point `scripts/start.sh` at the entry point you already have, and keep `scripts/dryrun.sh` free of side effects so a check never changes anything.
+
+Your block is done when three things are true: `check` passes on a fresh clone, a run archives itself, and the next block can consume its output without anyone pasting a path by hand.
+
+Every block carries its own tests — fast cases that need no tokens and no Docker, plus optional smoke tests that really run:
+
+```bash
+bash blocks/<name>/tests/run.sh               # cases only
+bash blocks/<name>/tests/run.sh --with-smoke  # plus a real end-to-end run
+```
+
+The full contract is in [What is a Block](https://legoflow-docs.pages.dev/docs/block-design).
+
 ## Roadmap
 
-We are actively expanding LegoFlow with more features and data pipelines, including more tasks, more scaffolds, and recursive self-improvement. Stay tuned!
+LegoFlow starts from SWE data, but the block contract is not specific to it. Where we are taking it:
 
-Known gaps, stated plainly:
+- **Wider task coverage.** More languages and more task types than bug-fixing PRs, and more sources than GitHub alone.
+- **More agent scaffolds.** Claude Code, OpenCode, OpenHands and Terminus are wired today. The scaffold is a config field, so new ones arrive as adapters rather than rewrites.
+- **Recursive self-improvement.** Closing the loop, so a trained checkpoint becomes the next round's rollout model and the pipeline improves the data that trains it.
+- **Beyond SWE.** The same tasks → rollouts → training → evaluation shape fits other long-horizon agent domains. The blocks are meant to be swapped, not rebuilt.
 
-- `/root:dashboard`, a single cross-block board, is still a stub. Use the four per-block dashboards.
+Known gaps, stated plainly, so nobody finds them the hard way:
+
+- `/root:dashboard`, a single board across all blocks, is still a stub. Use the four per-block dashboards.
 - Multi-node training is not wired up. The shipped ZeRO-3 config assumes one 8-GPU node.
 - Root `scripts/start.sh` automates the data stage only, Curator and Tracer. The full four-block chain is agent-driven through `/root:run`.
 - 11 benchmarks are validated against Harbor's registry. The remaining entries are unverified with this agent.
-- Configuration reference is spread across four per-block Configuration Guides. There is no consolidated reference page and no changelog yet.
-
-
-
-## Contributing
-
-Issues and pull requests are welcome on [GitHub](https://github.com/LegoX/SWE-Lego-Live).
-
-New stages are scaffolded with `/root:create`, which produces the full directory tree wired to the block contract. A block is finished when `check` passes on a fresh clone, a run archives itself, and another block can consume its output without being told a path by hand. See [Adding Your Own Block](https://legoflow-docs.pages.dev/docs/block-design).
+- Configuration reference is spread across four per-block guides. There is no consolidated reference page and no changelog yet.
 
 ## Citation
 
