@@ -1,8 +1,25 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/public/figures/legoflow-wordmark-dark.svg">
+    <img alt="LegoFlow" src="docs/public/figures/legoflow-wordmark-light.svg" width="380">
+  </picture>
+</p>
 
+<p align="center"><b>Easy and Interactive Code Data Engineering</b></p>
 
-**Easy and Interactive Code Data Engineering**
-
-[Docs](https://legoflow-docs.pages.dev/docs)  ·  [HuggingFace](https://huggingface.co/SWE-Lego)  ·  [Blog](https://legox.pages.dev/blog/legoflow/)  ·  [LegoX](https://legox.pages.dev/)  ·  [License](LICENSE)  ·  [ZH](./README_zh.md)
+<p align="center">
+  <a href="https://legoflow-docs.pages.dev/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
+  &nbsp;·&nbsp;
+  <a href="https://huggingface.co/SWE-Lego"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
+  &nbsp;·&nbsp;
+  <a href="https://legox.pages.dev/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
+  &nbsp;·&nbsp;
+  <a href="https://legox.pages.dev/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
+  &nbsp;·&nbsp;
+  <a href="LICENSE"><img src="docs/public/figures/icon-license.svg" height="15" alt=""> License</a>
+  &nbsp;·&nbsp;
+  <a href="./README_zh.md"><img src="docs/public/figures/icon-lang.svg" height="15" alt=""> ZH</a>
+</p>
 
 ---
 
@@ -40,8 +57,6 @@ The pipeline is a tree of **blocks**. The root orchestrates four children:
 
 
 Because the config is one-shot per run, changing one variable and rerunning is a small, reviewable edit rather than an archaeology exercise across scripts.
-
-#### What is a Block?
 
 > [!NOTE]
 > Each block plays a particular role, following the same structure. A block maintains its relevant repositories (`repos/`), configuration (`config.yaml`) and run scripts (`scripts/`), manages its output in `artifacts/`, and communicates with its adjacent blocks. More details can be found at [What is a Block](https://legoflow-docs.pages.dev/docs/block-design).
@@ -115,7 +130,7 @@ Datasets produced by LegoFlow and released for reuse. Every row names the teache
 
 | ID                  | Teacher Model | Scaffold      | Data Samples | Training Result                                           | HF Link                                                                                                 |
 | ------------------- | ------------- | ------------- | ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | [samples_for_llama_factory_sft](https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft) |
+| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
 
 
 
