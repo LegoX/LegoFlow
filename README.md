@@ -115,8 +115,7 @@ The detailed guides to each individual block can be found at [docs](https://docs
 
 #### Running Multiple Blocks
 
-Users can also customize the workflow by running multiple blocks.
-Full write-up on the [blog](https://legox.pages.dev/blog/legoflow/); step-by-step guidance in [Running Cascaded Blocks](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/cascaded).
+Users can also customize the workflow by running multiple blocks. Step-by-step guidance is in [Running Cascaded Blocks](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/cascaded).
 
 For example, our previous run with all four blocks shows that Curator built 4,166 verified Python tasks, Tracer solved 915 of them, 512 trajectories were selected for training, and the resulting fine-tune lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified. More details are recorded in the [blog](https://legox.pages.dev/blog/legoflow/).
 
