@@ -48,12 +48,12 @@ LegoFlow is an easy and interactive framework for code data engineering, part of
 The pipeline is a tree of **blocks**. The root orchestrates four children:
 
 
-| Block                                                                | What it does                                                                               | Built on                             |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------ |
-| [`curator`](https://legoflow-docs.pages.dev/docs/blocks/curator/getting-started)     | Curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums       | GitHub API, Docker, Claude Agent SDK |
-| [`tracer`](https://legoflow-docs.pages.dev/docs/blocks/tracer/getting-started)       | Collects high-quality trajectories with verified rewards, across multiple coding scaffolds | Harbor, per-job LiteLLM proxy        |
-| [`trainer`](https://legoflow-docs.pages.dev/docs/blocks/trainer/getting-started)     | Converts rollout traces into training-ready formats and launches end-to-end training       | LLaMA-Factory, DeepSpeed ZeRO-3      |
-| [`evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis              | Harbor, vLLM                         |
+| Block | Role |
+| ----- | ---- |
+| [`curator`](https://legoflow-docs.pages.dev/docs/blocks/curator/getting-started) | Curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums |
+| [`tracer`](https://legoflow-docs.pages.dev/docs/blocks/tracer/getting-started) | Collects high-quality trajectories with verified rewards, across multiple coding scaffolds |
+| [`trainer`](https://legoflow-docs.pages.dev/docs/blocks/trainer/getting-started) | Converts rollout traces into training-ready formats and launches end-to-end training |
+| [`evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis |
 
 
 > [!NOTE]
@@ -80,20 +80,27 @@ We are actively releasing the latest datasets produced by LegoFlow:
 - **A GPU node** — only if you train, or serve a checkpoint yourself. Validated on one node with 8× H800 80GB; multi-node is not wired up.
 - **Docker and Cloudflare credentials** — optional, for authenticated image pulls and for publishing dashboards.
 
-What each one is for is spelled out in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Each block has its own dependent enviroment, which can be setup automatically following the corresponding guides. 
+What each one is for is spelled out in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Each block has its own dependent environment, which can be set up automatically following the corresponding guides. 
 
-### Enviroment Setup
+### Environment Setup
 1. Clone the code repository.
-```
+```bash
 git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
 cd LegoFlow
 ```
 
-2. Install the plugins. Every block ships one. Register its directory as a Claude Code marketplace, then install from it. All five pairs are listed in Getting Started. 
+2. Install the plugins. Every block ships one. Register its directory as a Claude Code marketplace, then install from it:
+
+```bash
+claude plugin marketplace add ./.claude/plugins
+claude plugin install root@root-block
+```
+
+   The same holds for `curator`, `tracer`, `trainer` and `evaluator`, whose plugin directories live at `./blocks/<name>/.claude/plugins`. All five pairs are listed in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Run `/reload-plugins` afterwards so the skills load.
 
 ### Example Usages
 
-Users can triger individual blocks for a particular purpose, or jointly run mulitple blocks for a more complicated pipeline.
+Users can trigger individual blocks for a particular purpose, or jointly run multiple blocks for a more complicated pipeline.
 
 #### Running Individual Blocks
 
@@ -104,20 +111,14 @@ Every block has clear roles and functions. Users can easily trigger these blocks
 - `/block:run` does the work and archives the intermediate output to `artifacts/`
 - `/block:dashboard` helps the user to monitor the running progress and status
 
-#### Running the Full Pipeline
+The detailed guides to each individual block can be found at [docs](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/block-by-block).
 
-Once each block has run on its own, the root drives all four in dependency order. You describe the target, not the steps:
+#### Running Multiple Blocks
 
-```text
-/root:setup
-/root:check
-/root:run start the data pipeline
-```
-
-The chain pauses at every approval gate and archives each stage as it goes. In one such run an agent built 4,166 verified Python tasks, selected 512 trajectories out of 915 solved rollouts, and fine-tuned `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified** — reaching that second number only after reading its own first result and changing the selection rule.
-
+Users can also customize the workflow by running multiple blocks.
 Full write-up on the [blog](https://legox.pages.dev/blog/legoflow/); step-by-step guidance in [Running Cascaded Blocks](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/cascaded).
 
+For example, one such run chained all four blocks on a single brief: Curator built 4,166 verified Python tasks, Tracer solved 915 of them, 512 trajectories were selected for training, and the resulting fine-tune lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified.
 
 ## Contributing
 
