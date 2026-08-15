@@ -56,11 +56,17 @@ The pipeline is a tree of **blocks**. The root orchestrates four children:
 | [`evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis              | Harbor, vLLM                         |
 
 
-Because the config is one-shot per run, changing one variable and rerunning is a small, reviewable edit rather than an archaeology exercise across scripts.
-
 > [!NOTE]
 > Each block plays a particular role, following the same structure. A block maintains its relevant repositories (`repos/`), configuration (`config.yaml`) and run scripts (`scripts/`), manages its output in `artifacts/`, and communicates with its adjacent blocks. More details can be found at [What is a Block](https://legoflow-docs.pages.dev/docs/block-design).
 
+## Released Datasets
+
+We are actively releasing the latest datasets produced by LegoFlow:
+
+
+| ID                  | Teacher Model | Scaffold      | Data Samples | Training Result                                           | HF Link                                                                                                 |
+| ------------------- | ------------- | ------------- | ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
 
 
 ## Quick Start
@@ -77,24 +83,13 @@ Because the config is one-shot per run, changing one variable and rerunning is a
 What each one is for is spelled out in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Each block has its own dependent enviroment, which can be setup automatically following the corresponding guides. 
 
 ### Enviroment Setup
-
-**1. Clone the tree.**
-
-```bash
+1. Clone the code repository.
+```
 git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
 cd LegoFlow
 ```
 
-**2. Install the plugins.** Every block ships one. Register its directory as a Claude Code marketplace, then install from it:
-
-```bash
-claude plugin marketplace add ./.claude/plugins
-claude plugin install root@root-block
-```
-
-The same rules hold for `curator`, `tracer`, `trainer` and `evaluator`, whose plugin directories live at `./blocks/<name>/.claude/plugins`. All five pairs are listed in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Run `/reload-plugins` to ensure the plugins are correctly loaded.
-
-**3. Hand over to a skill.** `/root:setup` to prepare the workspace. From there every block answers the same four skills — `setup`, `check`, `run`, `dashboard` — so there is no script to read before your first run.
+2. Install the plugins. Every block ships one. Register its directory as a Claude Code marketplace, then install from it. All five pairs are listed in Getting Started. 
 
 ### Example Usages
 
@@ -106,7 +101,7 @@ Every block has clear roles and functions. Users can easily trigger these blocks
 
 - `/block:setup` prepares necessary dependencies and fills in `config.yaml`
 - `/block:check` validates the configuration and run pre-flight check
-- `/block:run` does the work and archives the intermediate output to `./artifacts`
+- `/block:run` does the work and archives the intermediate output to `artifacts/`
 - `/block:dashboard` helps the user to monitor the running progress and status
 
 #### Running the Full Pipeline
@@ -123,17 +118,6 @@ The chain pauses at every approval gate and archives each stage as it goes. In o
 
 Full write-up on the [blog](https://legox.pages.dev/blog/legoflow/); step-by-step guidance in [Running Cascaded Blocks](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/cascaded).
 
-## Open-source Data Collection
-
-Datasets produced by LegoFlow and released for reuse. Every row names the teacher model that generated the trajectories, the scaffold they were rolled out in, and the result of training on them.
-
-
-| ID                  | Teacher Model | Scaffold      | Data Samples | Training Result                                           | HF Link                                                                                                 |
-| ------------------- | ------------- | ------------- | ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
-
-
-
 
 ## Contributing
 
@@ -149,7 +133,6 @@ We welcome all developers to use, improve and contribute to LegoFlow. Issues and
   url    = {https://github.com/LegoX/SWE-Lego-Live}
 }
 ```
-
 
 
 ## Acknowledgements
