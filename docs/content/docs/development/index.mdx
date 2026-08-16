@@ -1,0 +1,24 @@
+---
+title: Development
+---
+
+Development in LegoFlow happens at two levels.
+
+- **Block-level development** changes the workflow contract: plugin skills,
+  `CLAUDE.md`, `config.yaml`, `scripts/`, dashboards, archives, and handoffs.
+- **Repository-level development** changes the implementation code that a block
+  runs from `repos/`.
+
+Keeping those levels separate is important. A block should explain how work is
+orchestrated, validated, archived, and handed to neighboring blocks. The pinned
+repository inside `repos/` should own the domain implementation itself.
+
+## Development Paths
+
+| I want to... | Go to |
+| --- | --- |
+| Create a new runnable stage in the LegoFlow tree | [Adding New Blocks](/docs/development/adding-new-blocks) |
+| Improve an existing block's workflow, skills, scripts, or dashboard | [Improving Existing Blocks](/docs/development/improving-existing-blocks) |
+
+Read [What is a Block](/docs/development/block-design) first if the block
+contract itself is new to you.

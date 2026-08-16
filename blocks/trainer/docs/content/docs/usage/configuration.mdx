@@ -3,52 +3,160 @@ title: Configuration Guide
 ---
 
 Trainer config controls data selection, conversion, model choice, training
-hyperparameters, infrastructure, and experiment logging.
+hyperparameters, infrastructure, and experiment logging. Most runs only need a
+few `runtime_info.input` fields. Leave `meta_info`, repository pins,
+environment paths, and output declarations alone unless you are changing the
+block contract itself.
 
-## Common edits
+## Common Fields
 
-| Field | When to edit |
-| --- | --- |
-| `runtime_info.input.source.*` | Choose Harbor output, Hugging Face LF data, or a local LF file. |
-| `runtime_info.input.model.*` | Select the base model. |
-| `runtime_info.input.training.*` | Tune training length, batch size, learning rate, output directory, and precision. |
-| `runtime_info.input.infrastructure.n_gpus_per_node` | Match the GPU node. |
-| `runtime_info.input.credentials.*` | Supply private Hub or W&B access through env, not tracked config. |
+| Area | Edit when | Main fields |
+| --- | --- | --- |
+| Data source | You train from Hugging Face LF data, local LF data, or raw Harbor jobs. | `source.type`, `hf_hub_url`, `lf_path`, `job_dir` |
+| Model | You switch the base model or local checkpoint. | `model.model_name_or_path`, `trust_remote_code` |
+| Training scale | You tune context length, samples, batch size, learning rate, or epochs. | `training.cutoff_len`, `max_samples`, `learning_rate`, `num_train_epochs` |
+| Infrastructure | You move between one GPU and a multi-GPU node. | `infrastructure.n_gpus_per_node`, `training.deepspeed` |
+| Remote machine | You want training to run on a GPU server instead of the current host. | `meta_info.resources.ip`, `user`, `pwd`, `directory` |
+| Experiment tracking | You want W&B or Hugging Face access. | `experiment.*`, `credentials.*` |
+
+## An Example Reference
+
+Start with the released LF dataset and the default Qwen3.5 base model. This is
+the simplest path because Trainer can skip Harbor trajectory conversion and go
+straight to LLaMA-Factory SFT.
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    source:\n      type: hf_lf\n      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft\n      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json\n      hf_split: train\n\n    conversion:\n      max_instances: 0\n      data_name: glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5\n\n    model:\n      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base\n      trust_remote_code: true\n\n    training:\n      stage: sft\n      finetuning_type: full\n      template: qwen3_5\n      cutoff_len: 131072\n      max_samples: 1000000\n      output_dir: qwen3_5_35b_a3b_base_glm52_openswe_mirror_score4_proto_oh_sdk_512_gbs64pbs1acc8_lr5e-5_epo3\n      per_device_train_batch_size: 1\n      gradient_accumulation_steps: 8\n      learning_rate: 5.0e-5\n      num_train_epochs: 3.0\n      bf16: true\n      flash_attn: fa2\n\n    infrastructure:\n      n_gpus_per_node: 8"}
+</ConfigSnippet>
+
+Use `/trainer:check` after editing. It checks data paths, model settings,
+conversion dependencies, GPU configuration, credentials, and training output
+paths before `/trainer:run` starts a costly job.
+
+## Configuration Break-down
+
+### Remote Execution
+
+Trainer runs locally by default, but training often belongs on a GPU server.
+Configure `meta_info.resources` when the block skill should log into a remote
+machine and run the Trainer workflow there.
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"meta_info:\n  resources:\n    ip: 10.0.0.20              # local = current machine; otherwise SSH target\n    user: ubuntu               # add this field if your remote setup needs it\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/trainer\n    public_storage: null"}
+</ConfigSnippet>
+
+The remote directory should point at the Trainer block checkout on the GPU
+server. Keep `runtime_info.input.infrastructure.n_gpus_per_node` aligned with
+that server, not with your laptop.
+
+### Data Source
+
+Trainer can read data in three modes. Choose exactly one source type for the
+run.
+
+- From a Hugging Face LF dataset:
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    source:\n      type: hf_lf\n      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft\n      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json\n      hf_split: train"}
+</ConfigSnippet>
+
+- From a local LF file produced by Tracer:
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    source:\n      type: local_lf\n      lf_path: ../tracer/artifacts/sft_data/<job>/lf.json"}
+</ConfigSnippet>
+
+- From a raw Harbor job directory:
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    source:\n      type: harbor_job\n      scaffold: openhands-sdk\n      job_dir: ../tracer/artifacts/jobs/<job>\n\n    conversion:\n      max_instances: 0\n      exclude_repos_file: scripts/excluded_repos.txt\n      data_name: my_converted_dataset"}
+</ConfigSnippet>
+
+Use `local_lf` when Tracer has already converted trajectories. Use `harbor_job`
+only when Trainer should run conversion itself.
+
+### Model and Template
+
+The model and template must agree. For Qwen3.5, keep the current
+`qwen3_5` template and long context settings.
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    model:\n      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base\n      trust_remote_code: true\n\n    training:\n      template: qwen3_5\n      cutoff_len: 131072\n      rope_scaling: null"}
+</ConfigSnippet>
+
+### Smoke Run
+
+Use a small sample cap and a separate output directory when checking a new data
+source or training node.
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    training:\n      max_samples: 32\n      output_dir: smoke-qwen3_5-sft\n      per_device_train_batch_size: 1\n      gradient_accumulation_steps: 1\n      num_train_epochs: 1.0\n      save_steps: 20\n\n    infrastructure:\n      n_gpus_per_node: 1"}
+</ConfigSnippet>
+
+### Production Training
+
+For production, keep the output directory unique and match the GPU count to the
+node.
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    training:\n      max_samples: 1000000\n      per_device_train_batch_size: 1\n      gradient_accumulation_steps: 8\n      learning_rate: 5.0e-5\n      num_train_epochs: 3.0\n      save_steps: 200\n      bf16: true\n      flash_attn: fa2\n\n    infrastructure:\n      n_gpus_per_node: 8"}
+</ConfigSnippet>
+
+## Handoff With Neighbor Blocks
+
+Trainer usually receives converted LF data from Tracer and produces a checkpoint
+that Evaluator can serve and benchmark.
+
+### Receive Tracer Data
+
+The most common handoff is `local_lf`: Tracer writes
+`artifacts/sft_data/<job>/lf.json`, and Trainer reads that file directly.
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"runtime_info:\n  input:\n    source:\n      type: local_lf\n      lf_path: ../tracer/artifacts/sft_data/<job>/lf.json"}
+</ConfigSnippet>
+
+If you want Trainer to consume raw Harbor jobs instead, keep the dependency
+contract and set `source.type: harbor_job`.
+
+<ConfigSnippet title="blocks/trainer/config.yaml">
+{"meta_info:\n  dependencies:\n    from:\n      source.job_dir:\n        from: tracer.output.raw_trajectories_dir\n        when: {source.type: harbor_job}\n\nruntime_info:\n  input:\n    source:\n      type: harbor_job\n      scaffold: openhands-sdk\n      job_dir: ../tracer/artifacts/jobs/<job>"}
+</ConfigSnippet>
+
+### Produce Evaluator Checkpoints
+
+After training, use the final checkpoint path as Evaluator's local model input.
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    local_model_serving:\n      model_path: ../trainer/artifacts/<training-output-dir>\n      model_name: Qwen3.5-35B-A3B"}
+</ConfigSnippet>
+
+## Field Reference
+
+| Field | Required? | Default | When to change |
+| --- | --- | --- | --- |
+| `source.type` | Yes | `hf_lf` | Choose `hf_lf`, `local_lf`, or `harbor_job` for the current run. |
+| `source.hf_hub_url` | For `hf_lf` | released dataset | Change when training from another Hub dataset. |
+| `source.hf_file_name` | For file-based `hf_lf` | released JSON | Change when the dataset repo contains multiple LF files. |
+| `source.lf_path` | For `local_lf` | Tracer LF path | Point to a real `lf.json` from Tracer. |
+| `source.job_dir` | For `harbor_job` | Tracer jobs path | Point to a real Harbor job directory. |
+| `source.scaffold` | For `harbor_job` | `openhands-sdk` | Must match the scaffold that produced the trajectories. |
+| `conversion.max_instances` | No | `0` | Use a positive number for subsampling; `0` means all samples. |
+| `conversion.data_name` | Yes | released dataset name | Change for each converted dataset profile. |
+| `model.model_name_or_path` | Yes | `Qwen/Qwen3.5-35B-A3B-Base` | Change the base model or local checkpoint. |
+| `training.template` | Yes | `qwen3_5` | Must match the model family. |
+| `training.cutoff_len` | Yes | `131072` | Lower for memory checks; keep long for long trajectories. |
+| `training.output_dir` | Yes | run name | Change for every important run to avoid overwriting outputs. |
+| `training.learning_rate` | Yes | `5.0e-5` | Tune for new data/model settings. |
+| `infrastructure.n_gpus_per_node` | Yes | `8` | Must match the training node. |
+| `credentials.*` | No | `""` | Prefer `$HF_TOKEN` and `$WANDB_API_KEY`; never commit secrets. |
+| `meta_info.resources.ip` | No | `local` | Set a host/IP when Trainer should run on a remote GPU server. |
+| `meta_info.resources.user` | For remote | add if needed | SSH user for the remote server. |
+| `meta_info.resources.directory` | For remote | `null` | Trainer block working directory on the remote server. |
+| `meta_info.resources.public_storage` | No | `null` | Optional public artifact location for dashboards or sharing. |
 
 ## Complete config.yaml
 
+Use this as the complete reference after you understand the few fields above.
+
 <ConfigFile file="blocks/trainer/config.yaml" />
-
-## Field guide
-
-| Field | Meaning | User action | Examples |
-| --- | --- | --- | --- |
-| `meta_info.name`, `label`, `description`, `parent` | Trainer identity and parent block. | Do not edit for normal runs. | Default block identity. |
-| `meta_info.dependencies.from.source.job_dir` | Consumes Tracer Harbor jobs when source type is `harbor_job`. | Do not edit unless rewiring. | Keep default unless changing handoffs. |
-| `meta_info.resources.*` | Training host information. | Fill when training runs on a remote GPU node. | `local`; remote IP only for SSH runs. |
-| `meta_info.repositories.*` | Pinned LLaMA-Factory and data-processing repos. | Update only deliberately. | Pinned commits in `repos/`. |
-| `meta_info.environment.*` | Training environment metadata. | Usually do not edit. | `artifacts/env/...`, Python `3.12` / `3.13`. |
-| `runtime_info.input.source.type` | Data source mode: Harbor job, Hugging Face LF, or local LF. | Choose before training. | `hf_lf`, `local_lf`, `harbor_job`. |
-| `runtime_info.input.source.scaffold` | Scaffold that produced trajectories. | Required for Harbor conversion. | `openhands-sdk`, `claude-code`, `open-code`, `terminus2`. |
-| `runtime_info.input.source.job_dir` | Harbor job directory. | Usually wired from Tracer for `harbor_job`. | `../tracer/artifacts/jobs/<job>`. |
-| `runtime_info.input.source.hf_*` | Hugging Face dataset, file, subset, and split. | Fill for `hf_lf` sources. | `SWE-Lego/samples_for_llama_factory_sft`, split `train`. |
-| `runtime_info.input.source.lf_path` | Local LF JSON path. | Fill for `local_lf` sources. | `../tracer/artifacts/sft_data/<job>/lf.json`. |
-| `runtime_info.input.conversion.*` | Harbor conversion cap, excluded repos, and dataset name. | Tune when converting trajectories. | `data_name: my_dataset`, `max_instances: 100`. |
-| `runtime_info.input.dataset.name` | LLaMA-Factory dataset name. | Usually auto-derived. | `""` auto-derived. |
-| `runtime_info.input.model.model_name_or_path` | Base model path or Hub id. | Change for new training runs. | `Qwen/Qwen3.5-35B-A3B-Base`, local path. |
-| `runtime_info.input.model.trust_remote_code` | Whether to trust custom model code. | Keep aligned with model requirements. | `true`, `false`. |
-| `runtime_info.input.training.stage` | Training stage. | Keep `sft` for current Trainer. | `sft`. |
-| `runtime_info.input.training.finetuning_type` | Full or parameter-efficient tuning type. | Current profile uses full fine-tuning. | `full`. |
-| `runtime_info.input.training.deepspeed` | DeepSpeed config path. | Change only with a matching training setup. | `scripts/deepspeed/ds_z3_config.json`. |
-| `runtime_info.input.training.template` | Chat template. | Match the base model family. | `qwen3_5`, `qwen3`, `qwen3_5_nothink`. |
-| `runtime_info.input.training.cutoff_len` | Maximum sequence length. | Tune for memory and data format. | `32768`, `131072`. |
-| `runtime_info.input.training.max_samples` | Dataset sample cap. | Lower for smoke or ablation runs. | `512` smoke, `1000000` full. |
-| `runtime_info.input.training.*workers` | Preprocessing and dataloader worker counts. | Tune for CPU capacity. | `4`, `16`. |
-| `runtime_info.input.training.output_dir` | Training output directory/run name base. | Change for each important run. | `artifacts/...` paths written by runs. |
-| `runtime_info.input.training.logging/save/*` | Logging and checkpoint cadence. | Tune for monitoring and storage. | `logging_steps: 1`, `save_steps: 200`. |
-| `runtime_info.input.training.batch/lr/epoch fields` | Batch size, accumulation, learning rate, weight decay, epochs, scheduler, warmup. | Main hyperparameters to tune. | `batch=1`, `lr=5e-5`, `epochs=3`. |
-| `runtime_info.input.training.bf16`, `flash_attn`, `enable_liger_kernel`, `use_unsloth_gc` | Performance and precision options. | Keep compatible with hardware/model. | `bf16: true`, `flash_attn: fa2`. |
-| `runtime_info.input.infrastructure.n_gpus_per_node` | GPU count. | Must match the training node. | `1`, `4`, `8`. |
-| `runtime_info.input.experiment.*` | W&B run naming and mode. | Optional experiment tracking. | `wandb_mode: offline`, `disabled`, `online`. |
-| `runtime_info.input.credentials.*` | W&B and Hugging Face tokens. | Prefer environment variables; never commit secrets. | `""`; `$HF_TOKEN`, `$WANDB_API_KEY`. |
-| `runtime_info.output.*` | Latest checkpoint, metrics, curves, and artifacts. | Read after a run; scripts may update it. | `artifacts/...` paths written by runs. |
