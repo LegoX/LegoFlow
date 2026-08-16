@@ -2,53 +2,140 @@
 title: Configuration Guide
 ---
 
-Curator config controls task discovery and task generation. This is where users
-choose repository collection scope, PR filters, LLM endpoints, and per-language
-generation limits.
+Curator config controls task discovery and task generation: which repositories
+to collect from, how PRs are filtered, which LLM endpoint is used, and how many
+verified tasks each language should produce. Most runs only need a few
+`runtime_info.input` fields. Leave `meta_info`, repository pins, environment
+paths, and output declarations alone unless you are changing the block contract
+itself.
 
-## Common edits
+## Common Fields
 
-| Field | When to edit |
-| --- | --- |
-| `runtime_info.input.pr_collection.*` | Change collection scale, languages, output directory, or repository/PR filters. |
-| `runtime_info.input.llm_api.*` | Point Curator at the right model endpoint and Claude Code proxy mode. |
-| `runtime_info.input.languages.<lang>` | Enable languages and tune timeout, concurrency, and task caps. |
-| `runtime_info.input.github_token` | Usually leave empty and supply tokens through env or token files. |
+| Area | Edit when | Main fields |
+| --- | --- | --- |
+| PR collection | You want to change languages, collection scale, or repository/PR filters. | `pr_collection.languages`, `repo_num`, `max_prs_per_repo`, `filters` |
+| LLM endpoint | You want Curator to call a different PR model or Claude Code proxy. | `llm_api.api_key`, `api_base_url`, `pr_model`, `task_model` |
+| GitHub tokens | You want faster or more stable PR collection. | `github_token`, `GITHUB_TOKENS`, `gh_token.txt` |
+| Language generation | You want to enable languages or change generation caps. | `languages.<lang>.enabled`, `n_concurrent`, `max_verified_tasks` |
+| Remote machine | You want Curator to run on another server instead of the current host. | `meta_info.resources.ip`, `user`, `pwd`, `directory` |
+| Tracer handoff | You need Tracer to consume verified tasks from Curator. | `output.merged_tasks_dir`, `dependencies.to.merged_tasks_dir` |
+
+## An Example Reference
+
+Start with a modest PR collection target, one private LLM endpoint, and a small
+per-language task cap. This gives you a practical first run without asking
+Curator to exhaust every collected candidate.
+
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"runtime_info:\n  input:\n    pr_collection:\n      enabled: true\n      languages: [python, javascript, typescript]\n      repo_num: 10\n      max_prs_per_repo: 20\n      output_dir: artifacts/collected_prs\n      token_limit: 32\n      filters:\n        min_stars: 30\n        min_merged_prs: 5\n        max_files_changed: 25\n        max_lines_changed: 1500\n\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      pr_model: Qwen3.6-35B-A3B\n      task_model: claude-sonnet-4-6\n      cc_provider_mode: openai_proxy\n      anthropic_base_url: http://127.0.0.1:4010\n      cc_proxy_port: 4010\n\n    github_token: \"\"             # prefer GITHUB_TOKENS or gh_token.txt\n\n    languages:\n      py: { enabled: true, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 4, max_verified_tasks: 10 } }\n      js: { enabled: true, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 4, max_verified_tasks: 10 } }\n      ts: { enabled: true, params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 4, max_verified_tasks: 10 } }"}
+</ConfigSnippet>
+
+Use `/curator:check` after editing. It checks token access, model endpoint
+settings, repository pins, language configuration, and the local environment
+before `/curator:collect-prs` or `/curator:create-tasks` starts real work.
+
+## Configuration Break-down
+
+### Remote Execution
+
+Curator runs locally by default. If you want the block skill to log into a
+remote CPU/Docker server and run the task collection or creation workflow there,
+fill `meta_info.resources`. Use `local` when the block should run on the current
+machine.
+
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"meta_info:\n  resources:\n    ip: 203.0.113.12              # local = current machine; otherwise SSH target\n    user: ubuntu               # SSH user for the remote server\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/curator\n    public_storage: null"}
+</ConfigSnippet>
+
+The remote directory should already contain the repository checkout, or be the
+place where your setup workflow will prepare it. Keep secrets out of tracked
+`config.yaml`; use your SSH agent, key files, or ignored private config for
+credentials.
+
+### PR Collection
+
+Curator first collects candidate PRs from GitHub. The `languages` list controls
+which ecosystems are searched, while the filters control how strict the
+repository and PR selection should be.
+
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"runtime_info:\n  input:\n    pr_collection:\n      enabled: true\n      languages: [c, cpp, go, java, javascript, typescript, python, rust]\n      repo_num: 100\n      max_prs_per_repo: 50\n      output_dir: artifacts/collected_prs\n      token_limit: 32\n      filters:\n        min_stars: 30\n        min_merged_prs: 5\n        max_files_changed: 25\n        max_lines_changed: 1500"}
+</ConfigSnippet>
+
+For a quick check, reduce `repo_num`, `max_prs_per_repo`, and the language list.
+For production, keep broad language coverage and prepare multiple GitHub tokens
+so collection does not stall on rate limits.
+
+### LLM and Claude Code Proxy
+
+Curator uses one model for PR analysis and instruction generation, then uses
+Claude Code for task creation. Keep tracked `config.yaml` free of real keys and
+private endpoints; put those values in environment variables or a private local
+profile.
+
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      pr_model: Qwen3.6-35B-A3B\n      task_model: claude-sonnet-4-6\n      cc_provider_mode: openai_proxy\n      anthropic_base_url: http://127.0.0.1:4010\n      cc_proxy_port: 4010"}
+</ConfigSnippet>
+
+Use `cc_provider_mode: openai_proxy` when Claude Code should call your
+OpenAI-compatible gateway through the local proxy. Use `native` only when you
+are intentionally using Anthropic-compatible credentials directly.
+
+### Language Generation
+
+After PR collection, Curator generates and validates tasks per language. Each
+language has its own timeout, Claude Code timeout, concurrency, and verified
+task cap.
+
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"runtime_info:\n  input:\n    languages:\n      py:   { enabled: true, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 24, max_verified_tasks: 256 } }\n      js:   { enabled: true, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }\n      rust: { enabled: true, params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16, max_verified_tasks: 128 } }"}
+</ConfigSnippet>
+
+Use small caps like `10` for a first run. Use `"all"` only when you are ready to
+consume all collected candidates for that language.
+
+## Handoff With Neighbor Blocks
+
+Curator has no upstream task source. Its main downstream handoff is the merged
+verified task directory that Tracer reads in local mode.
+
+### Produce Tracer Tasks
+
+`merged_tasks_dir` is the flattened task directory produced from all verified
+per-language outputs. Tracer reads this path through `task_source.dataset_name`.
+
+<ConfigSnippet title="blocks/curator/config.yaml">
+{"meta_info:\n  dependencies:\n    to:\n      merged_tasks_dir:\n        to: tracer.input.task_source.dataset_name\n        when: {tracer.input.task_source.provider: local}\n\nruntime_info:\n  output:\n    merged_tasks_dir:\n      path: artifacts/merged_swe_tasks\n      extract_command: python scripts/extract_verified_tasks.py"}
+</ConfigSnippet>
+
+After task creation, make sure `artifacts/merged_swe_tasks` exists before moving
+to Tracer.
+
+## Field Reference
+
+| Field | Required? | Default | When to change |
+| --- | --- | --- | --- |
+| `pr_collection.enabled` | Yes | `true` | Disable only when you already have collected PR inputs. |
+| `pr_collection.languages` | Yes | 8 languages | Narrow for debugging; expand for production coverage. |
+| `pr_collection.repo_num` | Yes | `100` | Lower for smoke runs; raise for larger data collection. |
+| `pr_collection.max_prs_per_repo` | Yes | `50` | Lower when collection is too broad or expensive. |
+| `pr_collection.filters.*` | Yes | Quality filters | Tune difficulty, recency, repo quality, and PR size. |
+| `llm_api.api_key` | Yes | `human` | Put the real key in env/private config. Never commit it. |
+| `llm_api.api_base_url` | Yes | `human` | Point Curator at your OpenAI-compatible endpoint. |
+| `llm_api.pr_model` | Yes | `Qwen3.6-35B-A3B` | Change the model used for PR filtering and instruction work. |
+| `llm_api.task_model` | Yes | `claude-sonnet-4-6` | Change the Claude Code-visible model alias for task creation. |
+| `llm_api.cc_proxy_port` | Yes | `4010` | Change only if the local proxy port is occupied. |
+| `github_token` | No | `""` | Prefer `GITHUB_TOKENS`, `GITHUB_TOKEN`, or `gh_token.txt`. |
+| `languages.<lang>.enabled` | Yes | `true` | Toggle a language for the current run. |
+| `languages.<lang>.params.n_concurrent` | Yes | language-specific | Tune for API rate limits and machine capacity. |
+| `languages.<lang>.params.max_verified_tasks` | Yes | language-specific | Lower for smoke runs; raise or use `"all"` for production. |
+| `meta_info.resources.ip` | No | `local` | Set a host/IP when Curator should run on a remote server. |
+| `meta_info.resources.user` | For remote | `null` | SSH user for the remote server. |
+| `meta_info.resources.directory` | For remote | `null` | Block working directory on the remote server. |
+| `meta_info.resources.public_storage` | No | `null` | Optional public artifact location for dashboards or sharing. |
 
 ## Complete config.yaml
 
+Use this as the complete reference after you understand the few fields above.
+
 <ConfigFile file="blocks/curator/config.yaml" />
-
-## Field guide
-
-| Field | Meaning | User action | Examples |
-| --- | --- | --- | --- |
-| `meta_info.name`, `label`, `description`, `parent` | Curator identity and parent block. | Do not edit for normal runs. | Default block identity. |
-| `meta_info.dependencies.from` | Curator has no upstream task source. | Do not edit. | Keep default unless changing handoffs. |
-| `meta_info.dependencies.to.merged_tasks_dir` | Wires curated tasks to Tracer when Tracer uses a local task source. | Do not edit unless rewiring pipeline outputs. | Keep default unless changing handoffs. |
-| `meta_info.repos.legoflow-curator` | Pinned task-generation repository. | Do not edit unless intentionally updating implementation code. | Pinned commits in `repos/`. |
-| `meta_info.environment.*` | Python environment and dependency metadata for `legoflow-curator`. | Read during setup; normally do not edit. | `artifacts/env/...`, Python `3.12` / `3.13`. |
-| `meta_info.resources.*` | Host where Curator runs. | Keep local unless moving work to a remote node. | `local`; remote IP only for SSH runs. |
-| `runtime_info.input.pr_collection.enabled` | Whether PR collection is active. | Disable only if using already collected inputs. | `true`, `false`. |
-| `runtime_info.input.pr_collection.languages` | Languages to collect from GitHub. | Edit to narrow or expand task sources. | `[python, rust]`, `[c, cpp, go, java]`. |
-| `runtime_info.input.pr_collection.repo_num` | Target number of qualifying repositories per language. | Lower for smoke runs, raise for data production. | `10` smoke, `100` production. |
-| `runtime_info.input.pr_collection.max_prs_per_repo` | Maximum candidate PRs per repository. | Tune for scale and cost. | `10`, `50`. |
-| `runtime_info.input.pr_collection.output_dir` | Where collected PR metadata is written. | Usually keep default. | `artifacts/...` paths written by runs. |
-| `runtime_info.input.pr_collection.token_limit` | First N combined file/env tokens used during collection. | Tune only when collection is too broad or too expensive. | `0` all, `32` first tokens. |
-| `runtime_info.input.pr_collection.filters.*` | Repository and PR quality filters. | Tune to control difficulty, recency, size, and quality. | `min_stars: 30`, `max_files_changed: 25`. |
-| `runtime_info.input.llm_api.api_key` | LLM API key marker. | Replace via setup/env; do not commit real keys. | `""`; use env/private local config. |
-| `runtime_info.input.llm_api.api_base_url` | LLM API endpoint marker. | Fill with the endpoint used for Curator models. | `""`; private OpenAI-compatible endpoint. |
-| `runtime_info.input.llm_api.pr_model` | Model for PR analysis. | Change when using a different PR filtering model. | `Qwen3.6-35B-A3B`, `claude-opus-4-6`. |
-| `runtime_info.input.llm_api.task_model` | Model for task generation. | Change when using a different task-writing model. | `claude-sonnet-4-6`, proxy alias. |
-| `runtime_info.input.llm_api.cc_provider_mode` | Claude Code provider mode. | Keep aligned with your proxy/native setup. | `openai_proxy`, `native`. |
-| `runtime_info.input.llm_api.anthropic_base_url` | Anthropic-compatible proxy endpoint. | Edit when your local proxy port changes. | `http://127.0.0.1:4010`, provider Anthropic URL. |
-| `runtime_info.input.llm_api.cc_proxy_port` | Local Claude Code proxy port. | Edit only when the proxy uses another port. | `4010`, `4011`. |
-| `runtime_info.input.github_token` | Fallback GitHub token field. | Prefer env variables or `gh_token.txt`; keep tracked config empty. | `""`; `GITHUB_TOKENS` or `gh_token.txt`. |
-| `runtime_info.input.languages.<lang>.enabled` | Whether to generate tasks for a language. | Toggle per run. | `true`, `false`. |
-| `runtime_info.input.languages.<lang>.params.timeout` | End-to-end generation timeout. | Raise for slow ecosystems. | `2400`, `3200`, `3600` seconds. |
-| `runtime_info.input.languages.<lang>.params.cc_timeout` | Claude Code task-generation timeout. | Raise when generation times out. | `2400`, `3200`, `3600` seconds. |
-| `runtime_info.input.languages.<lang>.params.n_concurrent` | Per-language concurrency. | Tune for machine capacity and API limits. | `4`, `8`, `16`, `24`. |
-| `runtime_info.input.languages.<lang>.params.max_verified_tasks` | Verified task cap per language. | Use small values for smoke runs. | `10` smoke, `128`, `256`, `all`. |
-| `runtime_info.output.swe_tasks_dir` | Per-language verified task output. | Read downstream; usually do not edit. | `artifacts/...` paths written by runs. |
-| `runtime_info.output.merged_tasks_dir` | Flattened verified task output for Tracer. | Usually keep default. | `artifacts/...` paths written by runs. |
-| `runtime_info.output.logs` | Per-language generation logs. | Use for debugging. | `artifacts/...` paths written by runs. |

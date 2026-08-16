@@ -7,17 +7,21 @@ title: Introduction
 
 ## What is LegoFlow?
 
-Building agent and software-engineering data pipelines is hard to do well. A realistic SWE pipeline has to mine useful GitHub changes, turn them into verifiable tasks, roll agents out in isolated environments, filter and convert trajectories, and then run multiple rounds of model training and evaluation. Without a shared workflow, the process becomes fragile: scripts drift, handoffs break, and several people often have to coordinate just to close the loop.
+LegoFlow is an easy and interactive framework for code data engineering. It helps users curate coding tasks, roll out agent trajectories, convert data for training, evaluate checkpoints, and inspect the whole process through live dashboards.
 
-**LegoFlow** gives users a guided way to operate that full pipeline with coding agents. You can set up blocks, check inputs, launch runs, inspect dashboards, and extend the workflow through natural language instructions and plugin skills. Although LegoFlow starts from SWE data, its block-based design is built for broader long-horizon agent data workflows where tasks, rollouts, training, evaluation, and analysis need to evolve together.
+The project starts from software-engineering data, where the loop is especially hard to run cleanly: useful GitHub changes have to become verifiable tasks, agents need to run in isolated environments, successful trajectories need to be filtered and converted, and checkpoints have to be trained and evaluated under traceable conditions. LegoFlow turns that loop into a guided workflow operated through coding-agent plugin skills.
 
 ## Highlights
 
-- **Fully agentic data workflow**: LegoFlow curates high-quality SWE tasks across **8+** programming languages and **20+** tags, then rolls out trajectories across multiple agent scaffolds, including Claude Code, OpenCode, OpenHands, and Terminus. The same workflow can grow into other long-horizon agent data domains.
+- **Fully Vibe-coding**: LegoFlow turns repo and PR collection, task verification, trajectory rollout, and the training-evaluation loop into prepared plugin skills. Users can interact with a coding agent, such as Claude Code, to run real data production instead of stitching scripts together by hand.
 
-- **Live analytics dashboards**: LegoFlow monitors the data production process through a series of live dashboards. These dashboards are built around carefully designed rubrics for tracking task difficulty, trajectory quality, and model performance.
+- **Wide coverage**: LegoFlow covers **8+** programming languages and **20+** task tags, with trajectory rollouts across Claude Code, OpenCode, OpenHands, and Terminus scaffolds.
 
-- **Easy to use and extend**: LegoFlow is operated through agent plugin skills. These skills are tied to predefined blocks, making it easier to execute, modify, and extend the workflow without learning every script first.
+- **Block-based extensibility**: LegoFlow is built around **blocks**, the runnable units that manage repositories, scripts, configuration, artifacts, dashboards, and handoffs for one stage of the workflow.
+
+- **Live analytics dashboards**: Each major stage ships with a dashboard. The dashboards use carefully designed rubrics to track task difficulty, trajectory quality, training progress, and model performance.
+
+- **Self-evolving loop**: An agent has run the full loop, diagnosed why a first fine-tune plateaued, changed the selection rule, and lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. See the [end-to-end run](https://legox.pages.dev/blog/legoflow/).
 
 ## System Design
 
@@ -25,17 +29,16 @@ Building agent and software-engineering data pipelines is hard to do well. A rea
 
 The overall data pipeline is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. The **root** block orchestrates four child blocks:
 
-- **Curator**: curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums such as Stack Overflow. Carefully designed filtering requirements preserve high-quality instances across **8+** programming languages and **20+** task tags.
+- **Curator**: curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums.
 - **Tracer**: collects high-quality trajectories with verified rewards, supporting rollouts across multiple coding scaffolds such as Claude Code, OpenCode, OpenHands, and Terminus.
 - **Trainer**: converts rollout traces into training-ready formats and launches end-to-end training workflows.
-- **Evaluator**: measures checkpoints on coding benchmarks and supports detailed analysis with carefully designed rubrics and tags.
+- **Evaluator**: measures checkpoints on coding benchmarks, with rubric- and tag-level analysis.
 {/*- **live dashboard**: displays live statistics across tasks, trajectories, training status, and Evaluator results. It also supports experiment comparison and deeper analysis over curated rubrics and tags.*/}
-
 
 
 ### Why Blocks?
 
-Blocks make the pipeline easier to use and easier to change. Because every stage follows the same contract, users can operate the whole system through plugin skills, restart a failed stage from its archived state, swap one block without breaking the others, and inspect artifacts through consistent dashboards. This keeps the workflow approachable for general users while leaving room for advanced analysis and new agent-data domains. See [What is a Block](/docs/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
+Blocks make the pipeline easier to use and easier to change. Because every stage follows the same contract, users can operate the whole system through plugin skills, restart a failed stage from its archived state, swap one block without breaking the others, and inspect artifacts through consistent dashboards. This keeps the workflow approachable for general users while leaving room for advanced analysis and new agent-data domains. See [What is a Block](/docs/development/block-design) for the exact block anatomy and how the diagram maps onto the repository structure.
 
 
 ## Start by Use Case
@@ -48,6 +51,6 @@ Blocks make the pipeline easier to use and easier to change. Because every stage
 | Collect agent trajectories on tasks I already have | [Tracer](/docs/blocks/tracer) |
 | Fine-tune a model on trajectories | [Trainer](/docs/blocks/trainer) |
 | Benchmark a model or a checkpoint | [Evaluator](/docs/blocks/evaluator) |
-| Add a block of my own | [What is a Block](/docs/block-design) |
+| Add a block of my own | [Adding New Blocks](/docs/development/adding-new-blocks) |
 
 </div>

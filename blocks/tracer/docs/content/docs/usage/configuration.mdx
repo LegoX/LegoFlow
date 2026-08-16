@@ -4,16 +4,85 @@ title: Configuration Guide
 
 Tracer config controls rollout jobs: which tasks to run, which agent scaffold
 to use, how many jobs to launch, and whether to convert trajectories for SFT.
+Most runs only need a few `runtime_info.input` fields. Leave `meta_info`,
+repository pins, environment paths, and output declarations alone unless you are
+changing the block contract itself.
 
-## Common edits
+## Common Fields
 
-| Field | When to edit |
-| --- | --- |
-| `runtime_info.input.llm_api.*` | Point rollouts at the model endpoint under test. |
-| `runtime_info.input.task_source.*` | Choose local Curator output or a Hugging Face dataset. |
-| `runtime_info.input.harbor_job.*` | Tune rollout scale, retries, concurrency, and timeouts. |
-| `runtime_info.input.agent.*` | Switch coding agent scaffold or runtime image. |
-| `runtime_info.input.sft_conversion.*` | Enable and configure post-rollout conversion. |
+| Area | Edit when | Main fields |
+| --- | --- | --- |
+| Model endpoint | You want Tracer to call a different model or gateway. | `llm_api.api_key`, `api_base_url`, `model` |
+| Task source | You are receiving Curator output or using a dataset from Hugging Face. | `task_source.provider`, `dataset_name`, `split` |
+| Rollout scale | You are doing a smoke run, a batch run, or a full production run. | `harbor_job.n_tasks`, `n_concurrent`, `max_retries`, `timeout_multiplier` |
+| Agent scaffold | You switch between Claude Code, OpenCode, or OpenHands SDK. | `agent.name`, `version`, `runtime_image`, `runtime_host_path` |
+| Remote machine | You want Tracer to run rollouts on another Docker server. | `meta_info.resources.ip`, `user`, `pwd`, `directory` |
+| Trainer handoff | You need training-ready data after rollout. | `sft_conversion.enabled`, `scaffold`, `tokenizer_name`, `out_dir` |
+
+## An Example Reference
+
+Start with local Curator output, a small task cap, Claude Code, and SFT
+conversion enabled. This gives you a complete mini-run that can hand data to
+Trainer.
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      model: openai/Qwen3.6-35B-A3B\n\n    task_source:\n      provider: local\n      dataset_name: ../curator/artifacts/merged_swe_tasks\n      split: train\n\n    harbor_job:\n      jobs_dir: artifacts/jobs\n      n_concurrent: 4\n      n_tasks: 10\n      max_retries: 2\n      timeout_multiplier: 5\n\n    agent:\n      name: custom-claude-code\n      version: 2.1.118\n      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1\n      runtime_host_path: artifacts/agent-runtime/claude-code\n      max_turns: 80\n      temperature: 0.7\n\n    sft_conversion:\n      enabled: true\n      scaffold: auto\n      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base\n      out_dir: artifacts/sft_data"}
+</ConfigSnippet>
+
+Use `/tracer:check` after editing. It catches missing task sources, bad model
+endpoints, unavailable Docker/runtime images, and conversion config mistakes
+before `/tracer:run` spends tokens.
+
+## Configuration Break-down
+
+### Remote Execution
+
+Tracer runs locally by default. If you want rollouts to happen on a remote
+CPU/Docker node, fill `meta_info.resources` so the operating skill knows where
+to log in and which block directory to use.
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"meta_info:\n  resources:\n    ip: 203.0.113.12              # local = current machine; otherwise SSH target\n    user: ubuntu               # SSH user for the remote server\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/tracer\n    public_storage: null"}
+</ConfigSnippet>
+
+Use a remote node when local Docker capacity, network placement, or long-running
+rollouts make the current machine inconvenient. The remote directory should
+point at the Tracer block checkout, not just the repository root.
+
+### Task Source
+
+Tracer receives valid tasks to produce trajectories either from the Curator, or open-sourced tasks from Huggingface. 
+
+- From Curator Tasks:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    task_source:\n      provider: local\n      dataset_name: ../curator/artifacts/merged_swe_tasks\n      split: train"}
+</ConfigSnippet>
+
+
+- From Hugging Face Task Dataset:
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    task_source:\n      provider: huggingface\n      dataset_name: SWE-Lego/<dataset-name>\n      split: train"}
+</ConfigSnippet>
+
+### Smoke Run
+
+Use a small `n_tasks` and low concurrency when checking a new endpoint,
+runtime image, or task source. This is usually helpful for debugging or getting familiar with the whole pipeline.
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    harbor_job:\n      n_concurrent: 1\n      n_tasks: 5\n      max_retries: 0\n      timeout_multiplier: 5"}
+</ConfigSnippet>
+
+### Production Rollout
+
+For production, raise concurrency only after `/tracer:check` passes and a smoke
+run has produced valid trajectories.
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    harbor_job:\n      n_concurrent: 8\n      n_tasks: null             # run every staged task\n      max_retries: 2\n      timeout_multiplier: 5"}
+</ConfigSnippet>
 
 ## Agent Version Presets
 
@@ -31,39 +100,60 @@ Use `auto` for a fresh run that uses the same `agent.name` in the current
 config. Use an explicit scaffold key when reconverting an older job whose
 scaffold may differ from the current config.
 
+## Handoff With Neighbor Blocks
+
+Tracer normally receives tasks from Curator and sends converted LF data to
+Trainer.
+
+### Receive Curator Tasks
+
+`task_source.dataset_name` is the path Tracer actually reads. The dependency
+entry documents that this value comes from Curator's `merged_tasks_dir`, so
+root-level checks can validate the handoff.
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:\n        from: curator.output.merged_tasks_dir\n        when: {task_source.provider: local}\n\nruntime_info:\n  input:\n    task_source:\n      provider: local\n      dataset_name: ../curator/artifacts/merged_swe_tasks"}
+</ConfigSnippet>
+
+### Produce Trainer-Ready Data
+
+Trainer usually reads `artifacts/sft_data/<job>/lf.json`. Keep conversion on
+when Tracer should produce that file after rollout.
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    sft_conversion:\n      enabled: true\n      scaffold: auto\n      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base\n      out_dir: artifacts/sft_data\n\n  output:\n    sft_data_dir:\n      path: artifacts/sft_data\n      trajectory_format: artifacts/sft_data/<job>/lf.json"}
+</ConfigSnippet>
+
+## Field Reference
+
+| Field | Required? | Default | When to change |
+| --- | --- | --- | --- |
+| `llm_api.api_key` | Yes | `human` | Put the real key in env/private config before rollout. Never commit it. |
+| `llm_api.api_base_url` | Yes | `human` | Point Tracer at your OpenAI-compatible endpoint. |
+| `llm_api.model` | Yes | `openai/Qwen3.6-35B-A3B` | Change when testing a different teacher model. |
+| `litellm_proxy.port` | Yes | `4003` | Change only if the local port is already occupied. |
+| `task_source.provider` | Yes | `local` | Use `local` for Curator output; use `huggingface` for a published dataset. |
+| `task_source.dataset_name` | Yes | `../curator/artifacts/merged_swe_tasks` | Change to another local task directory or dataset id. |
+| `harbor_job.n_concurrent` | Yes | `8` | Tune for endpoint capacity, Docker capacity, and API rate limits. |
+| `harbor_job.n_tasks` | No | `40` | Use `5` or `10` for smoke runs; use `null` to run all staged tasks. |
+| `harbor_job.max_retries` | Yes | `2` | Lower for fast checks; raise only for unstable infrastructure. |
+| `harbor_job.timeout_multiplier` | Yes | `5` | Increase when agents time out on valid tasks. This is a multiplier, not seconds. |
+| `agent.name` | Yes | `custom-claude-code` | Switch coding scaffold. Change the full agent row together. |
+| `agent.version` | Yes | `2.1.118` | Must match the selected scaffold and runtime image tag. |
+| `agent.runtime_image` | Yes | `docker.io/jierun/c-cc-2.1.118:v0.1` | Must match the selected scaffold and version. |
+| `agent.runtime_host_path` | Recommended | `artifacts/agent-runtime/claude-code` | Use the pre-extracted runtime path when available. |
+| `sft_conversion.enabled` | Yes | `true` | Keep `true` when Trainer will consume Tracer output. |
+| `sft_conversion.scaffold` | Yes | `auto` | Keep `auto` for fresh runs; set explicit key when reconverting old jobs. |
+| `sft_conversion.tokenizer_name` | Yes | `Qwen/Qwen3.5-35B-A3B-Base` | Align with the Trainer base model. |
+| `sft_conversion.max_instances` | No | `null` | Cap conversion for quick checks; `null` converts all successful rollouts. |
+| `env_extra.HARBOR_EXCLUDE_TASKS` | No | `excluded_tasks.txt artifacts/processed_tasks.yaml` | Add task ids or files to skip known-bad or already processed tasks. |
+| `meta_info.resources.ip` | No | `local` | Set a host/IP when Tracer should run on a remote Docker node. |
+| `meta_info.resources.user` | For remote | `null` | SSH user for the remote node. |
+| `meta_info.resources.directory` | For remote | `null` | Tracer block working directory on the remote node. |
+| `meta_info.resources.public_storage` | No | `null` | Optional public artifact location for dashboards or sharing. |
+
 ## Complete config.yaml
 
+Use this as the complete reference after you understand the few fields above.
+
 <ConfigFile file="blocks/tracer/config.yaml" />
-
-## Field guide
-
-| Field | Meaning | User action | Examples |
-| --- | --- | --- | --- |
-| `meta_info.name`, `label`, `description`, `parent` | Tracer identity and parent block. | Do not edit for normal runs. | Default block identity. |
-| `meta_info.dependencies.from.task_source.dataset_name` | Consumes Curator's merged tasks when using local task source. | Do not edit unless rewiring data handoff. | Keep default unless changing handoffs. |
-| `meta_info.dependencies.to.raw_trajectories_dir` | Publishes raw trajectories to Trainer when Trainer consumes Harbor jobs. | Do not edit unless changing handoff contract. | Keep default unless changing handoffs. |
-| `meta_info.resources.*` | Host and working directory for rollout execution. | Edit only when moving Tracer to another machine. | `local`; remote IP only for SSH runs. |
-| `meta_info.repositories.harbor` | Pinned Harbor runtime. | Update only deliberately. | Pinned commits in `repos/`. |
-| `meta_info.repositories.swe_data_process` | Pinned conversion/data-processing repo. | Update only deliberately. | Pinned commits in `repos/`. |
-| `meta_info.environment.*` | Local environments for Harbor, LiteLLM, and conversion. | Usually do not edit. | `artifacts/env/...`, Python `3.12` / `3.13`. |
-| `runtime_info.input.llm_api.*` | Upstream model endpoint, model id, protocols, and token cost metadata. | Fill endpoint/key/model before rollout. | `model: openai/Qwen3.6-35B-A3B`; key/URL stay private. |
-| `runtime_info.input.litellm_proxy.*` | Per-job LiteLLM proxy template, port, and key. | Change port only to avoid conflicts. | `port: 4003`, `master_key: dummy-key-cf`. |
-| `runtime_info.input.task_source.provider` | Task source mode: local Curator output or Hugging Face. | Set before a run. | `local`, `huggingface`, `harbor_registry`. |
-| `runtime_info.input.task_source.dataset_name` | Local path or dataset name for tasks. | Usually wired from Curator in local mode. | `../curator/artifacts/merged_swe_tasks`, `swe-bench-verified`. |
-| `runtime_info.input.task_source.split` | Dataset split. | Edit for Hugging Face sources. | `train`, `test`. |
-| `runtime_info.input.harbor_job.jobs_dir` | Directory for Harbor jobs. | Usually keep default. | `artifacts/jobs`. |
-| `runtime_info.input.harbor_job.n_concurrent` | Parallel rollout count. | Tune for capacity and API limits. | `4`, `8`, `16`, `24`. |
-| `runtime_info.input.harbor_job.n_tasks` | Number of tasks to run; `null` means all. | Use small values for smoke runs. | `5`, `40`, `null` all. |
-| `runtime_info.input.harbor_job.max_retries` | Per-task retry cap. | Raise only for unstable environments. | `0`, `2`, `3`. |
-| `runtime_info.input.harbor_job.timeout_multiplier` | Scales task timeout. | Raise for slow agents or tasks. | `2400`, `3200`, `3600` seconds. |
-| `runtime_info.input.agent.*` | Agent scaffold, version, runtime image/path, turns, and temperature. | Change fields together when switching scaffold. | `custom-claude-code` + `2.1.118`; `custom-opencode` + `1.18.7`; `custom-openhands-sdk` + `1.33.0`. |
-| `runtime_info.input.sft_conversion.enabled` | Whether to convert rollouts after the job. | Enable when producing Trainer input. | `true` for Trainer handoff, `false` to skip. |
-| `runtime_info.input.sft_conversion.scaffold` | Conversion scaffold mapping. | Keep aligned with the selected agent. | `auto`, `claude_code`, `open_code`, `openhands_sdk`. |
-| `runtime_info.input.sft_conversion.tokenizer_name` | Tokenizer used for conversion. | Align with Trainer base model. | `Qwen/Qwen3.5-35B-A3B-Base`. |
-| `runtime_info.input.sft_conversion.out_dir` | Converted SFT output directory. | Usually keep default. | `artifacts/sft_data`. |
-| `runtime_info.input.sft_conversion.max_instances` | Optional conversion cap. | Use for quick checks. | `null` all, `100` smoke, `0` all for Trainer. |
-| `runtime_info.input.sft_conversion.exclude_repos_file` | Repos excluded from conversion. | Leave empty for default. | `""`, `scripts/excluded_repos.txt`. |
-| `runtime_info.input.sft_conversion.reasoning_*` | Reasoning-content filtering behavior. | Tune only for dataset-format experiments. | `adaptive`, threshold `0.2`. |
-| `runtime_info.input.env_extra.HARBOR_EXCLUDE_TASKS` | Extra task exclusion sources or ids. | Use to skip known-bad tasks. | `excluded_tasks.txt artifacts/processed_tasks.yaml`. |
-| `runtime_info.output.raw_trajectories_dir` | Harbor job output consumed by Trainer. | Read downstream; usually do not edit. | `artifacts/...` paths written by runs. |
-| `runtime_info.output.sft_data_dir` | Converted SFT data output. | Read when conversion is enabled. | `artifacts/...` paths written by runs. |

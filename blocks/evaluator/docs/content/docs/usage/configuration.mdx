@@ -3,43 +3,154 @@ title: Configuration Guide
 ---
 
 Evaluator config controls benchmark selection, model endpoint, agent scaffold,
-job scale, and optional post-run analysis.
+job scale, and optional post-run analysis. Most runs only need a few
+`runtime_info.input` fields. Leave `meta_info`, repository pins, environment
+paths, and output declarations alone unless you are changing the block contract
+itself.
 
-## Common edits
+## Common Fields
 
-| Field | When to edit |
-| --- | --- |
-| `runtime_info.input.llm_api.*` | Point evaluation at a remote API or local vLLM endpoint. |
-| `runtime_info.input.local_model_serving.*` | Serve and name a local checkpoint. |
-| `runtime_info.input.task_source.*` | Select benchmark and registry behavior. |
-| `runtime_info.input.harbor_job.*` | Tune benchmark scale, concurrency, retries, and timeout. |
-| `runtime_info.input.agent.*` | Switch the evaluation agent scaffold. |
-| `runtime_info.input.job_analysis.*` | Enable or configure post-evaluation tagging. |
+| Area | Edit when | Main fields |
+| --- | --- | --- |
+| Model endpoint | You evaluate a remote API or a locally served checkpoint. | `llm_api.*`, `local_model_serving.*` |
+| Benchmark source | You change the benchmark or Harbor registry entry. | `task_source.dataset_name`, `version`, `registry_path`, `no_hack` |
+| Evaluation scale | You run a smoke benchmark or a full benchmark. | `harbor_job.n_tasks`, `n_concurrent`, `max_retries`, `timeout_multiplier` |
+| Agent scaffold | You switch the coding agent used for evaluation. | `agent.name`, `version`, `runtime_image`, `runtime_host_path` |
+| Remote machine | You want evaluation to run on another benchmark server. | `meta_info.resources.ip`, `user`, `pwd`, `directory` |
+| Post-run analysis | You want rubric and tag-level analysis after evaluation. | `job_analysis.enabled`, `tag_llm.*` |
+
+## An Example Reference
+
+Start by evaluating a locally served checkpoint on SWE-bench Verified with a
+small task cap. This checks the model endpoint, Harbor runtime, agent scaffold,
+and analysis path before a full benchmark.
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: http://127.0.0.1:8000/v1\n      model: openai/Qwen3.5-35B-A3B\n      protocols: [openai_compatible, anthropic_compatible]\n      served_via: per_job_litellm_proxy\n\n    local_model_serving:\n      model_path: artifacts/models/Qwen3.5-35B-A3B\n      model_name: Qwen3.5-35B-A3B\n\n    task_source:\n      provider: harbor_registry\n      dataset_name: swebench-verified\n      version: \"1.0\"\n      registry_path: repos/harbor/registry.json\n      no_hack: true\n\n    harbor_job:\n      jobs_dir: artifacts/jobs\n      n_concurrent: 2\n      n_tasks: 10\n      max_retries: 1\n      timeout_multiplier: 1\n\n    agent:\n      name: custom-openhands-sdk\n      version: 1.33.0\n      runtime_image: docker.io/jierun/c-oh-sdk-1.33.0:v0.1\n      runtime_host_path: artifacts/runtime/openhands-sdk\n      max_turns: 200\n      temperature: 1.0"}
+</ConfigSnippet>
+
+Use `/evaluator:check` after editing. It checks benchmark resolution, model
+endpoint reachability, Docker/runtime availability, local checkpoint settings,
+and job analysis configuration before `/evaluator:run` starts.
+
+## Configuration Break-down
+
+### Remote Execution
+
+Evaluator runs locally by default. Configure `meta_info.resources` when the
+benchmark job should run on a remote Docker server or GPU node instead.
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"meta_info:\n  resources:\n    ip: 203.0.113.30              # local = current machine; otherwise SSH target\n    user: ubuntu               # SSH user for the remote server\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/evaluator\n    public_storage: ./artifacts"}
+</ConfigSnippet>
+
+Use a remote machine when the model server, Docker runtime, or benchmark
+environment is easier to keep close to the evaluation node. The directory should
+point at the Evaluator block checkout on that machine.
+
+### Model Endpoint
+
+Evaluator can point to a remote API or a local checkpoint served through vLLM.
+In both cases, `llm_api.model` is the model name the agent will call.
+
+- Remote API:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      model: openai/Qwen3.5-35B-A3B\n      protocols: [openai_compatible, anthropic_compatible]\n      served_via: per_job_litellm_proxy"}
+</ConfigSnippet>
+
+- Local checkpoint:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: http://127.0.0.1:8000/v1\n      model: openai/Qwen3.5-35B-A3B\n\n    local_model_serving:\n      model_path: artifacts/models/Qwen3.5-35B-A3B\n      model_name: Qwen3.5-35B-A3B"}
+</ConfigSnippet>
+
+Keep `local_model_serving.model_name` aligned with the model name served by
+vLLM and referenced from `llm_api.model`.
+
+### Benchmark Source
+
+Evaluator normally reads registered benchmarks from Harbor's registry.
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    task_source:\n      provider: harbor_registry\n      dataset_name: swebench-verified\n      version: \"1.0\"\n      registry_path: repos/harbor/registry.json\n      no_hack: true"}
+</ConfigSnippet>
+
+Use `no_hack: true` for the hardened SWE-bench Verified path. Keep the registry
+path at `repos/harbor/registry.json` unless you are intentionally using another
+Harbor registry.
+
+### Smoke Evaluation
+
+Use a small task cap and modest concurrency when checking a new checkpoint,
+endpoint, or runtime image.
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    harbor_job:\n      n_concurrent: 2\n      n_tasks: 10\n      max_retries: 1\n      timeout_multiplier: 1"}
+</ConfigSnippet>
+
+### Production Evaluation
+
+For a full benchmark, set `n_tasks: null` and choose concurrency based on your
+endpoint capacity.
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    harbor_job:\n      n_concurrent: 24\n      n_tasks: null\n      max_retries: 2\n      timeout_multiplier: 1"}
+</ConfigSnippet>
+
+## Agent Version Presets
+
+The agent fields move as a set. Pick one row and keep `agent.name`,
+`agent.version`, `agent.runtime_image`, and `agent.runtime_host_path` aligned.
+
+| Scaffold | `agent.name` | `agent.version` | `agent.runtime_image` | `agent.runtime_host_path` |
+| --- | --- | --- | --- | --- |
+| Claude Code | `custom-claude-code` | `2.1.118` | `docker.io/jierun/c-cc-2.1.118:v0.1` | `artifacts/runtime/claude-code` |
+| OpenCode | `custom-opencode` | `1.18.7` | `docker.io/jierun/c-oc-1.18.7:v0.1` | `artifacts/runtime/opencode` |
+| OpenHands SDK | `custom-openhands-sdk` | `1.33.0` | `docker.io/jierun/c-oh-sdk-1.33.0:v0.1` | `artifacts/runtime/openhands-sdk` |
+
+## Handoff With Neighbor Blocks
+
+Evaluator usually receives a trained checkpoint from Trainer. It does not
+currently declare a formal dependency in `meta_info`, so the practical handoff
+is the checkpoint path you put into `local_model_serving.model_path`.
+
+### Receive Trainer Checkpoint
+
+After Trainer finishes, point Evaluator at the trained checkpoint directory and
+serve it through the local model path.
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_base_url: http://127.0.0.1:8000/v1\n      model: openai/Qwen3.5-35B-A3B\n\n    local_model_serving:\n      model_path: ../trainer/artifacts/<training-output-dir>\n      model_name: Qwen3.5-35B-A3B"}
+</ConfigSnippet>
+
+## Field Reference
+
+| Field | Required? | Default | When to change |
+| --- | --- | --- | --- |
+| `llm_api.api_key` | Yes | `human` | Put the real key in env/private config. Never commit it. |
+| `llm_api.api_base_url` | Yes | `human` | Point Evaluator at a remote endpoint or local vLLM server. |
+| `llm_api.model` | Yes | `openai/Qwen3.5-35B-A3B` | Change when evaluating another model/checkpoint. |
+| `local_model_serving.model_path` | For local eval | `artifacts/models/Qwen3.5-35B-A3B` | Point to the checkpoint served by vLLM. |
+| `local_model_serving.model_name` | For local eval | `Qwen3.5-35B-A3B` | Keep aligned with the served model name. |
+| `litellm_proxy.port` | Yes | `4101` | Change only if the local port is occupied. |
+| `task_source.dataset_name` | Yes | `swebench-verified` | Choose another Harbor benchmark. |
+| `task_source.version` | Yes | `"1.0"` | Match the Harbor registry entry. |
+| `task_source.registry_path` | Yes | `repos/harbor/registry.json` | Change only for a custom Harbor registry. |
+| `task_source.no_hack` | No | `true` | Toggle hardened SWE-bench Verified behavior. |
+| `harbor_job.n_concurrent` | Yes | `24` | Tune for endpoint capacity and machine resources. |
+| `harbor_job.n_tasks` | No | `null` | Use a number for smoke runs; `null` runs the full benchmark. |
+| `agent.name` | Yes | `custom-openhands-sdk` | Switch the evaluation scaffold. Change the full agent row together. |
+| `agent.version` | Yes | `1.33.0` | Must match the selected scaffold and runtime image tag. |
+| `job_analysis.enabled` | Yes | `true` | Disable only when you want a faster run without analysis. |
+| `job_analysis.tag_llm.*` | No | empty | Fill only when tagging should use a separate model endpoint. |
+| `meta_info.resources.ip` | No | `local` | Set a host/IP when Evaluator should run on a remote server. |
+| `meta_info.resources.user` | For remote | `null` | SSH user for the remote server. |
+| `meta_info.resources.directory` | For remote | `.` | Evaluator block working directory on the remote server. |
+| `meta_info.resources.public_storage` | No | `./artifacts` | Optional public artifact location for dashboards or sharing. |
 
 ## Complete config.yaml
 
+Use this as the complete reference after you understand the few fields above.
+
 <ConfigFile file="blocks/evaluator/config.yaml" />
-
-## Field guide
-
-| Field | Meaning | User action | Examples |
-| --- | --- | --- | --- |
-| `meta_info.name`, `label`, `description`, `parent` | Evaluator identity and parent block. | Do not edit for normal runs. | Default block identity. |
-| `meta_info.dependencies.from/to` | Evaluator is currently standalone. | Do not edit unless adding pipeline handoffs. | Keep default unless changing handoffs. |
-| `meta_info.resources.*` | Evaluation host and public artifact storage. | Edit only for remote execution or dashboard hosting. | `local`; remote IP only for SSH runs. |
-| `meta_info.repositories.harbor` | Pinned Harbor runtime. | Update only deliberately. | Pinned commits in `repos/`. |
-| `meta_info.environment.*` | Harbor and LiteLLM environments. | Usually do not edit. | `artifacts/env/...`, Python `3.12` / `3.13`. |
-| `runtime_info.input.llm_api.*` | Model API, protocol, and token-cost metadata. | Fill with the model or checkpoint endpoint being evaluated. | Remote API model or local served model; key/URL stay private. |
-| `runtime_info.input.local_model_serving.*` | Local checkpoint path and served model name. | Fill when evaluating a local model via vLLM. | `model_path: artifacts/model/<run>`, `served_model_name`. |
-| `runtime_info.input.litellm_proxy.*` | Per-job LiteLLM proxy template, port, and key. | Change port only to avoid conflicts. | `port: 4003`, `master_key: dummy-key-cf`. |
-| `runtime_info.input.task_source.provider` | Benchmark source provider. | Keep `harbor_registry` for registered benchmarks. | `local`, `huggingface`, `harbor_registry`. |
-| `runtime_info.input.task_source.dataset_name` | Benchmark name. | Main benchmark selection field. | `../curator/artifacts/merged_swe_tasks`, `swe-bench-verified`. |
-| `runtime_info.input.task_source.version` | Benchmark version. | Match Harbor registry entry. | `v1`, registry version. |
-| `runtime_info.input.task_source.registry_path` | Harbor registry file. | Usually keep default. | `repos/harbor/.../registry.yaml`. |
-| `runtime_info.input.task_source.no_hack` | Hardened SWE-Bench Verified variant. | Enable when testing no-hack egress controls. | `true`, `false`. |
-| `runtime_info.input.harbor_job.*` | Job directory, concurrency, task cap, retries, and timeout multiplier. | Tune for smoke or full benchmark runs. | Keep default. |
-| `runtime_info.input.job_analysis.enabled` | Whether to run post-eval analysis. | Disable for fast smoke runs. | `true`, `false`. |
-| `runtime_info.input.job_analysis.tag_llm.*` | Optional separate LLM for tagging. | Leave empty to fall back to `llm_api`. | Leave empty or set separate tagging model. |
-| `runtime_info.input.agent.*` | Agent scaffold, version, image/path, turns, and temperature. | Change fields together when switching scaffold. | `custom-claude-code`, `custom-opencode`, `custom-openhands-sdk`. |
-| `runtime_info.input.env_extra.*` | Extra Harbor and LiteLLM environment overrides. | Use for exclusions or runtime workarounds. | `excluded_tasks.txt artifacts/processed_tasks.yaml`. |
-| `runtime_info.output.eval_results_dir` | Evaluation job output directory and result formats. | Read after runs; usually do not edit. | `artifacts/...` paths written by runs. |

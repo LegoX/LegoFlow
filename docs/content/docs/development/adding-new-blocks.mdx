@@ -1,0 +1,119 @@
+---
+title: Adding New Blocks
+---
+
+New blocks are scaffolded from the root block. Use this path when you want to
+add a new stage to the LegoFlow tree: a new data source, a new rollout system, a
+new analysis stage, or a new downstream workflow.
+
+## Start From `/root:create`
+
+Run the root skill from the repository root:
+
+```text
+/root:create
+```
+
+Describe the unit of work you want. The skill asks for the block name, role,
+inputs, outputs, neighboring blocks, and the basic scripts the block needs. It
+then creates a complete block scaffold rather than a loose collection of files.
+
+The generated block includes:
+
+| Part | Why it matters |
+| --- | --- |
+| `CLAUDE.md` | The operating contract for the agent: what this block does, what it consumes, what it publishes, and what should not be touched. |
+| `config.yaml` | The declaration layer for identity, resources, repositories, dependencies, runtime inputs, and outputs. |
+| `scripts/` | The executable surface, including `start.sh`, `dryrun.sh`, and maintenance scripts. |
+| `.claude/plugins/` | The slash-command interface for setup, check, run, and dashboard operations. |
+| `artifacts/` | The run output and archive location. |
+| `dashboard/` | The read-only visualization surface for block status and outputs. |
+| `memory/` | Longer-lived notes, decisions, and observations for the operating agent. |
+| `blocks/` | Child blocks, if this block later becomes a parent. |
+
+Because `/root:create` copies from a canonical example block, the result should
+look like a working block from the start. Your job is to fill in the real
+contract and implementation details.
+
+## What to Define First
+
+### 1. The Block Boundary
+
+Before writing scripts, decide what the block owns and what it does not own.
+
+- The block owns workflow: config, skills, scripts, validation, artifacts,
+  dashboard, and handoff contracts.
+- The block does not have to own all domain logic. If the actual implementation
+  belongs in a separate repo, pin that repo under `repos/` and call it from the
+  block scripts.
+
+This boundary keeps LegoFlow extensible. A block can be swapped, rerun, or
+debugged without hiding domain code inside orchestration files.
+
+### 2. Inputs and Outputs
+
+Declare the interface before writing code.
+
+<ConfigSnippet title="blocks/<name>/config.yaml">
+{"runtime_info:\n  input:\n    upstream_path: human        # filled by user or dependency\n    model: human                # external choice\n\n  output:\n    result_dir:\n      path: artifacts/results\n      description: Outputs produced by this block"}
+</ConfigSnippet>
+
+Use `runtime_info.input` for values that come from outside the block. Use
+`runtime_info.output` for values the block publishes for downstream blocks.
+
+### 3. Neighbor Dependencies
+
+If the new block consumes another block's output, declare the edge in `from`. If
+another block consumes this block's output, mirror the edge in the producer's
+`to`.
+
+<ConfigSnippet title="blocks/<consumer>/config.yaml">
+{"meta_info:\n  dependencies:\n    from:\n      upstream_path:\n        from: producer.output.result_dir\n        when: {source.provider: local}"}
+</ConfigSnippet>
+
+A one-sided dependency should fail validation. That is intentional: a broken
+handoff is cheaper to catch before a run starts.
+
+### 4. Scripts
+
+Implement the executable surface after the config contract is clear.
+
+| Script | Requirement |
+| --- | --- |
+| `scripts/dryrun.sh` | Read-only. It should report all missing inputs, bad paths, unavailable tools, or endpoint failures it can check safely. |
+| `scripts/start.sh` | The main run path. It should read from `config.yaml`, write under `artifacts/`, and archive the run. |
+| `scripts/clean.sh` | Optional cleanup for generated environments, caches, or old artifacts. |
+| `scripts/stop.sh` | Optional direct termination path for long-running jobs. |
+
+Do not make `/block:check` guess what `dryrun.sh` already knows. The skill
+should call the script and help the user understand the result.
+
+### 5. Plugin Skills
+
+Every block should expose the same operating verbs:
+
+| Skill | What the user expects |
+| --- | --- |
+| `/<block>:setup` | Prepare dependencies and help fill config. Safe to rerun. |
+| `/<block>:check` | Run read-only validation. This should happen before expensive work. |
+| `/<block>:run` | Execute the block's main workflow, usually through `scripts/start.sh`. |
+| `/<block>:dashboard` | Open or refresh the block dashboard. Read-only. |
+
+Keep skill instructions concise and operational. The skill should guide the
+agent through the workflow, not duplicate every implementation detail from the
+repo.
+
+## Validation Checklist
+
+A new block is ready when:
+
+- `config.yaml` clearly separates inputs and outputs;
+- dependency edges are mirrored at both ends;
+- `/block:setup` can prepare a fresh clone;
+- `/block:check` passes without side effects;
+- `/block:run` writes outputs under `artifacts/`;
+- each run is archived with the config and scripts that produced it;
+- `/block:dashboard` can inspect the outputs without mutating them;
+- a downstream block can consume the output without being told a path by hand.
+
+For the exact anatomy, return to [What is a Block](/docs/development/block-design).
