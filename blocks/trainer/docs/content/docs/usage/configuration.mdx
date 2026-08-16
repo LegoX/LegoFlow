@@ -42,7 +42,7 @@ Configure `meta_info.resources` when the block skill should log into a remote
 machine and run the Trainer workflow there.
 
 <ConfigSnippet title="blocks/trainer/config.yaml">
-{"meta_info:\n  resources:\n    ip: 10.0.0.20              # local = current machine; otherwise SSH target\n    user: ubuntu               # add this field if your remote setup needs it\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/trainer\n    public_storage: null"}
+{"meta_info:\n  resources:\n    ip: 203.0.113.20              # local = current machine; otherwise SSH target\n    user: ubuntu               # add this field if your remote setup needs it\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/trainer\n    public_storage: null"}
 </ConfigSnippet>
 
 The remote directory should point at the Trainer block checkout on the GPU

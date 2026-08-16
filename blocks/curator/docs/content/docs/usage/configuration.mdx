@@ -44,7 +44,7 @@ fill `meta_info.resources`. Use `local` when the block should run on the current
 machine.
 
 <ConfigSnippet title="blocks/curator/config.yaml">
-{"meta_info:\n  resources:\n    ip: 10.0.0.12              # local = current machine; otherwise SSH target\n    user: ubuntu               # SSH user for the remote server\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/curator\n    public_storage: null"}
+{"meta_info:\n  resources:\n    ip: 203.0.113.12              # local = current machine; otherwise SSH target\n    user: ubuntu               # SSH user for the remote server\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/curator\n    public_storage: null"}
 </ConfigSnippet>
 
 The remote directory should already contain the repository checkout, or be the

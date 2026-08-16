@@ -41,7 +41,7 @@ Evaluator runs locally by default. Configure `meta_info.resources` when the
 benchmark job should run on a remote Docker server or GPU node instead.
 
 <ConfigSnippet title="blocks/evaluator/config.yaml">
-{"meta_info:\n  resources:\n    ip: 10.0.0.30              # local = current machine; otherwise SSH target\n    user: ubuntu               # SSH user for the remote server\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/evaluator\n    public_storage: ./artifacts"}
+{"meta_info:\n  resources:\n    ip: 203.0.113.30              # local = current machine; otherwise SSH target\n    user: ubuntu               # SSH user for the remote server\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/evaluator\n    public_storage: ./artifacts"}
 </ConfigSnippet>
 
 Use a remote machine when the model server, Docker runtime, or benchmark

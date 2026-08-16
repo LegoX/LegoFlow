@@ -42,7 +42,7 @@ CPU/Docker node, fill `meta_info.resources` so the operating skill knows where
 to log in and which block directory to use.
 
 <ConfigSnippet title="blocks/tracer/config.yaml">
-{"meta_info:\n  resources:\n    ip: 10.0.0.12              # local = current machine; otherwise SSH target\n    user: ubuntu               # SSH user for the remote server\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/tracer\n    public_storage: null"}
+{"meta_info:\n  resources:\n    ip: 203.0.113.12              # local = current machine; otherwise SSH target\n    user: ubuntu               # SSH user for the remote server\n    pwd: null                  # prefer SSH keys or your private secret channel\n    directory: /home/ubuntu/LegoFlow/blocks/tracer\n    public_storage: null"}
 </ConfigSnippet>
 
 Use a remote node when local Docker capacity, network placement, or long-running
