@@ -158,6 +158,17 @@ if [[ -f "$ENV_FILE" ]]; then
   source "$ENV_FILE"
 fi
 
+# Default to a fresh random Pages project suffix on every (re)start, so the
+# deployed URL is legoflow-tracer-<random>.pages.dev instead of the fixed
+# legoflow-tracer.pages.dev. Respects an explicit PUBLISH_PROJECT_SUFFIX from
+# the caller or $ENV_FILE (including PUBLISH_PROJECT_SUFFIX="" to opt back
+# into the fixed/remembered project name).
+if [[ -z "${PUBLISH_PROJECT_SUFFIX+x}" ]]; then
+  PUBLISH_PROJECT_SUFFIX="$(LC_ALL=C tr -dc 'a-z' </dev/urandom 2>/dev/null | head -c 6)"
+  log "no PUBLISH_PROJECT_SUFFIX set; generated random suffix '$PUBLISH_PROJECT_SUFFIX' for this run"
+fi
+export PUBLISH_PROJECT_SUFFIX
+
 # Fall back to the tree-wide shared credentials (root config.yaml ->
 # runtime_info.input.cloudflare) for anything $ENV_FILE did not provide. Values
 # already exported above win, so a per-block env file still overrides the shared

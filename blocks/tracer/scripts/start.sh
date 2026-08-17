@@ -272,7 +272,13 @@ if [[ -z "$AGENT_MODEL_NAME" ]]; then
   if [[ -z "$AGENT_MODEL_NAME" ]]; then
     AGENT_MODEL_NAME="$(cfg runtime_info.input.llm_api.upstream_model)"
   fi
+  # Litellm-style scaffolds (openhands-sdk) need the provider/ prefix kept on
+  # the model string so their own litellm client can route the request; other
+  # scaffolds (--model, ANTHROPIC_MODEL) want the bare alias, so keep both.
+  AGENT_MODEL_FULL="$AGENT_MODEL_NAME"
   AGENT_MODEL_NAME="${AGENT_MODEL_NAME##*/}"
+else
+  AGENT_MODEL_FULL="$AGENT_MODEL_NAME"
 fi
 JOB_NAME_PREFIX="$(cfg runtime_info.input.harbor_job.job_name_prefix)"
 if [[ -z "$JOB_NAME_PREFIX" ]]; then
@@ -316,14 +322,19 @@ else
 fi
 [[ -x "$HARBOR_PYTHON" ]] || { echo "ERROR: Harbor Python not found or not executable: $HARBOR_PYTHON" >&2; exit 1; }
 export TRAJGEN_AGENT_IMPORT_PATH="$(cfg runtime_info.input.agent.import_path)"
-if [[ -z "$TRAJGEN_AGENT_IMPORT_PATH" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]]; then
-  export TRAJGEN_AGENT_IMPORT_PATH="harbor.agents.custom.claude_code:CustomClaudeCode"
+if [[ -z "$TRAJGEN_AGENT_IMPORT_PATH" ]]; then
+  case "$AGENT_NAME" in
+    custom-claude-code)   export TRAJGEN_AGENT_IMPORT_PATH="harbor.agents.custom.claude_code:CustomClaudeCode" ;;
+    custom-opencode)      export TRAJGEN_AGENT_IMPORT_PATH="harbor.agents.custom.opencode:CustomOpenCode" ;;
+    custom-openhands-sdk) export TRAJGEN_AGENT_IMPORT_PATH="harbor.agents.custom.openhands_sdk:CustomOpenHandsSDK" ;;
+  esac
 fi
 export TRAJGEN_AGENT_API_PROTOCOL="$(cfg runtime_info.input.agent.api_protocol)"
 if [[ -z "$TRAJGEN_AGENT_API_PROTOCOL" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]]; then
   export TRAJGEN_AGENT_API_PROTOCOL="anthropic"
 fi
 export TRAJGEN_AGENT_MODEL_NAME="$AGENT_MODEL_NAME"
+export TRAJGEN_AGENT_MODEL_NAME_FULL="$AGENT_MODEL_FULL"
 
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/tracer_$(date +%Y-%m-%d_%H-%M-%S).log"
@@ -367,8 +378,12 @@ export TRAJGEN_JOB_NAME_PREFIX="$JOB_NAME_PREFIX"
 export TRAJGEN_JOB_DIR="$JOB_DIR"
 export TRAJGEN_TRAJECTORY_FILE_PATTERN="$JOB_DIR/<task-id>/agent/litellm-trajectory.jsonl"
 export TRAJGEN_RUNTIME_ROOT="$(cfg runtime_info.input.runtime_mount.container_runtime_root)"
-if [[ -z "$TRAJGEN_RUNTIME_ROOT" && "$(cfg runtime_info.input.agent.name)" == "custom-claude-code" ]]; then
-  export TRAJGEN_RUNTIME_ROOT="/opt/custom-agent-runtime/claude-code"
+if [[ -z "$TRAJGEN_RUNTIME_ROOT" ]]; then
+  case "$AGENT_NAME" in
+    custom-claude-code)   export TRAJGEN_RUNTIME_ROOT="/opt/custom-agent-runtime/claude-code" ;;
+    custom-opencode)      export TRAJGEN_RUNTIME_ROOT="/opt/custom-agent-runtime/opencode" ;;
+    custom-openhands-sdk) export TRAJGEN_RUNTIME_ROOT="/opt/custom-agent-runtime/oh-sdk" ;;
+  esac
 fi
 export TRAJGEN_RUNTIME_SOURCE_IMAGE="$(cfg runtime_info.input.agent.runtime_image)"
 RUNTIME_HOST_PATH_RAW="$(cfg runtime_info.input.agent.runtime_host_path)"
@@ -422,6 +437,44 @@ if [[ -z "$RUN_COMMAND" ]]; then
   for _excl_task in $_EXCLUDE_IDS; do
     EXTRA_ARGS="$EXTRA_ARGS --exclude-task-name $(printf '%q' "$_excl_task")"
   done
+  # Each custom scaffold reads its LLM connection from different env var
+  # names (checked against repos/harbor/src/harbor/agents/custom/*.py):
+  #   custom-claude-code    -> ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY / ANTHROPIC_MODEL
+  #   custom-openhands-sdk  -> LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
+  #   custom-opencode       -> provider-prefix-dependent; our models use the
+  #                            openai/ prefix, which opencode maps to
+  #                            OPENAI_BASE_URL / OPENAI_API_KEY
+  # NOTE: single $ (not \$) — this value is spliced into RUN_COMMAND via
+  # variable expansion, which does not re-interpret backslash escapes; the
+  # backslash only belongs when the flags are written as literal text
+  # directly inside the double-quoted RUN_COMMAND="..." string below.
+  #
+  # opencode needs --model as "provider/model"; others want the bare alias.
+  # turn-limit kwarg name also differs: max_turns (claude-code), max_iterations
+  # (openhands-sdk), none for opencode.
+  case "$AGENT_NAME" in
+    custom-openhands-sdk)
+      AGENT_LLM_AE='--ae LLM_BASE_URL=$TRAJGEN_LITELLM_ANTHROPIC_BASE_URL --ae LLM_API_KEY=$TRAJGEN_LITELLM_MASTER_KEY --ae LLM_MODEL=$TRAJGEN_AGENT_MODEL_NAME_FULL'
+      HARBOR_MODEL_ARG="$AGENT_MODEL_NAME"
+      AGENT_TURNS_AK="max_iterations"
+      ;;
+    custom-opencode)
+      AGENT_LLM_AE='--ae OPENAI_BASE_URL=$TRAJGEN_LITELLM_ANTHROPIC_BASE_URL --ae OPENAI_API_KEY=$TRAJGEN_LITELLM_MASTER_KEY'
+      HARBOR_MODEL_ARG="$AGENT_MODEL_FULL"
+      AGENT_TURNS_AK=""
+      ;;
+    *)
+      AGENT_LLM_AE='--ae ANTHROPIC_BASE_URL=$TRAJGEN_LITELLM_ANTHROPIC_BASE_URL --ae ANTHROPIC_API_KEY=$TRAJGEN_LITELLM_MASTER_KEY --ae ANTHROPIC_MODEL=$TRAJGEN_AGENT_MODEL_NAME'
+      HARBOR_MODEL_ARG="$AGENT_MODEL_NAME"
+      AGENT_TURNS_AK="max_turns"
+      ;;
+  esac
+  TURNS_AK_ARG=""
+  if [[ -n "$AGENT_TURNS_AK" ]]; then
+    TURNS_AK_ARG=" --ak ${AGENT_TURNS_AK}=$(printf '%q' "$MAX_TURNS")"
+  else
+    echo "[start] NOTE: agent.max_turns is not supported by $AGENT_NAME's Harbor agent; the configured value ($MAX_TURNS) will not be applied." >&2
+  fi
   RUN_COMMAND="uv run harbor run --path $(printf '%q' "$HARBOR_DATASET_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$TRAJGEN_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$TRAJGEN_JOB_NAME") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'
 import json
 import os
@@ -443,7 +496,7 @@ else:
     }]
 print(json.dumps(mounts))
 PY
-)\" --model $(printf '%q' "$TRAJGEN_AGENT_MODEL_NAME") --n-concurrent $(printf '%q' "$N_CONCURRENT")${EXTRA_ARGS} --timeout-multiplier $(printf '%q' "$TIMEOUT_MULTIPLIER") --max-retries $(printf '%q' "$MAX_RETRIES") --ak version=$(printf '%q' "$AGENT_VERSION") --ak max_turns=$(printf '%q' "$MAX_TURNS") --ak temperature=$(printf '%q' "$TEMPERATURE") --ae ANTHROPIC_BASE_URL=\$TRAJGEN_LITELLM_ANTHROPIC_BASE_URL --ae ANTHROPIC_API_KEY=\$TRAJGEN_LITELLM_MASTER_KEY --ae ANTHROPIC_MODEL=\$TRAJGEN_AGENT_MODEL_NAME --ae CUSTOM_AGENT_RUNTIME_ROOT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ROOT --ae CUSTOM_AGENT_CLAUDE=\$TRAJGEN_CUSTOM_AGENT_CLAUDE --ae CUSTOM_AGENT_RUNTIME_ENV_SCRIPT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT"
+)\" --model $(printf '%q' "$HARBOR_MODEL_ARG") --n-concurrent $(printf '%q' "$N_CONCURRENT")${EXTRA_ARGS} --timeout-multiplier $(printf '%q' "$TIMEOUT_MULTIPLIER") --max-retries $(printf '%q' "$MAX_RETRIES") --ak version=$(printf '%q' "$AGENT_VERSION")${TURNS_AK_ARG} --ak temperature=$(printf '%q' "$TEMPERATURE") $AGENT_LLM_AE --ae CUSTOM_AGENT_RUNTIME_ROOT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ROOT --ae CUSTOM_AGENT_CLAUDE=\$TRAJGEN_CUSTOM_AGENT_CLAUDE --ae CUSTOM_AGENT_RUNTIME_ENV_SCRIPT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT"
 fi
 
 LITELLM_TEMPLATE_RAW="$(cfg runtime_info.input.litellm_proxy.config_template)"
