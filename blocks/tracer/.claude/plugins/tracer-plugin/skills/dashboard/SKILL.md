@@ -115,7 +115,7 @@ those stats fresh by running `scripts/convert_trajectories.sh --skip-unchanged`.
 ./dashboard/progress_monitor.py --sample-limit 50            # smaller page
 ./dashboard/progress_monitor.py --no-include-samples         # omit embedded sample previews
 ./dashboard/progress_monitor.py --index-job <harbor-job>     # add a local Harbor batch to Instances/Trajectories
-./dashboard/progress_monitor.py --local-mode public --public-no-samples  # public metrics-only payload
+./dashboard/progress_monitor.py --public-no-samples          # metrics-only payload, no samples/traces
 ```
 
 Outputs `dashboard/site/index.html`; serves at `http://127.0.0.1:8765/index.html`.
@@ -135,9 +135,14 @@ pages.
 ## Online sync (Cloudflare Pages)
 
 `dashboard/run_cloudflare_pages_sync.sh` loop-generates the HTML and deploys
-`dashboard/site/` to Cloudflare Pages via `wrangler`, yielding a public URL
-(project `legoflow-tracer`, whose assigned hostname the script reads back and
-prints — never guess it from the project name). Each iteration also calls
+`dashboard/site/` to Cloudflare Pages via `wrangler`, yielding a public URL.
+By default each (re)start generates a fresh random Pages project suffix, so
+the project is `legoflow-tracer-<random>` and the URL changes on every
+restart — the script reads the assigned hostname back from the Cloudflare API
+and prints it; never guess it from the project name. Set
+`PUBLISH_PROJECT_SUFFIX=<suffix>` to pick a specific suffix, or
+`PUBLISH_PROJECT_SUFFIX=""` to opt back into the fixed/previously-remembered
+`legoflow-tracer` project instead. Each iteration also calls
 `scripts/convert_trajectories.sh --skip-unchanged` every `CONVERT_EVERY_SECONDS`
 to refresh SFT stats. Config is read from `~/.config/trajgen_progress_cloudflare.env`
 (override with `ENV_FILE`); `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
@@ -155,7 +160,7 @@ Public payload controls:
 | `DASHBOARD_SAMPLE_LIMIT` | `200` | Max samples per SFT dataset. |
 | `DASHBOARD_SAMPLE_PREVIEW_CHARS` | `1200` | Max characters per message preview. |
 | `DASHBOARD_SAMPLE_MESSAGE_LIMIT` | `12` | Max messages per sample preview. |
-| `DASHBOARD_LOCAL_MODE` | `public` | `full` includes bounded analysis text previews. |
+| `DASHBOARD_LOCAL_MODE` | `public` | No longer gates sample/trajectory inclusion — kept for compatibility. Set `DASHBOARD_INCLUDE_SAMPLES=0` (adds `--no-include-samples`) for a metrics-only payload instead. |
 | `DASHBOARD_HARBOR_JOBS_DIR` | `artifacts/jobs` | Local Harbor trial source. |
 | `DASHBOARD_MAX_TRIALS_PER_JOB` | `0` | Max trial facts per Harbor job; 0 = all. |
 | `DASHBOARD_MAX_QUALITY_RECORDS_PER_DATASET` | `0` | Max quality facts per SFT dataset; 0 = all. |

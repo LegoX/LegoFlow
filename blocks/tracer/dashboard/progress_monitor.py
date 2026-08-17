@@ -4783,9 +4783,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--max-quality-records-per-dataset", type=int, default=0,
                    help="Limit im.jsonl rows read per SFT dataset for quality facts. 0 means no limit.")
     p.add_argument("--local-mode", choices=["full", "public"], default="full",
-                   help="full keeps bounded text previews in analysis drilldown; public keeps metrics only.")
+                   help="No longer gates sample/trajectory inclusion (both modes embed bounded "
+                        "previews by default) — use --public-no-samples for a metrics-only public "
+                        "payload. Kept for compatibility with existing invocations.")
     p.add_argument("--public-no-samples", action="store_true",
-                   help="Disable embedded sample previews when publishing a public dashboard.")
+                   help="Disable embedded sample previews and full trajectory embedding — the "
+                        "metrics-only payload for a public dashboard.")
     p.add_argument("--refresh", type=int, default=60, help="HTML auto-refresh interval (seconds).")
     p.add_argument("--loop", nargs="?", const=60, type=int, default=None,
                    help="Regenerate on a loop; defaults to 60s when --loop is given without value.")
@@ -4821,8 +4824,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def effective_embedded_trajectory_limits(args: argparse.Namespace, *, include_samples: bool) -> tuple[int, int]:
-    """Disable full trajectory exports whenever previews are disabled or public."""
-    if args.local_mode == "public" or args.public_no_samples or not include_samples:
+    """Disable full trajectory exports whenever previews are disabled."""
+    if args.public_no_samples or not include_samples:
         return 0, 0
     return (
         max(0, int(args.embedded_traj_limit or 0)),
@@ -4833,7 +4836,7 @@ def effective_embedded_trajectory_limits(args: argparse.Namespace, *, include_sa
 def run_once(args: argparse.Namespace, refresh_seconds: int) -> dict[str, Any]:
     cache = {"version": CACHE_VERSION, "jobs": {}, "sft": {}} if args.force_full_scan else load_cache(args.cache_file)
     include_samples = bool(args.include_samples)
-    if args.local_mode == "public" or args.public_no_samples:
+    if args.public_no_samples:
         include_samples = False
     jobs = collect_jobs(args.jobs_dir.resolve(), cache)
     sft = collect_sft(args.sft_dir.resolve(), cache)
