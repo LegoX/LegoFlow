@@ -398,8 +398,25 @@ if [[ -z "$TRAJGEN_RUNTIME_IMAGE_SUBPATH" ]]; then
   export TRAJGEN_RUNTIME_IMAGE_SUBPATH
 fi
 export TRAJGEN_CUSTOM_AGENT_RUNTIME_ROOT="$TRAJGEN_RUNTIME_ROOT"
-export TRAJGEN_CUSTOM_AGENT_CLAUDE="$TRAJGEN_RUNTIME_ROOT/bin/claude"
 export TRAJGEN_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT="$TRAJGEN_RUNTIME_ROOT/runtime-env.sh"
+# Each custom scaffold's Harbor runner falls back to <root>/bin/<exe> when its
+# own executable env var is unset, so leaving this unset is not fatal — but
+# set it explicitly per scaffold anyway (matching blocks/evaluator/scripts/
+# start.sh) so the executable is named rather than relying on that fallback.
+case "$AGENT_NAME" in
+  custom-openhands-sdk)
+    export TRAJGEN_CUSTOM_AGENT_PYTHON="$TRAJGEN_RUNTIME_ROOT/bin/python"
+    CUSTOM_AGENT_EXECUTABLE_AE='--ae CUSTOM_AGENT_PYTHON=$TRAJGEN_CUSTOM_AGENT_PYTHON'
+    ;;
+  custom-opencode)
+    export TRAJGEN_CUSTOM_AGENT_OPENCODE="$TRAJGEN_RUNTIME_ROOT/bin/opencode"
+    CUSTOM_AGENT_EXECUTABLE_AE='--ae CUSTOM_AGENT_OPENCODE=$TRAJGEN_CUSTOM_AGENT_OPENCODE'
+    ;;
+  *)
+    export TRAJGEN_CUSTOM_AGENT_CLAUDE="$TRAJGEN_RUNTIME_ROOT/bin/claude"
+    CUSTOM_AGENT_EXECUTABLE_AE='--ae CUSTOM_AGENT_CLAUDE=$TRAJGEN_CUSTOM_AGENT_CLAUDE'
+    ;;
+esac
 export TRAJGEN_LITELLM_ANTHROPIC_BASE_URL="http://$(hostname -I | awk '{print $1}'):${LITELLM_PORT:-$(cfg runtime_info.input.litellm_proxy.port)}"
 export TRAJGEN_LITELLM_MASTER_KEY="$(cfg runtime_info.input.litellm_proxy.master_key)"
 if [[ -n "$LITELLM_UV_RAW" ]]; then
@@ -496,7 +513,7 @@ else:
     }]
 print(json.dumps(mounts))
 PY
-)\" --model $(printf '%q' "$HARBOR_MODEL_ARG") --n-concurrent $(printf '%q' "$N_CONCURRENT")${EXTRA_ARGS} --timeout-multiplier $(printf '%q' "$TIMEOUT_MULTIPLIER") --max-retries $(printf '%q' "$MAX_RETRIES") --ak version=$(printf '%q' "$AGENT_VERSION")${TURNS_AK_ARG} --ak temperature=$(printf '%q' "$TEMPERATURE") $AGENT_LLM_AE --ae CUSTOM_AGENT_RUNTIME_ROOT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ROOT --ae CUSTOM_AGENT_CLAUDE=\$TRAJGEN_CUSTOM_AGENT_CLAUDE --ae CUSTOM_AGENT_RUNTIME_ENV_SCRIPT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT"
+)\" --model $(printf '%q' "$HARBOR_MODEL_ARG") --n-concurrent $(printf '%q' "$N_CONCURRENT")${EXTRA_ARGS} --timeout-multiplier $(printf '%q' "$TIMEOUT_MULTIPLIER") --max-retries $(printf '%q' "$MAX_RETRIES") --ak version=$(printf '%q' "$AGENT_VERSION")${TURNS_AK_ARG} --ak temperature=$(printf '%q' "$TEMPERATURE") $AGENT_LLM_AE --ae CUSTOM_AGENT_RUNTIME_ROOT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ROOT $CUSTOM_AGENT_EXECUTABLE_AE --ae CUSTOM_AGENT_RUNTIME_ENV_SCRIPT=\$TRAJGEN_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT"
 fi
 
 LITELLM_TEMPLATE_RAW="$(cfg runtime_info.input.litellm_proxy.config_template)"
