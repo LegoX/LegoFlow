@@ -399,8 +399,7 @@ if [[ -z "$TRAJGEN_RUNTIME_IMAGE_SUBPATH" ]]; then
 fi
 export TRAJGEN_CUSTOM_AGENT_RUNTIME_ROOT="$TRAJGEN_RUNTIME_ROOT"
 export TRAJGEN_CUSTOM_AGENT_RUNTIME_ENV_SCRIPT="$TRAJGEN_RUNTIME_ROOT/runtime-env.sh"
-# Each scaffold reads a different executable env var; harbor falls back to
-# <root>/bin/<exe> if unset, but set it explicitly (matches blocks/evaluator).
+# harbor falls back to <root>/bin/<exe> if unset; set explicitly (matches blocks/evaluator)
 case "$AGENT_NAME" in
   custom-openhands-sdk)
     export TRAJGEN_CUSTOM_AGENT_PYTHON="$TRAJGEN_RUNTIME_ROOT/bin/python"
