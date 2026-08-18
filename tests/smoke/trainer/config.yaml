@@ -63,7 +63,7 @@ runtime_info:
       job_dir: ""
       # hf_* must be HERE, not only in the block's smoke config: run_pipeline
       # overlays this file before prepare_smoke_data.sh reads them.
-      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft
+      hf_hub_url: Lego-X/samples_for_llama_factory_sft
       hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
       fixture_lf: artifacts/data/examples/jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
       # Relative to the trainer block; run_pipeline rewrites to an absolute path.

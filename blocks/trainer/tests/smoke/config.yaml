@@ -60,7 +60,7 @@ runtime_info:
       type: hf_lf
       scaffold: openhands-sdk
       job_dir: ""
-      hf_hub_url: "SWE-Lego/samples_for_llama_factory_sft"
+      hf_hub_url: "Lego-X/samples_for_llama_factory_sft"
       hf_file_name: "jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json"
       hf_subset: ""
       hf_split: "train"

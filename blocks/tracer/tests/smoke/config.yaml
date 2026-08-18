@@ -67,7 +67,7 @@ runtime_info:
     # SMOKE: small HuggingFace slice — no curator handoff in this smoke.
     task_source:
       provider: huggingface
-      dataset_name: SWE-Lego/swerebenchv2-200-260429
+      dataset_name: Lego-X/swerebenchv2-200-260429
       split: train
 
     harbor_job:

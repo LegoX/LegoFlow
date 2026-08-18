@@ -365,7 +365,7 @@ jobs:
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
             echo "PATH=$CICD_SHARED/uv/bin:$PATH"
             # HF creds + shared cache so the optional smoke's prepare_smoke_data.sh
-            # (load_dataset) can pull SWE-Lego/samples_for_llama_factory_sft even
+            # (load_dataset) can pull Lego-X/samples_for_llama_factory_sft even
             # if it's gated/uncached — matches the other from-scratch jobs.
             echo "HF_TOKEN=${HF_TOKEN:-}"
             echo "HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-${HF_TOKEN:-}}"

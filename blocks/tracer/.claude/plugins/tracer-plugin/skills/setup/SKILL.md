@@ -101,7 +101,7 @@ Walk `runtime_info.input` and prompt only for unset fields (the literal `human` 
   `https://huggingface.co/api/datasets/<dataset_name>` with `Authorization:
   Bearer <token>` from `~/.cache/huggingface/token` (or `$HF_TOKEN`). If
   the response is 401/403, prompt the user for a token and write it to
-  `~/.cache/huggingface/token` (mode 600). `SWE-Lego/*` datasets are
+  `~/.cache/huggingface/token` (mode 600). `Lego-X/*` datasets are
   gated, so this almost always applies.
 - **LLM endpoint**: a live probe (`GET <api_base_url>/models`) is now part
   of `scripts/dryrun.sh`, so setup does not need to repeat it. Note: when
