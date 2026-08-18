@@ -21,7 +21,7 @@
 #   RUNNER_VERSION  actions/runner version to download (default: 2.323.0)
 set -euo pipefail
 
-REPO_URL="https://github.com/LegoX/LegoFlow"
+REPO_URL="https://github.com/LegoX/SWE-Lego-Live"
 : "${REG_TOKEN:?set REG_TOKEN (registration token from the repo Actions settings)}"
 RUNNER_DIR="${RUNNER_DIR:-$PWD/actions-runner-gpu}"
 RUNNER_NAME="${RUNNER_NAME:-gpu-$(hostname)}"
