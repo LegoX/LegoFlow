@@ -26,13 +26,13 @@ meta_info:
 
   repositories:
     harbor:
-      url: https://github.com/SWE-Lego/harbor.git
+      url: https://github.com/LegoX/harbor.git
       branch: main
       commit: ff0434968e5b6975af10d72ca1d7ed20e7fa2465
       path: repos/harbor
       readonly: true
     swe_data_process:
-      url: https://github.com/SWE-Lego/swe_data_process.git
+      url: https://github.com/LegoX/swe_data_process.git
       branch: main
       commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
       path: repos/swe_data_process

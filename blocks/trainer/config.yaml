@@ -19,13 +19,13 @@ meta_info:
 
   repositories:
     llama_factory:
-      url: https://github.com/SWE-Lego/LLaMA-Factory.git
+      url: https://github.com/LegoX/LLaMA-Factory.git
       branch: main
-      commit: 3e32f8ca86a71b94d79d1cd51ad457900ec1dc20
+      commit: 6e23fa19f485d86d0e5666ce3a9fdfdebb43c050
       path: repos/LLaMA-Factory
       readonly: true
     swe_data_process:
-      url: https://github.com/SWE-Lego/swe_data_process.git
+      url: https://github.com/LegoX/swe_data_process.git
       branch: main
       commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
       path: repos/swe_data_process
