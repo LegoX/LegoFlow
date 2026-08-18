@@ -214,6 +214,26 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         ]
     )
     dashboard.run_once(no_samples_args, 60)
+    rendered_html = (tmp / "public-site" / "index.html").read_text(encoding="utf-8")
+    for forbidden in (
+        'data-page="operations"',
+        'id="operations"',
+        'id="sftSearch"',
+        'id="sftScaffold"',
+        "function applyFilters()",
+    ):
+        if forbidden in rendered_html:
+            raise AssertionError(f"removed Operations UI remains in dashboard HTML: {forbidden}")
+    for required in (
+        'data-page="overview"',
+        'data-page="instances"',
+        'data-page="trajectories"',
+        "rgba(var(--matrix-heat-rgb),",
+    ):
+        if required not in rendered_html:
+            raise AssertionError(f"expected dashboard content is missing: {required}")
+    if "rgba(99,102,241," in rendered_html:
+        raise AssertionError("Trajectory Quality Score Matrix still uses the old purple heat color")
     exported_quality = [
         json.loads(line)
         for line in (tmp / "public-site" / "data" / "quality_fact.jsonl").read_text(encoding="utf-8").splitlines()

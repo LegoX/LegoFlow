@@ -67,6 +67,7 @@
   /* bar fills repeat dozens of times per page; a softened tint of the accent
      keeps the page calm without changing the brand colour */
   --accent-fill: #c96a45;
+  --matrix-heat-rgb: 179, 67, 31;
   --bar-text: #111111;
   --active-row: #f1efe9;
   --warn-bg: #fab21922;
@@ -111,6 +112,7 @@
   --button-hover: #302a2440;
   --bar-bg: #302a2466;
   --accent-fill: #c9805f;
+  --matrix-heat-rgb: 239, 160, 124;
   --bar-text: #f0ede7;
   --active-row: #302a2440;
   --warn-bg: #fab21922;
@@ -259,8 +261,6 @@ button:hover { border-color: var(--accent-border); background: var(--button-hove
 .tab.active { background: var(--ink); color: var(--ink-contrast); border-color: var(--ink); }
 .section { display: none; }
 .section.active { display: block; }
-.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-.toolbar input, .toolbar select { border: 1px solid var(--line); border-radius: 6px; background: var(--button-bg); color: var(--text); padding: 7px 9px; min-width: 190px; }
 .segment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 18px; }
 .segment-grid .panel { margin-top: 0; height: 100%; }
 /* Folds — same affordance as curator's board: a quiet uppercase bar that turns
@@ -312,11 +312,9 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .eval-table td { font-size: 13px; }
 .footer { color: var(--muted); font-size: 12px; padding: 24px 0 0; text-align: center; }
 .empty { color: var(--muted); padding: 24px; text-align: center; font-style: italic; }
-.status-grid { grid-template-columns: 280px 1fr 1fr; }
 .kv { display: grid; grid-template-columns: 120px 1fr; gap: 8px 12px; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-.pre { white-space: pre-wrap; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 0; color: var(--text); }
 .warn { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-text); }
 .samples-layout { display: grid; grid-template-columns: minmax(280px, 420px) minmax(0, 1fr); gap: 14px; }
 .sample-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; max-height: 720px; overflow-y: auto; background: var(--panel); }
@@ -479,7 +477,7 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
   .update-status { white-space: normal; flex-basis: 100%; }
   .content { padding: 16px; }
   .header-top { display: block; }
-  .kpis, .status-grid, .samples-layout, .split-layout { grid-template-columns: 1fr; }
+  .kpis, .samples-layout, .split-layout { grid-template-columns: 1fr; }
   .panel-head { display: block; }
   .mini-bar-row { grid-template-columns: 1fr; gap: 4px; }
   .mini-bar-value { text-align: left; }
@@ -503,7 +501,6 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
       <button class="nav-item active" data-page="overview"><span class="nav-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg></span><span class="nav-label">Overview</span></button>
       <button class="nav-item" data-page="instances"><span class="nav-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"></path></svg></span><span class="nav-label">Jobs</span></button>
       <button class="nav-item" data-page="trajectories"><span class="nav-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="18" r="3"></circle><path d="M9 6h6"></path><path d="M6 9v2a7 7 0 0 0 7 7h2"></path></svg></span><span class="nav-label">Trajectories</span></button>
-      <button class="nav-item" data-page="operations"><span class="nav-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="m8 9 3 3-3 3"></path><path d="M13 15h4"></path></svg></span><span class="nav-label">Operations</span></button>
     </nav>
   </aside>
   <div class="main-shell">
@@ -653,19 +650,6 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
     </section>
   </section>
 
-  <section id="operations" class="section" data-title="Operations" data-subtitle="Operator status, generated artifacts, and sync traceability.">
-    <div class="panel warn"><strong>Status unavailable.</strong> artifacts/index.yaml not found</div>
-
-    <section class="panel">
-      <div class="panel-head"><div><h2>SFT Datasets</h2>
-        <p class="hint">Stats from lf.stats.json with quick artifact path copy actions.</p></div></div>
-      <div class="toolbar">
-        <input id="sftSearch" placeholder="Search datasets, scaffolds, paths">
-        <select id="sftScaffold"><option value="">All scaffolds</option><option value="claude_code">claude_code</option><option value="unknown">unknown</option></select>
-      </div>
-      <div class="table-wrap"><table><thead><tr><th class='sortable'>Job</th><th class='sortable'>Scaffold</th><th class='num sortable'>Records</th><th class='num'>Token len (min/mean/max)</th><th class='num'>Turns (min/mean/max)</th><th class='num'>Scores (min/mean/max)</th><th class='num'>Tool-call errors</th><th class='num'>im.jsonl</th><th class='num'>lf.json</th></tr></thead><tbody><tr class="sft-row" data-search="jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5 unknown external:artifacts/sft_data/jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5" data-scaffold="unknown"><td class="job">jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5<div class="actions"><button class="copy-btn" data-copy="external:artifacts/sft_data/jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5">Copy dir</button><button class="copy-btn" data-copy="external:artifacts/sft_data/jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5/im.jsonl">Copy data</button></div></td><td><span class="badge scaffold">unknown</span></td><td class="num">512</td><td class="num">8,191 / 63,349 / 290,795<div class="muted">gt_128k: 48 &middot; total: 32,434,725</div></td><td class="num">4 / 46 / 200<div class="muted">gte_100: 22</div></td><td class="num">0.1480 / 0.7864 / 1.0000</td><td class="num">-<div class="muted">- / 24,363 calls &middot; traj: -</div></td><td class="num">117.3 MB</td><td class="num">-</td></tr><tr class="sft-row" data-search="merged_swe_tasks_copy-custom-claude-code-2.1.118-glm-5.2-urg-20260729223211 claude_code external:artifacts/sft_data/merged_swe_tasks_copy-custom-claude-code-2.1.118-glm-5.2-urg-20260729223211" data-scaffold="claude_code"><td class="job">merged_swe_tasks_copy-custom-claude-code-2.1.118-glm-5.2-urg-20260729223211<div class="actions"><button class="copy-btn" data-copy="external:artifacts/sft_data/merged_swe_tasks_copy-custom-claude-code-2.1.118-glm-5.2-urg-20260729223211">Copy dir</button><button class="copy-btn" data-copy="external:artifacts/sft_data/merged_swe_tasks_copy-custom-claude-code-2.1.118-glm-5.2-urg-20260729223211/im.jsonl">Copy data</button></div></td><td><span class="badge scaffold">claude_code</span></td><td class="num">3</td><td class="num">29,320 / 35,873 / 48,862<div class="muted">gt_128k: 0 &middot; total: 107,619</div></td><td class="num">10 / 15 / 23<div class="muted">gte_100: 0</div></td><td class="num">0.8311 / 0.8762 / 0.9310</td><td class="num">0.00%<div class="muted">0 / 54 calls &middot; traj: 0.00%</div></td><td class="num">438.5 KB</td><td class="num">453.7 KB</td></tr></tbody></table></div>
-    </section>
-  </section>
 
   <div class="footer">Generated by dashboard/progress_monitor.py</div>
 </main>
@@ -732,15 +716,6 @@ function copyText(text) {
   if (navigator.clipboard) navigator.clipboard.writeText(text);
 }
 
-function applyFilters() {
-  const sftQ = ($('#sftSearch')?.value || '').toLowerCase();
-  const sftScaffold = $('#sftScaffold')?.value || '';
-  $$('.sft-row').forEach(row => {
-    const ok = (!sftQ || row.dataset.search.includes(sftQ)) &&
-      (!sftScaffold || row.dataset.scaffold === sftScaffold);
-    row.classList.toggle('hidden', !ok);
-  });
-}
 
 function cellValue(row, index) {
   const text = row.children[index]?.innerText.trim() || '';
@@ -1167,8 +1142,8 @@ function subscoreHeatCell(value, extraClass = '') {
     return `<td class="num ${extraClass}">-</td>`;
   }
   const n = Math.max(0, Math.min(1, Number(value)));
-  const alpha = (n * 0.5).toFixed(3);
-  return `<td class="num ${extraClass}" style="background:rgba(99,102,241,${alpha})">${Number(value).toFixed(3)}</td>`;
+  const alpha = (n * 0.34).toFixed(3);
+  return `<td class="num ${extraClass}" style="background:rgba(var(--matrix-heat-rgb),${alpha})">${Number(value).toFixed(3)}</td>`;
 }
 
 function renderSubscoreMatrix() {
@@ -1797,11 +1772,6 @@ document.addEventListener('click', event => {
       renderTrajectoryList();
     }
   }
-});
-['sftSearch','sftScaffold'].forEach(id => {
-  const el = $('#' + id);
-  if (el) el.addEventListener('input', applyFilters);
-  if (el) el.addEventListener('change', applyFilters);
 });
 ['sampleSearch','sampleDataset'].forEach(id => {
   const el = $('#' + id);

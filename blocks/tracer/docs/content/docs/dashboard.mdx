@@ -31,7 +31,7 @@ and editing it will not change what the board shows:
 | `artifacts/tasks/` | Staged task batches, one per immediate subdirectory. |
 | `artifacts/jobs/` | Harbor jobs, one per immediate subdirectory. |
 | `artifacts/sft_data/` | Converted datasets, one per immediate subdirectory. Optional. |
-| `artifacts/index.yaml` | Archived run history. The status panel shows the newest entry. |
+| `artifacts/index.yaml` | Archived run history retained in the dashboard's source report. |
 | `artifacts/processed_tasks.yaml` | The consumption ledger, which records what has already been run. |
 
 To see exactly what the board resolved, without rendering anything:
@@ -79,7 +79,6 @@ trajectories scored zero.
 
 | Monitor | What it tells you |
 | --- | --- |
-| **Run status** | Latest archived run, completion state, timestamps, notes, and archive path. |
 | **Harbor jobs** | Job-level task counts, reward summaries, retries, and errors. |
 | **Task coverage** | Which tasks were attempted, completed, skipped, failed, or already processed. |
 | **Agent trajectories** | Per-task messages, tool calls, observations, bounded previews, and failure traces. |

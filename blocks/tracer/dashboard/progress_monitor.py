@@ -2419,6 +2419,7 @@ CSS = """
   /* bar fills repeat dozens of times per page; a softened tint of the accent
      keeps the page calm without changing the brand colour */
   --accent-fill: #c96a45;
+  --matrix-heat-rgb: 179, 67, 31;
   --bar-text: #111111;
   --active-row: #f1efe9;
   --warn-bg: #fab21922;
@@ -2463,6 +2464,7 @@ CSS = """
   --button-hover: #302a2440;
   --bar-bg: #302a2466;
   --accent-fill: #c9805f;
+  --matrix-heat-rgb: 239, 160, 124;
   --bar-text: #f0ede7;
   --active-row: #302a2440;
   --warn-bg: #fab21922;
@@ -2611,8 +2613,6 @@ button:hover { border-color: var(--accent-border); background: var(--button-hove
 .tab.active { background: var(--ink); color: var(--ink-contrast); border-color: var(--ink); }
 .section { display: none; }
 .section.active { display: block; }
-.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-.toolbar input, .toolbar select { border: 1px solid var(--line); border-radius: 6px; background: var(--button-bg); color: var(--text); padding: 7px 9px; min-width: 190px; }
 .segment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 18px; }
 .segment-grid .panel { margin-top: 0; height: 100%; }
 /* Folds — same affordance as curator's board: a quiet uppercase bar that turns
@@ -2664,11 +2664,9 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .eval-table td { font-size: 13px; }
 .footer { color: var(--muted); font-size: 12px; padding: 24px 0 0; text-align: center; }
 .empty { color: var(--muted); padding: 24px; text-align: center; font-style: italic; }
-.status-grid { grid-template-columns: 280px 1fr 1fr; }
 .kv { display: grid; grid-template-columns: 120px 1fr; gap: 8px 12px; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-.pre { white-space: pre-wrap; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 0; color: var(--text); }
 .warn { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-text); }
 .samples-layout { display: grid; grid-template-columns: minmax(280px, 420px) minmax(0, 1fr); gap: 14px; }
 .sample-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; max-height: 720px; overflow-y: auto; background: var(--panel); }
@@ -2831,7 +2829,7 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
   .update-status { white-space: normal; flex-basis: 100%; }
   .content { padding: 16px; }
   .header-top { display: block; }
-  .kpis, .status-grid, .samples-layout, .split-layout { grid-template-columns: 1fr; }
+  .kpis, .samples-layout, .split-layout { grid-template-columns: 1fr; }
   .panel-head { display: block; }
   .mini-bar-row { grid-template-columns: 1fr; gap: 4px; }
   .mini-bar-value { text-align: left; }
@@ -2998,45 +2996,11 @@ def render_job_segment_row(
     )
 
 
-def render_sft_row(s: dict[str, Any]) -> str:
-    tl = s.get("token_lens") or {}
-    nt = s.get("n_turns") or {}
-    sc = s.get("scores") or {}
-    tce = s.get("tool_call_errors") or {}
-    if tce:
-        tce_cell = (
-            f'{fmt_pct(tce.get("error_rate"))}'
-            f'<div class="muted">{fmt_num(tce.get("error_tool_calls"))} / {fmt_num(tce.get("total_tool_calls"))} calls'
-            f' &middot; traj: {fmt_pct(tce.get("trajectory_error_rate"))}</div>'
-        )
-    else:
-        tce_cell = '<span class="muted">-</span>'
-    search_text = f"{s.get('job')} {s.get('scaffold')} {s.get('path')}"
-    return (
-        f'<tr class="sft-row" data-search="{html.escape(search_text.lower())}" data-scaffold="{html.escape(s.get("scaffold") or "unknown")}">'
-        f'<td class="job">{html.escape(s["job"])}'
-        f'<div class="actions"><button class="copy-btn" data-copy="{html.escape(str(s.get("path") or ""))}">Copy dir</button>'
-        f'<button class="copy-btn" data-copy="{html.escape(str(s.get("im_path") or s.get("lf_path") or ""))}">Copy data</button></div></td>'
-        f'<td><span class="badge scaffold">{html.escape(s.get("scaffold") or "unknown")}</span></td>'
-        f'<td class="num">{fmt_num(s.get("count"))}</td>'
-        f'<td class="num">{fmt_num(tl.get("min"))} / {fmt_num(tl.get("mean"))} / {fmt_num(tl.get("max"))}'
-        f'<div class="muted">gt_128k: {fmt_num(tl.get("gt_128k"))} &middot; total: {fmt_num(s.get("total_tokens"))}</div></td>'
-        f'<td class="num">{fmt_num(nt.get("min"))} / {fmt_num(nt.get("mean"))} / {fmt_num(nt.get("max"))}'
-        f'<div class="muted">gte_100: {fmt_num(nt.get("gte_100"))}</div></td>'
-        f'<td class="num">{fmt_num(sc.get("min"), 4)} / {fmt_num(sc.get("mean"), 4)} / {fmt_num(sc.get("max"), 4)}</td>'
-        f'<td class="num">{tce_cell}</td>'
-        f'<td class="num">{html.escape(fmt_bytes(s.get("im_size")))}</td>'
-        f'<td class="num">{html.escape(fmt_bytes(s.get("lf_size")))}</td>'
-        "</tr>"
-    )
-
-
 def svg_icon(name: str) -> str:
     icons = {
         "overview": '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>',
         "instances": '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"></path></svg>',
         "trajectories": '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="18" r="3"></circle><path d="M9 6h6"></path><path d="M6 9v2a7 7 0 0 0 7 7h2"></path></svg>',
-        "operations": '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="m8 9 3 3-3 3"></path><path d="M13 15h4"></path></svg>',
         "moon": '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.7 8.7 0 0 1 9.5 3.5a7 7 0 1 0 11 11Z"></path></svg>',
         "sun": '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>',
         "refresh": '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.9 11A7 7 0 0 0 7.1 6.1L4 9"></path><path d="M5.1 13A7 7 0 0 0 16.9 17.9L20 15"></path></svg>',
@@ -3111,25 +3075,6 @@ def render_html(
     )
 
     missing_jobs = sum(1 for j in jobs_sorted if not j.get("source_exists", True))
-    if sft_sorted:
-        sft_rows = "".join(render_sft_row(s) for s in sft_sorted)
-        sft_table = (
-            '<div class="table-wrap"><table>'
-            "<thead><tr><th class='sortable'>Job</th><th class='sortable'>Scaffold</th><th class='num sortable'>Records</th>"
-            "<th class='num'>Token len (min/mean/max)</th>"
-            "<th class='num'>Turns (min/mean/max)</th>"
-            "<th class='num'>Scores (min/mean/max)</th>"
-            "<th class='num'>Tool-call errors</th>"
-            "<th class='num'>im.jsonl</th><th class='num'>lf.json</th></tr></thead>"
-            f"<tbody>{sft_rows}</tbody></table></div>"
-        )
-    else:
-        sft_table = '<div class="empty">No lf.stats.json found under artifacts/sft_data/.</div>'
-
-    scaffold_options = "".join(
-        f'<option value="{html.escape(v)}">{html.escape(v)}</option>'
-        for v in sorted({str(x.get("scaffold") or "unknown") for x in jobs_sorted + sft_sorted})
-    )
     sample_dataset_options = "".join(
         f'<option value="{html.escape(v)}">{html.escape(v)}</option>'
         for v in sorted({str(x.get("dataset")) for x in samples})
@@ -3226,31 +3171,12 @@ def render_html(
         "</div></details>"
         for dim in segment_dims if dim != "job"
     )
-    status_error = status.get("_error")
     icon_overview = svg_icon("overview")
     icon_instances = svg_icon("instances")
     icon_trajectories = svg_icon("trajectories")
-    icon_operations = svg_icon("operations")
     icon_moon = svg_icon("moon")
     icon_sun = svg_icon("sun")
     icon_refresh = svg_icon("refresh")
-    status_block = (
-        f'<div class="panel warn"><strong>Status unavailable.</strong> {html.escape(str(status_error))}</div>'
-        if status_error else
-        '<div class="grid status-grid">'
-        '<div class="card"><div class="label">Latest Run</div>'
-        f'<div class="value">{html.escape(str(status.get("id") or "-"))}</div>'
-        f'<div class="sub">completed_at: {html.escape(str(status.get("completed_at") or "-"))}</div></div>'
-        '<div class="card"><div class="label">Status</div>'
-        f'<div class="sub">{html.escape(str(status.get("status") or "-"))}</div></div>'
-        '<div class="card"><div class="label">Archive</div>'
-        f'<div class="sub">{html.escape(str(status.get("archive") or "-"))}</div></div>'
-        '</div>'
-        '<section class="panel"><div class="panel-head"><div><h2>Run Notes</h2>'
-        '<p class="hint">Source of truth: artifacts/index.yaml -> latest run</p></div>'
-        f'<button class="copy-btn" data-copy="{html.escape(str(index_path))}">Copy index path</button></div>'
-        f'<pre class="pre">{html.escape(str(status.get("notes") or "-"))}</pre></section>'
-    )
     stale_warning = (
         f'<section class="panel warn"><strong>{missing_jobs} cached job(s)</strong> no longer have result.json under the current jobs directory. '
         'They are shown as cache-only so old dashboard data is not mistaken for fresh source files.</section>'
@@ -3289,7 +3215,6 @@ def render_html(
       <button class="nav-item active" data-page="overview"><span class="nav-icon">{icon_overview}</span><span class="nav-label">Overview</span></button>
       <button class="nav-item" data-page="instances"><span class="nav-icon">{icon_instances}</span><span class="nav-label">Jobs</span></button>
       <button class="nav-item" data-page="trajectories"><span class="nav-icon">{icon_trajectories}</span><span class="nav-label">Trajectories</span></button>
-      <button class="nav-item" data-page="operations"><span class="nav-icon">{icon_operations}</span><span class="nav-label">Operations</span></button>
     </nav>
   </aside>
   <div class="main-shell">
@@ -3439,20 +3364,6 @@ def render_html(
     </section>
   </section>
 
-  <section id="operations" class="section" data-title="Operations" data-subtitle="Operator status, generated artifacts, and sync traceability.">
-    {status_block}
-
-    <section class="panel">
-      <div class="panel-head"><div><h2>SFT Datasets</h2>
-        <p class="hint">Stats from lf.stats.json with quick artifact path copy actions.</p></div></div>
-      <div class="toolbar">
-        <input id="sftSearch" placeholder="Search datasets, scaffolds, paths">
-        <select id="sftScaffold"><option value="">All scaffolds</option>{scaffold_options}</select>
-      </div>
-      {sft_table}
-    </section>
-  </section>
-
   <div class="footer">Generated by dashboard/progress_monitor.py</div>
 </main>
   </div>
@@ -3516,16 +3427,6 @@ function setPage(name) {{
 function copyText(text) {{
   if (!text) return;
   if (navigator.clipboard) navigator.clipboard.writeText(text);
-}}
-
-function applyFilters() {{
-  const sftQ = ($('#sftSearch')?.value || '').toLowerCase();
-  const sftScaffold = $('#sftScaffold')?.value || '';
-  $$('.sft-row').forEach(row => {{
-    const ok = (!sftQ || row.dataset.search.includes(sftQ)) &&
-      (!sftScaffold || row.dataset.scaffold === sftScaffold);
-    row.classList.toggle('hidden', !ok);
-  }});
 }}
 
 function cellValue(row, index) {{
@@ -3953,8 +3854,8 @@ function subscoreHeatCell(value, extraClass = '') {{
     return `<td class="num ${{extraClass}}">-</td>`;
   }}
   const n = Math.max(0, Math.min(1, Number(value)));
-  const alpha = (n * 0.5).toFixed(3);
-  return `<td class="num ${{extraClass}}" style="background:rgba(99,102,241,${{alpha}})">${{Number(value).toFixed(3)}}</td>`;
+  const alpha = (n * 0.34).toFixed(3);
+  return `<td class="num ${{extraClass}}" style="background:rgba(var(--matrix-heat-rgb),${{alpha}})">${{Number(value).toFixed(3)}}</td>`;
 }}
 
 function renderSubscoreMatrix() {{
@@ -4584,11 +4485,6 @@ document.addEventListener('click', event => {{
     }}
   }}
 }});
-['sftSearch','sftScaffold'].forEach(id => {{
-  const el = $('#' + id);
-  if (el) el.addEventListener('input', applyFilters);
-  if (el) el.addEventListener('change', applyFilters);
-}});
 ['sampleSearch','sampleDataset'].forEach(id => {{
   const el = $('#' + id);
   if (el) el.addEventListener('input', renderSampleList);
@@ -4771,7 +4667,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--output-html", type=Path, default=DEFAULT_HTML)
     p.add_argument("--cache-file", type=Path, default=DEFAULT_CACHE)
     p.add_argument("--index-file", type=Path, default=DEFAULT_INDEX,
-                   help="Archived-run index used by the dashboard status panel.")
+                   help="Archived-run index retained for source reporting and compatibility.")
     p.add_argument("--jobs-dir", type=Path, default=DEFAULT_JOBS)
     p.add_argument("--sft-dir", type=Path, default=DEFAULT_SFT)
     p.add_argument("--tasks-dir", type=Path, default=DEFAULT_TASKS)
