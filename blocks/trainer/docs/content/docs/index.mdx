@@ -4,7 +4,7 @@ title: Overview
 
 Trainer turns agent trajectories into ready-to-train datasets and fine-tunes SWE coding models on them.
 
-It is the supervised-fine-tuning stage of the [LegoFlow](https://github.com/LegoX/SWE-Lego-Live) pipeline, sitting between trajectory generation (`tracer`) and evaluation (`evaluator`). It can convert good rollouts produced upstream or consume a ready-made Hugging Face/local ShareGPT dataset, then trains a model with the patched [SWE-Lego LLaMA-Factory](https://github.com/SWE-Lego/LLaMA-Factory) + DeepSpeed ZeRO-3, all driven by a single `config.yaml`.
+It is the supervised-fine-tuning stage of the [LegoFlow](https://github.com/LegoX/LegoFlow) pipeline, sitting between trajectory generation (`tracer`) and evaluation (`evaluator`). It can convert good rollouts produced upstream or consume a ready-made Hugging Face/local ShareGPT dataset, then trains a model with the patched [LegoX LLaMA-Factory](https://github.com/LegoX/LLaMA-Factory) + DeepSpeed ZeRO-3, all driven by a single `config.yaml`.
 
 Training here is a measurement, not a one-off deliverable: it is how the pipeline
 finds out whether the upstream data carries signal. Both the data selection and

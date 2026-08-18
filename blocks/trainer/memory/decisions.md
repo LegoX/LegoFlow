@@ -13,7 +13,7 @@ decision below.
 ## 2026-07: Qwen3.5-capable training environment
 **Decision:** The environment installer now uses PyTorch 2.10.0 CUDA 12.8,
 builds `flash-attn` against the installed PyTorch, and installs
-`flash-linear-attention` plus `tilelang` for Qwen3.5. The patched SWE-Lego
+`flash-linear-attention` plus `tilelang` for Qwen3.5. The patched LegoX
 LLaMA-Factory is installed editable with its metrics, DeepSpeed, and Liger
 requirements.
 **Why:** Qwen3.5-35B-A3B uses linear-attention code paths and dependencies absent
@@ -35,7 +35,7 @@ conversion, so ready-made sources must be pre-cleaned upstream.
 
 ## 2026-06: Web dashboard replaces the status.mdx text view
 **Decision:** Live monitoring is the React + `server.py` webui under `dashboard/`
-(from `SWE-Lego/LLaMA-Factory:webui`). It reads `trainer_log.jsonl`,
+(from `LegoX/LLaMA-Factory:webui`). It reads `trainer_log.jsonl`,
 `trainer_state.json`, and `*_results.json` from `artifacts/model/<run>/` and console
 logs from `artifacts/logs/`. The previous `scripts/update_status.py` + `dashboard/status.mdx`
 text mechanism and its `train.sh` background loop were removed.

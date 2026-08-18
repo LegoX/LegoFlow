@@ -40,7 +40,7 @@ meta_info:
       path: repos/LLaMA-Factory
       readonly: true
     swe_data_process:
-      url: https://github.com/SWE-Lego/swe_data_process.git
+      url: https://github.com/LegoX/swe_data_process.git
       branch: main
       commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
       path: repos/swe_data_process

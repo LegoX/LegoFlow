@@ -18,7 +18,7 @@ export function baseOptions(): BaseLayoutProps {
         </div>
       ),
     },
-    githubUrl: "https://github.com/LegoX/SWE-Lego-Live",
+    githubUrl: "https://github.com/LegoX/LegoFlow",
     links: [
       {
         url: "https://legoflow.pages.dev",
