@@ -80,8 +80,8 @@ root `.gitmodules`); a fresh clone leaves them empty. For each entry under
    gh auth setup-git
    ```
    Never embed a token in the submodule URL or shell history.
-   `LLaMA-Factory` uses the public patched SWE-Lego fork
-   (`https://github.com/SWE-Lego/LLaMA-Factory.git`) and needs no token.
+   `LLaMA-Factory` uses the public patched LegoX fork
+   (`https://github.com/LegoX/LLaMA-Factory.git`) and needs no token.
 3. Verify each checkout matches the pin:
    `git -C repos/<path> rev-parse HEAD` must equal `meta_info.repositories.
    <name>.commit` (`3e32f8ca…` for LLaMA-Factory, `538d3838…` for

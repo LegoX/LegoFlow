@@ -42,7 +42,7 @@ from typing import Any, Iterator
 DATASETS: dict[str, tuple[str, str, str]] = {
     "scale_swe": ("AweAI-Team/Scale-SWE", "processed_to_upload.jsonl", "scale_swe"),
     "openswe_filtered": (
-        "SWE-Lego/openswe_filtered_for_rl",
+        "Lego-X/openswe_filtered_for_rl",
         "openswe_filtered_for_rl_22806.jsonl",
         "openswe_filtered",
     ),

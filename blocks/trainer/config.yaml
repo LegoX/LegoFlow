@@ -19,13 +19,13 @@ meta_info:
 
   repositories:
     llama_factory:
-      url: https://github.com/SWE-Lego/LLaMA-Factory.git
+      url: https://github.com/LegoX/LLaMA-Factory.git
       branch: main
       commit: 3e32f8ca86a71b94d79d1cd51ad457900ec1dc20
       path: repos/LLaMA-Factory
       readonly: true
     swe_data_process:
-      url: https://github.com/SWE-Lego/swe_data_process.git
+      url: https://github.com/LegoX/swe_data_process.git
       branch: main
       commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5
       path: repos/swe_data_process
@@ -44,7 +44,7 @@ runtime_info:
       type: hf_lf                 # harbor_job | hf_lf | local_lf
       scaffold: openhands-sdk     # harbor_job only: openhands-sdk | claude-code | open-code | terminus2
       job_dir: ../tracer/artifacts/jobs/<job>  # harbor_job only: replace <job> with a real Tracer job
-      hf_hub_url: "SWE-Lego/samples_for_llama_factory_sft"
+      hf_hub_url: "Lego-X/samples_for_llama_factory_sft"
       hf_file_name: "jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json"  # empty = full dataset config
       hf_subset: ""               # ignored when hf_file_name is set
       hf_split: "train"

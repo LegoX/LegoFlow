@@ -1,6 +1,6 @@
 {
   "name": "tracer",
-  "owner": { "name": "SWE-Lego" },
+  "owner": { "name": "LegoX" },
   "plugins": [
     {
       "name": "tracer",

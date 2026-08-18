@@ -26,7 +26,7 @@ the simplest path because Trainer can skip Harbor trajectory conversion and go
 straight to LLaMA-Factory SFT.
 
 <ConfigSnippet title="blocks/trainer/config.yaml">
-{"runtime_info:\n  input:\n    source:\n      type: hf_lf\n      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft\n      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json\n      hf_split: train\n\n    conversion:\n      max_instances: 0\n      data_name: glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5\n\n    model:\n      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base\n      trust_remote_code: true\n\n    training:\n      stage: sft\n      finetuning_type: full\n      template: qwen3_5\n      cutoff_len: 131072\n      max_samples: 1000000\n      output_dir: qwen3_5_35b_a3b_base_glm52_openswe_mirror_score4_proto_oh_sdk_512_gbs64pbs1acc8_lr5e-5_epo3\n      per_device_train_batch_size: 1\n      gradient_accumulation_steps: 8\n      learning_rate: 5.0e-5\n      num_train_epochs: 3.0\n      bf16: true\n      flash_attn: fa2\n\n    infrastructure:\n      n_gpus_per_node: 8"}
+{"runtime_info:\n  input:\n    source:\n      type: hf_lf\n      hf_hub_url: Lego-X/samples_for_llama_factory_sft\n      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json\n      hf_split: train\n\n    conversion:\n      max_instances: 0\n      data_name: glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5\n\n    model:\n      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base\n      trust_remote_code: true\n\n    training:\n      stage: sft\n      finetuning_type: full\n      template: qwen3_5\n      cutoff_len: 131072\n      max_samples: 1000000\n      output_dir: qwen3_5_35b_a3b_base_glm52_openswe_mirror_score4_proto_oh_sdk_512_gbs64pbs1acc8_lr5e-5_epo3\n      per_device_train_batch_size: 1\n      gradient_accumulation_steps: 8\n      learning_rate: 5.0e-5\n      num_train_epochs: 3.0\n      bf16: true\n      flash_attn: fa2\n\n    infrastructure:\n      n_gpus_per_node: 8"}
 </ConfigSnippet>
 
 Use `/trainer:check` after editing. It checks data paths, model settings,
@@ -57,7 +57,7 @@ run.
 - From a Hugging Face LF dataset:
 
 <ConfigSnippet title="blocks/trainer/config.yaml">
-{"runtime_info:\n  input:\n    source:\n      type: hf_lf\n      hf_hub_url: SWE-Lego/samples_for_llama_factory_sft\n      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json\n      hf_split: train"}
+{"runtime_info:\n  input:\n    source:\n      type: hf_lf\n      hf_hub_url: Lego-X/samples_for_llama_factory_sft\n      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json\n      hf_split: train"}
 </ConfigSnippet>
 
 - From a local LF file produced by Tracer:

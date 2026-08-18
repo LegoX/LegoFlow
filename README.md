@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://legoflow-docs.pages.dev/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
   &nbsp;·&nbsp;
-  <a href="https://huggingface.co/SWE-Lego"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
+  <a href="https://huggingface.co/Lego-X"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
   &nbsp;·&nbsp;
   <a href="https://legox.pages.dev/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
   &nbsp;·&nbsp;
@@ -66,7 +66,7 @@ We are actively releasing the latest datasets produced by LegoFlow:
 
 | ID                  | Teacher Model | Scaffold      | Data Samples | Training Result                                           | HF Link                                                                                                 |
 | ------------------- | ------------- | ------------- | ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK (v1.14) | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
+| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK (v1.14) | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/Lego-X/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
 
 
 ## Quick Start
@@ -85,7 +85,7 @@ What each one is for is spelled out in [Getting Started](https://legoflow-docs.p
 ### Environment Setup
 1. Clone the code repository.
 ```bash
-git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
+git clone --recurse-submodules https://github.com/LegoX/LegoFlow LegoFlow
 cd LegoFlow
 ```
 
@@ -121,7 +121,7 @@ For example, our previous run with all four blocks shows that Curator built 4,16
 
 ## Contributing
 
-We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/SWE-Lego-Live). For more details, please refer to the [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development).
+We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/LegoFlow). For more details, please refer to the [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development).
 
 ## Citation
 
@@ -130,7 +130,7 @@ We welcome all developers to use, improve and contribute to LegoFlow. Issues and
   title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
   author = {The LegoX Team},
   year   = {2026},
-  url    = {https://github.com/LegoX/SWE-Lego-Live}
+  url    = {https://github.com/LegoX/LegoFlow}
 }
 ```
 

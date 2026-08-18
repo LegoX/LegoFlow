@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://legoflow-docs.pages.dev/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
   &nbsp;·&nbsp;
-  <a href="https://huggingface.co/SWE-Lego"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
+  <a href="https://huggingface.co/Lego-X"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
   &nbsp;·&nbsp;
   <a href="https://legox.pages.dev/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
   &nbsp;·&nbsp;
@@ -66,7 +66,7 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排四个子 block：
 
 | ID | Teacher Model | Scaffold | 数据量 | 训练结果 | HF 链接 |
 | -- | ------------- | -------- | ------ | -------- | ------- |
-| `swe-sft-512-glm52` | GLM-5.2 | OpenHands SDK (v1.14) | 512 | `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上 7.6% → 64.4% | <a href="https://huggingface.co/datasets/SWE-Lego/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
+| `swe-sft-512-glm52` | GLM-5.2 | OpenHands SDK (v1.14) | 512 | `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上 7.6% → 64.4% | <a href="https://huggingface.co/datasets/Lego-X/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
 
 
 ## 快速开始
@@ -85,7 +85,7 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排四个子 block：
 ### 环境准备
 1. 克隆代码仓库。
 ```bash
-git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
+git clone --recurse-submodules https://github.com/LegoX/LegoFlow LegoFlow
 cd LegoFlow
 ```
 
@@ -121,7 +121,7 @@ claude plugin install root@root-block
 
 ## 参与贡献
 
-我们欢迎所有开发者使用、改进 LegoFlow 并为之贡献。issue 和 pull request 请提交到 [GitHub](https://github.com/LegoX/SWE-Lego-Live)。更多细节请参阅 [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development)。
+我们欢迎所有开发者使用、改进 LegoFlow 并为之贡献。issue 和 pull request 请提交到 [GitHub](https://github.com/LegoX/LegoFlow)。更多细节请参阅 [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development)。
 
 ## 引用
 
@@ -130,7 +130,7 @@ claude plugin install root@root-block
   title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
   author = {The LegoX Team},
   year   = {2026},
-  url    = {https://github.com/LegoX/SWE-Lego-Live}
+  url    = {https://github.com/LegoX/LegoFlow}
 }
 ```
 
