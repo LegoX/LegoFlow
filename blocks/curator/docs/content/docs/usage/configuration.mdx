@@ -9,7 +9,7 @@ verified tasks each language should produce. Most runs only need a few
 paths, and output declarations alone unless you are changing the block contract
 itself.
 
-## Common Fields
+## Common fields
 
 | Area | Edit when | Main fields |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ itself.
 | Remote machine | You want Curator to run on another server instead of the current host. | `meta_info.resources.ip`, `user`, `pwd`, `directory` |
 | Tracer handoff | You need Tracer to consume verified tasks from Curator. | `output.merged_tasks_dir`, `dependencies.to.merged_tasks_dir` |
 
-## An Example Reference
+## An example reference
 
 Start with a modest PR collection target, one private LLM endpoint, and a small
 per-language task cap. This gives you a practical first run without asking
@@ -34,9 +34,9 @@ Use `/curator:check` after editing. It checks token access, model endpoint
 settings, repository pins, language configuration, and the local environment
 before `/curator:collect-prs` or `/curator:create-tasks` starts real work.
 
-## Configuration Break-down
+## Configuration breakdown
 
-### Remote Execution
+### Remote execution
 
 Curator runs locally by default. If you want the block skill to log into a
 remote CPU/Docker server and run the task collection or creation workflow there,
@@ -52,7 +52,7 @@ place where your setup workflow will prepare it. Keep secrets out of tracked
 `config.yaml`; use your SSH agent, key files, or ignored private config for
 credentials.
 
-### PR Collection
+### PR collection
 
 Curator first collects candidate PRs from GitHub. The `languages` list controls
 which ecosystems are searched, while the filters control how strict the
@@ -81,7 +81,7 @@ Use `cc_provider_mode: openai_proxy` when Claude Code should call your
 OpenAI-compatible gateway through the local proxy. Use `native` only when you
 are intentionally using Anthropic-compatible credentials directly.
 
-### Language Generation
+### Language generation
 
 After PR collection, Curator generates and validates tasks per language. Each
 language has its own timeout, Claude Code timeout, concurrency, and verified
@@ -94,12 +94,12 @@ task cap.
 Use small caps like `10` for a first run. Use `"all"` only when you are ready to
 consume all collected candidates for that language.
 
-## Handoff With Neighbor Blocks
+## Handoff with neighboring blocks
 
 Curator has no upstream task source. Its main downstream handoff is the merged
 verified task directory that Tracer reads in local mode.
 
-### Produce Tracer Tasks
+### Produce Tracer tasks
 
 `merged_tasks_dir` is the flattened task directory produced from all verified
 per-language outputs. Tracer reads this path through `task_source.dataset_name`.
@@ -111,7 +111,7 @@ per-language outputs. Tracer reads this path through `task_source.dataset_name`.
 After task creation, make sure `artifacts/merged_swe_tasks` exists before moving
 to Tracer.
 
-## Field Reference
+## Field reference
 
 | Field | Required? | Default | When to change |
 | --- | --- | --- | --- |

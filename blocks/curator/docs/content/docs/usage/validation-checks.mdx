@@ -26,7 +26,7 @@ Each test returns `0` for pass, `77` for skip, and any other code for failure.
 The aggregate `run.sh` fails only when at least one test fails. Skipped tests
 are reported but do not fail the suite.
 
-## Check Cases
+## Check cases
 
 | Case | What it checks | Pass condition |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ are reported but do not fail the suite.
 | `07_create_tasks_skill.sh` | Curator task-generation command surface. | The canonical `/curator:create-tasks` skill, compatibility adapter, and plugin metadata stay wired correctly. |
 | `08_create_tasks_docs.sh` | Public Curator documentation contract. | Docs recommend the canonical command and keep the expected Pages target. |
 
-## Smoke Run
+## Smoke run
 
 The smoke test is `smoke/10_pr_demo.sh`. It runs `legoflow-curator create` over a small
 10-PR fixture and is meant for self-hosted or manually triggered validation,

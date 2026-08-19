@@ -2,7 +2,7 @@
 title: Supported Benchmarks
 ---
 
-Evaluator is registry-driven: it does not stage tasks locally. Switch benchmark by editing fields in `config.yaml → runtime_info.input.task_source`:
+Evaluator is registry driven: it does not stage tasks locally. Switch benchmark by editing fields in `config.yaml → runtime_info.input.task_source`:
 
 <ConfigSnippet title="blocks/evaluator/config.yaml">
 {"task_source:\n  provider: harbor_registry\n  dataset_name: swebench-verified\n  version: \"1.0\"\n  registry_path: repos/harbor/registry.json\n  no_hack: false"}
@@ -20,13 +20,13 @@ When enabled, `start.sh`:
 2. Runs `scripts/prepare_nohack.sh` to generate (if missing) the local dataset under `repos/harbor/datasets/swebench-verified-nohack` and registry at `repos/harbor/scripts/git_ignore/hack_control/registry.swebench_verified_nohack.json`
 3. Launches Harbor against `swebench-verified-nohack@1.0` with `--agent-extra-allowed-host <LiteLLM host>`
 
-Currently **only** `dataset_name: swebench-verified` is supported. The `-100` subset is **rejected** with `no_hack` — the remap would silently expand it to the full 500-task set; cap a smoke run with `harbor_job.n_tasks` instead. `n_tasks` also limits nohack registry generation to a separate `registry….limitN.json` so a short probe does not replace the full nohack registry (stale `limitN` variants are removed by `scripts/clean.sh`). Refresh a stale local nohack tree with `NOHACK_REFRESH=1` before `start.sh`.
+Currently **only** `dataset_name: swebench-verified` is supported. The `-100` subset is **rejected** with `no_hack` because the remap would silently expand it to the full 500-task set. Cap a smoke run with `harbor_job.n_tasks` instead. `n_tasks` also limits nohack registry generation to a separate `registry....limitN.json` so a short probe does not replace the full nohack registry. Stale `limitN` variants are removed by `scripts/clean.sh`. Refresh a stale local nohack tree with `NOHACK_REFRESH=1` before `start.sh`.
 
 See Harbor's `docs_dev/network-policy-nohack.md` for the phase-level network policy details.
 
 ## Curated benchmarks
 
-These are validated to run end-to-end under the agents eval configures (e.g. `custom-claude-code`):
+These are validated to run end to end under the agent configured by Evaluator, for example `custom-claude-code`:
 
 | `dataset_name` | `version` | Tasks | Source |
 | --- | --- | --- | --- |

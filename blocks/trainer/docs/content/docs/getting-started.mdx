@@ -55,7 +55,7 @@ For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
 `runtime_info.input` pieces below. For every field, see the
 <a href="/docs/blocks/trainer/usage/configuration">Configuration Guide</a>.
 
-### Receive Tracer Output
+### Receive Tracer output
 
 For the normal Tracer -> Trainer handoff, point Trainer at Tracer's converted
 LF file:
@@ -83,7 +83,7 @@ file from Hugging Face:
 {"runtime_info:\n  input:\n    source:\n      type: hf_lf\n      hf_hub_url: Lego-X/samples_for_llama_factory_sft\n      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json\n      hf_split: train\n\n    conversion:\n      data_name: glm52_openswe_mirror_score4_proto_oh_sdk_512_qwen3_5 # dataset key used by LLaMA-Factory\n      max_instances: 0                         # 0 = all samples"}
 </ConfigSnippet>
 
-### Conversion Config
+### Conversion config
 
 If Tracer has not produced `lf.json` yet, Trainer can convert a raw Harbor job.
 Keep `max_instances` small for a smoke run:
@@ -163,7 +163,7 @@ visibility, and wandb/HF settings. For exact pass conditions, see
 
 Fix required failures before launching training.
 
-## Run Training
+## Run training
 
 Launch the full training pipeline:
 
@@ -222,7 +222,7 @@ latest output. When you do want to evaluate this checkpoint, continue with
 [Evaluator Getting Started](/docs/blocks/evaluator/getting-started); Evaluator
 will show how to serve the checkpoint and point its config at the served model.
 
-## Dashboard Visualization
+## Dashboard visualization
 
 After a run starts, open the dashboard:
 

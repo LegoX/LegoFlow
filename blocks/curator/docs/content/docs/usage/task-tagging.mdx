@@ -6,7 +6,7 @@ This page explains how Curator assigns semantic tags to verified tasks. Tags are
 useful when you want to inspect dataset coverage, filter tasks by domain, or
 build balanced training/evaluation splits.
 
-## Tag Schema
+## Tag schema
 
 Each task receives exactly four tags:
 
@@ -24,7 +24,7 @@ Each task receives exactly four tags:
 The `bug_class` tag should describe the logical defect, not just the affected
 feature. This makes it easier to compare tasks across languages and projects.
 
-## How Tagging Works
+## How tagging works
 
 Curator uses the Harbor task-analysis tooling to tag verified tasks. The tagger:
 
@@ -38,7 +38,7 @@ Very large tasks can make a full prompt slow or unstable. The tagger handles
 this with progressive truncation: if a request fails, it retries with a shorter
 patch, instruction, and test excerpt until the request succeeds.
 
-## Where Tags Live
+## Where tags live
 
 Tags are written to each task's `task.toml`:
 
@@ -48,7 +48,7 @@ artifacts/swe_tasks/<lang>-cc/<task_id>/task.toml
 
 They are also read by the dashboard for filtering and comparison.
 
-## Regenerating Tags
+## Regenerating tags
 
 From `blocks/curator/dashboard/`, run:
 

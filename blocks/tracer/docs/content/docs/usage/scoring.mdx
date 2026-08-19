@@ -39,7 +39,7 @@ Main-agent records receive `_score`; subagent records are retained with
 records independently can break the conversation context that made the main
 trajectory meaningful.
 
-## Optional LLM Scoring
+## Optional LLM scoring
 
 Two optional LLM-as-judge paths can add semantic scoring when the extra endpoint
 cost is justified:
@@ -52,7 +52,7 @@ cost is justified:
 The optional scores are independent of TQS V2. Use them for deeper curation,
 not as a required part of the first rollout.
 
-## Where Scores Appear
+## Where scores appear
 
 Scores are attached to:
 
@@ -65,7 +65,7 @@ artifacts/sft_data/<job>/lf.stats.json
 The dashboard reads these files to show score distributions, low-score
 examples, tool-error patterns, and segment-level comparisons.
 
-## Practical Use
+## Practical use
 
 Use scoring to:
 

@@ -35,7 +35,7 @@ For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
 `runtime_info.input` pieces below. For every field, see the
 <a href="/docs/blocks/evaluator/usage/configuration">Configuration Guide</a>.
 
-### Benchmark Config
+### Benchmark config
 
 Evaluator is registry-driven. Pick the benchmark and version first:
 
@@ -46,7 +46,7 @@ Evaluator is registry-driven. Pick the benchmark and version first:
 For a fast first run, either choose a small benchmark variant when available or
 set `harbor_job.n_tasks` below.
 
-### Receive Trainer Output
+### Receive Trainer output
 
 If you are evaluating a checkpoint produced by Trainer, serve it with vLLM on a
 GPU node and make Evaluator call that OpenAI-compatible endpoint:
@@ -61,7 +61,7 @@ or another local model. The important pieces are `model_path`, which chooses the
 checkpoint to serve, and `llm_api`, which tells Evaluator how to call it. Keep
 `local_model_serving.model_name` aligned with `llm_api.model`.
 
-### LLM API Config
+### LLM API config
 
 Evaluator starts a per-job LiteLLM proxy in front of your model. For a remote
 API, point `llm_api` at the shared endpoint:
@@ -80,7 +80,7 @@ that model directory:
 See [Local Model Evaluation](/docs/blocks/evaluator/usage/local-model-evaluation)
 for the vLLM serving steps.
 
-### Harbor Job Config
+### Harbor job config
 
 Keep a first run small:
 
@@ -88,7 +88,7 @@ Keep a first run small:
 {"runtime_info:\n  input:\n    harbor_job:\n      jobs_dir: artifacts/jobs\n      n_concurrent: 4                           # keep small for the first run\n      n_tasks: 10                               # null = full benchmark\n      max_retries: 2\n      timeout_multiplier: 1"}
 </ConfigSnippet>
 
-### Agent Config
+### Agent config
 
 Choose one scaffold and keep its runtime image or host path aligned:
 
@@ -96,7 +96,7 @@ Choose one scaffold and keep its runtime image or host path aligned:
 {"runtime_info:\n  input:\n    agent:\n      name: custom-openhands-sdk                # custom-openhands-sdk | custom-claude-code | custom-opencode\n      version: 1.33.0\n      runtime_image: docker.io/jierun/c-oh-sdk-1.33.0:v0.1\n      runtime_host_path: artifacts/runtime/openhands-sdk\n      max_turns: 200\n      temperature: 1.0"}
 </ConfigSnippet>
 
-### Job Analysis Config
+### Job analysis config
 
 Post-eval analysis creates the artifacts used by the dashboard. Leave it on for
 normal runs:
@@ -165,7 +165,7 @@ For benchmark selection and proxy details, see
 [LiteLLM Proxy](/docs/blocks/evaluator/usage/litellm-proxy). For the
 full artifact layout, see [Output Format](/docs/blocks/evaluator/outputs).
 
-## Final Outputs
+## Final outputs
 
 Evaluator is the terminal block in the current LegoFlow pipeline, so there is
 no next block to configure. Its outputs are the final benchmark artifacts:
@@ -177,7 +177,7 @@ no next block to configure. Its outputs are the final benchmark artifacts:
 Use these paths for reporting, dashboard review, or any custom analysis you add
 after evaluation.
 
-## Dashboard Visualization
+## Dashboard visualization
 
 After an Evaluator run starts or finishes, open the dashboard:
 

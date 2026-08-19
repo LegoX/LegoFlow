@@ -26,7 +26,7 @@ Each test returns `0` for pass, `77` for skip, and any other code for failure.
 The aggregate `run.sh` fails only when at least one test fails. Skipped tests
 are reported but do not fail the suite.
 
-## Check Cases
+## Check cases
 
 | Case | What it checks | Pass condition |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ are reported but do not fail the suite.
 | `08_gpu_count.sh` | Visible GPU count. | `nvidia-smi` reports enough GPUs. CPU-only runners skip this case. |
 | `09_ci_smoke_contract.sh` | CI smoke wiring. | CI still launches the guarded, disposable training smoke path. |
 
-## Smoke Run
+## Smoke run
 
 The smoke test is `smoke/10_train_demo.sh`. It runs the real training pipeline
 against a disposable config copy and a staged 512-sample dataset, bounded by

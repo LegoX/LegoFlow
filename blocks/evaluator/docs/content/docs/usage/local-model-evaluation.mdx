@@ -2,7 +2,7 @@
 title: Local Model Evaluation
 ---
 
-The current eval profile benchmarks a **local checkpoint** (an SFT output from the pipeline). Serve it with vLLM and keep `llm_api` pointed at that endpoint — no code change to `start.sh` is needed, because the block only ever talks to an OpenAI/Anthropic-compatible HTTP endpoint.
+The current eval profile benchmarks a **local checkpoint** (an SFT output from the pipeline). Serve it with vLLM and keep `llm_api` pointed at that endpoint. You do not need to change `start.sh`, because the block only talks to an OpenAI/Anthropic-compatible HTTP endpoint.
 
 ## Topology
 
@@ -14,13 +14,13 @@ eval node (CPU)                                  GPU node
                     (start.sh, trajectory_logger)   api_base_url
 ```
 
-<Callout title="vLLM only — no second proxy" type="warn">
-The model-serving layer is vLLM only. `start.sh` already runs the per-job LiteLLM proxy (with `trajectory_logger`, sticky routing, and Anthropic-format support). Do not start a second LiteLLM next to vLLM — it would collide on the port and bypass that logging.
+<Callout title="vLLM only, no second proxy" type="warn">
+The model-serving layer is vLLM only. `start.sh` already runs the per-job LiteLLM proxy with `trajectory_logger`, sticky routing, and Anthropic-format support. Do not start a second LiteLLM next to vLLM because it would collide on the port and bypass that logging.
 </Callout>
 
 ## 0. One-time: create the vLLM env (GPU node)
 
-The eval node's `/evaluator:setup` does **not** build this — it only builds the CPU-side Harbor uv env + LiteLLM venv. For a standard bf16/fp16 checkpoint a plain pip install is enough:
+The eval node's `/evaluator:setup` does **not** build this. It only builds the CPU-side Harbor uv env and LiteLLM venv. For a standard bf16/fp16 checkpoint, a plain pip install is enough:
 
 ```bash
 conda create -y -n vllm_0.18.1 python=3.12
@@ -36,7 +36,7 @@ Only FP8 models with custom kernels (e.g. GLM-5.1-FP8) need the heavy source bui
 bash scripts/serve_local_model.sh   # runs in foreground; use tmux
 ```
 
-The checkpoint path and served name are read from `config.yaml → runtime_info.input.local_model_serving` (`model_path` / `model_name`) — that is the source of truth, not a hardcoded script default. Everything else is env-overridable (`MODEL_PATH`, `MODEL_NAME`, `VLLM_PORT`, `TENSOR_PARALLEL_SIZE`, `API_KEY`, `VLLM_CONDA_ENV`, …); it serves on `:8000` by default. When ready it prints the exact `llm_api` block to paste.
+The checkpoint path and served name are read from `config.yaml → runtime_info.input.local_model_serving` (`model_path` / `model_name`). Treat that config as the source of truth, not a hardcoded script default. Everything else is env-overridable (`MODEL_PATH`, `MODEL_NAME`, `VLLM_PORT`, `TENSOR_PARALLEL_SIZE`, `API_KEY`, `VLLM_CONDA_ENV`, ...). It serves on `:8000` by default. When ready, it prints the exact `llm_api` block to paste.
 
 <ConfigSnippet title="blocks/evaluator/config.yaml">
 {"local_model_serving:\n  model_path: artifacts/models/Qwen3.5-35B-A3B\n  model_name: Qwen3.5-35B-A3B"}

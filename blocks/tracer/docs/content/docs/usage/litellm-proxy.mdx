@@ -5,7 +5,7 @@ title: LiteLLM Proxy
 Tracer does not point agents directly at the upstream model API. Each job starts
 its own LiteLLM proxy, and Harbor agents talk to that local proxy instead.
 
-## Why Tracer Uses a Proxy
+## Why Tracer uses a proxy
 
 | Need | What the proxy does |
 | --- | --- |
@@ -14,7 +14,7 @@ its own LiteLLM proxy, and Harbor agents talk to that local proxy instead.
 | **Per-job isolation** | Writes one config under `artifacts/litellm/<job>/`, keeping routes, logs, and callbacks tied to a single rollout job. |
 | **Cost metadata** | Carries token-cost fields from `llm_api`, so downstream dashboards can estimate inference cost when available. |
 
-## Config Inputs
+## Config inputs
 
 The upstream endpoint lives under `runtime_info.input.llm_api`:
 
@@ -31,7 +31,7 @@ The local proxy settings live under `runtime_info.input.litellm_proxy`:
 The `master_key` is the local proxy credential. The upstream `api_key` is real
 and should never be committed.
 
-## Runtime Lifecycle
+## Runtime lifecycle
 
 During `/tracer:run`, `scripts/start.sh` handles the proxy lifecycle:
 
@@ -49,7 +49,7 @@ derives a served model alias from the model name, enables prompt-caching and
 responses-API pre-call checks, drops unsupported params, and registers the
 trajectory logger callback.
 
-## From Logs to Trajectories
+## From logs to trajectories
 
 The proxy turns model traffic into trajectory data while the rollout is running.
 Harbor gives each task a target file and sends it to LiteLLM through the
@@ -86,7 +86,7 @@ conversion step reads these LiteLLM records, applies the scaffold-specific
 converter, rebuilds the conversation as user, assistant, and tool messages, and
 then exports the shared IM/LF training formats.
 
-## Debugging Signals
+## Debugging signals
 
 If a rollout cannot start, inspect these surfaces first:
 

@@ -50,7 +50,7 @@ Historical jobs can outlive the current config. If a job was produced by a
 different scaffold than the active `agent.name`, set the scaffold explicitly
 before refreshing conversion.
 
-## Reasoning Filtering
+## Reasoning filtering
 
 Claude Code, OpenCode, and OpenHands SDK conversion support reasoning-content
 filtering. The checked-in default is adaptive mode:
@@ -63,7 +63,7 @@ Adaptive mode keeps useful reasoning while filtering records whose reasoning
 content ratio looks suspicious for downstream training. Terminus-2 does not use
 this filter because its trajectory structure separates reasoning differently.
 
-## Idempotent Refresh
+## Idempotent refresh
 
 The converter writes `.convert_sig.json` next to the outputs. The signature is
 computed from the resolved reward-1.0 instance set and conversion inputs:

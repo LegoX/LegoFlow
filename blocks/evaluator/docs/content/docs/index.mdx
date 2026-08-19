@@ -2,24 +2,35 @@
 title: Overview
 ---
 
-Evaluator runs registered evaluation benchmarks through Harbor against any configurable upstream LLM, and stores per-task results and trajectories.
+Evaluator runs registered benchmarks through Harbor against a configurable
+upstream LLM, then stores per-task results and trajectories.
 
-It is the evaluation stage of the [LegoFlow](https://github.com/LegoX/SWE-Lego-Live) pipeline — a leaf block with no downstream consumer. Where `tracer` generates training data and `trainer` produces checkpoints, Evaluator measures how good any model is on a chosen benchmark. It mirrors Tracer's runtime shell (a pinned [Harbor](https://github.com/LegoX/harbor) checkout fronted by a per-job LiteLLM proxy), but loads its task set from Harbor's `registry.json` instead of a locally-staged legoflow-curator export.
+It is the evaluation stage of the
+[LegoFlow](https://github.com/LegoX/SWE-Lego-Live) pipeline, and it has no
+downstream consumer. Where `tracer` generates training data and `trainer`
+produces checkpoints, Evaluator measures a model on a chosen benchmark. It uses
+a runtime shell similar to Tracer: a pinned
+[Harbor](https://github.com/LegoX/harbor) checkout behind a per-job LiteLLM
+proxy. The difference is that Evaluator loads tasks from Harbor's
+`registry.json`, not from a local Curator export.
 
 Evaluator provides:
 
-- **Registry-driven benchmark selection** — switch between SWE-bench Verified, Multilingual, Pro, Terminal-Bench, and a dozen other benchmarks by editing two config fields; no local task staging
-- **A per-job LiteLLM proxy** fronting your model API with OpenAI- and Anthropic-compatible endpoints and trajectory logging
-- **Containerized rollouts at scale** via Harbor, with configurable concurrency, retries, and timeouts
-- **Pluggable agent scaffolds** — Claude Code, OpenHands SDK, and OpenCode validated end-to-end
-- **Remote API *or* local checkpoint** evaluation — point at a shared endpoint or serve a trained checkpoint with vLLM, with no code change
-- **Automatic post-eval job analysis** — attribution, scoring, and failure breakdowns the dashboard reads, at zero token cost by default
-- **A self-contained dashboard** for browsing jobs, analysis reports, and agent trajectories
+- Registry-driven benchmark selection across SWE-bench Verified, Multilingual,
+  Pro, Terminal-Bench, and other Harbor benchmarks.
+- A per-job LiteLLM proxy that exposes OpenAI- and Anthropic-compatible
+  endpoints and records trajectories.
+- Containerized rollouts through Harbor, with configurable concurrency,
+  retries, and timeouts.
+- Pluggable agent scaffolds, including Claude Code, OpenHands SDK, and OpenCode.
+- Remote API or local-checkpoint evaluation with the same block workflow.
+- Post-eval job analysis for attribution, scoring, and failure breakdowns.
+- A dashboard for browsing jobs, reports, and trajectories.
 
 ## Where to go next
 
-- [Getting Started](/docs/blocks/evaluator/getting-started) — install the dependencies and run your first benchmark
-- [Design](/docs/blocks/evaluator/design) — see how Evaluator resolves benchmarks, starts the proxy, runs Harbor, and analyzes jobs
-- [Usage](/docs/blocks/evaluator/usage/configuration) — configuration, benchmark selection, proxy, local model, and job-analysis details
-- [Output Format](/docs/blocks/evaluator/outputs) — find scores, trajectories, verifier reports, analysis, and archives
-- [Dashboard](/docs/blocks/evaluator/dashboard) — browse jobs, reports, and trajectories
+- [Getting Started](/docs/blocks/evaluator/getting-started): install the dependencies and run your first benchmark.
+- [Design](/docs/blocks/evaluator/design): see how Evaluator resolves benchmarks, starts the proxy, runs Harbor, and analyzes jobs.
+- [Usage](/docs/blocks/evaluator/usage/configuration): configure benchmarks, proxying, local models, and job analysis.
+- [Output Format](/docs/blocks/evaluator/outputs): find scores, trajectories, verifier reports, analysis, and archives.
+- [Dashboard](/docs/blocks/evaluator/dashboard): browse jobs, reports, and trajectories.

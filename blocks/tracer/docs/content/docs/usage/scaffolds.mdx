@@ -7,7 +7,7 @@ agent scaffolds, and each one logs messages, tools, reasoning, and observations
 in a slightly different shape. Conversion normalizes those shapes into the IM
 schema before scoring and LF export.
 
-## Supported Scaffolds
+## Supported scaffolds
 
 | Scaffold | Current pinned version | Agent name | Config / converter key | Converter module |
 | --- | --- | --- | --- | --- |
@@ -19,7 +19,7 @@ schema before scoring and LF export.
 The mapping is encoded in `scripts/convert_trajectories.sh`, so the block's
 conversion path and docs use the same scaffold keys.
 
-## Automatic Detection
+## Automatic detection
 
 When `sft_conversion.scaffold: auto`, Tracer derives the converter from
 `runtime_info.input.agent.name`:

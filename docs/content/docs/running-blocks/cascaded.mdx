@@ -13,7 +13,7 @@ tree, validate it, then ask the root plugin to dispatch the work. The brief
 describes the target and constraints; it does not override block configuration
 or make undeclared handoffs automatic.
 
-## Step 1: Prepare the Tree
+## Step 1: Prepare the tree
 
 ```text
 /root:setup
@@ -29,7 +29,7 @@ or ignored private files. Non-secret decisions such as model names, languages,
 benchmarks, and endpoint locations belong in the relevant block's
 `runtime_info.input`.
 
-## Step 2: Check the Tree
+## Step 2: Check the tree
 
 ```text
 /root:check
@@ -49,7 +49,7 @@ Root orchestration consumes Curator's existing collection under
 wait for it to finish.
 </Callout>
 
-## Step 3: Run the Tree
+## Step 3: Run the tree
 
 ```text
 /root:run start the data pipeline
@@ -77,11 +77,11 @@ What each stage should produce, and what to hold it to:
 >
 > Before planning execution, inspect the root and every relevant block's `config.yaml`, `CLAUDE.md`, documentation, scripts, plugin instructions, dependency declarations, and existing artifacts. Prefer the LegoFlow block plugins as the standard operating interface, but use them as guidance rather than an inflexible requirement. Choose the safest interface that preserves each block's setup, validation, approval, execution, and archiving expectations.
 >
-> - **Curator:** produce enough verified Python tasks for the downstream data target. Accept only tasks that pass NOP/Oracle validation, publish an ordered verified-task manifest, and preserve collection and verification evidence.
-> - **Tracer:** use the available teacher-model API to solve the verified tasks and preserve successful raw trajectories. Select concurrency and retry behavior that fit endpoint quota and health; record any routing or runtime adaptation.
-> - **Selection and conversion:** normalize trajectories into the training-compatible format, retain successful rewards, deduplicate by task, remove malformed or shallow examples, and freeze exactly **512** deeply-reasoned, high-quality passed trajectories with an ordered manifest and content hash.
-> - **Trainer:** full-parameter fine-tune `Qwen3.5-35B-A3B-Base` on the selected dataset. Derive the training configuration from the model requirements, available GPU topology, relevant block documentation, and previously successful artifacts. Preserve the resolved config, logs, checkpoints, and training curves, and adjust settings when runtime evidence shows a resource or stability problem.
-> - **Evaluator:** serve the resulting checkpoint and evaluate all 500 SWE-bench Verified tasks under one consistent agent, serving, and verifier configuration. Resume infrastructure failures without changing the evaluation conditions, and preserve the ordered task list, retry history, per-task verifier reports, and final result.
+> - Curator should produce enough verified Python tasks for the downstream data target. Accept only tasks that pass NOP/Oracle validation, publish an ordered verified-task manifest, and preserve collection and verification evidence.
+> - Tracer should use the available teacher-model API to solve the verified tasks and preserve successful raw trajectories. Select concurrency and retry behavior that fit endpoint quota and health, and record any routing or runtime adaptation.
+> - Selection and conversion should normalize trajectories into the training-compatible format, retain successful rewards, deduplicate by task, remove malformed or shallow examples, and freeze exactly **512** deeply-reasoned, high-quality passed trajectories with an ordered manifest and content hash.
+> - Trainer should full-parameter fine-tune `Qwen3.5-35B-A3B-Base` on the selected dataset. Derive the training configuration from the model requirements, available GPU topology, relevant block documentation, and previously successful artifacts. Preserve the resolved config, logs, checkpoints, and training curves, and adjust settings when runtime evidence shows a resource or stability problem.
+> - Evaluator should serve the resulting checkpoint and evaluate all 500 SWE-bench Verified tasks under one consistent agent, serving, and verifier configuration. Resume infrastructure failures without changing the evaluation conditions, and preserve the ordered task list, retry history, per-task verifier reports, and final result.
 >
 > Monitor every stage through its logs, manifests, archives, and dashboards. When a failure or quality regression appears, document the evidence -> hypothesis -> change -> result chain, update the smallest responsible module, rerun only the affected downstream stages, and preserve failed and improved attempts separately. Do not chase a target score by changing evaluation conditions; optimize for a traceable and reviewable improvement.
 
@@ -108,7 +108,7 @@ For a partial workflow, invoke the relevant child skills individually. Current
 root target resolution treats multiple named blocks as ambiguous rather than
 as a requested slice.
 
-## While It Runs
+## While it runs
 
 Read each block's outputs, logs, dashboard, and latest `artifacts/index.yaml`
 entry. A normal leaf run automatically records metadata, a config snapshot, a
@@ -121,7 +121,7 @@ read the evidence, form a hypothesis, change the smallest responsible thing,
 rerun only the affected downstream stages, and retain both failed and improved
 attempts.
 
-## Case Study: Recovery and Improvement
+## Case study: recovery and improvement
 
 One agent used this workflow to operate Curator, Tracer, Trainer, and Evaluator
 across a Python-only experiment. Curator produced 4,166 verified tasks, and a
@@ -164,7 +164,7 @@ higher under the reported evaluation.
 
 ***Figure 2.** The base model and the two SFT attempts.*
 
-## Why LegoFlow Enabled It
+## Why LegoFlow enabled it
 
 - **Declared boundaries localize change.** Each declared producer and consumer
   names the same handoff, so a format mismatch can be traced upstream. The
@@ -176,7 +176,7 @@ higher under the reported evaluation.
   archive, and dashboard surfaces give each block a familiar control plane,
   while the input/output contract keeps internal fixes behind a stable boundary.
 
-## Reproducibility Warning
+## Reproducibility warning
 
 Exact tasks, trajectories, corrections, and scores will not repeat bit for bit.
 Live GitHub state, model sampling, provider revisions, endpoint health, retries,

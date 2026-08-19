@@ -26,7 +26,7 @@ Each test returns `0` for pass, `77` for skip, and any other code for failure.
 The aggregate `run.sh` fails only when at least one test fails. Skipped tests
 are reported but do not fail the suite.
 
-## Check Cases
+## Check cases
 
 | Case | What it checks | Pass condition |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ are reported but do not fail the suite.
 | `07_runtime_image.sh` | Agent runtime image cache. | Configured image is already present, or a cold cache is skipped. Docker access failures still fail. |
 | `09_dashboard_regressions.sh` | Public dashboard export behavior. | Exports avoid full trajectories, read R2 JSONL shards, show latest archives, and keep smoke config aligned. |
 
-## Smoke Run
+## Smoke run
 
 The smoke test is `smoke/10_hf_task_demo.sh`. It temporarily swaps in a smoke
 configuration, runs up to 10 Hugging Face tasks, then restores the original

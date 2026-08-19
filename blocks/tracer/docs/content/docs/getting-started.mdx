@@ -33,7 +33,7 @@ For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
 `runtime_info.input` pieces below. For every field, see the
 <a href="/docs/blocks/tracer/usage/configuration">Configuration Guide</a>.
 
-### LLM API Config
+### LLM API config
 
 Tracer starts a per-job LiteLLM proxy in front of your model. Point `llm_api` at
 the raw upstream endpoint:
@@ -44,7 +44,7 @@ the raw upstream endpoint:
 
 Never commit real API keys or private endpoints to `config.yaml`.
 
-### Receive Curator Output
+### Receive Curator output
 
 For the full LegoFlow path, Tracer reads Curator's merged verified tasks:
 
@@ -62,7 +62,7 @@ During `/tracer:run`, Tracer stages this source into its own
 per task rather than copying. If `verifiable_tasks.txt` exists, only those
 verified task IDs are staged.
 
-### Rollout Config
+### Rollout config
 
 Start with a small task cap and modest concurrency:
 
@@ -70,7 +70,7 @@ Start with a small task cap and modest concurrency:
 {"runtime_info:\n  input:\n    harbor_job:\n      jobs_dir: artifacts/jobs              # Harbor jobs and trajectories land here\n      n_concurrent: 4                       # keep small for the first run\n      n_tasks: 10                           # null = all prepared tasks\n      max_retries: 2\n      timeout_multiplier: 5"}
 </ConfigSnippet>
 
-### Agent Config
+### Agent config
 
 Choose one scaffold and keep its runtime image, version, and conversion scaffold
 aligned. Do not change only `version`: the runtime image tag and
@@ -98,7 +98,7 @@ together:
 {"runtime_info:\n  input:\n    agent:\n      name: custom-opencode\n      version: 1.18.7\n      runtime_image: docker.io/jierun/c-oc-1.18.7:v0.1\n      runtime_host_path: artifacts/agent-runtime/opencode\n\n    sft_conversion:\n      scaffold: open_code                    # or keep auto for a new matching run"}
 </ConfigSnippet>
 
-### SFT Conversion Config
+### SFT conversion config
 
 If you want Trainer-ready LF data after rollout, enable conversion. Otherwise
 leave it off and use raw trajectories only.
@@ -133,7 +133,7 @@ should leave you ready for task preparation and rollout.
 
 Fix required failures before continuing.
 
-## Run Trajectories
+## Run trajectories
 
 Launch the rollout job:
 
@@ -163,7 +163,7 @@ artifacts/sft_data/<job>/lf.json      # only when sft_conversion.enabled: true
 
 For the artifact layout and handoff contract, see [Output Format](/docs/blocks/tracer/outputs).
 
-## Trajectory Conversion
+## Trajectory conversion
 
 Raw rollout trajectories are useful for inspection, but Trainer usually needs
 clean SFT data. If `sft_conversion.enabled: true`, Tracer converts successful
@@ -212,7 +212,7 @@ In the common SFT path, Trainer usually consumes `sft_data_dir` manually through
 [Trainer Getting Started](/docs/blocks/trainer/getting-started) to see that
 downstream config.
 
-## Dashboard Visualization
+## Dashboard visualization
 
 After a job starts or finishes, open the dashboard:
 

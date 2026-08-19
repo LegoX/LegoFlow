@@ -26,7 +26,7 @@ Each test returns `0` for pass, `77` for skip, and any other code for failure.
 The aggregate `run.sh` fails only when at least one test fails. Skipped tests
 are reported but do not fail the suite.
 
-## Check Cases
+## Check cases
 
 | Case | What it checks | Pass condition |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ are reported but do not fail the suite.
 | `12_smoke_verifier.sh` | Smoke verifier fixtures. | Missing, stale, clean scored, and exception-scored trial fixtures classify as expected. |
 | `13_smoke_contract.sh` | Smoke config and cleanup guard. | Fixture pins, image/path/port alignment, temporary config, and container cleanup stay safe. |
 
-## Smoke Run
+## Smoke run
 
 The smoke test is `smoke/10_registry_task_demo.sh`. It runs an isolated
 evaluation config against the first tasks of the configured registry dataset.

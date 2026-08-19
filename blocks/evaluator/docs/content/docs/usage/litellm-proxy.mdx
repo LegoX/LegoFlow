@@ -2,14 +2,14 @@
 title: LiteLLM Proxy
 ---
 
-eval never points the agent directly at your upstream model API. Instead, each job starts its own **LiteLLM proxy**, which normalizes the endpoint, exposes both OpenAI- and Anthropic-compatible protocols, and attaches the trajectory logger.
+Evaluator never points the agent directly at your upstream model API. Each job starts its own **LiteLLM proxy**, which normalizes the endpoint, exposes both OpenAI- and Anthropic-compatible protocols, and attaches the trajectory logger.
 
 ## Why a proxy
 
-- **Protocol bridging** — different agent scaffolds expect OpenAI or Anthropic message formats. The proxy serves both from one upstream model.
-- **Trajectory capture** — the proxy's logger writes each request/response to `litellm-trajectory.jsonl`, which is what makes a run reproducible and analyzable.
-- **Backend transparency** — because the agent only ever talks to the proxy, the same setup works whether the upstream is a remote API or a local vLLM checkpoint.
-- **Isolation** — each job gets a fresh, per-job config so concurrent or sequential jobs don't share state.
+- Different agent scaffolds expect OpenAI or Anthropic message formats. The proxy serves both from one upstream model.
+- The proxy logger writes each request and response to `litellm-trajectory.jsonl`, so a run can be replayed and analyzed later.
+- The agent only talks to the proxy, so the same setup works with a remote API or a local vLLM checkpoint.
+- Each job gets a fresh per-job config, so concurrent or sequential jobs do not share state.
 
 ## Configuration
 
@@ -42,7 +42,7 @@ For a remote API, put the real key only in a private run profile or secret-injec
 3. Runs the Harbor job against the proxy.
 
 <Callout title="One proxy only" type="warn">
-The model-serving layer for a local checkpoint is **vLLM only**. `start.sh` already runs the per-job LiteLLM proxy (with the trajectory logger, sticky routing, and Anthropic-format support); do not start a second LiteLLM next to vLLM — it would collide on the port and bypass that logging. When a job's inference is finished but the proxy is still up, stop the process started for this job — and only that one.
+The model-serving layer for a local checkpoint is **vLLM only**. `start.sh` already runs the per-job LiteLLM proxy with the trajectory logger, sticky routing, and Anthropic-format support. Do not start a second LiteLLM next to vLLM because it would collide on the port and bypass that logging. When a job's inference is finished but the proxy is still up, stop the process started for this job, and only that one.
 </Callout>
 
 <Callout title="set -u workaround" type="info">

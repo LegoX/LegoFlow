@@ -8,7 +8,7 @@ few `runtime_info.input` fields. Leave `meta_info`, repository pins,
 environment paths, and output declarations alone unless you are changing the
 block contract itself.
 
-## Common Fields
+## Common fields
 
 | Area | Edit when | Main fields |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ block contract itself.
 | Remote machine | You want training to run on a GPU server instead of the current host. | `meta_info.resources.ip`, `user`, `pwd`, `directory` |
 | Experiment tracking | You want W&B or Hugging Face access. | `experiment.*`, `credentials.*` |
 
-## An Example Reference
+## An example reference
 
 Start with the released LF dataset and the default Qwen3.5 base model. This is
 the simplest path because Trainer can skip Harbor trajectory conversion and go
@@ -33,9 +33,9 @@ Use `/trainer:check` after editing. It checks data paths, model settings,
 conversion dependencies, GPU configuration, credentials, and training output
 paths before `/trainer:run` starts a costly job.
 
-## Configuration Break-down
+## Configuration breakdown
 
-### Remote Execution
+### Remote execution
 
 Trainer runs locally by default, but training often belongs on a GPU server.
 Configure `meta_info.resources` when the block skill should log into a remote
@@ -49,7 +49,7 @@ The remote directory should point at the Trainer block checkout on the GPU
 server. Keep `runtime_info.input.infrastructure.n_gpus_per_node` aligned with
 that server, not with your laptop.
 
-### Data Source
+### Data source
 
 Trainer can read data in three modes. Choose exactly one source type for the
 run.
@@ -84,7 +84,7 @@ The model and template must agree. For Qwen3.5, keep the current
 {"runtime_info:\n  input:\n    model:\n      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base\n      trust_remote_code: true\n\n    training:\n      template: qwen3_5\n      cutoff_len: 131072\n      rope_scaling: null"}
 </ConfigSnippet>
 
-### Smoke Run
+### Smoke run
 
 Use a small sample cap and a separate output directory when checking a new data
 source or training node.
@@ -93,7 +93,7 @@ source or training node.
 {"runtime_info:\n  input:\n    training:\n      max_samples: 32\n      output_dir: smoke-qwen3_5-sft\n      per_device_train_batch_size: 1\n      gradient_accumulation_steps: 1\n      num_train_epochs: 1.0\n      save_steps: 20\n\n    infrastructure:\n      n_gpus_per_node: 1"}
 </ConfigSnippet>
 
-### Production Training
+### Production training
 
 For production, keep the output directory unique and match the GPU count to the
 node.
@@ -102,12 +102,12 @@ node.
 {"runtime_info:\n  input:\n    training:\n      max_samples: 1000000\n      per_device_train_batch_size: 1\n      gradient_accumulation_steps: 8\n      learning_rate: 5.0e-5\n      num_train_epochs: 3.0\n      save_steps: 200\n      bf16: true\n      flash_attn: fa2\n\n    infrastructure:\n      n_gpus_per_node: 8"}
 </ConfigSnippet>
 
-## Handoff With Neighbor Blocks
+## Handoff with neighboring blocks
 
 Trainer usually receives converted LF data from Tracer and produces a checkpoint
 that Evaluator can serve and benchmark.
 
-### Receive Tracer Data
+### Receive Tracer data
 
 The most common handoff is `local_lf`: Tracer writes
 `artifacts/sft_data/<job>/lf.json`, and Trainer reads that file directly.
@@ -123,7 +123,7 @@ contract and set `source.type: harbor_job`.
 {"meta_info:\n  dependencies:\n    from:\n      source.job_dir:\n        from: tracer.output.raw_trajectories_dir\n        when: {source.type: harbor_job}\n\nruntime_info:\n  input:\n    source:\n      type: harbor_job\n      scaffold: openhands-sdk\n      job_dir: ../tracer/artifacts/jobs/<job>"}
 </ConfigSnippet>
 
-### Produce Evaluator Checkpoints
+### Produce Evaluator checkpoints
 
 After training, use the final checkpoint path as Evaluator's local model input.
 
@@ -131,7 +131,7 @@ After training, use the final checkpoint path as Evaluator's local model input.
 {"runtime_info:\n  input:\n    local_model_serving:\n      model_path: ../trainer/artifacts/<training-output-dir>\n      model_name: Qwen3.5-35B-A3B"}
 </ConfigSnippet>
 
-## Field Reference
+## Field reference
 
 | Field | Required? | Default | When to change |
 | --- | --- | --- | --- |

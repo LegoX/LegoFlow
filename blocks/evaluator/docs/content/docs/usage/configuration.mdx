@@ -8,7 +8,7 @@ job scale, and optional post-run analysis. Most runs only need a few
 paths, and output declarations alone unless you are changing the block contract
 itself.
 
-## Common Fields
+## Common fields
 
 | Area | Edit when | Main fields |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ itself.
 | Remote machine | You want evaluation to run on another benchmark server. | `meta_info.resources.ip`, `user`, `pwd`, `directory` |
 | Post-run analysis | You want rubric and tag-level analysis after evaluation. | `job_analysis.enabled`, `tag_llm.*` |
 
-## An Example Reference
+## An example reference
 
 Start by evaluating a locally served checkpoint on SWE-bench Verified with a
 small task cap. This checks the model endpoint, Harbor runtime, agent scaffold,
@@ -33,9 +33,9 @@ Use `/evaluator:check` after editing. It checks benchmark resolution, model
 endpoint reachability, Docker/runtime availability, local checkpoint settings,
 and job analysis configuration before `/evaluator:run` starts.
 
-## Configuration Break-down
+## Configuration breakdown
 
-### Remote Execution
+### Remote execution
 
 Evaluator runs locally by default. Configure `meta_info.resources` when the
 benchmark job should run on a remote Docker server or GPU node instead.
@@ -48,7 +48,7 @@ Use a remote machine when the model server, Docker runtime, or benchmark
 environment is easier to keep close to the evaluation node. The directory should
 point at the Evaluator block checkout on that machine.
 
-### Model Endpoint
+### Model endpoint
 
 Evaluator can point to a remote API or a local checkpoint served through vLLM.
 In both cases, `llm_api.model` is the model name the agent will call.
@@ -68,7 +68,7 @@ In both cases, `llm_api.model` is the model name the agent will call.
 Keep `local_model_serving.model_name` aligned with the model name served by
 vLLM and referenced from `llm_api.model`.
 
-### Benchmark Source
+### Benchmark source
 
 Evaluator normally reads registered benchmarks from Harbor's registry.
 
@@ -80,7 +80,7 @@ Use `no_hack: true` for the hardened SWE-bench Verified path. Keep the registry
 path at `repos/harbor/registry.json` unless you are intentionally using another
 Harbor registry.
 
-### Smoke Evaluation
+### Smoke evaluation
 
 Use a small task cap and modest concurrency when checking a new checkpoint,
 endpoint, or runtime image.
@@ -89,7 +89,7 @@ endpoint, or runtime image.
 {"runtime_info:\n  input:\n    harbor_job:\n      n_concurrent: 2\n      n_tasks: 10\n      max_retries: 1\n      timeout_multiplier: 1"}
 </ConfigSnippet>
 
-### Production Evaluation
+### Production evaluation
 
 For a full benchmark, set `n_tasks: null` and choose concurrency based on your
 endpoint capacity.
@@ -98,7 +98,7 @@ endpoint capacity.
 {"runtime_info:\n  input:\n    harbor_job:\n      n_concurrent: 24\n      n_tasks: null\n      max_retries: 2\n      timeout_multiplier: 1"}
 </ConfigSnippet>
 
-## Agent Version Presets
+## Agent version presets
 
 The agent fields move as a set. Pick one row and keep `agent.name`,
 `agent.version`, `agent.runtime_image`, and `agent.runtime_host_path` aligned.
@@ -109,13 +109,13 @@ The agent fields move as a set. Pick one row and keep `agent.name`,
 | OpenCode | `custom-opencode` | `1.18.7` | `docker.io/jierun/c-oc-1.18.7:v0.1` | `artifacts/runtime/opencode` |
 | OpenHands SDK | `custom-openhands-sdk` | `1.33.0` | `docker.io/jierun/c-oh-sdk-1.33.0:v0.1` | `artifacts/runtime/openhands-sdk` |
 
-## Handoff With Neighbor Blocks
+## Handoff with neighboring blocks
 
 Evaluator usually receives a trained checkpoint from Trainer. It does not
 currently declare a formal dependency in `meta_info`, so the practical handoff
 is the checkpoint path you put into `local_model_serving.model_path`.
 
-### Receive Trainer Checkpoint
+### Receive Trainer checkpoint
 
 After Trainer finishes, point Evaluator at the trained checkpoint directory and
 serve it through the local model path.
@@ -124,7 +124,7 @@ serve it through the local model path.
 {"runtime_info:\n  input:\n    llm_api:\n      api_base_url: http://127.0.0.1:8000/v1\n      model: openai/Qwen3.5-35B-A3B\n\n    local_model_serving:\n      model_path: ../trainer/artifacts/<training-output-dir>\n      model_name: Qwen3.5-35B-A3B"}
 </ConfigSnippet>
 
-## Field Reference
+## Field reference
 
 | Field | Required? | Default | When to change |
 | --- | --- | --- | --- |

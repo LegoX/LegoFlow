@@ -6,7 +6,7 @@ This page explains how Curator scores task quality after tasks are generated.
 Use it when you want to compare datasets, sample by difficulty, or understand
 why one task looks harder than another. 
 
-## Difficulty Score
+## Difficulty score
 
 Curator follows the Harbor
 [`scripts/task_analysis`](https://github.com/LegoX/harbor/tree/main/scripts/task_analysis)
@@ -33,7 +33,7 @@ The final score is bucketed into a simple label:
 | `medium` | `4.1-7.0` |
 | `hard` | `> 7.0` |
 
-## Where Scores Live
+## Where scores live
 
 Curator writes scoring metadata back into each task's `task.toml`:
 
@@ -55,7 +55,7 @@ Use these fields for dataset sampling and dashboard comparison. For example, a
 small smoke dataset can keep mostly `easy` and `medium` tasks, while a training
 or evaluation dataset may intentionally keep more `hard` cases.
 
-## Regenerating Scores
+## Regenerating scores
 
 From `blocks/curator/`, regenerate task metadata with:
 

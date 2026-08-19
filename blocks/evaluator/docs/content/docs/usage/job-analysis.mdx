@@ -2,13 +2,13 @@
 title: Job Analysis
 ---
 
-A raw eval job tells you which tasks resolved and which didn't. **Job analysis** turns that into the attribution and scoring artifacts the [dashboard](/docs/blocks/evaluator/dashboard) reads — failure distributions, task breakdowns, resolved-vs-unresolved metrics, and per-instance summaries.
+A raw eval job tells you which tasks resolved and which did not. Job analysis turns that into the attribution and scoring artifacts the [dashboard](/docs/blocks/evaluator/dashboard) reads: failure distributions, task breakdowns, resolved-vs-unresolved metrics, and per-instance summaries.
 
 After each eval, `start.sh` runs `scripts/analyze_job.sh "$JOB_DIR"` automatically. It is **non-fatal**: a failed analysis never fails a completed eval run.
 
 ## What it produces
 
-The pipeline runs Harbor's `job_analysis` over a completed job and writes results into `<job_dir>/analysis/` — the exact layout the dashboard reads:
+The pipeline runs Harbor's `job_analysis` over a completed job and writes results into `<job_dir>/analysis/`. The dashboard reads this layout directly:
 
 ```text
 artifacts/jobs/<job>/analysis/
@@ -33,15 +33,15 @@ Safe to re-run, and safe to run on old jobs.
 | Aspect | Behavior |
 | --- | --- |
 | **Opt-out** | set `runtime_info.input.job_analysis.enabled: false` in `config.yaml` |
-| **Cost** | LLM judge is off by default → pure-CPU, zero token cost. Enable with `JOB_ANALYSIS_JUDGE=1` (needs `ANTHROPIC_API_KEY`) |
-| **Engine** | uses `artifacts/env/harbor-uv` (has `scipy` + `pyyaml`); the read-only Harbor repo is only `cd`-ed into for imports — all output lands in the writable job dir |
+| **Cost** | LLM judge is off by default, so the analysis is pure CPU and has zero token cost. Enable with `JOB_ANALYSIS_JUDGE=1` (needs `ANTHROPIC_API_KEY`) |
+| **Engine** | uses `artifacts/env/harbor-uv` (has `scipy` + `pyyaml`); the read-only Harbor repo is only `cd`-ed into for imports, and all output lands in the writable job dir |
 | **Gold dependency** | needs a gold dataset; auto-generated when missing, skips cleanly if it cannot be built |
 
 <Callout title="Multilingual domain classification" type="info">
-`task_analysis` domain classification relies on Harbor's `classifier.py` repo→domain map, which is Python-SWE-bench-Verified-centric. For multilingual repos (apache/druid, lucene, …) the domain falls back to `other`. Any local tweak to that classifier is overwritten by `update_repos.sh` — keep such changes out of the read-only repo.
+`task_analysis` domain classification relies on Harbor's `classifier.py` repo-to-domain map, which is centered on Python SWE-bench Verified. For multilingual repos (apache/druid, lucene, ...) the domain falls back to `other`. Any local tweak to that classifier is overwritten by `update_repos.sh`, so keep such changes out of the read-only repo.
 </Callout>
 
-## Gold Dataset Prep
+## Gold dataset prep
 
 Job analysis needs per-instance reference data at:
 
@@ -57,7 +57,7 @@ bash scripts/prepare_dataset.sh [<dataset_name>]
 
 The prep path runs the matching Harbor adapter, then tags task metadata
 (`language`, `area`, `topic`, `bug_class`, difficulty) for dashboard
-breakdowns. It is idempotent and best-effort: if tagging fails, the gold data is
+breakdowns. It is idempotent and best effort: if tagging fails, the gold data is
 still usable, but dashboard breakdowns are less rich.
 
 | `dataset_name` | Adapter | HuggingFace source |

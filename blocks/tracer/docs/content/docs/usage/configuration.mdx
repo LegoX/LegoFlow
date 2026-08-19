@@ -8,7 +8,7 @@ Most runs only need a few `runtime_info.input` fields. Leave `meta_info`,
 repository pins, environment paths, and output declarations alone unless you are
 changing the block contract itself.
 
-## Common Fields
+## Common fields
 
 | Area | Edit when | Main fields |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ changing the block contract itself.
 | Remote machine | You want Tracer to run rollouts on another Docker server. | `meta_info.resources.ip`, `user`, `pwd`, `directory` |
 | Trainer handoff | You need training-ready data after rollout. | `sft_conversion.enabled`, `scaffold`, `tokenizer_name`, `out_dir` |
 
-## An Example Reference
+## An example reference
 
 Start with local Curator output, a small task cap, Claude Code, and SFT
 conversion enabled. This gives you a complete mini-run that can hand data to
@@ -33,9 +33,9 @@ Use `/tracer:check` after editing. It catches missing task sources, bad model
 endpoints, unavailable Docker/runtime images, and conversion config mistakes
 before `/tracer:run` spends tokens.
 
-## Configuration Break-down
+## Configuration breakdown
 
-### Remote Execution
+### Remote execution
 
 Tracer runs locally by default. If you want rollouts to happen on a remote
 CPU/Docker node, fill `meta_info.resources` so the operating skill knows where
@@ -49,7 +49,7 @@ Use a remote node when local Docker capacity, network placement, or long-running
 rollouts make the current machine inconvenient. The remote directory should
 point at the Tracer block checkout, not just the repository root.
 
-### Task Source
+### Task source
 
 Tracer receives valid tasks to produce trajectories either from the Curator, or open-sourced tasks from Huggingface. 
 
@@ -66,7 +66,7 @@ Tracer receives valid tasks to produce trajectories either from the Curator, or 
 {"runtime_info:\n  input:\n    task_source:\n      provider: huggingface\n      dataset_name: Lego-X/<dataset-name>\n      split: train"}
 </ConfigSnippet>
 
-### Smoke Run
+### Smoke run
 
 Use a small `n_tasks` and low concurrency when checking a new endpoint,
 runtime image, or task source. This is usually helpful for debugging or getting familiar with the whole pipeline.
@@ -75,7 +75,7 @@ runtime image, or task source. This is usually helpful for debugging or getting 
 {"runtime_info:\n  input:\n    harbor_job:\n      n_concurrent: 1\n      n_tasks: 5\n      max_retries: 0\n      timeout_multiplier: 5"}
 </ConfigSnippet>
 
-### Production Rollout
+### Production rollout
 
 For production, raise concurrency only after `/tracer:check` passes and a smoke
 run has produced valid trajectories.
@@ -84,7 +84,7 @@ run has produced valid trajectories.
 {"runtime_info:\n  input:\n    harbor_job:\n      n_concurrent: 8\n      n_tasks: null             # run every staged task\n      max_retries: 2\n      timeout_multiplier: 5"}
 </ConfigSnippet>
 
-## Agent Version Presets
+## Agent version presets
 
 The agent fields move as a set. Pick one row and keep `agent.name`,
 `agent.version`, `agent.runtime_image`, `agent.runtime_host_path`, and
@@ -100,12 +100,12 @@ Use `auto` for a fresh run that uses the same `agent.name` in the current
 config. Use an explicit scaffold key when reconverting an older job whose
 scaffold may differ from the current config.
 
-## Handoff With Neighbor Blocks
+## Handoff with neighboring blocks
 
 Tracer normally receives tasks from Curator and sends converted LF data to
 Trainer.
 
-### Receive Curator Tasks
+### Receive Curator tasks
 
 `task_source.dataset_name` is the path Tracer actually reads. The dependency
 entry documents that this value comes from Curator's `merged_tasks_dir`, so
@@ -115,7 +115,7 @@ root-level checks can validate the handoff.
 {"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:\n        from: curator.output.merged_tasks_dir\n        when: {task_source.provider: local}\n\nruntime_info:\n  input:\n    task_source:\n      provider: local\n      dataset_name: ../curator/artifacts/merged_swe_tasks"}
 </ConfigSnippet>
 
-### Produce Trainer-Ready Data
+### Produce Trainer-ready data
 
 Trainer usually reads `artifacts/sft_data/<job>/lf.json`. Keep conversion on
 when Tracer should produce that file after rollout.
@@ -124,7 +124,7 @@ when Tracer should produce that file after rollout.
 {"runtime_info:\n  input:\n    sft_conversion:\n      enabled: true\n      scaffold: auto\n      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base\n      out_dir: artifacts/sft_data\n\n  output:\n    sft_data_dir:\n      path: artifacts/sft_data\n      trajectory_format: artifacts/sft_data/<job>/lf.json"}
 </ConfigSnippet>
 
-## Field Reference
+## Field reference
 
 | Field | Required? | Default | When to change |
 | --- | --- | --- | --- |

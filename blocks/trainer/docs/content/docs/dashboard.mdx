@@ -9,7 +9,7 @@ for training.
 
 A demo dashboard is available [here](/dashboard_demo/trainer/).
 
-## Deployment Mode
+## Deployment mode
 
 Both modes read the same files, so the numbers never depend on which one you pick.
 
@@ -22,7 +22,7 @@ Both modes read the same files, so the numbers never depend on which one you pic
   first. For anything long-lived, prefer an access-controlled setup, since the
   URL alone exposes the run.
 
-## Where It Reads From
+## Where it reads from
 
 The board reads two fixed locations, both written by `scripts/train.sh`:
 
@@ -36,7 +36,7 @@ The board only reads `artifacts/`. Symlink an outside run into
 `artifacts/model/`, and the link name becomes the run name.
 </Callout>
 
-## What It Monitors
+## What it monitors
 
 | Monitor | What it tells you |
 | --- | --- |

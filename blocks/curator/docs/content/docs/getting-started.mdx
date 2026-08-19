@@ -32,7 +32,7 @@ For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
 four `runtime_info.input` pieces below. For every field, see the
 <a href="/docs/blocks/curator/usage/configuration">Configuration Guide</a>.
 
-### LLM API Config
+### LLM API config
 
 Curator uses the LLM for PR filtering, instruction writing, and task creation.
 Pick one of these two modes.
@@ -54,7 +54,7 @@ only exposes an OpenAI-compatible API.
 Never commit real API keys or endpoints to `config.yaml`. Use environment
 variables or ignored `.env` files for secrets.
 
-### PR Collection Config
+### PR collection config
 
 This is what `/curator:collect-prs` reads. Start small: one language, fewer
 repos, and conservative filters.
@@ -63,7 +63,7 @@ repos, and conservative filters.
 {"runtime_info:\n  input:\n    pr_collection:\n      enabled: true\n      languages: [python]             # keep one language for the first run\n      repo_num: 10                    # repos with qualifying PRs per language\n      max_prs_per_repo: 5             # candidate PR cap per repository\n      output_dir: artifacts/collected_prs\n      token_limit: 4                  # first N file/env GitHub tokens; 0 = use all\n      filters:\n        min_stars: 30                 # avoid inactive or tiny repos\n        min_merged_prs: 5             # require some PR history\n        min_language_percentage: 0.4  # repo should mostly match the target language\n        max_days_since_push: 1095     # skip stale repositories\n        min_issue_body_length: 10     # require enough issue context\n        min_files_changed: 1\n        max_files_changed: 25         # avoid huge PRs for a first run\n        max_lines_changed: 1500"}
 </ConfigSnippet>
 
-### Create Task Config
+### Create task config
 
 This is what `/curator:create-tasks` reads. Keep concurrency and task caps low
 until one end-to-end run works.
@@ -72,7 +72,7 @@ until one end-to-end run works.
 {"runtime_info:\n  input:\n    languages:\n      py:\n        enabled: true\n        params:\n          timeout: 3200               # whole PR case timeout in seconds\n          cc_timeout: 2400            # Claude Code task-creation timeout\n          n_concurrent: 2             # keep small for the first run\n          max_verified_tasks: 5       # stop after N verified tasks; use \"all\" for no cap"}
 </ConfigSnippet>
 
-### GitHub Token Config
+### GitHub token config
 
 Curator needs GitHub tokens for PR collection and metadata lookup. Put one
 token per line in a local text file, for example:
@@ -123,7 +123,7 @@ Ready for /curator:collect-prs and /curator:create-tasks.
 
 Fix required failures before continuing.
 
-## Collect PR
+## Collect PRs
 
 Collect candidate PRs:
 
@@ -146,7 +146,7 @@ owner/repo:pr-123
 For the first run, keep `languages` and `repo_num` small. Wait for collection
 to finish before creating tasks.
 
-## Create Task
+## Create tasks
 
 Turn collected PRs into verified SWE tasks:
 
@@ -201,7 +201,7 @@ copies only tasks listed in each language's `verifiable_tasks.txt`.
 
 For the artifact layout and handoff contract, see [Output Format](/docs/blocks/curator/outputs).
 
-## Dashboard Visualization
+## Dashboard visualization
 
 After tasks are generated, open the dataset dashboard:
 
