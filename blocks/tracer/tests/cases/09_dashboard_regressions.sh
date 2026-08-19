@@ -316,6 +316,18 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         }
         for idx in range(12)
     ]
+    unopened_reader = dashboard.IndexedImRecordReader(im_batch_cards)
+    try:
+        if unopened_reader.files or unopened_reader.offsets:
+            raise AssertionError("IM fallback indexed files before a candidate was requested")
+        if unopened_reader.get(str(im_batch_path), 0).get("index") != 0:
+            raise AssertionError("incremental IM fallback could not read its first candidate")
+        if unopened_reader.scan_state[str(im_batch_path)][0] != 1:
+            raise AssertionError(
+                f"IM fallback scanned beyond the requested candidate: {unopened_reader.scan_state}"
+            )
+    finally:
+        unopened_reader.close()
     observed_im_reads = []
     original_im_get = dashboard.IndexedImRecordReader.get
 
@@ -403,6 +415,8 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         'id="trajResample"',
         'class="traj-layout"',
         "function trajSortCards(cards, mode)",
+        "raw === null || raw === undefined",
+        "pool.filter(card => card.status === 'pass' || card.status === 'scored')",
         "function selectTrajectory(card, button)",
         "void loadFullTrajectory(card, loadToken)",
         "const fullTrajectoryCache = {}",
@@ -426,6 +440,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         "function traceMarkdownBlocks(value)",
         "function renderTraceRichText(value)",
         "item.event?.failure || item.event?.error || item.event?.exception",
+        "item.event?.success !== false",
         "trace-code-block",
         "trace-code-copy",
         "text-align: left",
@@ -532,6 +547,59 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         }
         if parsed != expected:
             raise AssertionError(f"LiteLLM event normalization duplicated or dropped trace data: {parsed}")
+        sort_start = rendered_html.index("function trajNumeric")
+        sort_end = rendered_html.index("function topCountLabel", sort_start)
+        sort_model = rendered_html[sort_start:sort_end]
+        sort_fixture = [
+            {"id": "reward-one", "status": "pass", "score": None, "reward": 1},
+            {"id": "reward-zero", "status": "pass", "score": None, "reward": 0},
+            {"id": "failed", "status": "fail", "score": None, "reward": 1},
+            {"id": "scored", "status": "scored", "score": 0.5, "reward": None},
+        ]
+        sort_script = (
+            "const R2_API_AVAILABLE=false; let trajSampleSeed=1;"
+            f"eval({json.dumps(sort_model)});"
+            f"const cards={json.dumps(sort_fixture)};"
+            "process.stdout.write(JSON.stringify({"
+            "high:trajSortCards(cards,'high').map(card=>card.id),"
+            "clean:trajSortCards(cards,'clean').map(card=>card.id)}));"
+        )
+        sorted_cards = json.loads(
+            subprocess.check_output([node, "-e", sort_script], text=True)
+        )
+        pass_score_order = [
+            card_id for card_id in sorted_cards["high"] if card_id != "failed"
+        ]
+        if pass_score_order != ["reward-one", "scored", "reward-zero"]:
+            raise AssertionError(f"null scores still mask rewards: {sorted_cards}")
+        if set(sorted_cards["clean"]) != {"reward-one", "reward-zero", "scored"}:
+            raise AssertionError(f"Clean mode includes failed trajectories: {sorted_cards}")
+        failure_fixture = fixture + [
+            {
+                "timestamp": "2026-08-19T10:00:02Z",
+                "success": False,
+                "request_body": fixture[-1]["request_body"],
+                "failure": {"message": "rate limited"},
+            }
+        ]
+        failure_script = (
+            f"eval({json.dumps(trace_model)});"
+            f"const trace=analyzeTrajectoryRecord({json.dumps(failure_fixture)});"
+            "const retry=trace.events[trace.events.length-1];"
+            "process.stdout.write(JSON.stringify({failures:trace.summary.api_failures,"
+            "incoming:retry.incoming.length,assistant:Boolean(retry.assistant),"
+            "failure:retry.event.failure}));"
+        )
+        failed_retry = json.loads(
+            subprocess.check_output([node, "-e", failure_script], text=True)
+        )
+        if failed_retry != {
+            "failures": 1,
+            "incoming": 0,
+            "assistant": False,
+            "failure": {"message": "rate limited"},
+        }:
+            raise AssertionError(f"repeated failed API attempt was dropped: {failed_retry}")
         markdown_start = rendered_html.index("// TRACE_MARKDOWN_MODEL_START")
         markdown_end = rendered_html.index("// TRACE_MARKDOWN_MODEL_END", markdown_start)
         markdown_model = rendered_html[markdown_start:markdown_end]
@@ -629,6 +697,20 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         full_server.server_close()
     if served_full_row.get("id") != sampleable_cards[0].get("id"):
         raise AssertionError(f"generated sampler full trace failed its HTTP lookup: {served_full_row}")
+
+    demo_html = (block / "docs" / "public" / "dashboard_demo" / "tracer" / "index.html").read_text(
+        encoding="utf-8"
+    )
+    demo_cards_match = re.search(
+        r'<script id="trajCardData" type="application/json">(.*?)</script>',
+        demo_html,
+        flags=re.DOTALL,
+    )
+    if not demo_cards_match:
+        raise AssertionError("checked-in dashboard demo has no trajectory card payload")
+    demo_cards = json.loads(demo_cards_match.group(1))
+    if any(card.get("embedded_available") or card.get("embedded_path") for card in demo_cards):
+        raise AssertionError("checked-in dashboard demo advertises trajectory shards it does not ship")
 
     trajectories = []
     for idx in range(3):

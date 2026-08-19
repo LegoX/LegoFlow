@@ -1925,7 +1925,7 @@ def strip_record_paths(node: Any, block_dir: Path = BLOCK_DIR) -> Any:
 
 
 class IndexedImRecordReader:
-    """Index requested IM lines once and materialize one record at a time."""
+    """Incrementally index requested IM lines and materialize one at a time."""
 
     def __init__(self, cards: list[dict[str, Any]]) -> None:
         wanted: dict[str, set[int]] = {}
@@ -1934,33 +1934,46 @@ class IndexedImRecordReader:
             if path and index is not None:
                 wanted.setdefault(path, set()).add(int(index))
 
+        self.wanted = wanted
         self.files: dict[str, Any] = {}
         self.offsets: dict[tuple[str, int], int] = {}
-        for path, indices in wanted.items():
-            last = max(indices)
+        self.scan_state: dict[str, tuple[int, int]] = {
+            path: (0, 0) for path in wanted
+        }
+
+    def get(self, path: str, index: int) -> Any | None:
+        if path not in self.wanted or index not in self.wanted[path]:
+            return None
+        fh = self.files.get(path)
+        if fh is None:
             try:
                 fh = open(path, "rb")
             except OSError as exc:
                 print(f"WARN: failed to read {path}: {exc}", file=sys.stderr)
-                continue
+                return None
             self.files[path] = fh
-            line_number = 0
+
+        offset = self.offsets.get((path, index))
+        if offset is None:
+            line_number, scan_offset = self.scan_state[path]
+            if index < line_number:
+                return None
             try:
-                while line_number <= last:
+                fh.seek(scan_offset)
+                while line_number <= index:
                     offset = fh.tell()
                     line = fh.readline()
                     if not line:
                         break
-                    if line_number in indices:
+                    if line_number in self.wanted[path]:
                         self.offsets[(path, line_number)] = offset
                     line_number += 1
+                self.scan_state[path] = (line_number, fh.tell())
             except OSError as exc:
                 print(f"WARN: failed to index {path}: {exc}", file=sys.stderr)
-
-    def get(self, path: str, index: int) -> Any | None:
-        fh = self.files.get(path)
-        offset = self.offsets.get((path, index))
-        if fh is None or offset is None:
+                return None
+            offset = self.offsets.get((path, index))
+        if offset is None:
             return None
         try:
             fh.seek(offset)
@@ -2038,9 +2051,8 @@ def write_embedded_trajectory_shards(
         card.pop("embedded_bytes", None)
 
     selected = select_embedded_traj_cards(cards, limit=limit)
-    # Build a lightweight byte-offset index once. Parsing remains lazy, so the
-    # fallback can inspect every candidate without retaining thousands of
-    # multi-megabyte IM records before the successful-embed limit is reached.
+    # Index only as each fallback candidate is attempted. This keeps both JSON
+    # parsing and multi-GB IM file I/O behind the successful-embed limit.
     im_records = IndexedImRecordReader(selected)
     try:
         for card in selected:
@@ -3664,7 +3676,9 @@ function trajSourceName(card) {{
 
 function trajNumeric(card, keys, fallback) {{
   for (const key of keys) {{
-    const value = Number(card[key]);
+    const raw = card[key];
+    if (raw === null || raw === undefined || (typeof raw === 'string' && !raw.trim())) continue;
+    const value = Number(raw);
     if (Number.isFinite(value)) return value;
   }}
   return fallback;
@@ -3747,7 +3761,7 @@ function trajSortCards(cards, mode) {{
     return pool.sort((a, b) => availCmp(a, b) || trajErrorValue(b) - trajErrorValue(a) || String(a.id).localeCompare(String(b.id)));
   }}
   if (mode === 'clean') {{
-    return pool.filter(card => card.status === 'pass' || card.status === 'scored' || trajErrorValue(card) === 0)
+    return pool.filter(card => card.status === 'pass' || card.status === 'scored')
       .sort((a, b) => availCmp(a, b) || trajNumeric(b, ['score', 'reward'], -1) - trajNumeric(a, ['score', 'reward'], -1) || String(a.id).localeCompare(String(b.id)));
   }}
   return pool.sort((a, b) => {{
@@ -4669,7 +4683,7 @@ function renderLiteLLMTimeline(container, trace) {{
   const turns = document.createElement('div');
   turns.className = 'turns-list';
   events.forEach((item, index) => {{
-    if (!item.assistant && !item.incoming.length) return;
+    if (!item.assistant && !item.incoming.length && item.event?.success !== false) return;
     const calls = item.tool_calls || [];
     const results = item.tool_results || [];
     const usage = item.usage || {{}};
