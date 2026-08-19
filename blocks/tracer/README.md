@@ -65,7 +65,7 @@ Run from the repo root with the `block` plugin loaded, or from this directory.
 /root:check tracer     # preflight: config, repos, envs, tasks, LLM endpoint
 /tracer:setup           # clone/update repos, build uv envs, run dryrun
 /root:run tracer       # execute scripts/start.sh (proxy + Harbor) and archive
-/tracer:dashboard       # view overview/instances/trajectories/operations locally or sync online
+/tracer:dashboard       # view Overview, Jobs, and Trajectories locally or sync online
 ```
 
 After a job, do the tracer-specific bookkeeping (ledger + `HARBOR_EXCLUDE_TASKS`

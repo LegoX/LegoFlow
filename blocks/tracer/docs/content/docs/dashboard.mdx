@@ -7,6 +7,21 @@ Tracer's dashboard is the progress and trajectory monitor for rollout jobs. Run
 optional SFT conversion output.
 
 A demo dashboard is available [here](/dashboard_demo/tracer/).
+The checked-in demo is a UI snapshot and does not include its trajectory shard
+files, so use a locally generated or Cloudflare-synced dashboard to verify the
+**Full trace** viewer.
+
+After a full trace loads, the sampler derives missing turn, tool, token, model,
+provider, and timing metadata from that payload. The default timeline groups
+system, user, assistant, and tool content by turn; **Raw JSON** remains available
+for exact payload inspection. Message prose is rendered as safe, left-aligned
+lightweight Markdown, while fenced code gets a language label, copy control,
+preserved indentation, and horizontal scrolling.
+
+The sampler starts with a balanced mix of scored, passing, failing, and errored
+trajectories instead of filling the first page with one outcome. Clicking a
+source in **Valid Trajectories** filters **Trajectory Sampler** to that exact
+job or dataset source and scrolls it into view.
 
 ## Deployment Mode
 

@@ -1498,6 +1498,55 @@ def traj_r2_key(card: dict[str, Any]) -> str:
     return f"trajs/{job}/{instance}/{traj}.json"
 
 
+def sampler_card_bucket(card: dict[str, Any]) -> str:
+    if card.get("kind") == "quality":
+        return "quality"
+    status = str(card.get("status") or "")
+    return status if status in {"pass", "fail", "error"} else "other"
+
+
+def select_sampler_cards(cards: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+    """Build a deterministic source/status-balanced payload for the UI sampler.
+
+    The previous error-first truncation filled all 6,000 published slots before
+    pass or converted-quality cards were reached. Round-robin selection keeps
+    every source addressable from the Valid Trajectories table and gives the
+    client enough of each outcome to offer meaningful sampling modes.
+    """
+    if limit <= 0:
+        return []
+    if len(cards) <= limit:
+        return list(cards)
+    buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for card in cards:
+        source = str(card.get("job") or card.get("dataset") or card.get("source") or "unknown")
+        buckets.setdefault((source, sampler_card_bucket(card)), []).append(card)
+    for rows in buckets.values():
+        rows.sort(key=lambda row: str(row.get("id") or ""))
+
+    sources = sorted({source for source, _ in buckets}, key=str.lower)
+    kinds = ("quality", "pass", "fail", "error", "other")
+    positions = {key: 0 for key in buckets}
+    selected: list[dict[str, Any]] = []
+    while len(selected) < limit:
+        progressed = False
+        for kind in kinds:
+            for source in sources:
+                key = (source, kind)
+                rows = buckets.get(key) or []
+                index = positions.get(key, 0)
+                if index >= len(rows):
+                    continue
+                selected.append(rows[index])
+                positions[key] = index + 1
+                progressed = True
+                if len(selected) >= limit:
+                    return selected
+        if not progressed:
+            break
+    return selected
+
+
 def build_traj_cards(
     trial_facts: list[dict[str, Any]],
     quality_facts: list[dict[str, Any]],
@@ -1529,12 +1578,15 @@ def build_traj_cards(
             "source": fact.get("source"),
             "scaffold": fact.get("scaffold"),
             "model": fact.get("model"),
+            "provider": fact.get("provider"),
             "status": fact.get("status"),
             "reward": fact.get("reward"),
             "score": maybe_round(mean(scores)),
             "tokens": fact.get("tokens"),
             "cost_usd": fact.get("cost_usd"),
             "duration_sec": fact.get("duration_sec"),
+            "started_at": fact.get("started_at"),
+            "finished_at": fact.get("finished_at"),
             "exception_type": fact.get("exception_type"),
             "path": fact.get("path"),
             "trajectory_path": fact.get("trajectory_path"),
@@ -1582,20 +1634,7 @@ def build_traj_cards(
         card["r2_key"] = traj_r2_key(card)
         cards.append(card)
 
-    def card_sort(card: dict[str, Any]) -> tuple[int, float, str]:
-        if card.get("status") == "error":
-            status_rank = 0
-        elif card.get("status") == "fail":
-            status_rank = 1
-        elif card.get("kind") == "quality":
-            status_rank = 2
-        else:
-            status_rank = 3
-        score = safe_float(card.get("score"))
-        return (status_rank, score if score is not None else 999.0, str(card.get("id")))
-
-    cards.sort(key=card_sort)
-    embedded = cards[:embed_limit]
+    embedded = select_sampler_cards(cards, limit=embed_limit)
     return cards, embedded
 
 
@@ -1815,6 +1854,13 @@ def write_jsonl_shards(path: Path, rows: list[dict[str, Any]], *, max_bytes: int
 
 
 def select_embedded_traj_cards(cards: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+    """Order every loadable card, putting a diverse first tranche up front.
+
+    The writer, not this selector, applies ``limit`` to successful embeds. A
+    fixed-size candidate slice used to stop after 120 attempts; when 109 of
+    those files exceeded the per-record cap the published board got only 11
+    traces even though smaller candidates existed later in the list.
+    """
     if limit <= 0:
         return []
     def has_source(card: dict[str, Any]) -> bool:
@@ -1829,8 +1875,6 @@ def select_embedded_traj_cards(cards: list[dict[str, Any]], *, limit: int) -> li
 
     def add_many(rows: list[dict[str, Any]]) -> None:
         for row in rows:
-            if len(selected) >= limit:
-                return
             card_id = str(row.get("id") or "")
             if not card_id or card_id in seen:
                 continue
@@ -1857,7 +1901,7 @@ def select_embedded_traj_cards(cards: list[dict[str, Any]], *, limit: int) -> li
     add_many(sorted(candidates, key=lambda c: (-numeric(c, "score", "reward", default=-1), str(c.get("id")))))
     add_many(sorted([c for c in candidates if c.get("status") in {"pass", "scored"}], key=lambda c: str(c.get("id"))))
     add_many(sorted(candidates, key=lambda c: str(c.get("id"))))
-    return selected[:limit]
+    return selected
 
 
 RECORD_PATH_KEYS = ("trajectory_output_path",)
@@ -1948,6 +1992,7 @@ def write_embedded_trajectory_shards(
     total_bytes = 0
     shard_index = 0
     oversized = 0
+    embedded_count = 0
 
     def shard_rel(index: int) -> str:
         return str(Path("data") / f"traj_embedded.{index:03d}.jsonl")
@@ -1963,11 +2008,25 @@ def write_embedded_trajectory_shards(
         current_bytes = 0
         shard_index += 1
 
+    for card in cards:
+        card.pop("embedded_available", None)
+        card.pop("embedded_path", None)
+        card.pop("embedded_bytes", None)
+
     selected = select_embedded_traj_cards(cards, limit=limit)
     im_records = read_im_records(selected)
     for card in selected:
+        if embedded_count >= limit:
+            break
         trajectory_path = Path(str(card.get("trajectory_path") or ""))
         if str(card.get("trajectory_path") or ""):
+            if max_record_bytes:
+                try:
+                    if trajectory_path.stat().st_size > max_record_bytes:
+                        oversized += 1
+                        continue
+                except OSError:
+                    pass
             try:
                 record = read_trajectory_payload(trajectory_path)
             except (OSError, ValueError) as exc:
@@ -1986,8 +2045,8 @@ def write_embedded_trajectory_shards(
             continue
         if current and current_bytes + line_bytes > shard_max_bytes:
             flush()
-        if total_bytes and total_bytes + line_bytes > max_total_bytes:
-            break
+        if total_bytes + line_bytes > max_total_bytes:
+            continue
         if line_bytes > max_total_bytes:
             continue
         card["embedded_available"] = True
@@ -1996,6 +2055,7 @@ def write_embedded_trajectory_shards(
         current.append(line)
         current_bytes += line_bytes
         total_bytes += line_bytes
+        embedded_count += 1
     flush()
     if oversized:
         print(f"NOTE: {oversized} trajectory record(s) exceeded "
@@ -2613,6 +2673,8 @@ button:hover { border-color: var(--accent-border); background: var(--button-hove
 .tab.active { background: var(--ink); color: var(--ink-contrast); border-color: var(--ink); }
 .section { display: none; }
 .section.active { display: block; }
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.toolbar input, .toolbar select { border: 1px solid var(--line); border-radius: 6px; background: var(--button-bg); color: var(--text); padding: 7px 9px; min-width: 190px; }
 .segment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 18px; }
 .segment-grid .panel { margin-top: 0; height: 100%; }
 /* Folds — same affordance as curator's board: a quiet uppercase bar that turns
@@ -2694,6 +2756,7 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .split-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, .72fr); gap: 14px; align-items: start; }
 .source-link { border: 0; background: transparent; color: inherit; padding: 0; text-align: left; font: inherit; max-width: 100%; }
 .source-link:hover { color: var(--active-text); background: transparent; border-color: transparent; }
+.source-link.active { color: var(--active-text); }
 .source-name { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
 .source-sub { color: var(--muted); font-size: 12px; margin-top: 3px; overflow-wrap: anywhere; }
 .metric-pill { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-soft); font-variant-numeric: tabular-nums; }
@@ -2708,24 +2771,22 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .subscore-matrix-table td.num { text-align: right; }
 .subscore-matrix-table th.score-sep, .subscore-matrix-table td.score-sep { border-right: 2px solid var(--line); }
 .subscore-matrix-table th.segment-sort { cursor: pointer; }
-/* Trajectory inspector — the same fixed two-pane dialog curator uses for sample
-   tasks: the sampled trajectories on the left, the selected one on the right.
-   Fixed rather than content-sized so the dialog does not jump between a card with
-   no preview and one carrying a full turn-by-turn trace. */
-.traj-box { width: min(1160px, 95vw); height: min(760px, 88vh); max-height: none; }
-.traj-body { padding: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr);
-  min-height: 0; flex: 1; overflow: hidden; }
-.traj-side { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px;
-  background: var(--panel-soft); min-height: 0; }
-.traj-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-
-.traj-filters { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px;
-  margin-bottom: 8px; border-bottom: 1px solid var(--line); }
-.traj-filters input, .traj-filters select { width: 100%; font-size: 12px; }
-.traj-filter-row { display: flex; gap: 6px; }
-.traj-filter-row select { flex: 1 1 auto; min-width: 0; }
-.traj-filter-row button { flex: 0 0 auto; font-size: 12px; }
-.traj-filters .hint { font-size: 11px; color: var(--muted); }
+.traj-layout { display: grid; grid-template-columns: minmax(300px, 460px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.traj-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; max-height: 760px; overflow-y: auto; background: var(--panel); }
+.traj-card { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 11px 12px; background: var(--panel); }
+.traj-card.active { background: var(--active-row); }
+.traj-card-meta { color: var(--muted); font-size: 12px; margin-top: 3px; overflow-wrap: anywhere; }
+.traj-meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+.traj-meta-section { border: 1px solid var(--line); border-radius: 8px; background: var(--panel-soft); padding: 11px 12px; min-width: 0; }
+.traj-meta-section h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
+.traj-meta-kv { display: grid; grid-template-columns: minmax(86px, auto) minmax(0, 1fr); gap: 5px 10px; margin: 0; font-size: 12px; }
+.traj-meta-kv dt { color: var(--muted); }
+.traj-meta-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.meta-na { color: var(--muted); font-style: italic; }
+.traj-provenance { margin: 10px 0 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-soft); }
+.traj-provenance > summary { cursor: pointer; padding: 9px 11px; color: var(--muted); font-size: 12px; }
+.traj-provenance[open] > summary { border-bottom: 1px solid var(--line); }
+.traj-provenance .traj-meta-kv { padding: 10px 12px; }
 /* Highlighted JSON always sits on the dark editor surface, in both themes —
    curator's file pane does the same. One surface means one token palette that is
    guaranteed to have contrast, instead of two that have to be kept in step. */
@@ -2734,46 +2795,6 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .json-hl .json-str { color: #c9a26a; }
 .json-hl .json-num { color: #e0a06f; }
 .json-hl .json-lit { color: #b48ead; }
-.traj-picker { display: flex; flex-direction: column; gap: 5px; }
-.traj-group { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
-  margin: 10px 0 2px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
-.traj-group:first-child { margin-top: 0; }
-.traj-group-name { font-size: 11px; font-weight: 650; color: var(--fg-dim); overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; }
-.traj-group-n { font-size: 10.5px; color: var(--fg-faint); white-space: nowrap; }
-.traj-pick { display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
-  background: transparent; border: 1px solid transparent; border-radius: 8px;
-  padding: 8px 10px; cursor: pointer; font: inherit; font-size: 12px; color: var(--text);
-  text-align: left; width: 100%; min-width: 0; }
-.traj-pick:hover { border-color: var(--line); background: var(--panel); }
-.traj-pick.active { background: var(--accent-soft); border-color: var(--accent-border); }
-.traj-pick .sid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.traj-pick .smeta { color: var(--muted); font-size: 10.5px; }
-
-.traj-head { padding: 14px 20px 12px; border-bottom: 1px solid var(--line); }
-.traj-head .t { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
-  font-weight: 650; word-break: break-all; line-height: 1.4; }
-.traj-head .m { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
-.traj-head .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.traj-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 20px 0; }
-.traj-tab { background: transparent; border: 1px solid transparent; color: var(--fg-dim);
-  border-radius: 8px 8px 0 0; padding: 6px 12px; cursor: pointer; font: inherit;
-  font-size: 12px; white-space: nowrap; }
-.traj-tab:hover { color: var(--text); }
-.traj-tab.active { background: var(--panel-soft); border-color: var(--line);
-  border-bottom-color: var(--panel-soft); color: var(--text); font-weight: 650; }
-.traj-tab .sz { color: var(--fg-faint); font-size: 10.5px; margin-left: 6px; }
-.traj-pane { flex: 1; min-height: 0; margin: 0 20px 20px; border: 1px solid var(--line);
-  border-radius: 0 10px 10px 10px; background: var(--panel-soft); overflow: auto;
-  padding: 16px 18px; }
-.traj-pane > .empty, .traj-pane .empty { color: var(--muted); font-size: 12.5px; }
-.traj-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-.traj-pane .detail-preview { max-height: none; margin-top: 0; background: var(--panel); }
-.traj-pane .json-block { max-height: none; background: var(--panel); }
-.traj-pane .kv { margin: 0; }
-.traj-pane h2 { font-size: 13px; margin: 18px 0 8px; }
-.traj-pane h2:first-child { margin-top: 0; }
 .traj-view { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); min-height: 520px; padding: 14px; }
 .step-row { width: 100%; display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; padding: 9px 11px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; background: var(--panel); }
 .step-row:hover, .step-row.active { background: var(--active-row); border-color: var(--line); }
@@ -2789,6 +2810,11 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .trace-header { margin-bottom: 12px; }
 .trace-header-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .trace-title { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.trace-toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 0 12px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(8px); }
+.trace-toolbar .spacer { flex: 1; }
+.trace-view-toggle.active { background: var(--active-row); border-color: var(--accent-border); color: var(--active-text); font-weight: 700; }
+.trace-summary { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; }
+.trace-raw { max-height: 760px; }
 .turns-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .turn-card, .preface-card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden; }
 .turn-card.open { border-color: var(--accent-border); }
@@ -2798,19 +2824,46 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
 .turn-num { font-weight: 700; }
 .turn-tools { display: inline-flex; gap: 4px; flex-wrap: wrap; color: var(--amber); }
 .turn-spacer { flex: 1; }
-.turn-body { display: flex; flex-direction: column; gap: 10px; padding: 0 12px 12px; border-top: 1px solid var(--line); }
-.trace-block { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--panel-soft); }
-.trace-block.thought { border-color: #3987e555; background: #3987e50a; }
+.turn-meta { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.turn-body { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 0 12px 12px; border-top: 1px solid var(--line); text-align: left; }
+.trace-block { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--panel-soft); text-align: left; }
+.trace-block.system { border-color: var(--line-strong); background: var(--panel-soft); }
+.trace-block.user { border-color: #b3431f55; background: #b3431f0a; }
+.trace-block.assistant { border-color: #3987e555; background: #3987e50a; }
+.trace-block.reasoning { border-color: #8a725755; background: #8a72570a; padding: 0; }
+.trace-block.reasoning > summary { cursor: pointer; padding: 9px 10px; display: flex; gap: 8px; align-items: center; }
+.trace-block.reasoning[open] > summary { border-bottom: 1px solid var(--line); }
+.trace-block.reasoning .trace-rich-text { padding: 10px; }
 .trace-block.action { border-color: #fab21955; background: #fab2190a; }
 .trace-block.observation { border-color: #4a944055; background: #4a94400a; }
 .trace-block.error { border-color: #d03b3b55; background: #d03b3b0d; }
 .block-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
 .block-label { color: var(--muted); font-size: 10.5px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
 .block-tool-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--amber); background: #fab21922; padding: 1px 7px; border-radius: 4px; }
-.block-pre, .preface-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; background: #1a1714; color: #f0ede7; border: 1px solid #302a24; border-radius: 6px; padding: 10px; max-height: 420px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.45; }
+.block-pre, .preface-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; background: #1a1714; color: #f0ede7; border: 1px solid #302a24; border-radius: 6px; padding: 10px; max-height: 420px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.45; text-align: left; }
+.trace-rich-text { width: 100%; min-width: 0; color: var(--text); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; line-height: 1.62; text-align: left; overflow-wrap: anywhere; }
+.trace-rich-text > :first-child { margin-top: 0; }
+.trace-rich-text > :last-child { margin-bottom: 0; }
+.trace-prose { margin: 0 0 10px; white-space: pre-wrap; }
+.trace-rich-text h1, .trace-rich-text h2, .trace-rich-text h3, .trace-rich-text h4 { margin: 14px 0 7px; line-height: 1.3; letter-spacing: 0; text-align: left; }
+.trace-rich-text h1 { font-size: 17px; }
+.trace-rich-text h2 { font-size: 15.5px; }
+.trace-rich-text h3, .trace-rich-text h4 { font-size: 14px; }
+.trace-rich-text ul, .trace-rich-text ol { margin: 0 0 10px; padding-left: 24px; }
+.trace-rich-text li { margin: 3px 0; }
+.trace-rich-text blockquote { margin: 0 0 10px; padding: 7px 10px; border-left: 3px solid var(--accent-border); background: var(--panel-softer); color: var(--fg-dim); }
+.trace-rich-text code.trace-inline-code { padding: 1px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel-softer); color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
+.trace-rich-text a { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; }
+.trace-code-block { margin: 0 0 10px; border: 1px solid #302a24; border-radius: 7px; overflow: hidden; background: #1a1714; color: #f0ede7; text-align: left; }
+.trace-code-head { min-height: 32px; display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 11px; border-bottom: 1px solid #302a24; background: #211d19; }
+.trace-code-language { color: #c9c2b6; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; text-transform: lowercase; }
+.trace-code-copy { margin-left: auto; min-height: 22px; padding: 2px 7px; border-color: #4a433c; background: #2a2520; color: #f0ede7; font-size: 10.5px; }
+.trace-code-pre { margin: 0; max-height: 520px; padding: 12px; overflow: auto; white-space: pre; tab-size: 4; text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; }
+.trace-code-pre code { display: block; padding: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; }
 .preface-card { margin-top: 8px; }
 .preface-card > summary { cursor: pointer; padding: 10px 12px; display: flex; gap: 8px; align-items: center; }
 .preface-card[open] > summary { border-bottom: 1px solid var(--line); }
+.preface-card .trace-rich-text { padding: 10px 12px; }
 .arg-pill { display: inline-flex; gap: 6px; margin: 0 6px 6px 0; padding: 3px 8px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 5px; font-size: 12px; }
 .arg-key { color: var(--muted); font-weight: 700; }
 .arg-block { margin-top: 6px; }
@@ -2829,7 +2882,7 @@ details > summary { cursor: pointer; color: var(--blue); font-size: 13px; paddin
   .update-status { white-space: normal; flex-basis: 100%; }
   .content { padding: 16px; }
   .header-top { display: block; }
-  .kpis, .samples-layout, .split-layout { grid-template-columns: 1fr; }
+  .kpis, .samples-layout, .split-layout, .traj-layout, .traj-meta-grid { grid-template-columns: 1fr; }
   .panel-head { display: block; }
   .mini-bar-row { grid-template-columns: 1fr; gap: 4px; }
   .mini-bar-value { text-align: left; }
@@ -3231,29 +3284,6 @@ def render_html(
         <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="Toggle black and white theme" title="Toggle theme"><span class="theme-moon">{icon_moon}</span><span class="theme-sun">{icon_sun}</span></button>
       </div>
     </div>
-<div class="modal" id="trajPanel" role="dialog" aria-modal="true" hidden>
-  <div class="modal-box traj-box">
-    <div class="modal-head">
-      <div><h3 id="trajPanelTitle">Trajectory</h3>
-        <div class="sub">metrics, preview and the full turn-by-turn trace when available</div></div>
-      <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
-    </div>
-    <div class="traj-body">
-      <div class="traj-side">
-        <div class="traj-filters">
-          <input id="trajSearch" placeholder="Search instance, source, language, status">
-          <select id="trajSource"><option value="">All sources</option></select>
-          <div class="traj-filter-row">
-            <span id="trajSampleInfo" class="hint"></span>
-            <button id="trajResample" type="button">Resample</button>
-          </div>
-        </div>
-        <div id="trajList" class="traj-picker"></div>
-      </div>
-      <div class="traj-main" id="trajView"></div>
-    </div>
-  </div>
-</div>
 <div class="modal" id="metricsPanel" role="dialog" aria-modal="true" data-requires-quality hidden>
   <div class="modal-box">
     <div class="modal-head">
@@ -3357,10 +3387,36 @@ def render_html(
         </table>
       </div>
     </section>
-    <section class="panel">
+    <section class="panel" id="trajectorySamplerPanel">
       <div class="panel-head"><div><h2>Trajectory Sampler</h2>
-        <p class="hint">Search, filter and sample concrete trajectories, then read one turn by turn. Opens as a dialog so the trace gets the whole screen.</p></div>
-        <div class="actions"><button id="openSampler" type="button">Open sampler</button></div></div>
+        <p class="hint">Filter and sample trajectories; selecting a card loads its full trace automatically when embedded or available through R2.</p></div>
+        <div class="actions"><button id="trajResample" type="button">Resample</button></div></div>
+      <div class="toolbar">
+        <input id="trajSearch" placeholder="Search instance, source, language, status">
+        <select id="trajSource"><option value="">All sources</option></select>
+        <select id="trajLanguage"><option value="">All programming languages</option></select>
+        <select id="trajMode">
+          <option value="mixed" selected>Balanced mix</option>
+          <option value="low">Lowest score / failures</option>
+          <option value="high">Highest score</option>
+          <option value="error">Most errors</option>
+          <option value="clean">Clean / pass</option>
+          <option value="random">Random sample</option>
+        </select>
+        <select id="trajSampleSize">
+          <option value="10">10 cards</option>
+          <option value="20" selected>20 cards</option>
+          <option value="50">50 cards</option>
+          <option value="100">100 cards</option>
+        </select>
+      </div>
+      <div class="traj-layout">
+        <div>
+          <div class="card-title">Sampled Trajectories <span id="trajSampleInfo" class="hint"></span></div>
+          <div id="trajList" class="traj-list step-list"></div>
+        </div>
+        <div id="trajView" class="traj-view empty">Select a trajectory to inspect metrics, preview text, and the automatically loaded full trace.</div>
+      </div>
     </section>
   </section>
 
@@ -3386,10 +3442,7 @@ const tqsWeights = {json.dumps(TQS_WEIGHTS, ensure_ascii=False)};
 const subscoreLabels = {json.dumps(SUBSCORE_LABELS, ensure_ascii=False)};
 let currentSample = null;
 let currentTraj = null;
-// What the sampler is showing; the dialog's left pane lists exactly this.
-let trajVisibleCards = [];
-let trajActiveTab = 'details';
-const TRAJ_SAMPLE_SIZE = 10;
+let trajLoadToken = 0;
 // Whether /api/traj can actually serve a trace that is not embedded. Without the
 // R2 binding it answers 503, so offering the control would fail on every click.
 const R2_API_AVAILABLE = {r2_api_js};
@@ -3572,6 +3625,7 @@ function renderOverviewCharts() {{
 
 let trajSampleSeed = 1;
 const embeddedShardCache = {{}};
+const fullTrajectoryCache = {{}};
 let trajSourceSort = {{field: 'comp', dir: 'desc'}};
 
 function trajSourceName(card) {{
@@ -3595,7 +3649,7 @@ function trajErrorValue(card) {{
 
 function trajAvailabilityRank(card) {{
   if (card.embedded_available) return 0;
-  if (card.full_available) return 1;
+  if (card.full_available && R2_API_AVAILABLE) return 1;
   return 2;
 }}
 
@@ -3613,12 +3667,67 @@ function seededShuffle(rows, seed) {{
   return arr;
 }}
 
-// One rule: a random draw, preferring trajectories that can be opened. Resample
-// advances the seed.
-function trajSampleCards(cards) {{
-  const available = cards.filter(card => trajAvailabilityRank(card) < 2);
-  const pool = available.length ? available : cards;
-  return seededShuffle(pool, trajSampleSeed);
+function trajStatusBucket(card) {{
+  if (card.kind === 'quality') return 'quality';
+  return ['pass', 'fail', 'error'].includes(card.status) ? card.status : 'other';
+}}
+
+function interleaveTrajectoryBuckets(cards, seed) {{
+  const order = ['quality', 'pass', 'fail', 'error', 'other'];
+  const buckets = Object.fromEntries(order.map((kind, index) => [
+    kind,
+    seededShuffle(cards.filter(card => trajStatusBucket(card) === kind), seed + index * 97),
+  ]));
+  const mixed = [];
+  let index = 0;
+  while (mixed.length < cards.length) {{
+    let progressed = false;
+    for (const kind of order) {{
+      if (index < buckets[kind].length) {{
+        mixed.push(buckets[kind][index]);
+        progressed = true;
+      }}
+    }}
+    if (!progressed) break;
+    index += 1;
+  }}
+  return mixed;
+}}
+
+function trajMixedCards(cards) {{
+  const mixed = [];
+  for (const rank of [0, 1, 2]) {{
+    mixed.push(...interleaveTrajectoryBuckets(
+      cards.filter(card => trajAvailabilityRank(card) === rank),
+      trajSampleSeed + rank * 1009,
+    ));
+  }}
+  return mixed;
+}}
+
+function trajSortCards(cards, mode) {{
+  const pool = cards.slice();
+  const availCmp = (a, b) => trajAvailabilityRank(a) - trajAvailabilityRank(b);
+  if (mode === 'mixed') return trajMixedCards(pool);
+  if (mode === 'random') return seededShuffle(pool, trajSampleSeed);
+  if (mode === 'high') {{
+    return pool.sort((a, b) => availCmp(a, b) || trajNumeric(b, ['score', 'reward'], -1) - trajNumeric(a, ['score', 'reward'], -1) || String(a.id).localeCompare(String(b.id)));
+  }}
+  if (mode === 'error') {{
+    return pool.sort((a, b) => availCmp(a, b) || trajErrorValue(b) - trajErrorValue(a) || String(a.id).localeCompare(String(b.id)));
+  }}
+  if (mode === 'clean') {{
+    return pool.filter(card => card.status === 'pass' || card.status === 'scored' || trajErrorValue(card) === 0)
+      .sort((a, b) => availCmp(a, b) || trajNumeric(b, ['score', 'reward'], -1) - trajNumeric(a, ['score', 'reward'], -1) || String(a.id).localeCompare(String(b.id)));
+  }}
+  return pool.sort((a, b) => {{
+    const availability = availCmp(a, b);
+    if (availability) return availability;
+    const statusRank = card => card.status === 'error' ? 0 : card.status === 'fail' ? 1 : card.kind === 'quality' ? 2 : 3;
+    const ar = statusRank(a), br = statusRank(b);
+    if (ar !== br) return ar - br;
+    return trajNumeric(a, ['score', 'reward'], 999) - trajNumeric(b, ['score', 'reward'], 999) || String(a.id).localeCompare(String(b.id));
+  }});
 }}
 
 function topCountLabel(counts) {{
@@ -3794,6 +3903,7 @@ function renderTrajectorySourceTable() {{
   const root = $('#trajSourceRows');
   if (!root) return;
   const rows = sourceComparisonRows().sort(compareSourceRows);
+  const activeSource = $('#trajSource')?.value || '';
   updateSourceSortHeaders();
   if (!rows.length) {{
     root.innerHTML = '<tr><td colspan="11" class="empty">No trajectory sources available.</td></tr>';
@@ -3807,7 +3917,7 @@ function renderTrajectorySourceTable() {{
     return `
       <tr>
         <td>
-          <button class="source-link" type="button" data-source-filter="${{escapeHtml(row.source)}}">
+          <button class="source-link ${{activeSource === row.source ? 'active' : ''}}" type="button" data-source-filter="${{escapeHtml(row.source)}}">
             <span class="source-name"><span class="source-dot" style="background:${{stableIdentityColor(row.source)}}"></span>${{escapeHtml(row.source)}}</span>
             <div class="source-sub">${{escapeHtml(row.model)}} · ${{formatMaybe(row.pass)}} pass · ${{formatMaybe(row.fail)}} fail · ${{formatMaybe(row.error)}} error</div>
           </button>
@@ -3907,69 +4017,65 @@ function renderTrajectoryList() {{
   if (!list) return;
   const q = ($('#trajSearch')?.value || '').toLowerCase();
   const source = $('#trajSource')?.value || '';
-  const matched = trajCardData
-    .filter(card => !source || trajSourceName(card) === source)
-    .filter(card => {{
+  const language = $('#trajLanguage')?.value || '';
+  const mode = $('#trajMode')?.value || 'mixed';
+  const requestedSize = Number($('#trajSampleSize')?.value || 20);
+  const sampleSize = [10, 20, 50, 100].includes(requestedSize) ? requestedSize : 20;
+  const matched = trajCardData.filter(card => {{
+      if (source && trajSourceName(card) !== source) return false;
+      if (language && String(card.language || '') !== language) return false;
       if (!q) return true;
       const hay = [card.id, card.instance_id, card.task_name, card.job, card.dataset, card.source, card.language, card.status, card.model, card.scaffold, card.exception_type].join(' ').toLowerCase();
       return hay.includes(q);
-    }});
-
-  // Per batch, not from one pool: a global draw lets the largest batch crowd out
-  // the rest, and the availability preference can drop a whole batch that has no
-  // reachable trace. Ten from each means every batch shows up.
-  const groups = new Map();
-  for (const card of matched) {{
-    const key = trajSourceName(card) || 'unknown';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(card);
-  }}
-  const sections = [...groups.entries()]
-    .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
-    .map(([name, list]) => ({{name, total: list.length,
-                             cards: trajSampleCards(list).slice(0, TRAJ_SAMPLE_SIZE)}}));
-  const cards = sections.flatMap(section => section.cards);
-  trajVisibleCards = cards;
+  }});
+  const cards = trajSortCards(matched, mode).slice(0, sampleSize);
   const info = $('#trajSampleInfo');
   if (info) {{
-    info.textContent = sections.length
-      ? `${{cards.length}} shown · up to ${{TRAJ_SAMPLE_SIZE}} per batch · ${{sections.length}} batch${{sections.length === 1 ? '' : 'es'}}`
-      : 'nothing matches';
+    info.textContent = cards.length
+      ? `${{cards.length}} / ${{matched.length}} shown · ${{mode}} sample${{source ? ' · ' + source : ''}}`
+      : 'No trajectory cards match the current filters.';
   }}
   if (!cards.length) {{
     list.innerHTML = '<div class="empty">No trajectory cards match the current filters.</div>';
     const view = $('#trajView');
-    if (view) view.innerHTML = '<div class="traj-pane"><div class="empty">No trajectory selected.</div></div>';
+    if (view) view.innerHTML = '<div class="empty">No trajectory selected.</div>';
     currentTraj = null;
+    trajLoadToken += 1;
     return;
   }}
-  // Narrow rows — an id and one line of metadata, curator's sample-row shape —
-  // under a heading per batch, so it is always clear which batch a row came from.
-  let n = 0;
-  list.innerHTML = sections.map(section => {{
-    const rows = section.cards.map(card => {{
-      const idx = n++;
-      return `
-    <button class="traj-pick ${{idx === 0 ? 'active' : ''}}" data-i="${{idx}}" data-id="${{escapeHtml(card.id)}}">
+  list.innerHTML = cards.map((card, idx) => `
+    <button class="traj-card ${{idx === 0 ? 'active' : ''}}" data-i="${{idx}}" data-id="${{escapeHtml(card.id)}}">
       <span class="sid">#${{idx + 1}} ${{escapeHtml(card.instance_id || card.task_name || card.id)}}</span>
-      <span class="smeta">${{escapeHtml(card.status || card.kind || '-')}} · score ${{formatMaybe(card.score)}} · ${{formatMaybe(card.turns)}} turns · ${{escapeHtml(card.language || 'unknown')}}${{card.embedded_available ? ' · embedded' : ''}}</span>
-    </button>`;
-    }}).join('');
-    return `<div class="traj-group"><span class="traj-group-name" title="${{escapeHtml(section.name)}}">${{escapeHtml(section.name)}}</span>`
-         + `<span class="traj-group-n">${{section.cards.length}} of ${{section.total}}</span></div>${{rows}}`;
-  }}).join('');
-  $$('.traj-pick', list).forEach(btn => btn.addEventListener('click', () => selectTrajectory(cards[Number(btn.dataset.i)], btn)));
-  // Prime the detail so the dialog never opens on an empty right pane.
-  selectTrajectory(cards[0], $('.traj-pick', list));
+      <span class="smeta" data-card-stats>${{trajectoryCardStats(card)}}</span>
+      <span class="traj-card-meta">${{escapeHtml(trajSourceName(card))}} · ${{escapeHtml(card.language || 'unknown')}} · ${{escapeHtml(card.model || '-')}}</span>
+    </button>`).join('');
+  $$('.traj-card', list).forEach(btn => btn.addEventListener('click', () => selectTrajectory(cards[Number(btn.dataset.i)], btn)));
+  selectTrajectory(cards[0], $('.traj-card', list));
 }}
 
-// The sampler is the dialog. Opening it renders the current sample if that has
-// not happened yet, so the page carries no standing trajectory list.
-function openSampler() {{
-  const panel = document.getElementById('trajPanel');
-  if (!panel) return;
-  if (!trajVisibleCards.length) renderTrajectoryList();
-  panel.hidden = false;
+function hasMetaValue(value) {{
+  return value !== null && value !== undefined && value !== '' && String(value).toLowerCase() !== 'unknown';
+}}
+
+function trajectoryValue(card, key) {{
+  if (hasMetaValue(card?.[key])) return card[key];
+  const derived = card?._traceSummary || {{}};
+  return hasMetaValue(derived[key]) ? derived[key] : null;
+}}
+
+function trajectoryCardStats(card) {{
+  const turns = trajectoryValue(card, 'turns');
+  const calls = trajectoryValue(card, 'tool_calls');
+  const tokens = trajectoryValue(card, 'tokens');
+  return `${{escapeHtml(card.status || card.kind || '-')}} · score ${{formatMaybe(card.score)}} · reward ${{formatMaybe(card.reward)}} · ${{formatMaybe(turns)}} turns · ${{formatMaybe(calls)}} calls · ${{formatTokenUnits(tokens)}} tokens${{card.embedded_available ? ' · embedded' : ''}}`;
+}}
+
+function updateTrajectoryCardStats(card) {{
+  $$('.traj-card').forEach(button => {{
+    if (button.dataset.id !== String(card.id || '')) return;
+    const stats = $('[data-card-stats]', button);
+    if (stats) stats.innerHTML = trajectoryCardStats(card);
+  }});
 }}
 
 function scoreBreakdown(card) {{
@@ -3978,15 +4084,79 @@ function scoreBreakdown(card) {{
   return rows ? `<h2>Score Breakdown</h2><dl class="kv">${{rows}}</dl>` : '';
 }}
 
+function metaValueHtml(value, formatter = formatMaybe, missing = 'N/A') {{
+  if (!hasMetaValue(value)) return `<span class="meta-na">${{escapeHtml(missing)}}</span>`;
+  return escapeHtml(formatter(value));
+}}
+
+function formatDuration(value) {{
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value || '');
+  if (n < 1) return `${{Math.round(n * 1000)}} ms`;
+  if (n < 60) return `${{n.toFixed(n < 10 ? 2 : 1)}} s`;
+  return `${{Math.floor(n / 60)}}m ${{Math.round(n % 60)}}s`;
+}}
+
+function formatCost(value) {{
+  const n = Number(value);
+  return Number.isFinite(n) ? `$${{n.toFixed(n < 0.01 ? 5 : 4)}}` : String(value || '');
+}}
+
+function trajectoryMetaHtml(card) {{
+  const summary = card._traceSummary || {{}};
+  const pending = !card._traceSummary && (card.embedded_available || (card.full_available && R2_API_AVAILABLE));
+  const waiting = pending ? 'Pending trace' : 'N/A';
+  const value = key => trajectoryValue(card, key);
+  const finish = summary.finish_reasons?.length ? summary.finish_reasons.join(', ') : null;
+  const exception = hasMetaValue(card.exception_type) ? card.exception_type : null;
+  return `
+    <div class="traj-meta-grid">
+      <section class="traj-meta-section"><h3>Outcome</h3><dl class="traj-meta-kv">
+        <dt>Status</dt><dd>${{metaValueHtml(card.status || card.kind)}}</dd>
+        <dt>Reward</dt><dd>${{metaValueHtml(card.reward)}}</dd>
+        <dt>Quality score</dt><dd>${{metaValueHtml(card.score, formatMaybe, 'Not scored')}}</dd>
+        <dt>Exception</dt><dd>${{metaValueHtml(exception, String, 'None recorded')}}</dd>
+      </dl></section>
+      <section class="traj-meta-section"><h3>Execution</h3><dl class="traj-meta-kv">
+        <dt>LLM turns</dt><dd>${{metaValueHtml(value('turns'), formatMaybe, waiting)}}</dd>
+        <dt>Messages</dt><dd>${{metaValueHtml(summary.message_count, formatMaybe, waiting)}}</dd>
+        <dt>Tool calls</dt><dd>${{metaValueHtml(value('tool_calls'), formatMaybe, waiting)}}</dd>
+        <dt>Tool results</dt><dd>${{metaValueHtml(summary.tool_results, formatMaybe, waiting)}}</dd>
+        <dt>Detected errors</dt><dd>${{metaValueHtml(summary.detected_tool_errors, formatMaybe, waiting)}}</dd>
+      </dl></section>
+      <section class="traj-meta-section"><h3>Usage</h3><dl class="traj-meta-kv">
+        <dt>Prompt tokens</dt><dd>${{metaValueHtml(summary.prompt_tokens, formatTokenUnits, waiting)}}</dd>
+        <dt>Completion</dt><dd>${{metaValueHtml(summary.completion_tokens, formatTokenUnits, waiting)}}</dd>
+        <dt>Total tokens</dt><dd>${{metaValueHtml(value('tokens'), formatTokenUnits, waiting)}}</dd>
+        <dt>Cost</dt><dd>${{metaValueHtml(value('cost_usd'), formatCost, waiting)}}</dd>
+        <dt>API failures</dt><dd>${{metaValueHtml(summary.api_failures, formatMaybe, waiting)}}</dd>
+      </dl></section>
+      <section class="traj-meta-section"><h3>Model & Timing</h3><dl class="traj-meta-kv">
+        <dt>Model</dt><dd>${{metaValueHtml(value('model'))}}</dd>
+        <dt>Provider</dt><dd>${{metaValueHtml(value('provider'))}}</dd>
+        <dt>Started</dt><dd>${{metaValueHtml(value('started_at'), formatDateTime)}}</dd>
+        <dt>Finished</dt><dd>${{metaValueHtml(value('finished_at'), formatDateTime)}}</dd>
+        <dt>Wall duration</dt><dd>${{metaValueHtml(value('duration_sec'), formatDuration)}}</dd>
+        <dt>LLM latency</dt><dd>${{metaValueHtml(summary.llm_duration_sec, formatDuration, waiting)}}</dd>
+        <dt>Finish reason</dt><dd>${{metaValueHtml(finish, String, waiting)}}</dd>
+      </dl></section>
+    </div>
+    <details class="traj-provenance"><summary>Provenance and storage</summary><dl class="traj-meta-kv">
+      <dt>Trace format</dt><dd>${{metaValueHtml(summary.format, String, waiting)}}</dd>
+      <dt>Session</dt><dd><code>${{metaValueHtml(summary.session_id, String, waiting)}}</code></dd>
+      <dt>Embedded</dt><dd>${{card.embedded_available ? `yes · ${{escapeHtml(card.embedded_path || '-')}}` : 'no'}}</dd>
+      <dt>R2 key</dt><dd><code>${{escapeHtml(card.r2_key || '-')}}</code></dd>
+      <dt>Local</dt><dd><code>${{escapeHtml(card.trajectory_path || card.path || '-')}}</code></dd>
+    </dl></details>`;
+}}
+
 function selectTrajectory(card, button) {{
   currentTraj = card;
-  $$('.traj-pick').forEach(item => item.classList.remove('active'));
+  const loadToken = ++trajLoadToken;
+  $$('.traj-card').forEach(item => item.classList.remove('active'));
   if (button) button.classList.add('active');
-  const dialogTitle = document.getElementById('trajPanelTitle');
-  if (dialogTitle) dialogTitle.textContent = card.instance_id || card.task_name || card.id || 'Trajectory';
   const view = $('#trajView');
-  view.classList.remove('empty');
-  // No heading: the tab it lives under already names it.
+  if (!view) return;
   const preview = card.preview ? `<div class="detail-preview">${{escapeHtml(card.preview)}}</div>` : '';
   // Say up front whether this trace can be opened here: only embedded ones load
   // from the page, everything else needs the R2 binding.
@@ -3994,82 +4164,81 @@ function selectTrajectory(card, button) {{
   // different sentences. The generic "not reachable" line read as a fault when the
   // usual case is simply an SFT record, which never had a trajectory file at all.
   const traceNote = card.embedded_available
-    ? 'Embedded in this page — opens offline, no backend needed.'
+    ? 'Loading the embedded full trace…'
     : (card.full_available
        ? (R2_API_AVAILABLE
-          ? 'Not embedded: this trace is larger than the per-record embed cap, so it is fetched from R2 on demand.'
+          ? 'Loading the full trace from R2…'
           : 'Not embedded: this trace is larger than the per-record embed cap, and this board has no R2 backend to fetch it from. It is readable at the local path above, on the machine that produced it.')
        : (card.kind === 'quality'
-          ? 'This row is a converted SFT record, not a Harbor rollout, so there is no separate trajectory file to open. Its conversation lives inside the dataset\\'s im.jsonl, which is not published with this board — the Preview tab shows a bounded excerpt.'
+          ? 'This row is a converted SFT record, not a Harbor rollout, so there is no separate trajectory file to open. Its conversation lives inside the dataset\\'s im.jsonl, which is not published with this board — the Preview section shows a bounded excerpt.'
           : 'No trajectory file was recorded for this run, so there is nothing to open.'));
-  const error = card.exception_type ? `<dt>Exception</dt><dd>${{escapeHtml(card.exception_type)}}</dd>` : '';
-  // A local path proves nothing to a remote reader. Offer the control only when
-  // the trace is embedded, or a backend was declared that can fetch it.
   const canLoad = card.embedded_available || (card.full_available && R2_API_AVAILABLE);
-  const loadAction = canLoad
-    ? `<button id="loadFullTraj" type="button">${{card.embedded_available ? 'Open embedded trace' : 'Load full'}}</button>`
-    : '';
-  // Head / tabs / one scrolling pane, as curator's sample viewer. Tabs keep the
-  // dialog a fixed size whatever the card carries.
-  const details = `
-    <dl class="kv">
-      <dt>Language</dt><dd>${{escapeHtml(card.language || 'unknown')}}</dd>
-      <dt>Domain</dt><dd>${{escapeHtml(card.domain || 'unknown')}} · ${{escapeHtml(card.category || 'unknown')}} · ${{escapeHtml(card.difficulty || 'unknown')}}</dd>
-      <dt>Model</dt><dd>${{escapeHtml(card.model || '-')}} · ${{escapeHtml(card.scaffold || '-')}}</dd>
-      <dt>Score</dt><dd>${{formatMaybe(card.score)}} · reward ${{formatMaybe(card.reward)}} · tool ${{formatPercent(card.tool_success_rate)}}</dd>
-      <dt>Usage</dt><dd>${{formatMaybe(card.turns)}} turns · ${{formatMaybe(card.tool_calls)}} tool calls · ${{formatMaybe(card.tokens)}} tokens · ${{formatMaybe(card.cost_usd)}} USD</dd>
-      <dt>Embedded</dt><dd>${{card.embedded_available ? `yes · ${{escapeHtml(card.embedded_path || '-')}}` : 'no'}}</dd>
-      <dt>R2 key</dt><dd><code>${{escapeHtml(card.r2_key || '-')}}</code></dd>
-      <dt>Local</dt><dd><code>${{escapeHtml(card.trajectory_path || card.path || '-')}}</code></dd>
-      ${{error}}
-    </dl>
-    ${{scoreBreakdown(card)}}`;
-  const tabs = [
-    {{key: 'details', label: 'Details', body: details}},
-    {{key: 'preview', label: 'Preview',
-     body: preview || '<div class="empty">no preview was embedded for this trajectory</div>'}},
-    {{key: 'trace', label: 'Full trace',
-     body: `<div class="traj-actions">${{loadAction}}</div>`
-           + `<div class="empty">${{traceNote}}</div>`
-           + '<div id="fullTrajResult" class="json-block hidden"></div>'}},
-  ];
   view.innerHTML = `
-    <div class="traj-head">
-      <div class="t">${{escapeHtml(card.instance_id || card.task_name || card.id)}}</div>
-      <div class="m">${{escapeHtml(card.kind)}} · ${{escapeHtml(card.job || card.dataset || '-')}} · ${{escapeHtml(card.status || '-')}}</div>
+    <div class="panel-head">
+      <div>
+        <h2>${{escapeHtml(card.instance_id || card.task_name || card.id)}}</h2>
+        <div class="hint">${{escapeHtml(card.kind || '-')}} · ${{escapeHtml(card.job || card.dataset || '-')}} · ${{escapeHtml(card.status || '-')}}</div>
+      </div>
       <div class="actions">
         <button class="copy-btn" data-copy="${{escapeHtml(card.r2_key || '')}}">Copy R2 key</button>
         <button class="copy-btn" data-copy="${{escapeHtml(card.path || card.trajectory_path || '')}}">Copy local path</button>
       </div>
     </div>
-    <div class="traj-tabs">${{tabs.map(t => `<button class="traj-tab" data-tab="${{t.key}}">${{t.label}}</button>`).join('')}}</div>
-    <div class="traj-pane" id="trajPane"></div>`;
-
-  function showTab(key) {{
-    const tab = tabs.find(t => t.key === key) || tabs[0];
-    trajActiveTab = tab.key;
-    $('#trajPane').innerHTML = tab.body;
-    $$('.traj-tab', view).forEach(b => b.classList.toggle('active', b.dataset.tab === tab.key));
-    $('#loadFullTraj')?.addEventListener('click', () => loadFullTrajectory(card));
-  }}
-  $$('.traj-tab', view).forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
-  showTab(trajActiveTab);
+    <div class="hint">${{escapeHtml(card.repo || '-')}} · ${{escapeHtml(card.language || 'unknown')}} · ${{escapeHtml(card.domain || 'unknown')}} / ${{escapeHtml(card.category || 'unknown')}} / ${{escapeHtml(card.difficulty || 'unknown')}} · ${{escapeHtml(card.scaffold || '-')}}</div>
+    <div id="trajMetaGrid">${{trajectoryMetaHtml(card)}}</div>
+    ${{scoreBreakdown(card)}}
+    <h2>Preview</h2>
+    ${{preview || '<div class="empty">No preview was embedded for this trajectory.</div>'}}
+    <h2>Full trace</h2>
+    <div id="fullTrajStatus" class="hint">${{escapeHtml(traceNote)}}</div>
+    <div id="fullTrajResult" class="json-block hidden"></div>`;
+  if (canLoad) void loadFullTrajectory(card, loadToken);
 }}
 
-async function loadFullTrajectory(card) {{
+function fullTrajectoryCacheKey(card) {{
+  return card.embedded_available
+    ? `embedded:${{card.embedded_path || ''}}:${{card.id || ''}}`
+    : `r2:${{card.r2_key || ''}}`;
+}}
+
+async function fetchFullTrajectory(card) {{
+  const key = fullTrajectoryCacheKey(card);
+  if (!fullTrajectoryCache[key]) {{
+    const request = card.embedded_available ? loadEmbeddedTrajectory(card) : fetchRemoteTrajectory(card);
+    fullTrajectoryCache[key] = request.catch(err => {{
+      delete fullTrajectoryCache[key];
+      throw err;
+    }});
+  }}
+  return fullTrajectoryCache[key];
+}}
+
+async function loadFullTrajectory(card, loadToken = trajLoadToken) {{
   const box = $('#fullTrajResult');
-  if (!box) return;
-  box.classList.remove('hidden');
-  box.textContent = card.embedded_available ? 'Loading embedded trajectory...' : 'Loading /api/traj...';
+  const status = $('#fullTrajStatus');
+  if (!box || !status) return;
+  status.textContent = card.embedded_available ? 'Loading the embedded full trace…' : 'Loading the full trace from R2…';
+  box.classList.add('hidden');
   try {{
-    const data = card.embedded_available ? await loadEmbeddedTrajectory(card) : await fetchRemoteTrajectory(card);
+    const data = await fetchFullTrajectory(card);
+    if (loadToken !== trajLoadToken || currentTraj !== card) return;
+    status.textContent = card.embedded_available ? 'Embedded full trace loaded.' : 'Full trace loaded from R2.';
+    box.classList.remove('hidden');
     renderFullTrajectory(box, card, data);
   }} catch (err) {{
+    if (loadToken !== trajLoadToken || currentTraj !== card) return;
     box.classList.remove('json-hl');
-    box.textContent =
-      `This trace is not embedded in the page, and /api/traj could not serve it (${{err}}).\\n`
-      + `Opening it needs the TRACER_TRAJ_BUCKET R2 binding on the Pages project, with the `
-      + `object uploaded.\\n\\nR2 key:     ${{card.r2_key || '-'}}\\nLocal path: ${{card.trajectory_path || card.path || '-'}}`;
+    box.classList.add('hidden');
+    box.textContent = '';
+    status.textContent = card.embedded_available
+      ? `The embedded full trace could not be loaded (${{err}}). Shard: ${{card.embedded_path || '-'}}.`
+      : `The R2 full trace could not be loaded (${{err}}). Key: ${{card.r2_key || '-'}}.`;
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.textContent = 'Retry full trace';
+    retry.addEventListener('click', () => void loadFullTrajectory(card, trajLoadToken));
+    status.appendChild(document.createTextNode(' '));
+    status.appendChild(retry);
   }}
 }}
 
@@ -4116,6 +4285,240 @@ function contentToText(content) {{
   return String(content);
 }}
 
+// TRACE_MODEL_START — kept DOM-free so regression tests can execute it in Node.
+function traceNumber(value) {{
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}}
+
+function traceText(value) {{
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(traceText).join('\\n');
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') {{
+    if (typeof value.text === 'string') return value.text;
+    if (typeof value.content === 'string') return value.content;
+    try {{ return JSON.stringify(value); }} catch (err) {{ return String(value); }}
+  }}
+  return String(value);
+}}
+
+function traceMessageFingerprint(message) {{
+  if (!message || typeof message !== 'object') return traceText(message);
+  const calls = Array.isArray(message.tool_calls) ? message.tool_calls.map(call => ({{
+    id: call?.id || '',
+    name: call?.function?.name || call?.function_name || '',
+    arguments: call?.function?.arguments ?? call?.arguments ?? '',
+  }})) : [];
+  return JSON.stringify({{
+    role: message.role || '',
+    content: traceText(message.content),
+    reasoning: traceText(message.reasoning_content),
+    tool_call_id: message.tool_call_id || '',
+    name: message.name || '',
+    calls,
+  }});
+}}
+
+function traceCommonPrefix(left, right) {{
+  const n = Math.min(left.length, right.length);
+  let i = 0;
+  while (i < n && traceMessageFingerprint(left[i]) === traceMessageFingerprint(right[i])) i += 1;
+  return i;
+}}
+
+function traceResponseMessage(event) {{
+  const choices = event?.response_body?.choices;
+  return Array.isArray(choices) && choices[0]?.message && typeof choices[0].message === 'object'
+    ? choices[0].message : null;
+}}
+
+function traceMessageToolCalls(message) {{
+  return Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+}}
+
+function traceToolName(call) {{
+  return call?.function?.name || call?.function_name || 'tool';
+}}
+
+function traceObservationLooksError(text) {{
+  const head = String(text || '').slice(0, 800);
+  const match = head.match(/exit code[:\\s]+(-?\\d+)/i);
+  if (match) return match[1] !== '0';
+  return /<tool_use_error>|arguments provided to the tool are invalid|traceback \\(most recent call last\\)|command not found|permission denied|no such file or directory|non-zero exit status|error:/i.test(head);
+}}
+
+function traceUsageForEvent(event) {{
+  const direct = event?.usage;
+  if (direct && typeof direct === 'object') return direct;
+  const response = event?.response_body?.usage;
+  return response && typeof response === 'object' ? response : {{}};
+}}
+
+function analyzeLiteLLMEvents(record) {{
+  const sourceEvents = record.filter(event => event && typeof event === 'object'
+    && (event.request_body || event.response_body));
+  const timeline = [];
+  const normalizedEvents = [];
+  const toolResultsById = new Map();
+  const allToolMessages = [];
+  let previousRequest = [];
+  let promptTokens = 0, completionTokens = 0, totalTokens = 0, cost = 0, durationMs = 0;
+  let hasPrompt = false, hasCompletion = false, hasTotal = false, hasCost = false, hasDuration = false;
+  let model = null, provider = null, sessionId = null, startedAt = null, finishedAt = null;
+  let apiFailures = 0;
+  const finishReasons = new Set();
+
+  sourceEvents.forEach((event, index) => {{
+    const request = event.request_body && typeof event.request_body === 'object' ? event.request_body : {{}};
+    const requestMessages = Array.isArray(request.messages) ? request.messages : [];
+    let start = 0;
+    if (previousRequest.length) {{
+      const previousPrefix = traceCommonPrefix(previousRequest, requestMessages);
+      start = previousPrefix === previousRequest.length
+        ? previousRequest.length : traceCommonPrefix(timeline, requestMessages);
+    }}
+    const incoming = [];
+    for (const message of requestMessages.slice(start)) {{
+      const duplicateTail = timeline.length
+        && traceMessageFingerprint(timeline[timeline.length - 1]) === traceMessageFingerprint(message);
+      if (!duplicateTail) {{
+        timeline.push(message);
+        incoming.push(message);
+      }}
+      if (message?.role === 'tool') {{
+        allToolMessages.push(message);
+        if (message.tool_call_id) toolResultsById.set(String(message.tool_call_id), message);
+      }}
+    }}
+    previousRequest = requestMessages;
+
+    const assistant = traceResponseMessage(event);
+    if (assistant && (!timeline.length
+        || traceMessageFingerprint(timeline[timeline.length - 1]) !== traceMessageFingerprint(assistant))) {{
+      timeline.push(assistant);
+    }}
+    const usage = traceUsageForEvent(event);
+    const prompt = traceNumber(usage.prompt_tokens);
+    const completion = traceNumber(usage.completion_tokens);
+    const total = traceNumber(usage.total_tokens);
+    const eventCost = traceNumber(usage.cost);
+    const eventDuration = traceNumber(event.duration_ms ?? request.llm_api_duration_ms);
+    if (prompt !== null) {{ promptTokens += prompt; hasPrompt = true; }}
+    if (completion !== null) {{ completionTokens += completion; hasCompletion = true; }}
+    if (total !== null) {{ totalTokens += total; hasTotal = true; }}
+    if (eventCost !== null) {{ cost += eventCost; hasCost = true; }}
+    if (eventDuration !== null) {{ durationMs += eventDuration; hasDuration = true; }}
+    if (event.success === false) apiFailures += 1;
+    const finishReason = event?.response_body?.choices?.[0]?.finish_reason;
+    if (finishReason) finishReasons.add(String(finishReason));
+    model = event?.response_body?.model || request.model || model;
+    provider = request.custom_llm_provider || provider;
+    sessionId = event.session_id || sessionId;
+    const stamp = event.timestamp || event.request_time || request.api_call_start_time;
+    if (stamp && !startedAt) startedAt = stamp;
+    if (stamp) finishedAt = stamp;
+    normalizedEvents.push({{index, event, incoming, assistant, usage, finish_reason: finishReason || null}});
+  }});
+
+  const allCallIds = new Set();
+  let toolCalls = 0;
+  for (const item of normalizedEvents) {{
+    const calls = traceMessageToolCalls(item.assistant);
+    item.tool_calls = calls;
+    item.tool_results = [];
+    for (const call of calls) {{
+      toolCalls += 1;
+      if (call?.id) {{
+        const id = String(call.id);
+        allCallIds.add(id);
+        if (toolResultsById.has(id)) item.tool_results.push(toolResultsById.get(id));
+      }}
+    }}
+    item.orphan_results = item.incoming.filter(message => message?.role === 'tool'
+      && (!message.tool_call_id || !allCallIds.has(String(message.tool_call_id))));
+  }}
+  const detectedErrors = allToolMessages.filter(message => traceObservationLooksError(traceText(message.content))).length;
+  if (!hasTotal && (hasPrompt || hasCompletion)) {{
+    totalTokens = promptTokens + completionTokens;
+    hasTotal = true;
+  }}
+  return {{
+    format: 'LiteLLM events',
+    record,
+    events: normalizedEvents,
+    messages: timeline,
+    summary: {{
+      format: 'LiteLLM events',
+      turns: normalizedEvents.filter(item => item.assistant).length,
+      message_count: timeline.length,
+      tool_calls: toolCalls,
+      tool_results: allToolMessages.length,
+      detected_tool_errors: detectedErrors,
+      prompt_tokens: hasPrompt ? promptTokens : null,
+      completion_tokens: hasCompletion ? completionTokens : null,
+      tokens: hasTotal ? totalTokens : null,
+      cost_usd: hasCost ? cost : null,
+      llm_duration_sec: hasDuration ? durationMs / 1000 : null,
+      api_failures: apiFailures,
+      model, provider, session_id: sessionId,
+      started_at: startedAt, finished_at: finishedAt,
+      finish_reasons: Array.from(finishReasons),
+    }},
+  }};
+}}
+
+function analyzeMessageTrace(record, messages, format = 'messages') {{
+  const assistant = messages.filter(message => message?.role === 'assistant');
+  const tools = messages.filter(message => message?.role === 'tool');
+  const calls = assistant.flatMap(traceMessageToolCalls);
+  const usage = record?.meta_info?.unique_info?._usage || record?._usage || {{}};
+  return {{
+    format, record, messages,
+    summary: {{
+      format,
+      turns: assistant.length,
+      message_count: messages.length,
+      tool_calls: calls.length,
+      tool_results: tools.length,
+      detected_tool_errors: tools.filter(message => traceObservationLooksError(traceText(message.content))).length,
+      prompt_tokens: traceNumber(usage.prompt_tokens ?? usage.input_tokens),
+      completion_tokens: traceNumber(usage.completion_tokens ?? usage.output_tokens),
+      tokens: traceNumber(usage.total_tokens),
+      cost_usd: traceNumber(usage.cost ?? usage.cost_usd),
+      api_failures: null,
+      finish_reasons: [],
+    }},
+  }};
+}}
+
+function analyzeTrajectoryRecord(record) {{
+  if (Array.isArray(record) && record.some(event => event?.request_body || event?.response_body)) {{
+    return analyzeLiteLLMEvents(record);
+  }}
+  if (record && Array.isArray(record.messages)) return analyzeMessageTrace(record, record.messages, 'messages');
+  if (Array.isArray(record) && record.every(message => message && typeof message === 'object' && message.role)) {{
+    return analyzeMessageTrace({{messages: record}}, record, 'messages');
+  }}
+  if (record && Array.isArray(record.steps)) {{
+    const agentSteps = record.steps.filter(step => step?.source === 'agent' || step?.tool_calls || step?.observation);
+    const toolCalls = agentSteps.flatMap(step => Array.isArray(step?.tool_calls) ? step.tool_calls : []);
+    const observations = agentSteps.flatMap(step => Array.isArray(step?.observation?.results) ? step.observation.results : []);
+    return {{
+      format: 'steps', record, steps: record.steps,
+      summary: {{
+        format: 'steps', turns: agentSteps.length, message_count: record.steps.length,
+        tool_calls: toolCalls.length, tool_results: observations.length,
+        detected_tool_errors: observations.filter(obs => traceObservationLooksError(traceText(obs?.content))).length,
+        prompt_tokens: null, completion_tokens: null, tokens: null, cost_usd: null,
+        api_failures: null, finish_reasons: [],
+      }},
+    }};
+  }}
+  return {{format: 'raw JSON', record, summary: {{format: 'raw JSON', finish_reasons: []}}}};
+}}
+// TRACE_MODEL_END
+
 // Escape first, tokenize second — the other order eats the markup just inserted.
 // Only & < > are escaped: the tokenizer needs quotes to find string boundaries,
 // and a bare quote is harmless in element content. Strings match whole, so a
@@ -4130,7 +4533,7 @@ function highlightJson(value) {{
   if (text === undefined || text === null) return '';
   const escaped = String(text).replace(/[&<>]/g, ch => ({{'&': '&amp;', '<': '&lt;', '>': '&gt;'}}[ch]));
   return escaped.replace(
-    /("(?:\\\\.|[^"\\\\])*")(\s*:)?|\\b(?:true|false|null)\\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g,
+    /("(?:\\\\.|[^"\\\\])*")(\\s*:)?|\\b(?:true|false|null)\\b|-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?/g,
     (match, str, colon) => {{
       if (str !== undefined) {{
         return colon !== undefined && colon !== null
@@ -4146,11 +4549,8 @@ function renderFullTrajectory(box, card, data) {{
   const record = normalizeTrajectoryPayload(data);
   box.classList.remove('json-block');
   box.innerHTML = '';
-  if (!record || typeof record !== 'object') {{
-    box.classList.add('json-block', 'json-hl');
-    box.innerHTML = highlightJson(data);
-    return;
-  }}
+  const trace = analyzeTrajectoryRecord(record);
+  applyTraceSummary(card, trace.summary || {{}});
   const wrap = document.createElement('div');
   wrap.className = 'trace-detail';
   wrap.innerHTML = `
@@ -4161,16 +4561,469 @@ function renderFullTrajectory(box, card, data) {{
         <span class="step-badge ${{card.status === 'error' ? 'bad' : card.status === 'fail' ? 'warn' : 'good'}}">${{escapeHtml(card.status || card.kind || '-')}}</span>
         <span class="step-badge">score ${{formatMaybe(card.score)}}</span>
       </div>
-      <p class="hint">${{escapeHtml(trajSourceName(card))}} · ${{escapeHtml(card.model || '-')}} · ${{escapeHtml(card.language || 'unknown')}}</p>
+      <p class="hint">${{escapeHtml(trajSourceName(card))}} · ${{escapeHtml(trajectoryValue(card, 'model') || '-')}} · ${{escapeHtml(card.language || 'unknown')}}</p>
     </div>
+    <div class="trace-toolbar">
+      <button type="button" class="trace-view-toggle active" data-trace-view="timeline">Timeline</button>
+      <button type="button" class="trace-view-toggle" data-trace-view="raw">Raw JSON</button>
+      <span class="spacer"></span>
+      <button type="button" data-turn-action="expand">Expand all</button>
+      <button type="button" data-turn-action="collapse">Collapse all</button>
+    </div>
+    <div class="trace-summary">${{traceSummaryHtml(trace.summary || {{}})}}</div>
   `;
-  // One rendering for every payload. Splitting into turns was a second, busier
-  // view of the same bytes, and which one you got depended on the payload shape.
-  const pre = document.createElement('pre');
-  pre.className = 'block-pre json-hl';
-  pre.innerHTML = highlightJson(record);
-  wrap.appendChild(pre);
+  const timeline = document.createElement('div');
+  timeline.className = 'trace-timeline';
+  const raw = document.createElement('pre');
+  raw.className = 'block-pre json-hl trace-raw hidden';
+  raw.innerHTML = highlightJson(record ?? data);
+  const supportsTimeline = trace.format !== 'raw JSON';
+  if (supportsTimeline) renderTraceTimeline(timeline, trace);
+  else {{
+    timeline.classList.add('hidden');
+    raw.classList.remove('hidden');
+    const timelineButton = $('[data-trace-view="timeline"]', wrap);
+    const rawButton = $('[data-trace-view="raw"]', wrap);
+    timelineButton.disabled = true;
+    timelineButton.classList.remove('active');
+    rawButton.classList.add('active');
+  }}
+  wrap.appendChild(timeline);
+  wrap.appendChild(raw);
+  $$('[data-trace-view]', wrap).forEach(button => button.addEventListener('click', () => {{
+    const showRaw = button.dataset.traceView === 'raw';
+    timeline.classList.toggle('hidden', showRaw);
+    raw.classList.toggle('hidden', !showRaw);
+    $$('[data-trace-view]', wrap).forEach(item => item.classList.toggle('active', item === button));
+    $$('[data-turn-action]', wrap).forEach(item => item.classList.toggle('hidden', showRaw));
+  }}));
+  $('[data-turn-action="expand"]', wrap).addEventListener('click', () => setAllTurns(wrap, true));
+  $('[data-turn-action="collapse"]', wrap).addEventListener('click', () => setAllTurns(wrap, false));
   box.appendChild(wrap);
+}}
+
+function applyTraceSummary(card, summary) {{
+  card._traceSummary = summary || {{}};
+  updateTrajectoryCardStats(card);
+  if (currentTraj === card) {{
+    const grid = $('#trajMetaGrid');
+    if (grid) grid.innerHTML = trajectoryMetaHtml(card);
+  }}
+}}
+
+function traceSummaryHtml(summary) {{
+  const pills = [
+    `${{formatMaybe(summary.turns)}} turns`,
+    `${{formatMaybe(summary.message_count)}} messages`,
+    `${{formatMaybe(summary.tool_calls)}} tool calls`,
+    `${{formatTokenUnits(summary.tokens)}} tokens`,
+  ];
+  if (Number(summary.detected_tool_errors || 0) > 0) pills.push(`${{summary.detected_tool_errors}} detected errors`);
+  return pills.map((label, index) => `<span class="metric-pill ${{index === 4 ? 'bad' : ''}}">${{escapeHtml(label)}}</span>`).join('');
+}}
+
+function renderTraceTimeline(container, trace) {{
+  if (trace.format === 'LiteLLM events') renderLiteLLMTimeline(container, trace);
+  else if (trace.format === 'steps') renderStepsTimeline(container, trace);
+  else renderMessagesTimeline(container, trace.messages || []);
+}}
+
+function renderLiteLLMTimeline(container, trace) {{
+  const events = trace.events || [];
+  const firstIncoming = events[0]?.incoming || [];
+  const preface = firstIncoming.filter(message => message?.role === 'system' || message?.role === 'user');
+  for (const message of preface) {{
+    const label = message.role === 'system' ? 'System instructions' : 'Initial user task';
+    container.appendChild(prefaceCard(label, traceText(message.content), message.role === 'user'));
+  }}
+  const turns = document.createElement('div');
+  turns.className = 'turns-list';
+  events.forEach((item, index) => {{
+    if (!item.assistant && !item.incoming.length) return;
+    const calls = item.tool_calls || [];
+    const results = item.tool_results || [];
+    const usage = item.usage || {{}};
+    const meta = [
+      item.event?.timestamp || item.event?.request_time,
+      hasMetaValue(item.event?.duration_ms) ? formatDuration(Number(item.event.duration_ms) / 1000) : null,
+      hasMetaValue(usage.total_tokens) ? `${{formatTokenUnits(usage.total_tokens)}} tok` : null,
+      hasMetaValue(usage.cost) ? formatCost(usage.cost) : null,
+      item.finish_reason,
+    ].filter(hasMetaValue);
+    const turn = turnCardShell(index, index < 2, calls.map(traceToolName), results.length, body => {{
+      for (const message of item.incoming) {{
+        if (index === 0 && preface.includes(message)) continue;
+        if (message?.role === 'tool') continue;
+        const role = ['system', 'user', 'assistant'].includes(message?.role) ? message.role : 'user';
+        body.appendChild(traceBlock(role, role, traceText(message?.content)));
+      }}
+      const assistant = item.assistant;
+      if (assistant) {{
+        const reasoning = traceText(assistant.reasoning_content ?? assistant.reasoning);
+        const content = traceText(assistant.content);
+        if (reasoning) body.appendChild(reasoningBlock(reasoning));
+        if (content) body.appendChild(traceBlock('assistant', 'assistant', content));
+      }}
+      calls.forEach(call => {{
+        body.appendChild(actionBlock(call));
+        const result = call?.id ? results.find(message => String(message.tool_call_id || '') === String(call.id)) : null;
+        if (result) body.appendChild(observationBlock(traceText(result.content), `tool result · ${{traceToolName(call)}}`));
+      }});
+      for (const result of item.orphan_results || []) {{
+        body.appendChild(observationBlock(traceText(result.content), result.name ? `tool result · ${{result.name}}` : 'tool result'));
+      }}
+      if (item.event?.success === false) body.appendChild(traceBlock('error', 'API failure', traceText(item.event?.error || item.event?.exception || 'The model request was marked unsuccessful.')));
+      if (!body.children.length) body.appendChild(emptySmall('No displayable content in this turn.'));
+    }}, meta);
+    turns.appendChild(turn);
+  }});
+  container.appendChild(turns);
+}}
+
+function renderMessagesTimeline(container, messages) {{
+  const preface = [];
+  let cursor = 0;
+  while (cursor < messages.length && (messages[cursor]?.role === 'system' || messages[cursor]?.role === 'user')) {{
+    preface.push(messages[cursor]);
+    cursor += 1;
+    if (messages[cursor - 1]?.role === 'user') break;
+  }}
+  preface.forEach(message => container.appendChild(prefaceCard(message.role === 'system' ? 'System instructions' : 'Initial user task', traceText(message.content), message.role === 'user')));
+  const groups = [];
+  let current = null;
+  let pending = [];
+  for (const message of messages.slice(cursor)) {{
+    if (message?.role === 'assistant') {{
+      current = {{assistant: message, incoming: pending, results: []}};
+      pending = [];
+      groups.push(current);
+    }} else if (message?.role === 'tool' && current && !pending.length) current.results.push(message);
+    else pending.push(message);
+  }}
+  if (pending.length) groups.push({{assistant: null, incoming: pending, results: []}});
+  const turns = document.createElement('div');
+  turns.className = 'turns-list';
+  groups.forEach((group, index) => {{
+    const calls = traceMessageToolCalls(group.assistant);
+    turns.appendChild(turnCardShell(index, index < 2, calls.map(traceToolName), group.results.length, body => {{
+      group.incoming.forEach(message => body.appendChild(traceBlock(message?.role || 'user', message?.role || 'message', traceText(message?.content))));
+      if (group.assistant) {{
+        const reasoning = traceText(group.assistant.reasoning_content ?? group.assistant.reasoning);
+        if (reasoning) body.appendChild(reasoningBlock(reasoning));
+        if (traceText(group.assistant.content)) body.appendChild(traceBlock('assistant', 'assistant', traceText(group.assistant.content)));
+      }}
+      calls.forEach(call => body.appendChild(actionBlock(call)));
+      group.results.forEach(result => body.appendChild(observationBlock(traceText(result.content), result.name ? `tool result · ${{result.name}}` : 'tool result')));
+      if (!body.children.length) body.appendChild(emptySmall('No displayable content in this turn.'));
+    }}));
+  }});
+  container.appendChild(turns);
+}}
+
+function renderStepsTimeline(container, trace) {{
+  const turns = document.createElement('div');
+  turns.className = 'turns-list';
+  (trace.steps || []).forEach((step, index) => {{
+    const calls = Array.isArray(step?.tool_calls) ? step.tool_calls : [];
+    const results = Array.isArray(step?.observation?.results) ? step.observation.results : [];
+    turns.appendChild(turnCardShell(index, index < 2, calls.map(toolNameFromStepCall), results.length, body => {{
+      const reasoning = traceText(step?.reasoning ?? step?.thought);
+      const response = traceText(step?.response ?? step?.content);
+      if (reasoning) body.appendChild(reasoningBlock(reasoning));
+      if (response) body.appendChild(traceBlock('assistant', 'assistant', response));
+      calls.forEach(call => body.appendChild(actionBlock(call)));
+      results.forEach(result => body.appendChild(observationBlock(traceText(result?.content ?? result), 'tool result')));
+      if (!body.children.length) body.appendChild(traceBlock('system', step?.source || 'step', traceText(step)));
+    }}));
+  }});
+  container.appendChild(turns);
+}}
+
+function setTurnOpen(card, open) {{
+  card.classList.toggle('open', open);
+  const body = $('.turn-body', card);
+  const chev = $('.turn-chev', card);
+  if (body) body.style.display = open ? 'flex' : 'none';
+  if (chev) chev.textContent = open ? 'v' : '>';
+}}
+
+function setAllTurns(root, open) {{
+  $$('.turn-card', root).forEach(card => setTurnOpen(card, open));
+}}
+
+// TRACE_MARKDOWN_MODEL_START — parsing stays DOM-free for Node regression tests.
+function traceFenceInfo(line) {{
+  const text = String(line || '');
+  let offset = 0;
+  while (offset < Math.min(3, text.length) && text[offset] === ' ') offset += 1;
+  const trimmed = text.slice(offset);
+  const marker = trimmed[0];
+  if (marker !== '~' && marker !== String.fromCharCode(96)) return null;
+  let size = 0;
+  while (trimmed[size] === marker) size += 1;
+  if (size < 3) return null;
+  const info = trimmed.slice(size).trim();
+  if (marker === String.fromCharCode(96) && info.includes(marker)) return null;
+  const rawLanguage = info.split(/[ \t]+/)[0] || '';
+  const language = rawLanguage.replace(/[^A-Za-z0-9_.+#-]/g, '').slice(0, 32) || 'code';
+  return {{marker, size, language}};
+}}
+
+function traceFenceCloses(line, fence) {{
+  const text = String(line || '');
+  let offset = 0;
+  while (offset < Math.min(3, text.length) && text[offset] === ' ') offset += 1;
+  const trimmed = text.slice(offset);
+  let size = 0;
+  while (trimmed[size] === fence.marker) size += 1;
+  return size >= fence.size && trimmed.slice(size).trim() === '';
+}}
+
+function traceMarkdownBlocks(value) {{
+  const lines = String(value ?? '').replaceAll(String.fromCharCode(13), '').split(String.fromCharCode(10));
+  const blocks = [];
+  let prose = [];
+  const flushProse = () => {{
+    while (prose.length && !prose[0].trim()) prose.shift();
+    while (prose.length && !prose[prose.length - 1].trim()) prose.pop();
+    if (prose.length) blocks.push({{type: 'prose', text: prose.join(String.fromCharCode(10))}});
+    prose = [];
+  }};
+  for (let index = 0; index < lines.length; index += 1) {{
+    const fence = traceFenceInfo(lines[index]);
+    if (!fence) {{
+      prose.push(lines[index]);
+      continue;
+    }}
+    flushProse();
+    const code = [];
+    let closed = false;
+    for (index += 1; index < lines.length; index += 1) {{
+      if (traceFenceCloses(lines[index], fence)) {{
+        closed = true;
+        break;
+      }}
+      code.push(lines[index]);
+    }}
+    blocks.push({{
+      type: 'code',
+      language: fence.language,
+      text: code.join(String.fromCharCode(10)),
+      closed,
+    }});
+  }}
+  flushProse();
+  return blocks;
+}}
+// TRACE_MARKDOWN_MODEL_END
+
+function traceHeadingInfo(line) {{
+  const text = String(line || '').trimStart();
+  let level = 0;
+  while (level < text.length && text[level] === '#') level += 1;
+  if (level < 1 || level > 4 || text[level] !== ' ') return null;
+  return {{level, text: text.slice(level + 1).trim()}};
+}}
+
+function traceListInfo(line) {{
+  const text = String(line || '').trimStart();
+  if ('-+*'.includes(text[0]) && text[1] === ' ') {{
+    return {{ordered: false, text: text.slice(2)}};
+  }}
+  let cursor = 0;
+  while (cursor < text.length && text[cursor] >= '0' && text[cursor] <= '9') cursor += 1;
+  if (cursor && (text[cursor] === '.' || text[cursor] === ')') && text[cursor + 1] === ' ') {{
+    return {{ordered: true, text: text.slice(cursor + 2)}};
+  }}
+  return null;
+}}
+
+function traceQuoteText(line) {{
+  const text = String(line || '').trimStart();
+  if (text[0] !== '>') return null;
+  return text.slice(text[1] === ' ' ? 2 : 1);
+}}
+
+function appendTraceInline(parent, value) {{
+  const text = String(value || '');
+  const tick = String.fromCharCode(96);
+  let cursor = 0;
+  let plain = '';
+  const flush = () => {{
+    if (plain) parent.appendChild(document.createTextNode(plain));
+    plain = '';
+  }};
+  while (cursor < text.length) {{
+    const char = text[cursor];
+    if (char === tick) {{
+      const end = text.indexOf(tick, cursor + 1);
+      if (end > cursor + 1) {{
+        flush();
+        const code = document.createElement('code');
+        code.className = 'trace-inline-code';
+        code.textContent = text.slice(cursor + 1, end);
+        parent.appendChild(code);
+        cursor = end + 1;
+        continue;
+      }}
+    }}
+    const pair = text.slice(cursor, cursor + 2);
+    if (pair === '**' || pair === '__') {{
+      const end = text.indexOf(pair, cursor + 2);
+      if (end > cursor + 2) {{
+        flush();
+        const strong = document.createElement('strong');
+        strong.textContent = text.slice(cursor + 2, end);
+        parent.appendChild(strong);
+        cursor = end + 2;
+        continue;
+      }}
+    }}
+    if ((char === '*' || char === '_') && text[cursor + 1] !== char) {{
+      const end = text.indexOf(char, cursor + 1);
+      if (end > cursor + 1) {{
+        flush();
+        const emphasis = document.createElement('em');
+        emphasis.textContent = text.slice(cursor + 1, end);
+        parent.appendChild(emphasis);
+        cursor = end + 1;
+        continue;
+      }}
+    }}
+    if (char === '[') {{
+      const labelEnd = text.indexOf('](', cursor + 1);
+      const hrefEnd = labelEnd >= 0 ? text.indexOf(')', labelEnd + 2) : -1;
+      if (labelEnd > cursor + 1 && hrefEnd > labelEnd + 2) {{
+        const href = text.slice(labelEnd + 2, hrefEnd).trim();
+        if (href.startsWith('https://') || href.startsWith('http://')) {{
+          flush();
+          const link = document.createElement('a');
+          link.textContent = text.slice(cursor + 1, labelEnd);
+          link.href = href;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          parent.appendChild(link);
+          cursor = hrefEnd + 1;
+          continue;
+        }}
+      }}
+    }}
+    plain += char;
+    cursor += 1;
+  }}
+  flush();
+}}
+
+function appendTraceProse(container, value) {{
+  const lines = String(value || '').split(String.fromCharCode(10));
+  let index = 0;
+  while (index < lines.length) {{
+    if (!lines[index].trim()) {{
+      index += 1;
+      continue;
+    }}
+    const heading = traceHeadingInfo(lines[index]);
+    if (heading) {{
+      const node = document.createElement('h' + heading.level);
+      appendTraceInline(node, heading.text);
+      container.appendChild(node);
+      index += 1;
+      continue;
+    }}
+    const list = traceListInfo(lines[index]);
+    if (list) {{
+      const node = document.createElement(list.ordered ? 'ol' : 'ul');
+      while (index < lines.length) {{
+        const item = traceListInfo(lines[index]);
+        if (!item || item.ordered !== list.ordered) break;
+        const li = document.createElement('li');
+        appendTraceInline(li, item.text);
+        node.appendChild(li);
+        index += 1;
+      }}
+      container.appendChild(node);
+      continue;
+    }}
+    const quote = traceQuoteText(lines[index]);
+    if (quote !== null) {{
+      const node = document.createElement('blockquote');
+      const quoted = [];
+      while (index < lines.length) {{
+        const text = traceQuoteText(lines[index]);
+        if (text === null) break;
+        quoted.push(text);
+        index += 1;
+      }}
+      appendTraceInline(node, quoted.join(String.fromCharCode(10)));
+      container.appendChild(node);
+      continue;
+    }}
+    const paragraph = [];
+    while (index < lines.length && lines[index].trim()
+        && !traceHeadingInfo(lines[index]) && !traceListInfo(lines[index])
+        && traceQuoteText(lines[index]) === null) {{
+      paragraph.push(lines[index]);
+      index += 1;
+    }}
+    const node = document.createElement('p');
+    node.className = 'trace-prose';
+    appendTraceInline(node, paragraph.join(String.fromCharCode(10)));
+    container.appendChild(node);
+  }}
+}}
+
+function traceCodeBlock(block) {{
+  const figure = document.createElement('figure');
+  figure.className = 'trace-code-block';
+  const head = document.createElement('div');
+  head.className = 'trace-code-head';
+  const language = document.createElement('span');
+  language.className = 'trace-code-language';
+  language.textContent = block.language || 'code';
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'trace-code-copy';
+  copy.textContent = 'Copy';
+  copy.addEventListener('click', () => {{
+    copyText(block.text || '');
+    copy.textContent = 'Copied';
+    window.setTimeout(() => {{ copy.textContent = 'Copy'; }}, 1200);
+  }});
+  head.appendChild(language);
+  head.appendChild(copy);
+  const pre = document.createElement('pre');
+  pre.className = 'trace-code-pre';
+  const code = document.createElement('code');
+  code.textContent = block.text || '';
+  pre.appendChild(code);
+  figure.appendChild(head);
+  figure.appendChild(pre);
+  return figure;
+}}
+
+function renderTraceRichText(value) {{
+  const container = document.createElement('div');
+  container.className = 'trace-rich-text';
+  for (const block of traceMarkdownBlocks(value)) {{
+    if (block.type === 'code') container.appendChild(traceCodeBlock(block));
+    else appendTraceProse(container, block.text);
+  }}
+  return container;
+}}
+
+function traceTerminalPre(value) {{
+  const pre = document.createElement('pre');
+  pre.className = 'block-pre';
+  pre.textContent = String(value || '');
+  return pre;
+}}
+
+function reasoningBlock(text) {{
+  const details = document.createElement('details');
+  details.className = 'trace-block reasoning';
+  details.innerHTML = `<summary><span class="block-label">reasoning</span><span class="muted">${{formatMaybe((text || '').length)}} chars</span></summary>`;
+  details.appendChild(renderTraceRichText(text));
+  return details;
 }}
 
 
@@ -4179,14 +5032,15 @@ function prefaceCard(label, text, open) {{
   const details = document.createElement('details');
   details.className = 'preface-card';
   if (open) details.setAttribute('open', '');
-  details.innerHTML = `<summary><span class="block-label">${{escapeHtml(label)}}</span><span class="muted">${{formatMaybe((text || '').length)}} chars</span></summary><pre class="preface-pre">${{escapeHtml(text || '')}}</pre>`;
+  details.innerHTML = `<summary><span class="block-label">${{escapeHtml(label)}}</span><span class="muted">${{formatMaybe((text || '').length)}} chars</span></summary>`;
+  details.appendChild(renderTraceRichText(text));
   return details;
 }}
 
 
 
 
-function turnCardShell(idx, open, toolNames, obsCount, fillBody) {{
+function turnCardShell(idx, open, toolNames, obsCount, fillBody, meta = []) {{
   const card = document.createElement('div');
   card.className = 'turn-card' + (open ? ' open' : '');
   const body = document.createElement('div');
@@ -4200,12 +5054,10 @@ function turnCardShell(idx, open, toolNames, obsCount, fillBody) {{
     <span class="turn-num">Turn ${{idx + 1}}</span>
     <span class="turn-tools">${{toolNames.length ? toolNames.map(name => `<span class="step-badge warn">${{escapeHtml(name)}}</span>`).join('') : '<span class="muted">no tool call</span>'}}</span>
     <span class="turn-spacer"></span>
-    <span class="muted">${{obsCount}} obs</span>
+    <span class="turn-meta">${{meta.map(item => `<span>${{escapeHtml(item)}}</span>`).join('')}}<span>${{obsCount}} results</span></span>
   `;
   button.addEventListener('click', () => {{
-    const isOpen = card.classList.toggle('open');
-    body.style.display = isOpen ? 'flex' : 'none';
-    $('.turn-chev', button).textContent = isOpen ? 'v' : '>';
+    setTurnOpen(card, !card.classList.contains('open'));
   }});
   fillBody(body);
   card.appendChild(button);
@@ -4227,7 +5079,7 @@ function actionBlock(call) {{
   if (typeof args === 'string') {{
     try {{ args = JSON.parse(args); }} catch (err) {{}}
   }}
-  const wrap = traceBlock('action', 'action', '', name);
+  const wrap = traceBlock('action', 'action', '', name, 'terminal');
   const pre = $('.block-pre', wrap);
   if (args && typeof args === 'object' && !Array.isArray(args)) {{
     pre.remove();
@@ -4255,21 +5107,19 @@ function actionBlock(call) {{
 
 function observationBlock(text, label) {{
   const isErr = obsLooksError(text);
-  return traceBlock(isErr ? 'observation error' : 'observation', label || 'observation', text || '', isErr ? 'error?' : '');
+  return traceBlock(isErr ? 'observation error' : 'observation', label || 'observation', text || '', isErr ? 'error?' : '', 'terminal');
 }}
 
-function traceBlock(kind, label, text, toolName = '') {{
+function traceBlock(kind, label, text, toolName = '', mode = 'rich') {{
   const wrap = document.createElement('div');
   wrap.className = `trace-block ${{kind}}`;
-  wrap.innerHTML = `<div class="block-head"><span class="block-label">${{escapeHtml(label)}}</span>${{toolName ? `<span class="block-tool-name">${{escapeHtml(toolName)}}</span>` : ''}}</div><pre class="block-pre">${{escapeHtml(text || '')}}</pre>`;
+  wrap.innerHTML = `<div class="block-head"><span class="block-label">${{escapeHtml(label)}}</span>${{toolName ? `<span class="block-tool-name">${{escapeHtml(toolName)}}</span>` : ''}}</div>`;
+  wrap.appendChild(mode === 'terminal' ? traceTerminalPre(text) : renderTraceRichText(text));
   return wrap;
 }}
 
 function obsLooksError(text) {{
-  const head = String(text || '').slice(0, 800);
-  const m = head.match(/exit code[:\\s]+(-?\\d+)/i);
-  if (m) return m[1] !== '0';
-  return /<tool_use_error>|arguments provided to the tool are invalid|traceback \\(most recent call last\\)|command not found|permission denied|no such file or directory|non-zero exit status|error:/i.test(head);
+  return traceObservationLooksError(text);
 }}
 
 function emptySmall(text) {{
@@ -4440,7 +5290,7 @@ function selectSample(sample, button) {{
 
 document.addEventListener('keydown', event => {{
   if (event.key !== 'Escape') return;
-  for (const id of ['infoPanel', 'metricsPanel', 'trajPanel']) {{
+  for (const id of ['infoPanel', 'metricsPanel']) {{
     const panel = document.getElementById(id);
     if (panel) panel.hidden = true;
   }}
@@ -4451,7 +5301,7 @@ document.addEventListener('click', event => {{
   // close control dismisses it. Dismissal resolves against the dialog the click
   // actually happened in — matching on data-close alone would close whichever
   // dialog this loop happened to reach first.
-  const PANELS = [['infoPanel', 'infoToggle'], ['metricsPanel', 'metricsToggle'], ['trajPanel', null]];
+  const PANELS = [['infoPanel', 'infoToggle'], ['metricsPanel', 'metricsToggle']];
   for (const [panelId, buttonId] of PANELS) {{
     const panel = document.getElementById(panelId);
     const button = buttonId && document.getElementById(buttonId);
@@ -4479,10 +5329,10 @@ document.addEventListener('click', event => {{
   const sourceButton = event.target.closest('[data-source-filter]');
   if (sourceButton) {{
     const sourceSelect = $('#trajSource');
-    if (sourceSelect) {{
-      sourceSelect.value = sourceButton.dataset.sourceFilter || '';
-      renderTrajectoryList();
-    }}
+    if (sourceSelect) sourceSelect.value = sourceButton.dataset.sourceFilter || '';
+    renderTrajectorySourceTable();
+    renderTrajectoryList();
+    $('#trajectorySamplerPanel')?.scrollIntoView({{behavior: 'smooth', block: 'start'}});
   }}
 }});
 ['sampleSearch','sampleDataset'].forEach(id => {{
@@ -4510,16 +5360,19 @@ $$('th[data-source-sort]').forEach(th => th.addEventListener('click', () => {{
   }};
   renderTrajectorySourceTable();
 }}));
-['trajSearch','trajSource'].forEach(id => {{
+['trajSearch','trajSource','trajLanguage','trajMode','trajSampleSize'].forEach(id => {{
   const el = $('#' + id);
-  if (el) el.addEventListener('input', renderTrajectoryList);
-  if (el) el.addEventListener('change', renderTrajectoryList);
+  const update = () => {{
+    renderTrajectoryList();
+    if (id === 'trajSource') renderTrajectorySourceTable();
+  }};
+  if (el) el.addEventListener('input', update);
+  if (el) el.addEventListener('change', update);
 }});
 $('#trajResample')?.addEventListener('click', () => {{
   trajSampleSeed += 1;
   renderTrajectoryList();
 }});
-$('#openSampler')?.addEventListener('click', openSampler);
 $$('th.sortable').forEach(th => th.addEventListener('click', () => sortTable(th)));
 $('#copySampleId')?.addEventListener('click', () => copyText(currentSample?.instance_id || ''));
 $('#themeToggle')?.addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
@@ -4529,14 +5382,12 @@ $('#refreshNow')?.addEventListener('click', event => {{
   btn.setAttribute('aria-busy', 'true');
   window.location.reload();
 }});
-populateSelect('trajSource', new Set([
-  ...trajCardData.map(row => trajSourceName(row)),
-  ...trajSourceSummaryData.map(row => row.source || 'unknown'),
-]));
 renderThemeToggle();
 renderOverviewCharts();
 renderTrajectorySourceTable();
 renderSubscoreMatrix();
+populateSelect('trajLanguage', new Set(trajCardData.map(card => card.language || '').filter(Boolean)));
+populateSelect('trajSource', new Set(trajCardData.map(trajSourceName).filter(Boolean)));
 renderTrajectoryList();
 renderSampleList();
 renderSegments();
