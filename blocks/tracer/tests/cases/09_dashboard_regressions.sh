@@ -547,6 +547,31 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         }
         if parsed != expected:
             raise AssertionError(f"LiteLLM event normalization duplicated or dropped trace data: {parsed}")
+        missing_metrics_fixture = json.loads(json.dumps(fixture))
+        missing_metrics_fixture[0]["usage"]["total_tokens"] = None
+        missing_metrics_fixture[0]["usage"]["cost"] = None
+        missing_metrics_fixture[0]["duration_ms"] = None
+        missing_metrics_fixture[1]["usage"]["total_tokens"] = ""
+        missing_metrics_fixture[1]["usage"]["cost"] = "   "
+        missing_metrics_fixture[1]["duration_ms"] = ""
+        missing_metrics_script = (
+            f"eval({json.dumps(trace_model)});"
+            f"const trace=analyzeTrajectoryRecord({json.dumps(missing_metrics_fixture)});"
+            "process.stdout.write(JSON.stringify({tokens:trace.summary.tokens,"
+            "cost:trace.summary.cost_usd,duration:trace.summary.llm_duration_sec,"
+            "nullValue:traceNumber(null),emptyValue:traceNumber('   ')}));"
+        )
+        missing_metrics = json.loads(
+            subprocess.check_output([node, "-e", missing_metrics_script], text=True)
+        )
+        if missing_metrics != {
+            "tokens": 39,
+            "cost": None,
+            "duration": None,
+            "nullValue": None,
+            "emptyValue": None,
+        }:
+            raise AssertionError(f"missing trace metrics were converted to zero: {missing_metrics}")
         sort_start = rendered_html.index("function trajNumeric")
         sort_end = rendered_html.index("function topCountLabel", sort_start)
         sort_model = rendered_html[sort_start:sort_end]

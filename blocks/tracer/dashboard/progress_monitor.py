@@ -4331,6 +4331,7 @@ function contentToText(content) {{
 
 // TRACE_MODEL_START — kept DOM-free so regression tests can execute it in Node.
 function traceNumber(value) {{
+  if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }}
