@@ -1899,7 +1899,7 @@ function renderLiteLLMTimeline(container, trace) {
       for (const result of item.orphan_results || []) {
         body.appendChild(observationBlock(traceText(result.content), result.name ? `tool result · ${result.name}` : 'tool result'));
       }
-      if (item.event?.success === false) body.appendChild(traceBlock('error', 'API failure', traceText(item.event?.error || item.event?.exception || 'The model request was marked unsuccessful.')));
+      if (item.event?.success === false) body.appendChild(traceBlock('error', 'API failure', traceText(item.event?.failure || item.event?.error || item.event?.exception || 'The model request was marked unsuccessful.')));
       if (!body.children.length) body.appendChild(emptySmall('No displayable content in this turn.'));
     }, meta);
     turns.appendChild(turn);

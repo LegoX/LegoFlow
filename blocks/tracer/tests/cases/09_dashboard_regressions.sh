@@ -297,6 +297,51 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     if embedded_ids != {"small-0", "small-1"}:
         raise AssertionError(f"embed limit counted failed attempts instead of successful records: {candidate_cards}")
 
+    im_batch_path = tmp / "batch-im.jsonl"
+    im_batch_path.write_text(
+        "".join(
+            json.dumps({"index": idx, "content": "x" * (500 if idx < 9 else 1)}) + "\n"
+            for idx in range(12)
+        ),
+        encoding="utf-8",
+    )
+    im_batch_cards = [
+        {
+            "id": f"im-{idx:02d}",
+            "job": "batch",
+            "kind": "quality",
+            "status": "scored",
+            "im_path": str(im_batch_path),
+            "index": idx,
+        }
+        for idx in range(12)
+    ]
+    observed_im_reads = []
+    original_im_get = dashboard.IndexedImRecordReader.get
+
+    def tracked_im_get(self, path, index):
+        observed_im_reads.append(index)
+        return original_im_get(self, path, index)
+
+    dashboard.IndexedImRecordReader.get = tracked_im_get
+    try:
+        batched_exports = dashboard.write_embedded_trajectory_shards(
+            data_dir,
+            im_batch_cards,
+            limit=2,
+            max_total_bytes=10_000,
+            max_record_bytes=200,
+        )
+    finally:
+        dashboard.IndexedImRecordReader.get = original_im_get
+    if not batched_exports:
+        raise AssertionError("lazy IM fallback did not reach smaller later records")
+    if observed_im_reads != list(range(11)):
+        raise AssertionError(f"IM fallback parsed records beyond the successful limit: {observed_im_reads}")
+    batched_ids = {card["id"] for card in im_batch_cards if card.get("embedded_available")}
+    if batched_ids != {"im-09", "im-10"}:
+        raise AssertionError(f"lazy IM fallback selected the wrong records: {im_batch_cards}")
+
     empty_jobs = tmp / "jobs"
     empty_tasks = tmp / "tasks"
     empty_jobs.mkdir()
@@ -380,6 +425,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         "TRACE_MARKDOWN_MODEL_START",
         "function traceMarkdownBlocks(value)",
         "function renderTraceRichText(value)",
+        "item.event?.failure || item.event?.error || item.event?.exception",
         "trace-code-block",
         "trace-code-copy",
         "text-align: left",

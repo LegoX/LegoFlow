@@ -337,6 +337,18 @@ jobs:
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/tracer"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh tracer"; exit 1; }
+          # The shared checkout survives org/repository migrations. Keep its
+          # saved origins aligned with the URLs declared by the merge ref so
+          # repo-pin validation checks repository identity, not stale metadata.
+          for repo_name in harbor swe_data_process; do
+            repo_url="$(python3 - "$repo_name" <<'PY'
+          import sys, yaml
+          config = yaml.safe_load(open("config.yaml", encoding="utf-8"))
+          print(config["meta_info"]["repositories"][sys.argv[1]]["url"])
+          PY
+          )"
+            git -C "$CANON/repos/$repo_name" remote set-url origin "$repo_url"
+          done
           mkdir -p repos artifacts
           rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
@@ -422,6 +434,17 @@ jobs:
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/tracer"
+          # The smoke job reuses the same canonical repositories as cases.
+          # Refresh origins before linking them into this checkout as well.
+          for repo_name in harbor swe_data_process; do
+            repo_url="$(python3 - "$repo_name" <<'PY'
+          import sys, yaml
+          config = yaml.safe_load(open("config.yaml", encoding="utf-8"))
+          print(config["meta_info"]["repositories"][sys.argv[1]]["url"])
+          PY
+          )"
+            git -C "$CANON/repos/$repo_name" remote set-url origin "$repo_url"
+          done
           mkdir -p repos artifacts
           rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor

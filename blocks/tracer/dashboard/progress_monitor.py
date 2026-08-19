@@ -1924,34 +1924,58 @@ def strip_record_paths(node: Any, block_dir: Path = BLOCK_DIR) -> Any:
     return node
 
 
-def read_im_records(cards: list[dict[str, Any]]) -> dict[tuple[str, int], Any]:
-    """Fetch the specific im.jsonl lines a set of cards points at.
+class IndexedImRecordReader:
+    """Index requested IM lines once and materialize one record at a time."""
 
-    One pass per file, stopping at the last line wanted — these run to hundreds
-    of megabytes, and per-record seeking would re-read the file each time.
-    """
-    wanted: dict[str, set[int]] = {}
-    for card in cards:
-        path, index = str(card.get("im_path") or ""), card.get("index")
-        if path and index is not None:
-            wanted.setdefault(path, set()).add(int(index))
+    def __init__(self, cards: list[dict[str, Any]]) -> None:
+        wanted: dict[str, set[int]] = {}
+        for card in cards:
+            path, index = str(card.get("im_path") or ""), card.get("index")
+            if path and index is not None:
+                wanted.setdefault(path, set()).add(int(index))
 
-    out: dict[tuple[str, int], Any] = {}
-    for path, indices in wanted.items():
-        last = max(indices)
-        try:
-            with open(path, encoding="utf-8", errors="ignore") as fh:
-                for i, line in enumerate(fh):
-                    if i in indices:
-                        try:
-                            out[(path, i)] = json.loads(line)
-                        except json.JSONDecodeError:
-                            print(f"WARN: invalid JSON at {path}:{i + 1}", file=sys.stderr)
-                    if i >= last:
+        self.files: dict[str, Any] = {}
+        self.offsets: dict[tuple[str, int], int] = {}
+        for path, indices in wanted.items():
+            last = max(indices)
+            try:
+                fh = open(path, "rb")
+            except OSError as exc:
+                print(f"WARN: failed to read {path}: {exc}", file=sys.stderr)
+                continue
+            self.files[path] = fh
+            line_number = 0
+            try:
+                while line_number <= last:
+                    offset = fh.tell()
+                    line = fh.readline()
+                    if not line:
                         break
+                    if line_number in indices:
+                        self.offsets[(path, line_number)] = offset
+                    line_number += 1
+            except OSError as exc:
+                print(f"WARN: failed to index {path}: {exc}", file=sys.stderr)
+
+    def get(self, path: str, index: int) -> Any | None:
+        fh = self.files.get(path)
+        offset = self.offsets.get((path, index))
+        if fh is None or offset is None:
+            return None
+        try:
+            fh.seek(offset)
+            line = fh.readline().decode("utf-8", errors="ignore")
+            return json.loads(line)
+        except json.JSONDecodeError:
+            print(f"WARN: invalid JSON at {path}:{index + 1}", file=sys.stderr)
         except OSError as exc:
-            print(f"WARN: failed to read {path}: {exc}", file=sys.stderr)
-    return out
+            print(f"WARN: failed to read {path}:{index + 1}: {exc}", file=sys.stderr)
+        return None
+
+    def close(self) -> None:
+        for fh in self.files.values():
+            fh.close()
+        self.files.clear()
 
 
 def read_trajectory_payload(path: Path) -> Any:
@@ -2014,48 +2038,54 @@ def write_embedded_trajectory_shards(
         card.pop("embedded_bytes", None)
 
     selected = select_embedded_traj_cards(cards, limit=limit)
-    im_records = read_im_records(selected)
-    for card in selected:
-        if embedded_count >= limit:
-            break
-        trajectory_path = Path(str(card.get("trajectory_path") or ""))
-        if str(card.get("trajectory_path") or ""):
-            if max_record_bytes:
+    # Build a lightweight byte-offset index once. Parsing remains lazy, so the
+    # fallback can inspect every candidate without retaining thousands of
+    # multi-megabyte IM records before the successful-embed limit is reached.
+    im_records = IndexedImRecordReader(selected)
+    try:
+        for card in selected:
+            if embedded_count >= limit:
+                break
+            trajectory_path = Path(str(card.get("trajectory_path") or ""))
+            if str(card.get("trajectory_path") or ""):
+                if max_record_bytes:
+                    try:
+                        if trajectory_path.stat().st_size > max_record_bytes:
+                            oversized += 1
+                            continue
+                    except OSError:
+                        pass
                 try:
-                    if trajectory_path.stat().st_size > max_record_bytes:
-                        oversized += 1
-                        continue
-                except OSError:
-                    pass
-            try:
-                record = read_trajectory_payload(trajectory_path)
-            except (OSError, ValueError) as exc:
-                print(f"WARN: failed to embed trajectory {trajectory_path}: {exc}", file=sys.stderr)
+                    record = read_trajectory_payload(trajectory_path)
+                except (OSError, ValueError) as exc:
+                    print(f"WARN: failed to embed trajectory {trajectory_path}: {exc}", file=sys.stderr)
+                    continue
+            else:
+                record = im_records.get(str(card.get("im_path")), int(card.get("index")))
+                if record is None:
+                    continue
+            record = strip_record_paths(record)
+            row = {"id": card.get("id"), "record": record}
+            line = json.dumps(row, ensure_ascii=False, default=json_default) + "\n"
+            line_bytes = len(line.encode("utf-8"))
+            if max_record_bytes and line_bytes > max_record_bytes:
+                oversized += 1
                 continue
-        else:
-            record = im_records.get((str(card.get("im_path")), int(card.get("index"))))
-            if record is None:
+            if current and current_bytes + line_bytes > shard_max_bytes:
+                flush()
+            if total_bytes + line_bytes > max_total_bytes:
                 continue
-        record = strip_record_paths(record)
-        row = {"id": card.get("id"), "record": record}
-        line = json.dumps(row, ensure_ascii=False, default=json_default) + "\n"
-        line_bytes = len(line.encode("utf-8"))
-        if max_record_bytes and line_bytes > max_record_bytes:
-            oversized += 1
-            continue
-        if current and current_bytes + line_bytes > shard_max_bytes:
-            flush()
-        if total_bytes + line_bytes > max_total_bytes:
-            continue
-        if line_bytes > max_total_bytes:
-            continue
-        card["embedded_available"] = True
-        card["embedded_path"] = shard_rel(shard_index)
-        card["embedded_bytes"] = line_bytes
-        current.append(line)
-        current_bytes += line_bytes
-        total_bytes += line_bytes
-        embedded_count += 1
+            if line_bytes > max_total_bytes:
+                continue
+            card["embedded_available"] = True
+            card["embedded_path"] = shard_rel(shard_index)
+            card["embedded_bytes"] = line_bytes
+            current.append(line)
+            current_bytes += line_bytes
+            total_bytes += line_bytes
+            embedded_count += 1
+    finally:
+        im_records.close()
     flush()
     if oversized:
         print(f"NOTE: {oversized} trajectory record(s) exceeded "
@@ -4672,7 +4702,7 @@ function renderLiteLLMTimeline(container, trace) {{
       for (const result of item.orphan_results || []) {{
         body.appendChild(observationBlock(traceText(result.content), result.name ? `tool result · ${{result.name}}` : 'tool result'));
       }}
-      if (item.event?.success === false) body.appendChild(traceBlock('error', 'API failure', traceText(item.event?.error || item.event?.exception || 'The model request was marked unsuccessful.')));
+      if (item.event?.success === false) body.appendChild(traceBlock('error', 'API failure', traceText(item.event?.failure || item.event?.error || item.event?.exception || 'The model request was marked unsuccessful.')));
       if (!body.children.length) body.appendChild(emptySmall('No displayable content in this turn.'));
     }}, meta);
     turns.appendChild(turn);
