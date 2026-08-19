@@ -65,7 +65,7 @@ Run from the repo root with the `block` plugin loaded, or from this directory.
 /root:check tracer     # preflight: config, repos, envs, tasks, LLM endpoint
 /tracer:setup           # clone/update repos, build uv envs, run dryrun
 /root:run tracer       # execute scripts/start.sh (proxy + Harbor) and archive
-/tracer:dashboard       # view overview/instances/trajectories/operations locally or sync online
+/tracer:dashboard       # view Overview, Jobs, and Trajectories locally or sync online
 ```
 
 After a job, do the tracer-specific bookkeeping (ledger + `HARBOR_EXCLUDE_TASKS`
@@ -83,7 +83,7 @@ generic lifecycle (`/root:check`, `/root:run`); these are tracer-specific:
 | `/tracer:setup` | Clone/update `harbor` + `swe_data_process`, build uv envs, initialise ledger if needed, run dryrun |
 | `/tracer:check` | Read-only preflight |
 | `/tracer:run` | LiteLLM proxy + Harbor job + post-run ledger / exclude-list / status bookkeeping |
-| `/tracer:dashboard` | Interactive HTML board (Overview, Instances, Trajectories, Operations), Cloudflare Pages online sync, optional R2 full trajectory loading, or SFT stats refresh |
+| `/tracer:dashboard` | Interactive HTML board (Overview, Jobs, Trajectories), Cloudflare Pages online sync, optional R2 full trajectory loading, or SFT stats refresh |
 
 ## Where things live
 
