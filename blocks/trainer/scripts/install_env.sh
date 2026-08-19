@@ -61,7 +61,7 @@ uv pip install --python "$PY" \
   --index-url "$TUNA_INDEX" \
   -e "repos/swe_data_process[llm]"
 
-# Install the patched SWE-Lego LLaMA-Factory source and its training stack.
+# Install the patched LegoX LLaMA-Factory source and its training stack.
 uv pip install --python "$PY" --index-url "$TUNA_INDEX" \
   -e "repos/LLaMA-Factory"
 uv pip install --python "$PY" --index-url "$TUNA_INDEX" \

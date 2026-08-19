@@ -14,7 +14,7 @@ meta_info:
   repos:
     legoflow-curator:
       name: legoflow-curator
-      commit_id: 3ba57a1d07ac277d72546d705bf2de6f82ca373e
+      commit_id: 53faa328fcfc000c258e0d4b47dd609a887fc23a
       role: core pipeline - CLI, task generation, validation, scoring
 
   environment:

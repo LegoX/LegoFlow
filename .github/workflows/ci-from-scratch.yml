@@ -76,7 +76,7 @@ jobs:
           HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "git@github.com:"
           HOME="$CI_HOME" git config --global --add url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
           # actions/checkout sets a per-repo extraheader with the workflow's
-          # GITHUB_TOKEN; that token can't see private SWE-Lego submodules, so
+          # GITHUB_TOKEN; that token can't see private LegoX submodules, so
           # it must not override our PAT-embedded URL rewrites.
           git -C "$GITHUB_WORKSPACE" config --local --unset-all 'http.https://github.com/.extraheader' 2>/dev/null || true
           {
@@ -365,7 +365,7 @@ jobs:
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
             echo "PATH=$CICD_SHARED/uv/bin:$PATH"
             # HF creds + shared cache so the optional smoke's prepare_smoke_data.sh
-            # (load_dataset) can pull SWE-Lego/samples_for_llama_factory_sft even
+            # (load_dataset) can pull Lego-X/samples_for_llama_factory_sft even
             # if it's gated/uncached — matches the other from-scratch jobs.
             echo "HF_TOKEN=${HF_TOKEN:-}"
             echo "HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-${HF_TOKEN:-}}"

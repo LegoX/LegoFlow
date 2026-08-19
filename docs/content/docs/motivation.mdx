@@ -9,32 +9,9 @@ pipeline involves multiple stages: mining real repositories, collecting valid
 PRs, creating verified tasks with runnable environments, rolling out and
 filtering successful trajectories, and closing the training-evaluation loop.
 
-Code data engineering is especially complex along the following dimensions:
-
-- **Human-in-the-loop**: Each stage usually needs a human to prepare inputs,
-  check intermediate outputs, decide whether a run is good enough to continue,
-  and pass stage-wise artifacts to the next step. These handoffs are easy to
-  lose track of when they live in ad-hoc notes, copied paths, or one person's
-  memory.
-
-- **Domain-specific pipelines**: Agent data pipelines differ widely across
-  domains. While 
-  [Harbor](https://www.harborframework.com/docs) provides a unified scheme to agentic task structure,
-  the upstream data sources, verification rules, rollout environments, and analysis
-  needs still vary from one to another. 
-
-- **Heterogeneous platforms**: The pipeline often spans different machines and
-  runtime environments. Task construction and rollout need CPU-heavy Docker
-  sandboxes, while training and large-scale evaluation may need GPU servers.
-  Coordinating these environments requires explicit configuration, reproducible
-  scripts, and clear ownership of artifacts.
-
-## The Goal of LegoFlow
-
-LegoFlow answers these challenges by turning the whole agentic-data pipeline
-into a set of reusable, inspectable blocks. Each block has a clear contract,
-standard plugin skills, its own dashboard, and archived artifacts, so users can
-run the pipeline stage by stage without memorizing hidden handoffs. The same
+LegoFlow aims to simplify the whole process of code data engineering by turning the whole agentic-data pipeline
+into a set of reusable, inspectable blocks. Each block has a clear contract, standard plugin skills, its own dashboard, 
+and archived artifacts, so users can run the pipeline stage by stage without memorizing hidden handoffs. The same
 structure also keeps the system extensible: new data domains, new coding agents,
 new training recipes, and new evaluation rubrics can be added while preserving a
 consistent way to configure, run, debug, and compare results.
@@ -103,72 +80,3 @@ described in [this temporary blog post](https://legox.pages.dev/blog/legoflow/).
 The same loop can also be used to tune block-level choices, such as task
 filters, rollout agents, trajectory selection rules, training settings, and
 evaluation suites, then compare the resulting artifacts across runs.
-
-{/* ------- The Old Content ------
-
-## The failure mode is the handoff
-
-In practice each stage becomes a directory of scripts with its own conventions,
-often owned by a different person. The contracts between them stay informal: a
-path pasted into a message, a filename that "everyone knows" is the verified set,
-a filter applied by hand before training that nobody wrote down. That works while
-one person holds the whole thing in their head, and it degrades from there.
-
-The symptoms are consistent:
-
-- **A stage silently consumes the wrong thing.** Training reads every task
-  directory instead of the verified ones, and nothing complains, because a
-  directory of half-finished candidates looks exactly like a directory of tasks.
-- **A failure cannot be traced back.** A malformed record surfaces during
-  training, three stages away from the conversion step that produced it.
-- **A rerun means redoing everything.** The configuration and code that produced
-  last week's run are gone, so a new attempt cannot be compared with the old one
-  and the old one cannot be reproduced.
-- **Nobody can say what a number means.** A benchmark score exists, but the data
-  it was trained on and the conditions it was measured under were not recorded
-  together.
-
-## LegoFlow turns the loop into blocks
-
-LegoFlow makes the pipeline a tree of **blocks**, where every block obeys the
-same contract, and the contract targets exactly the failures above.
-
-- **Dependencies are declared in both directions.** A consumer states which
-  upstream output feeds which of its own inputs, and the producer mirrors it. A
-  broken handoff is caught by a preflight check, before a multi-hour job starts.
-- **Each run is archived with its configuration and scripts.** A run can be
-  compared, explained, and rerun later, because the scene that produced it was
-  kept.
-- **Every block looks the same from the outside.** Setup, check, run, inspect,
-  in that order, with the same archive layout and the same kind of dashboard.
-  Learning one block is most of the work of learning the next.
-- **One config per run.** The knobs that decide a run live in one file, so
-  changing one variable and rerunning is a small, reviewable edit rather than an
-  archaeology exercise across scripts.
-
-Each block also comes with plugin skills and a dashboard. The skills give users
-a friendly way to run setup, checks, jobs, and visualization from a coding-agent
-session. The dashboard gives the run a shared place to inspect task difficulty,
-trajectory quality, training progress, and evaluation results.
-
-## Why this matters more with agents
-
-A uniform contract is convenient for a person and load-bearing for an agent. An
-agent operating this pipeline has to decide what to run next, notice that
-something went wrong, find the stage responsible, change one thing, and rerun
-only what that change affected. All four of those depend on structure it can rely
-on rather than conventions it has to infer.
-
-That is not a hypothesis. An agent has run this entire pipeline on its own:
-Curator built verified tasks, Tracer collected solved trajectories, Trainer
-fine-tuned a model, and Evaluator measured the result. The loop diagnosed why a
-first fine-tune plateaued, changed the trajectory selection rule, and lifted
-`Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. [Running
-Cascaded Blocks](/docs/running-blocks/cascaded) is the procedure it followed.
-
-## Where to go next
-
-- [Getting Started](/docs/getting-started) to install and configure the tree.
-- [What is a Block](/docs/development/block-design) for the exact contract every block obeys.
-- [Running Cascaded Blocks](/docs/running-blocks/cascaded) for the full run, with numbers.
-*/}
