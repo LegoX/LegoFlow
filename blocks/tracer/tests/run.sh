@@ -25,6 +25,34 @@ for arg in "$@"; do
   esac
 done
 
+sync_ci_runtime_origins() {
+  [[ "${CI:-}" == "true" ]] || return 0
+  local name path url abs current
+  while IFS=$'\t' read -r name path url; do
+    abs="$BLOCK_DIR/$path"
+    # Normal CI links these paths to long-lived shared checkouts. Repository
+    # transfers can leave their saved origin metadata stale even when the pin
+    # and worktree are correct. Local, non-symlinked repos remain untouched.
+    [[ -L "$abs" ]] || continue
+    current="$(git -C "$abs" remote get-url origin 2>/dev/null || true)"
+    [[ "$current" == "$url" ]] && continue
+    echo "INFO: refreshing CI runtime origin for $name: $current -> $url"
+    git -C "$abs" remote set-url origin "$url" || return 1
+  done < <(python3 - "$BLOCK_DIR/config.yaml" <<'PY'
+import sys, yaml
+config = yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}
+for name in ("harbor", "swe_data_process"):
+    repo = config["meta_info"]["repositories"][name]
+    print(f"{name}\t{repo['path']}\t{repo['url']}")
+PY
+  )
+}
+
+if ! sync_ci_runtime_origins; then
+  echo "FAIL: could not refresh Tracer CI shared-runtime origins" >&2
+  exit 1
+fi
+
 pass=0; fail=0; skip=0
 failed_names=()
 
