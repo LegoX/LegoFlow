@@ -1,6 +1,6 @@
 {
   "name": "curator-block",
-  "owner": { "name": "SWE-Lego" },
+  "owner": { "name": "LegoX" },
   "plugins": [
     {
       "name": "curator",

@@ -4,7 +4,7 @@ title: Overview
 
 Evaluator runs registered evaluation benchmarks through Harbor against any configurable upstream LLM, and stores per-task results and trajectories.
 
-It is the evaluation stage of the [LegoFlow](https://github.com/LegoX/SWE-Lego-Live) pipeline — a leaf block with no downstream consumer. Where `tracer` generates training data and `trainer` produces checkpoints, Evaluator measures how good any model is on a chosen benchmark. It mirrors Tracer's runtime shell (a pinned [Harbor](https://github.com/SWE-Lego/harbor) checkout fronted by a per-job LiteLLM proxy), but loads its task set from Harbor's `registry.json` instead of a locally-staged legoflow-curator export.
+It is the evaluation stage of the [LegoFlow](https://github.com/LegoX/SWE-Lego-Live) pipeline — a leaf block with no downstream consumer. Where `tracer` generates training data and `trainer` produces checkpoints, Evaluator measures how good any model is on a chosen benchmark. It mirrors Tracer's runtime shell (a pinned [Harbor](https://github.com/LegoX/harbor) checkout fronted by a per-job LiteLLM proxy), but loads its task set from Harbor's `registry.json` instead of a locally-staged legoflow-curator export.
 
 Evaluator provides:
 

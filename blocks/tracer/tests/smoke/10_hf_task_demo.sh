@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CI smoke 10: tracer end-to-end on 10 tasks selected from the HuggingFace
-# dataset configured in runtime_info.input.task_source (SWE-Lego/swerebenchv2-…).
+# dataset configured in runtime_info.input.task_source (Lego-X/swerebenchv2-…).
 #
 # Strategy: swap config.yaml for a smoke variant (jobs_dir=artifacts/jobs/smoke,
 # n_tasks=10, low concurrency, sft_conversion disabled), run prepare_tasks.sh
