@@ -267,3 +267,6 @@ Re-run `/curator:check`.
 ## Shared LegoFlow CLI
 
 The canonical execution command for this skill is `./bin/legoflow check curator`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.
+## LegoFlow Command Convention
+
+The canonical command for this skill is `/curator:check`. The shared CLI accepts the same command as `./bin/legoflow /curator:check` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.

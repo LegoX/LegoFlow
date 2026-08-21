@@ -7,10 +7,12 @@ import argparse
 import os
 import subprocess
 import sys
+import re
 from pathlib import Path
 
 
 BLOCKS = ("curator", "tracer", "trainer", "evaluator")
+COMMAND_BLOCKS = ("root", *BLOCKS)
 
 
 def repo_root() -> Path:
@@ -67,6 +69,14 @@ def run_setup(root: Path, block: str) -> int:
     return 0
 
 
+def run_setup_all(root: Path) -> int:
+    for block in BLOCKS:
+        result = run_setup(root, block)
+        if result:
+            return result
+    return 0
+
+
 def run_workflow(root: Path, block: str | None, extra: list[str]) -> int:
     if extra[:1] == ["--"]:
         extra = extra[1:]
@@ -88,6 +98,15 @@ def run_dashboard(root: Path, block: str, extra: list[str]) -> int:
     else:
         command = ["bash", "dashboard/start.sh", *extra]
     return run_command(root, command, directory)
+
+
+def run_dashboard_all(root: Path, extra: list[str]) -> int:
+    result = 0
+    for block in BLOCKS:
+        result = run_dashboard(root, block, extra)
+        if result:
+            return result
+    return result
 
 
 def run_curator_action(root: Path, action: str, extra: list[str]) -> int:
@@ -112,6 +131,36 @@ def print_create_contract(root: Path) -> int:
     return 0
 
 
+def normalize_slash_command(argv: list[str]) -> list[str]:
+    """Translate LegoFlow slash commands into the shared CLI subcommands."""
+    aliases = {
+        ("root", "check"): ["check", "--full"],
+        ("root", "setup"): ["setup-all"],
+        ("root", "run"): ["run"],
+        ("root", "dashboard"): ["dashboard-all"],
+        ("root", "create"): ["create"],
+    }
+    for block in BLOCKS:
+        aliases[(block, "check")] = ["check", block]
+        aliases[(block, "setup")] = ["setup", block]
+        aliases[(block, "run")] = ["run", block]
+        aliases[(block, "dashboard")] = ["dashboard", block]
+    aliases.update({
+        ("curator", "collect-prs"): ["collect-prs"],
+        ("curator", "create-tasks"): ["create-tasks"],
+    })
+    normalized = list(argv)
+    for index, value in enumerate(normalized):
+        match = re.fullmatch(r"/(root|curator|tracer|trainer|evaluator):([a-z-]+)", value)
+        if not match:
+            continue
+        key = (match.group(1), match.group(2))
+        if key not in aliases:
+            raise SystemExit(f"Unknown LegoFlow slash command: {value}")
+        return normalized[:index] + aliases[key] + normalized[index + 1:]
+    return normalized
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="legoflow", description="Run LegoFlow workflows consistently from any coding agent.")
     parser.add_argument("--root", type=Path, default=None, help="LegoFlow repository root (defaults to this checkout).")
@@ -123,6 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     setup = subparsers.add_parser("setup", help="Prepare one block's pinned repositories and environment.")
     setup.add_argument("block", choices=BLOCKS)
+    subparsers.add_parser("setup-all", help="Prepare every LegoFlow block.")
 
     run = subparsers.add_parser("run", help="Run the root pipeline or one block.")
     run.add_argument("block", nargs="?", choices=BLOCKS)
@@ -131,6 +181,8 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard = subparsers.add_parser("dashboard", help="Inspect or serve one block dashboard.")
     dashboard.add_argument("block", choices=BLOCKS)
     dashboard.add_argument("args", nargs=argparse.REMAINDER)
+    dashboard_all = subparsers.add_parser("dashboard-all", help="Inspect every block dashboard.")
+    dashboard_all.add_argument("args", nargs=argparse.REMAINDER)
 
     subparsers.add_parser("create", help="Show the shared block-creation contract for an agent-assisted scaffold.")
 
@@ -143,7 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    arguments = parser.parse_args(argv)
+    arguments = parser.parse_args(normalize_slash_command(list(argv if argv is not None else sys.argv[1:])))
     root = (arguments.root or repo_root()).expanduser().resolve()
     if not (root / "config.yaml").is_file():
         parser.error(f"LegoFlow root does not contain config.yaml: {root}")
@@ -151,10 +203,14 @@ def main(argv: list[str] | None = None) -> int:
         return run_check(root, arguments.block, arguments.full)
     if arguments.command == "setup":
         return run_setup(root, arguments.block)
+    if arguments.command == "setup-all":
+        return run_setup_all(root)
     if arguments.command == "run":
         return run_workflow(root, arguments.block, arguments.args)
     if arguments.command == "dashboard":
         return run_dashboard(root, arguments.block, arguments.args)
+    if arguments.command == "dashboard-all":
+        return run_dashboard_all(root, arguments.args)
     if arguments.command == "create":
         return print_create_contract(root)
     if arguments.command in {"collect-prs", "create-tasks"}:

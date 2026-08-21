@@ -108,3 +108,6 @@ Live web UI:  cd dashboard && ./start_dashboard.sh   (:8091)
 ## Shared LegoFlow CLI
 
 The canonical execution command for this skill is `./bin/legoflow dashboard trainer`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.
+## LegoFlow Command Convention
+
+The canonical command for this skill is `/trainer:dashboard`. The shared CLI accepts the same command as `./bin/legoflow /trainer:dashboard` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.

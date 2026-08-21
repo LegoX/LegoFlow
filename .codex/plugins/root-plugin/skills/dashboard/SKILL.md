@@ -6,3 +6,6 @@ description: Inspect or refresh LegoFlow dashboards and summarize experiment art
 # Inspect LegoFlow Dashboards
 
 Read the relevant block `AGENTS.md` and dashboard instructions. Prefer `./bin/legoflow dashboard <block>` in read-only mode, identify the artifact index and run being inspected, and summarize task counts, trajectory quality, training metrics, evaluation scores, and missing data. Ask for confirmation before publishing or deploying a dashboard.
+## LegoFlow Command Convention
+
+The canonical command for this skill is `/root:dashboard`. The shared CLI accepts the same command as `./bin/legoflow /root:dashboard` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.

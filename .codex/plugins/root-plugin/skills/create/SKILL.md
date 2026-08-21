@@ -10,3 +10,6 @@ Use the root block definition and existing examples. A new block must include `c
 ## Shared LegoFlow CLI
 
 Use `./bin/legoflow create` to print the shared block-creation contract before the agent-assisted intake and scaffold. Claude Code and Codex use the same contract and finish by running `./bin/legoflow check <block>`.
+## LegoFlow Command Convention
+
+The canonical command for this skill is `/root:create`. The shared CLI accepts the same command as `./bin/legoflow /root:create` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.

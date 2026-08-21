@@ -221,3 +221,6 @@ started, then hand off to `/curator:dashboard`.
 ## Shared LegoFlow CLI
 
 The canonical execution command for this skill is `./bin/legoflow create-tasks`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.
+## LegoFlow Command Convention
+
+The canonical command for this skill is `/curator:create-tasks`. The shared CLI accepts the same command as `./bin/legoflow /curator:create-tasks` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.

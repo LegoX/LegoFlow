@@ -29,6 +29,25 @@ You can also invoke it directly as `./bin/legoflow`.
 | `legoflow run <block>` | Run one block |
 | `legoflow dashboard <block>` | Inspect or serve one block dashboard |
 | `legoflow create` | Show the shared block-creation contract for an agent-assisted scaffold |
+
+The canonical LegoFlow command form is slash-based:
+
+```text
+/root:check
+/curator:check
+/curator:collect-prs
+/tracer:run
+/trainer:run
+/evaluator:dashboard
+```
+
+The repository CLI accepts these exact strings as arguments:
+
+```bash
+./bin/legoflow /root:check
+./bin/legoflow /curator:check
+./bin/legoflow /tracer:run
+```
 | `legoflow collect-prs` | Collect Curator candidate pull requests |
 | `legoflow create-tasks` | Create and verify Curator tasks |
 
@@ -40,11 +59,11 @@ Claude Code and Codex use the same action names and the same CLI commands:
 
 | Action | Claude Code | Codex | Shared execution |
 | --- | --- | --- | --- |
-| Curator check | `/curator:check` | `curator:check` skill | `legoflow check curator` |
-| Curator PR collection | `/curator:collect-prs` | `curator:collect-prs` skill | `legoflow collect-prs` |
-| Tracer run | `/tracer:run` | `tracer:run` skill | `legoflow run tracer` |
-| Trainer run | `/trainer:run` | `trainer:run` skill | `legoflow run trainer` |
-| Evaluator dashboard | `/evaluator:dashboard` | `evaluator:dashboard` skill | `legoflow dashboard evaluator` |
+| Curator check | `/curator:check` | `/curator:check` skill convention | `legoflow /curator:check` |
+| Curator PR collection | `/curator:collect-prs` | `/curator:collect-prs` skill convention | `legoflow /curator:collect-prs` |
+| Tracer run | `/tracer:run` | `/tracer:run` skill convention | `legoflow /tracer:run` |
+| Trainer run | `/trainer:run` | `/trainer:run` skill convention | `legoflow /trainer:run` |
+| Evaluator dashboard | `/evaluator:dashboard` | `/evaluator:dashboard` skill convention | `legoflow /evaluator:dashboard` |
 
 `create` remains agent-assisted because block scaffolding requires an intake conversation. Both agents use the same contract and must produce the same files; `legoflow create` prints that contract and the validation command.
 
