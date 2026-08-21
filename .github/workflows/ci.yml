@@ -163,6 +163,10 @@ jobs:
             ln -s "$CANON/artifacts/swe_tasks/py-cc" artifacts/swe_tasks/py-cc || true
           ls -la repos artifacts artifacts/swe_tasks
       - name: Run curator test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh
+      - name: Run curator test cases
         working-directory: blocks/curator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -359,6 +363,10 @@ jobs:
           fi
           ls -la repos artifacts
       - name: Run tracer test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh
+      - name: Run tracer test cases
         working-directory: blocks/tracer
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -536,6 +544,10 @@ jobs:
             || printf 'runs: []\n' > artifacts/index.yaml
           ls -la repos artifacts
       - name: Run evaluator test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh
+      - name: Run evaluator test cases
         working-directory: blocks/evaluator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -687,6 +699,10 @@ jobs:
           ln -s "$CANON/repos/swe_data_process"  repos/swe_data_process
           ln -s "$CANON/artifacts/env"           artifacts/env
           ls -la repos artifacts
+      - name: Run trainer test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh
       - name: Run trainer test cases
         working-directory: blocks/trainer
         run: bash tests/run.sh

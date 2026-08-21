@@ -24,7 +24,7 @@ meta_info:
     harbor:
       url: https://github.com/LegoX/harbor.git
       branch: main
-      commit: 0bdee0a6943afa8839e79038acb19a9016e27fb2
+      commit: 348d10f175e7951fcd1cbf472eb454d3d0a9b667
       path: repos/harbor
       readonly: true
 
@@ -94,4 +94,3 @@ runtime_info:
       job_layout: "artifacts/jobs/smoke/<job>/<task>/{agent,verifier}/"
       trajectory_format: "artifacts/jobs/smoke/<job>/<task>/agent/litellm-trajectory.jsonl"
       results_summary_format: "artifacts/jobs/smoke/<job>/result.json"
-

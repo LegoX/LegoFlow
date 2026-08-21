@@ -42,7 +42,15 @@ def get(d, dotted):
         cur = cur.get(part)
     return cur
 
-missing = [k for k in REQUIRED if get(cfg, k) in (None, "")]
+# Production configs intentionally leave operator-managed LLM credentials and
+# endpoints blank; CI injects them only for live smoke runs. The schema still
+# requires the fields to exist, while the model names remain mandatory.
+RUNTIME_FILLED = {
+    "runtime_info.input.llm_api.api_key",
+    "runtime_info.input.llm_api.api_base_url",
+}
+missing = [k for k in REQUIRED if get(cfg, k) is None or
+           (get(cfg, k) == "" and k not in RUNTIME_FILLED)]
 if missing:
     for k in missing:
         print(f"FAIL: missing or empty: {k}", file=sys.stderr)
