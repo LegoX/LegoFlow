@@ -50,7 +50,6 @@ def run_setup(root: Path, block: str) -> int:
     if block == "curator":
         commands = [
             ["git", "submodule", "update", "--init", "repos/legoflow-curator"],
-            ["uv", "venv", "artifacts/envs/legoflow-curator-env", "--python", "3.12"],
             [
                 "uv",
                 "pip",
@@ -62,6 +61,9 @@ def run_setup(root: Path, block: str) -> int:
             ],
             ["bash", "scripts/setup_cc_proxy_env.sh"],
         ]
+        venv = directory / "artifacts/envs/legoflow-curator-env/bin/python"
+        if not venv.is_file():
+            commands.insert(1, ["uv", "venv", "artifacts/envs/legoflow-curator-env", "--python", "3.12"])
     elif block == "tracer":
         commands = [
             ["bash", "scripts/update_repos.sh"],
