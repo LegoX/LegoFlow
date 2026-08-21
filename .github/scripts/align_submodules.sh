@@ -16,6 +16,12 @@ git_credentials=(git)
 if [[ -n "${GITHUB_TOKENS:-}" ]]; then
   export GITHUB_TOKEN="${GITHUB_TOKENS%%,*}"
 fi
+
+remove_local_path() {
+  local path="$1"
+  local relative="${path#"$ROOT/"}"
+  bash "$ROOT/.github/scripts/remove_workspace_paths.sh" "$relative"
+}
 if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   git_credentials=(git -c 'credential.helper=!f() { echo username=x-access-token; echo password=$GITHUB_TOKEN; }; f')
 fi
@@ -48,7 +54,7 @@ align_one() {
   fi
   if [[ "$actual" == "$expected" ]]; then
     if [[ -n "$SHARED_RUNTIME" ]]; then
-      rm -rf "$local_path"
+      remove_local_path "$local_path"
       mkdir -p "$(dirname "$local_path")"
       ln -s "$canonical" "$local_path"
       echo "INFO: $relative uses shared runtime pin $expected"
@@ -61,7 +67,7 @@ align_one() {
   echo "INFO: shared runtime pin drift for $relative (have ${actual:-<missing>}, need $expected); checking out PR gitlink"
   target_mode="$(git -C "$ROOT" ls-tree HEAD -- "$relative" | awk '{print $1}')"
   if [[ "$target_mode" == "160000" ]]; then
-    rm -rf "$local_path"
+    remove_local_path "$local_path"
     (cd "$ROOT" && "${git_credentials[@]}" submodule update --init --recursive --force -- "$relative")
   else
     checkout_path="$local_path"
@@ -77,7 +83,7 @@ align_one() {
       fetch --depth 1 origin "$expected"
     git -C "$checkout_path" checkout --detach "$expected"
     if [[ -n "$SHARED_RUNTIME" ]]; then
-      rm -rf "$local_path"
+      remove_local_path "$local_path"
       mkdir -p "$(dirname "$local_path")"
       ln -s "$checkout_path" "$local_path"
     fi

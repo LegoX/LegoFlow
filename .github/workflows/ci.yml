@@ -341,8 +341,11 @@ jobs:
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/tracer"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh tracer"; exit 1; }
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/tracer/repos/harbor blocks/tracer/repos/swe_data_process \
+            blocks/tracer/artifacts/env blocks/tracer/artifacts/agent-runtime \
+            blocks/tracer/artifacts/processed_tasks.yaml
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
           ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
           ln -s "$CANON/artifacts/env"                      artifacts/env
@@ -436,8 +439,11 @@ jobs:
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/tracer"
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/tracer/repos/harbor blocks/tracer/repos/swe_data_process \
+            blocks/tracer/artifacts/env blocks/tracer/artifacts/agent-runtime \
+            blocks/tracer/artifacts/processed_tasks.yaml
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
           ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
           ln -s "$CANON/artifacts/env"                      artifacts/env
@@ -536,9 +542,12 @@ jobs:
           CANON="${SHARED_RUNTIME}/evaluator"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh evaluator"; exit 1; }
           # actions/checkout creates empty placeholder dirs for declared
-          # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
+          # submodules; ln -sfn would put the link INSIDE them. Remove only
+          # checkout-local paths before creating the links.
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/evaluator/repos/harbor blocks/evaluator/artifacts/env \
+            blocks/evaluator/artifacts/runtime blocks/evaluator/artifacts/index.yaml
           mkdir -p repos artifacts
-          rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
           ln -s "$CANON/repos/harbor"        repos/harbor
           ln -s "$CANON/artifacts/env"       artifacts/env
           # agent.runtime_host_path: harbor bind-mounts this into every task
@@ -615,8 +624,10 @@ jobs:
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/evaluator"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh evaluator"; exit 1; }
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/evaluator/repos/harbor blocks/evaluator/artifacts/env \
+            blocks/evaluator/artifacts/runtime blocks/evaluator/artifacts/index.yaml
           mkdir -p repos artifacts
-          rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
           ln -s "$CANON/repos/harbor"        repos/harbor
           ln -s "$CANON/artifacts/env"       artifacts/env
           ln -s "$CANON/artifacts/runtime"   artifacts/runtime
