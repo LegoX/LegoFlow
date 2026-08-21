@@ -85,7 +85,7 @@ What each one is for is spelled out in [Getting Started](https://legoflow-docs.p
 ### Environment Setup
 1. Clone the code repository.
 ```bash
-git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
+git clone --recurse-submodules https://github.com/LegoX/LegoFlow LegoFlow
 cd LegoFlow
 ```
 
@@ -121,7 +121,7 @@ For example, our previous run with all four blocks shows that Curator built 4,16
 
 ## Contributing
 
-We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/SWE-Lego-Live). For more details, please refer to the [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development).
+We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/LegoFlow). For more details, please refer to the [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development).
 
 ## Citation
 
@@ -130,7 +130,7 @@ We welcome all developers to use, improve and contribute to LegoFlow. Issues and
   title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
   author = {The LegoX Team},
   year   = {2026},
-  url    = {https://github.com/LegoX/SWE-Lego-Live}
+  url    = {https://github.com/LegoX/LegoFlow}
 }
 ```
 

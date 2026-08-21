@@ -80,6 +80,7 @@ runtime_info:
     # reference to /evaluator:setup 
     agent:
       name: custom-openhands-sdk
+      orchestration_runtime: claude_code  # claude_code | codex; selects the user-facing orchestrator
       version: 1.33.0
       runtime_image: docker.io/jierun/c-oh-sdk-1.33.0:v0.1
       runtime_host_path: artifacts/runtime/openhands-sdk

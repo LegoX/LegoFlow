@@ -1,0 +1,11 @@
+{
+  "name": "legoflow-evaluator",
+  "version": "0.1.0",
+  "description": "Run benchmark evaluations and analyze model performance in LegoFlow.",
+  "author": { "name": "LegoX", "url": "https://github.com/LegoX" },
+  "repository": "https://github.com/LegoX/LegoFlow",
+  "license": "Apache-2.0",
+  "keywords": ["legoflow", "evaluation", "benchmark", "harbor"],
+  "skills": "./skills/",
+  "interface": { "displayName": "LegoFlow Evaluator", "shortDescription": "Evaluate coding models", "longDescription": "Run registered coding benchmarks and analyze model performance, verifier results, and failure slices in LegoFlow.", "developerName": "LegoX", "category": "Developer Tools", "capabilities": ["Interactive", "Write"], "defaultPrompt": ["Check the evaluation configuration.", "Run an approved benchmark.", "Analyze evaluation failures and scores."] }
+}

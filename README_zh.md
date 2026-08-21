@@ -85,7 +85,7 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排四个子 block：
 ### 环境准备
 1. 克隆代码仓库。
 ```bash
-git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
+git clone --recurse-submodules https://github.com/LegoX/LegoFlow LegoFlow
 cd LegoFlow
 ```
 
@@ -121,7 +121,7 @@ claude plugin install root@root-block
 
 ## 参与贡献
 
-我们欢迎所有开发者使用、改进 LegoFlow 并为之贡献。issue 和 pull request 请提交到 [GitHub](https://github.com/LegoX/SWE-Lego-Live)。更多细节请参阅 [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development)。
+我们欢迎所有开发者使用、改进 LegoFlow 并为之贡献。issue 和 pull request 请提交到 [GitHub](https://github.com/LegoX/LegoFlow)。更多细节请参阅 [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development)。
 
 ## 引用
 
@@ -130,7 +130,7 @@ claude plugin install root@root-block
   title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
   author = {The LegoX Team},
   year   = {2026},
-  url    = {https://github.com/LegoX/SWE-Lego-Live}
+  url    = {https://github.com/LegoX/LegoFlow}
 }
 ```
 

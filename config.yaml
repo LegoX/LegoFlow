@@ -24,6 +24,10 @@ meta_info:
 runtime_info:
   # Optionally shared credentials, by default they are set to "" (off)
   input:
+    agent:
+      runtime: claude_code       # claude_code | codex; selects the orchestration surface
+      command: ""                # optional command override for automation; never stores credentials
+      env: {}                     # optional non-secret environment overrides
     cloudflare:
       account_id: ""
       api_token: ""

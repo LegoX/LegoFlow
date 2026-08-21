@@ -1,0 +1,11 @@
+{
+  "name": "legoflow",
+  "interface": { "displayName": "LegoFlow" },
+  "plugins": [
+    { "name": "legoflow-root", "source": { "source": "local", "path": "../../.codex/plugins/root-plugin" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "legoflow-curator", "source": { "source": "local", "path": "../../blocks/curator/.codex/plugins/curator-plugin" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "legoflow-tracer", "source": { "source": "local", "path": "../../blocks/tracer/.codex/plugins/tracer-plugin" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "legoflow-trainer", "source": { "source": "local", "path": "../../blocks/trainer/.codex/plugins/trainer-plugin" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" },
+    { "name": "legoflow-evaluator", "source": { "source": "local", "path": "../../blocks/evaluator/.codex/plugins/evaluator-plugin" }, "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" }, "category": "Developer Tools" }
+  ]
+}

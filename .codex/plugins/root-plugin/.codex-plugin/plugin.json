@@ -1,0 +1,25 @@
+{
+  "name": "legoflow-root",
+  "version": "0.1.0",
+  "description": "Operate LegoFlow's block tree from Codex: inspect configuration, validate dependencies, prepare environments, run approved stages, and monitor artifacts.",
+  "author": { "name": "LegoX", "url": "https://github.com/LegoX" },
+  "homepage": "https://legoflow-docs.pages.dev/docs",
+  "repository": "https://github.com/LegoX/LegoFlow",
+  "license": "Apache-2.0",
+  "keywords": ["legoflow", "code-data", "agent", "swe", "training", "evaluation"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "LegoFlow",
+    "shortDescription": "Orchestrate code-data blocks",
+    "longDescription": "Use Codex to safely coordinate task curation, trajectory generation, training, evaluation, dashboards, and iterative experiments in LegoFlow.",
+    "developerName": "LegoX",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://legoflow-docs.pages.dev/docs",
+    "defaultPrompt": [
+      "Check the LegoFlow pipeline and summarize blockers.",
+      "Run the curator, tracer, trainer, and evaluator workflow.",
+      "Analyze the latest artifacts and propose the next experiment."
+    ]
+  }
+}

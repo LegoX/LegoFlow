@@ -76,6 +76,7 @@ runtime_info:
 
     agent:
       name: custom-claude-code   # Supported pinned versions: custom-claude-code=2.1.118, custom-opencode=1.18.7, custom-openhands-sdk=1.33.0.
+      orchestration_runtime: claude_code  # claude_code | codex; selects the user-facing orchestrator
       version: 2.1.118
       runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
       runtime_host_path: artifacts/agent-runtime/claude-code   # pre-extracted; see /tracer:check reference
