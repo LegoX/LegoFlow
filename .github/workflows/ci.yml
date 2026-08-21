@@ -562,6 +562,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
         run: bash .github/scripts/align_submodules.sh
+      - name: Refresh evaluator Harbor editable environment
+        working-directory: blocks/evaluator
+        run: |
+          set -euo pipefail
+          HARBOR_UV="$(python3 - <<'PY'
+          import yaml
+          config = yaml.safe_load(open("config.yaml", encoding="utf-8")) or {}
+          print(config["meta_info"]["environment"]["harbor_uv"])
+          PY
+          )"
+          case "$HARBOR_UV" in
+            /*) HARBOR_UV_ABS="$HARBOR_UV" ;;
+            *) HARBOR_UV_ABS="$PWD/$HARBOR_UV" ;;
+          esac
+          mkdir -p "$(dirname "$HARBOR_UV_ABS")"
+          (
+            cd repos/harbor
+            UV_PROJECT_ENVIRONMENT="$HARBOR_UV_ABS" uv sync
+          )
+          HARBOR_EDITABLE_ROOT="$PWD/repos/harbor" \
+            "$HARBOR_UV_ABS/bin/python" scripts/check_harbor_editable.py
       - name: Run evaluator test cases
         working-directory: blocks/evaluator
         env:
