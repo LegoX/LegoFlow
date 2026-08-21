@@ -98,6 +98,12 @@ claude plugin install root@root-block
 
    The same holds for `curator`, `tracer`, `trainer` and `evaluator`, whose plugin directories live at `./blocks/<name>/.claude/plugins`. All five pairs are listed in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Run `/reload-plugins` afterwards so the skills load.
 
+   LegoFlow also provides Codex plugins under `.codex/plugins/`. They use the
+   same slash commands, such as `/root:check` and `/curator:check`, and thinly
+   reference the canonical Claude Code skills. See the [Codex adaptation and
+   testing guide](docs/CODEX_ADAPTATION_AND_TESTING.md) for configuration,
+   maintenance, and validation details.
+
 ### Example Usages
 
 Users can trigger individual blocks for a particular purpose, or jointly run multiple blocks for a more complicated pipeline.
@@ -126,11 +132,11 @@ We welcome all developers to use, improve and contribute to LegoFlow. Issues and
 ## Citation
 
 ```bibtex
-@misc{legoflow2026,
-  title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
+@misc{tao2026legoflow,
+  title  = {LegoFlow: Easy and Interactive Data Engineering for Coding Agents},
   author = {The LegoX Team},
   year   = {2026},
-  url    = {https://github.com/LegoX/LegoFlow}
+  url    = {https://legox.com/blog/legoflow/}
 }
 ```
 

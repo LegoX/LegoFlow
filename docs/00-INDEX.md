@@ -7,6 +7,7 @@ These documents describe Codex setup and the OpenLux compatibility checks.
 - [CODEX_QUICKSTART.md](./CODEX_QUICKSTART.md): safe session bootstrap.
 - [CODEX_USAGE_GUIDE.md](./CODEX_USAGE_GUIDE.md): plugin and configuration details.
 - [openlux-codex-api-diagnosis.md](./openlux-codex-api-diagnosis.md): API requirements and diagnosis.
+- [CODEX_ADAPTATION_AND_TESTING.md](./CODEX_ADAPTATION_AND_TESTING.md): integration design and live results.
 
 ## Test reports
 
