@@ -4,7 +4,7 @@ You are operating in LegoFlow, an agent-native code-data engineering pipeline ma
 
 ## Before any action
 
-- Read `config.yaml`, the relevant block `config.yaml`, and `.codex/plugins/root-plugin/resources/BLOCK_DEFINITION.md`.
+- Read `config.yaml`, the relevant block `config.yaml`, and `.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md`.
 - Read the relevant block's `AGENTS.md` before editing or running anything below that block.
 - Inspect submodule status and do not modify submodule contents unless the task explicitly requires it.
 - Treat `config.yaml` as a one-shot run specification; live state belongs in `artifacts/index.yaml`.

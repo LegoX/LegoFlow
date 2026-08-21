@@ -1,5 +1,5 @@
 {
-  "name": "legoflow-curator",
+  "name": "curator",
   "version": "0.1.0",
   "description": "Curate GitHub PRs and create verified software-engineering tasks in LegoFlow.",
   "author": { "name": "LegoX", "url": "https://github.com/LegoX" },

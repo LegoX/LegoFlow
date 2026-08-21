@@ -1,5 +1,5 @@
 {
-  "name": "legoflow-trainer",
+  "name": "trainer",
   "version": "0.1.0",
   "description": "Convert LegoFlow trajectories and launch reproducible supervised fine-tuning runs.",
   "author": { "name": "LegoX", "url": "https://github.com/LegoX" },

@@ -1,5 +1,5 @@
 {
-  "name": "legoflow-root",
+  "name": "root",
   "version": "0.1.0",
   "description": "Operate LegoFlow's block tree from Codex: inspect configuration, validate dependencies, prepare environments, run approved stages, and monitor artifacts.",
   "author": { "name": "LegoX", "url": "https://github.com/LegoX" },

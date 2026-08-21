@@ -193,3 +193,6 @@ For foreground runs, swap "Monitor" for the final exit code, final loss
   the remote run path (SSH + tmux) first.
 - There is no `scripts/stop.sh` in this block today; stopping is manual
   (`kill <pid>` then `bash scripts/clean.sh`). Don't invent one.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow run trainer`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

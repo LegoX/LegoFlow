@@ -105,3 +105,6 @@ Live web UI:  cd dashboard && ./start_dashboard.sh   (:8091)
 - Read-only: never edit `config.yaml`, launch training, or write artifacts.
 - Only start the web server when the user explicitly asks; it's long-running.
 - Never modify `repos/`. Local block — no SSH.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow dashboard trainer`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

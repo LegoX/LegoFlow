@@ -177,3 +177,6 @@ Never deploy unless the user explicitly requests it.
 - `pr_collection.filters` are **configuration**, shown as such. Per-repo stars and
   merged-PR counts are not recorded anywhere; never present a threshold as a
   measurement.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow dashboard curator`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

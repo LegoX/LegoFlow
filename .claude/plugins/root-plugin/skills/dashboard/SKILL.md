@@ -38,3 +38,6 @@ project-wide aggregate.
 - [ ] Spec the well-known port and `/health` contract.
 - [ ] Decide whether the dashboard auto-launches on `/root:run`, or stays
       strictly opt-in via this skill.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow dashboard <block>`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

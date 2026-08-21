@@ -195,3 +195,6 @@ doesn't exist on this host (model dir, `job_dir`) — fix those, not the env.
 | `local_lf` | `lf_path` (absolute or block-relative LF json) | `scaffold`, `job_dir`, `hf_*` | skipped |
 
 For `hf_lf` / `local_lf`, `conversion.data_name` is still used as the registered dataset key, and `conversion.max_instances` (>0) becomes the dataset's `num_samples` (random subsample). `dataset.name: ""` auto-derives from `conversion.data_name`.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow setup trainer`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

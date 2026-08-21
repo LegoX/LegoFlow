@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""Shared LegoFlow command interface for Claude Code and Codex."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+BLOCKS = ("curator", "tracer", "trainer", "evaluator")
+
+
+def repo_root() -> Path:
+    override = os.environ.get("LEGOFLOW_ROOT")
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path(__file__).resolve().parents[1]
+
+
+def run_command(root: Path, command: list[str], cwd: Path | None = None) -> int:
+    location = cwd or root
+    print(f"$ (cd {location} && {' '.join(command)})")
+    completed = subprocess.run(command, cwd=location, check=False)
+    return completed.returncode
+
+
+def block_dir(root: Path, block: str) -> Path:
+    if block not in BLOCKS:
+        raise SystemExit(f"Unknown block '{block}'. Choose one of: {', '.join(BLOCKS)}")
+    return root / "blocks" / block
+
+
+def run_check(root: Path, block: str | None, full: bool) -> int:
+    if block:
+        return run_command(root, ["bash", "scripts/dryrun.sh"], block_dir(root, block))
+    command = ["bash", "scripts/dryrun.sh"]
+    if full:
+        command.append("--full")
+    return run_command(root, command)
+
+
+def run_setup(root: Path, block: str) -> int:
+    directory = block_dir(root, block)
+    commands: list[list[str]]
+    if block == "curator":
+        commands = [["bash", "scripts/setup_cc_proxy_env.sh"]]
+    elif block == "tracer":
+        commands = [
+            ["bash", "scripts/update_repos.sh"],
+            ["bash", "scripts/setup_harbor_env.sh"],
+            ["bash", "scripts/setup_swe_data_process_env.sh"],
+        ]
+    elif block == "trainer":
+        commands = [
+            ["git", "submodule", "update", "--init", "repos/LLaMA-Factory", "repos/swe_data_process"],
+            ["bash", "scripts/install_env.sh"],
+        ]
+    else:
+        commands = [["bash", "scripts/update_repos.sh"]]
+    for command in commands:
+        result = run_command(root, command, directory)
+        if result:
+            return result
+    return 0
+
+
+def run_workflow(root: Path, block: str | None, extra: list[str]) -> int:
+    if extra[:1] == ["--"]:
+        extra = extra[1:]
+    if block:
+        return run_command(root, ["bash", "scripts/start.sh", *extra], block_dir(root, block))
+    return run_command(root, ["bash", "scripts/start.sh", *extra])
+
+
+def run_dashboard(root: Path, block: str, extra: list[str]) -> int:
+    if extra[:1] == ["--"]:
+        extra = extra[1:]
+    directory = block_dir(root, block)
+    if block == "curator":
+        command = ["python3", "dashboard/progress_monitor_multi.py", "--report-only", *extra]
+    elif block == "tracer":
+        command = ["python3", "dashboard/progress_monitor.py", "--report-only", *extra]
+    elif block == "trainer":
+        command = ["bash", "dashboard/start_dashboard.sh", *extra]
+    else:
+        command = ["bash", "dashboard/start.sh", *extra]
+    return run_command(root, command, directory)
+
+
+def run_curator_action(root: Path, action: str, extra: list[str]) -> int:
+    if extra[:1] == ["--"]:
+        extra = extra[1:]
+    directory = block_dir(root, "curator")
+    if action == "collect-prs":
+        command = ["bash", "scripts/collect_all_bg.sh", *extra]
+    else:
+        command = ["bash", "scripts/create_all_bg.sh", *extra]
+    return run_command(root, command, directory)
+
+
+def print_create_contract(root: Path) -> int:
+    resource = root / ".claude/plugins/root-plugin/resources/BLOCK_INTAKE.md"
+    print("LegoFlow block creation is agent-assisted.")
+    print("Collect the block name, role, parent, children, inputs, outputs, resources, and repositories.")
+    print("Both Claude Code and Codex must create config.yaml, CLAUDE.md, AGENTS.md, scripts/, artifacts/, and matching plugin metadata.")
+    if resource.is_file():
+        print(f"Use the intake template: {resource}")
+    print("After creation, run: ./bin/legoflow check <block>")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="legoflow", description="Run LegoFlow workflows consistently from any coding agent.")
+    parser.add_argument("--root", type=Path, default=None, help="LegoFlow repository root (defaults to this checkout).")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    check = subparsers.add_parser("check", help="Run a root or block dry run.")
+    check.add_argument("block", nargs="?", choices=BLOCKS)
+    check.add_argument("--full", action="store_true", help="Run every block dry run for a root check.")
+
+    setup = subparsers.add_parser("setup", help="Prepare one block's pinned repositories and environment.")
+    setup.add_argument("block", choices=BLOCKS)
+
+    run = subparsers.add_parser("run", help="Run the root pipeline or one block.")
+    run.add_argument("block", nargs="?", choices=BLOCKS)
+    run.add_argument("args", nargs=argparse.REMAINDER)
+
+    dashboard = subparsers.add_parser("dashboard", help="Inspect or serve one block dashboard.")
+    dashboard.add_argument("block", choices=BLOCKS)
+    dashboard.add_argument("args", nargs=argparse.REMAINDER)
+
+    subparsers.add_parser("create", help="Show the shared block-creation contract for an agent-assisted scaffold.")
+
+    for action in ("collect-prs", "create-tasks"):
+        action_parser = subparsers.add_parser(action, help=f"Run the curator {action} workflow.")
+        action_parser.add_argument("args", nargs=argparse.REMAINDER)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    arguments = parser.parse_args(argv)
+    root = (arguments.root or repo_root()).expanduser().resolve()
+    if not (root / "config.yaml").is_file():
+        parser.error(f"LegoFlow root does not contain config.yaml: {root}")
+    if arguments.command == "check":
+        return run_check(root, arguments.block, arguments.full)
+    if arguments.command == "setup":
+        return run_setup(root, arguments.block)
+    if arguments.command == "run":
+        return run_workflow(root, arguments.block, arguments.args)
+    if arguments.command == "dashboard":
+        return run_dashboard(root, arguments.block, arguments.args)
+    if arguments.command == "create":
+        return print_create_contract(root)
+    if arguments.command in {"collect-prs", "create-tasks"}:
+        return run_curator_action(root, arguments.command, arguments.args)
+    parser.error(f"Unsupported command: {arguments.command}")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -209,3 +209,6 @@ Additional rules:
 - Do not skip failed checks just because the user said "ignore that" — re-run after they fix it instead.
 - Do not invent values to "satisfy" a check (e.g. don't substitute env vars for null inputs). Surface the gap; let the user fill it.
 - **Do not proceed to /root:run without explicit user confirmation**, even if all checks pass.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow check --full`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

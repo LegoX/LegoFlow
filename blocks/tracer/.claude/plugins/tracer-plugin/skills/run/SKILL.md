@@ -121,3 +121,6 @@ never re-run a task it already processed. After every job:
   `--skip-unchanged` refresh.
 - Progress board: `/tracer:dashboard` covers local preview and Cloudflare
   Pages sync.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow run tracer`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

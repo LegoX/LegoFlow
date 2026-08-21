@@ -264,3 +264,6 @@ Re-run `/curator:check`.
 
 - **Silent verification failure**: the Claude Code path (task_model / cc_provider_mode / anthropic_base_url) is what writes `verifiable_tasks.txt`. If the mode is wrong for the provider, verification fails **silently** — task skeletons stay templates, no task is verified, yet batch state still reports success. Always verify the CC path end-to-end, not just the OpenAI path.
 - **pr_collection.filters**: a null/absent filter is not an error — it means "use the collector's built-in default". Only flag values that are set but out of range.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow check curator`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

@@ -1,0 +1,51 @@
+---
+title: LegoFlow CLI
+description: The shared command interface used by Claude Code and Codex.
+---
+
+# LegoFlow CLI
+
+Claude Code and Codex use the same `legoflow` command interface. Agent-specific plugins provide the user-facing instructions, while the CLI dispatches to the existing block scripts.
+
+## Installation
+
+Run the CLI from a checkout:
+
+```bash
+export PATH="$PWD/bin:$PATH"
+```
+
+You can also invoke it directly as `./bin/legoflow`.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `legoflow check` | Check the root configuration and dependencies |
+| `legoflow check --full` | Check the root and every block |
+| `legoflow check <block>` | Check one block |
+| `legoflow setup <block>` | Prepare one block's repositories and environment |
+| `legoflow run` | Run the root pipeline |
+| `legoflow run <block>` | Run one block |
+| `legoflow dashboard <block>` | Inspect or serve one block dashboard |
+| `legoflow create` | Show the shared block-creation contract for an agent-assisted scaffold |
+| `legoflow collect-prs` | Collect Curator candidate pull requests |
+| `legoflow create-tasks` | Create and verify Curator tasks |
+
+Use `--` before script-specific options when needed, for example `legoflow run tracer -- --no-dryrun`.
+
+## Agent parity
+
+Claude Code and Codex use the same action names and the same CLI commands:
+
+| Action | Claude Code | Codex | Shared execution |
+| --- | --- | --- | --- |
+| Curator check | `/curator:check` | `curator:check` skill | `legoflow check curator` |
+| Curator PR collection | `/curator:collect-prs` | `curator:collect-prs` skill | `legoflow collect-prs` |
+| Tracer run | `/tracer:run` | `tracer:run` skill | `legoflow run tracer` |
+| Trainer run | `/trainer:run` | `trainer:run` skill | `legoflow run trainer` |
+| Evaluator dashboard | `/evaluator:dashboard` | `evaluator:dashboard` skill | `legoflow dashboard evaluator` |
+
+`create` remains agent-assisted because block scaffolding requires an intake conversation. Both agents use the same contract and must produce the same files; `legoflow create` prints that contract and the validation command.
+
+Both agents must still follow `check -> confirm -> run`. The CLI does not bypass user confirmation or change the underlying Harbor, training, or evaluation runtime.

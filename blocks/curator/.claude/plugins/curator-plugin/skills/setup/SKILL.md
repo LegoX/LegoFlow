@@ -180,3 +180,6 @@ llm_api:
 ### languages
 
 `languages.<lang>.params` (timeout / cc_timeout / n_concurrent) are read by `scripts/read_params.py` + `scripts/create_<lang>.sh`. `enabled` selects which languages `create_all_bg.sh` launches (`python scripts/read_params.py --list-enabled` shows the current set) — set it to `false` to drop a language, or run a specific `create_<lang>.sh` to generate just one.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow setup curator`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

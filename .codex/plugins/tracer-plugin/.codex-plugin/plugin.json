@@ -1,5 +1,5 @@
 {
-  "name": "legoflow-tracer",
+  "name": "tracer",
   "version": "0.1.0",
   "description": "Generate and inspect verified coding-agent trajectories with Harbor in LegoFlow.",
   "author": { "name": "LegoX", "url": "https://github.com/LegoX" },

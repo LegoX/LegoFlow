@@ -254,3 +254,6 @@ Re-run `/trainer:check`.
 - **overwrite_output_dir: false** means an existing `training.output_dir` will NOT be replaced — an explicit env override is required to overwrite a previous run. Treat an existing output dir + false as "will refuse", not as an error.
 - **credentials.hf_token** is only required for private `source.type: hf_lf` datasets; empty is normal for public ones. `wandb_api_key` stays empty — the key flows via `$WANDB_API_KEY`.
 - **runtime_info.output** is written back by `scripts/train.sh` STEP 3 (comment-preserving, flock-guarded). Its pre-run shape (value: null entries) is the contract — do not "fix" the nulls.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow check trainer`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

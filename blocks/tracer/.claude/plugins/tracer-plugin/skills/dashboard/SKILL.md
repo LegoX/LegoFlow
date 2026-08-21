@@ -247,3 +247,6 @@ manual step is needed.
   conversion to fill them in unless the user asks for that separate action.
 - Never launch `scripts/start.sh`, `prepare_tasks.sh`, a Harbor job, or a deploy
   unless the user asks for that separate action.
+## Shared LegoFlow CLI
+
+The canonical execution command for this skill is `./bin/legoflow dashboard tracer`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.

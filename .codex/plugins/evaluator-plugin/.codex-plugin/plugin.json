@@ -1,5 +1,5 @@
 {
-  "name": "legoflow-evaluator",
+  "name": "evaluator",
   "version": "0.1.0",
   "description": "Run benchmark evaluations and analyze model performance in LegoFlow.",
   "author": { "name": "LegoX", "url": "https://github.com/LegoX" },
