@@ -17,6 +17,14 @@ You are operating in LegoFlow, an agent-native code-data engineering pipeline ma
 - Keep credentials in environment variables such as `GITHUB_TOKEN`; never print or commit them.
 - Preserve artifacts and previous experiment results. Do not use `--all` cleanup without explicit confirmation.
 
+## Command convention
+
+- Use the same slash-command names for Claude Code and Codex: `/root:<action>` and `/<block>:<action>`.
+- Root commands are `/root:check`, `/root:setup`, `/root:run`, `/root:dashboard`, and `/root:create`.
+- Block commands use the matching plugin skill names, for example `/curator:check`, `/tracer:run`, `/trainer:dashboard`, and `/evaluator:run`.
+- The repository CLI accepts every command literally: `./bin/legoflow /root:check` or `./bin/legoflow /curator:check`.
+- Do not use legacy `legoflow-*` names as plugin or skill names; those names are reserved for underlying packages, environments, or artifact paths where they already exist.
+
 ## Development
 
 - Keep all repository content in English.

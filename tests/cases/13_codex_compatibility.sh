@@ -57,6 +57,9 @@ for name, plugin in plugins.items():
             raise SystemExit(f"FAIL: malformed Codex skill: {skill.relative_to(root)}")
         if "./bin/legoflow" not in text:
             raise SystemExit(f"FAIL: Codex skill does not reference shared CLI: {skill.relative_to(root)}")
+        command = f"/{name}:{skill.parent.name}"
+        if command not in text:
+            raise SystemExit(f"FAIL: Codex skill does not document its slash command: {command}")
 
 marketplace = json.loads((root / ".agents/plugins/marketplace.json").read_text(encoding="utf-8"))
 names = {entry["name"] for entry in marketplace["plugins"]}
