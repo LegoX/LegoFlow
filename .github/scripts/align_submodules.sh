@@ -21,8 +21,9 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
 fi
 
 align_one() {
-  local block="$1" repo="$2" pin_source
+  local block="$1" repo="$2" pin_source canonical_block
   pin_source="${3:-blocks/$block/repos/$repo}"
+  canonical_block="${4:-$block}"
   local relative="blocks/$block/repos/$repo"
   local local_path="$ROOT/$relative"
   local canonical=""
@@ -37,6 +38,8 @@ align_one() {
   actual=""
   if [[ -z "$SHARED_RUNTIME" ]]; then
     canonical="$local_path"
+  else
+    canonical="${SHARED_RUNTIME%/}/$canonical_block/repos/$repo"
   fi
   if [[ -n "$SHARED_RUNTIME" && ( -e "$canonical/.git" || -f "$canonical/.git" ) ]]; then
     actual="$(git -C "$canonical" rev-parse HEAD 2>/dev/null || true)"
@@ -88,7 +91,7 @@ align_one() {
 
 align_one curator legoflow-curator
 align_one tracer harbor
-align_one tracer swe_data_process blocks/trainer/repos/swe_data_process
+align_one tracer swe_data_process blocks/trainer/repos/swe_data_process trainer
 align_one evaluator harbor
 align_one trainer LLaMA-Factory
 align_one trainer swe_data_process
