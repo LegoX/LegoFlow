@@ -366,6 +366,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
         run: bash .github/scripts/align_submodules.sh
+      - name: Refresh tracer editable environments
+        working-directory: blocks/tracer
+        run: |
+          set -euo pipefail
+          bash scripts/setup_harbor_env.sh
+          bash scripts/setup_swe_data_process_env.sh
       - name: Run tracer test cases
         working-directory: blocks/tracer
         env:
