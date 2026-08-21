@@ -1,11 +1,12 @@
 ---
 name: run
-description: Launch an approved supervised fine-tuning run and inspect its outputs.
+description: Run the canonical trainer run workflow.
 ---
 
-# Run Trainer
+# Canonical LegoFlow Skill
 
-Never start training without a successful check and explicit confirmation. Run `./bin/legoflow run trainer` in a named tmux session, monitor logs without exposing secrets, and inspect checkpoints, metrics, curves, and archive metadata. Preserve previous runs.
-## LegoFlow Command Convention
+Read and follow `blocks/trainer/.claude/plugins/trainer-plugin/skills/run/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/trainer:run`. The shared CLI accepts the same command as `./bin/legoflow /trainer:run` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/trainer:run`. The shared CLI fallback is `./bin/legoflow /trainer:run` when the agent does not expose slash commands directly.

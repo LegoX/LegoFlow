@@ -1,11 +1,12 @@
 ---
 name: setup
-description: Prepare Harbor and LiteLLM evaluation environments after an approved preflight.
+description: Run the canonical evaluator setup workflow.
 ---
 
-# Set Up Evaluator
+# Canonical LegoFlow Skill
 
-After explicit confirmation, run `./bin/legoflow setup evaluator`. Preserve the pinned Harbor submodule, verify the registry, and report environment paths without starting an evaluation.
-## LegoFlow Command Convention
+Read and follow `blocks/evaluator/.claude/plugins/evaluator-plugin/skills/setup/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/evaluator:setup`. The shared CLI accepts the same command as `./bin/legoflow /evaluator:setup` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/evaluator:setup`. The shared CLI fallback is `./bin/legoflow /evaluator:setup` when the agent does not expose slash commands directly.

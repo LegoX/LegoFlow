@@ -1,11 +1,12 @@
 ---
 name: run
-description: Run an approved benchmark evaluation and inspect verifier results.
+description: Run the canonical evaluator run workflow.
 ---
 
-# Run Evaluator
+# Canonical LegoFlow Skill
 
-Complete the evaluator check and wait for confirmation. Run `./bin/legoflow run evaluator` in a named tmux session. Inspect the result summary, per-task verifier outputs, trajectory logs, and archive metadata; report partial jobs as partial rather than successful.
-## LegoFlow Command Convention
+Read and follow `blocks/evaluator/.claude/plugins/evaluator-plugin/skills/run/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/evaluator:run`. The shared CLI accepts the same command as `./bin/legoflow /evaluator:run` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/evaluator:run`. The shared CLI fallback is `./bin/legoflow /evaluator:run` when the agent does not expose slash commands directly.

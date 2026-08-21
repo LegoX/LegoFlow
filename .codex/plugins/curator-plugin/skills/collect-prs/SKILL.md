@@ -1,11 +1,12 @@
 ---
 name: collect-prs
-description: Collect candidate GitHub pull requests for LegoFlow after approval.
+description: Run the canonical curator collect-prs workflow.
 ---
 
-# Collect Pull Requests
+# Canonical LegoFlow Skill
 
-Run `./bin/legoflow collect-prs` only after check and confirmation. Use `GITHUB_TOKEN` from the environment, never echo it, and record filters, pagination, rate-limit status, and the artifact path. Do not create tasks in this step.
-## LegoFlow Command Convention
+Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/collect-prs/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/curator:collect-prs`. The shared CLI accepts the same command as `./bin/legoflow /curator:collect-prs` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/curator:collect-prs`. The shared CLI fallback is `./bin/legoflow /curator:collect-prs` when the agent does not expose slash commands directly.

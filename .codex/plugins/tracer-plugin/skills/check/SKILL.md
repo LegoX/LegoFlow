@@ -1,11 +1,12 @@
 ---
 name: check
-description: Run the tracer preflight without launching Harbor trajectory jobs.
+description: Run the canonical tracer check workflow.
 ---
 
-# Check Tracer
+# Canonical LegoFlow Skill
 
-Read `blocks/tracer/AGENTS.md`, `CLAUDE.md`, and `config.yaml`. Run `./bin/legoflow check tracer`; report task source, selected Harbor scaffold, model endpoint, LiteLLM, Docker, submodule, and artifact requirements. Do not launch Harbor.
-## LegoFlow Command Convention
+Read and follow `blocks/tracer/.claude/plugins/tracer-plugin/skills/check/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/tracer:check`. The shared CLI accepts the same command as `./bin/legoflow /tracer:check` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/tracer:check`. The shared CLI fallback is `./bin/legoflow /tracer:check` when the agent does not expose slash commands directly.

@@ -1,11 +1,12 @@
 ---
 name: dashboard
-description: Inspect tracer jobs, trajectory quality, and converted training data.
+description: Run the canonical tracer dashboard workflow.
 ---
 
-# Inspect Tracer
+# Canonical LegoFlow Skill
 
-Use `./bin/legoflow dashboard tracer` and read-only analysis scripts. Summarize job completion, task pass rates, trajectory quality, reasoning checks, scaffold/model slices, conversion counts, and failed tasks. Ask for confirmation before publishing a dashboard.
-## LegoFlow Command Convention
+Read and follow `blocks/tracer/.claude/plugins/tracer-plugin/skills/dashboard/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/tracer:dashboard`. The shared CLI accepts the same command as `./bin/legoflow /tracer:dashboard` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/tracer:dashboard`. The shared CLI fallback is `./bin/legoflow /tracer:dashboard` when the agent does not expose slash commands directly.

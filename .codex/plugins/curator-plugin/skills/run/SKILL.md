@@ -1,11 +1,12 @@
 ---
 name: run
-description: Run the curator's approved compatibility workflow using its existing scripts.
+description: Run the canonical curator run workflow.
 ---
 
-# Run Curator
+# Canonical LegoFlow Skill
 
-This is a compatibility entry point. Resolve whether the user requested PR collection or task creation, then dispatch to `./bin/legoflow collect-prs` or `./bin/legoflow create-tasks`. Never silently run both phases.
-## LegoFlow Command Convention
+Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/run/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/curator:run`. The shared CLI accepts the same command as `./bin/legoflow /curator:run` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/curator:run`. The shared CLI fallback is `./bin/legoflow /curator:run` when the agent does not expose slash commands directly.

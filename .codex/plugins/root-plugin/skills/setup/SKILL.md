@@ -1,11 +1,12 @@
 ---
 name: setup
-description: Prepare LegoFlow block environments and repositories after the user confirms the check results.
+description: Run the canonical root setup workflow.
 ---
 
-# Set Up LegoFlow
+# Canonical LegoFlow Skill
 
-Run setup only after presenting the check summary and receiving explicit confirmation. Use `./bin/legoflow setup <block>`, preserve pinned submodule commits, and report environment paths and any network or credential failures.
-## LegoFlow Command Convention
+Read and follow `.claude/plugins/root-plugin/skills/setup/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/root:setup`. The shared CLI accepts the same command as `./bin/legoflow /root:setup` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/root:setup`. The shared CLI fallback is `./bin/legoflow /root:setup` when the agent does not expose slash commands directly.

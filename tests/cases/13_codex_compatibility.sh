@@ -51,7 +51,7 @@ for name, plugin in plugins.items():
     codex_skills = {path.parent.name for path in skills}
     if claude_skills != codex_skills:
         raise SystemExit(f"FAIL: Claude/Codex skill names differ for {name}")
-    for skill in skills:
+for skill in skills:
         text = skill.read_text(encoding="utf-8")
         if not text.startswith("---\n") or "description:" not in text:
             raise SystemExit(f"FAIL: malformed Codex skill: {skill.relative_to(root)}")
@@ -60,6 +60,10 @@ for name, plugin in plugins.items():
         command = f"/{name}:{skill.parent.name}"
         if command not in text:
             raise SystemExit(f"FAIL: Codex skill does not document its slash command: {command}")
+        claude_skill = claude_plugin_dirs[name] / "skills" / skill.parent.name / "SKILL.md"
+        claude_ref = claude_skill.relative_to(root).as_posix()
+        if claude_ref not in text:
+            raise SystemExit(f"FAIL: Codex skill does not reference Claude canonical skill: {skill.relative_to(root)}")
 
 marketplace = json.loads((root / ".agents/plugins/marketplace.json").read_text(encoding="utf-8"))
 names = {entry["name"] for entry in marketplace["plugins"]}
@@ -67,9 +71,15 @@ expected = set(plugins)
 if names != expected:
     raise SystemExit(f"FAIL: marketplace entries {sorted(names)} != {sorted(expected)}")
 
-for path in [root / "AGENTS.md", *sorted((root / "blocks").glob("*/AGENTS.md"))]:
-    if "LegoX" not in path.read_text(encoding="utf-8"):
-        raise SystemExit(f"FAIL: missing LegoX ownership in {path.relative_to(root)}")
+agent_refs = {root / "AGENTS.md": root / "CLAUDE.md"}
+agent_refs.update(
+    {root / "blocks" / block / "AGENTS.md": root / "blocks" / block / "CLAUDE.md"
+     for block in ("curator", "tracer", "trainer", "evaluator")}
+)
+for agents, claude in agent_refs.items():
+    text = agents.read_text(encoding="utf-8")
+    if claude.relative_to(root).as_posix() not in text and claude.name not in text:
+        raise SystemExit(f"FAIL: {agents.relative_to(root)} does not reference {claude.relative_to(root)}")
 
 print("PASS: Codex plugins, marketplace, and AGENTS.md contracts")
 PY

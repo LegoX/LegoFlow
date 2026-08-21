@@ -1,11 +1,12 @@
 ---
 name: dashboard
-description: Inspect curator collection and task-verification artifacts.
+description: Run the canonical curator dashboard workflow.
 ---
 
-# Inspect Curator
+# Canonical LegoFlow Skill
 
-Use `./bin/legoflow dashboard curator` in read-only mode where possible. Summarize candidate PRs, generated tasks, verification pass rates, language/tag slices, and the latest archive entry.
-## LegoFlow Command Convention
+Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/dashboard/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/curator:dashboard`. The shared CLI accepts the same command as `./bin/legoflow /curator:dashboard` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/curator:dashboard`. The shared CLI fallback is `./bin/legoflow /curator:dashboard` when the agent does not expose slash commands directly.

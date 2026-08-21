@@ -1,11 +1,12 @@
 ---
 name: create-tasks
-description: Convert curated pull requests into verified SWE tasks after approval.
+description: Run the canonical curator create-tasks workflow.
 ---
 
-# Create Verified Tasks
+# Canonical LegoFlow Skill
 
-Read the curator task-generation contract and existing artifacts first. After explicit confirmation, run `./bin/legoflow create-tasks`, verify NOP/Oracle results, and report the manifest and rejected-task counts. Preserve prior task pools.
-## LegoFlow Command Convention
+Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/create-tasks/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/curator:create-tasks`. The shared CLI accepts the same command as `./bin/legoflow /curator:create-tasks` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/curator:create-tasks`. The shared CLI fallback is `./bin/legoflow /curator:create-tasks` when the agent does not expose slash commands directly.

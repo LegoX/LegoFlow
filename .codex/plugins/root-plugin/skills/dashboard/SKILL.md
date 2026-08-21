@@ -1,11 +1,12 @@
 ---
 name: dashboard
-description: Inspect or refresh LegoFlow dashboards and summarize experiment artifacts without modifying source data.
+description: Run the canonical root dashboard workflow.
 ---
 
-# Inspect LegoFlow Dashboards
+# Canonical LegoFlow Skill
 
-Read the relevant block `AGENTS.md` and dashboard instructions. Prefer `./bin/legoflow dashboard <block>` in read-only mode, identify the artifact index and run being inspected, and summarize task counts, trajectory quality, training metrics, evaluation scores, and missing data. Ask for confirmation before publishing or deploying a dashboard.
-## LegoFlow Command Convention
+Read and follow `.claude/plugins/root-plugin/skills/dashboard/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/root:dashboard`. The shared CLI accepts the same command as `./bin/legoflow /root:dashboard` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/root:dashboard`. The shared CLI fallback is `./bin/legoflow /root:dashboard` when the agent does not expose slash commands directly.

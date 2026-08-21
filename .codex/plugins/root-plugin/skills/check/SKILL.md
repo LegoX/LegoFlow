@@ -1,11 +1,12 @@
 ---
 name: check
-description: Validate LegoFlow's root configuration, block dependencies, credentials, repositories, and runtime prerequisites without starting jobs.
+description: Run the canonical root check workflow.
 ---
 
-# Check LegoFlow
+# Canonical LegoFlow Skill
 
-Read `AGENTS.md`, `config.yaml`, and the relevant block instructions. Run `./bin/legoflow check --full` for the root pipeline or `./bin/legoflow check <block>` for a single block. Summarize warnings and failures, including missing environment variables, submodule state, GPU/Docker requirements, and output paths. Do not start a job.
-## LegoFlow Command Convention
+Read and follow `.claude/plugins/root-plugin/skills/check/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/root:check`. The shared CLI accepts the same command as `./bin/legoflow /root:check` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/root:check`. The shared CLI fallback is `./bin/legoflow /root:check` when the agent does not expose slash commands directly.

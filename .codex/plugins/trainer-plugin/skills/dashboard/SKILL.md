@@ -1,11 +1,12 @@
 ---
 name: dashboard
-description: Inspect training logs, checkpoints, metrics, and experiment comparisons.
+description: Run the canonical trainer dashboard workflow.
 ---
 
-# Inspect Trainer
+# Canonical LegoFlow Skill
 
-Use `./bin/legoflow dashboard trainer` in read-only mode. Summarize dataset size, loss curves, throughput, checkpoint status, validation signals, and comparison against the configured baseline. Do not delete or overwrite checkpoints.
-## LegoFlow Command Convention
+Read and follow `blocks/trainer/.claude/plugins/trainer-plugin/skills/dashboard/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/trainer:dashboard`. The shared CLI accepts the same command as `./bin/legoflow /trainer:dashboard` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/trainer:dashboard`. The shared CLI fallback is `./bin/legoflow /trainer:dashboard` when the agent does not expose slash commands directly.

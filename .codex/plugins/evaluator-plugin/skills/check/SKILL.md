@@ -1,11 +1,12 @@
 ---
 name: check
-description: Validate benchmark registry, model endpoint, Harbor environment, and evaluation resources without running tasks.
+description: Run the canonical evaluator check workflow.
 ---
 
-# Check Evaluator
+# Canonical LegoFlow Skill
 
-Read `blocks/evaluator/AGENTS.md`, `CLAUDE.md`, and `config.yaml`. Run `./bin/legoflow check evaluator`; report benchmark, version, task count, agent scaffold, endpoint, credentials, Docker, and resource requirements. Do not launch Harbor.
-## LegoFlow Command Convention
+Read and follow `blocks/evaluator/.claude/plugins/evaluator-plugin/skills/check/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/evaluator:check`. The shared CLI accepts the same command as `./bin/legoflow /evaluator:check` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/evaluator:check`. The shared CLI fallback is `./bin/legoflow /evaluator:check` when the agent does not expose slash commands directly.

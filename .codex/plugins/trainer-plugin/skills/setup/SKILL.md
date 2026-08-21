@@ -1,11 +1,12 @@
 ---
 name: setup
-description: Prepare LLaMA-Factory and data-processing environments after an approved preflight.
+description: Run the canonical trainer setup workflow.
 ---
 
-# Set Up Trainer
+# Canonical LegoFlow Skill
 
-After explicit confirmation, run `./bin/legoflow setup trainer`. Preserve the pinned submodules and report the Python/uv environment, installed package revisions, and available GPU topology.
-## LegoFlow Command Convention
+Read and follow `blocks/trainer/.claude/plugins/trainer-plugin/skills/setup/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/trainer:setup`. The shared CLI accepts the same command as `./bin/legoflow /trainer:setup` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/trainer:setup`. The shared CLI fallback is `./bin/legoflow /trainer:setup` when the agent does not expose slash commands directly.

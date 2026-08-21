@@ -1,11 +1,12 @@
 ---
 name: check
-description: Run the curator preflight without collecting PRs or creating tasks.
+description: Run the canonical curator check workflow.
 ---
 
-# Check Curator
+# Canonical LegoFlow Skill
 
-Read `blocks/curator/AGENTS.md`, `CLAUDE.md`, and `config.yaml`. Run `./bin/legoflow check curator`; report GitHub credentials, repository access, source filters, output directories, and any blocked prerequisites. Do not mutate curator artifacts.
-## LegoFlow Command Convention
+Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/check/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/curator:check`. The shared CLI accepts the same command as `./bin/legoflow /curator:check` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/curator:check`. The shared CLI fallback is `./bin/legoflow /curator:check` when the agent does not expose slash commands directly.

@@ -1,11 +1,12 @@
 ---
 name: setup
-description: Prepare the curator environment after an approved preflight.
+description: Run the canonical curator setup workflow.
 ---
 
-# Set Up Curator
+# Canonical LegoFlow Skill
 
-After explicit confirmation, run `./bin/legoflow setup curator`. Preserve the pinned `legoflow-curator` submodule and report the resulting environment and CLI version.
-## LegoFlow Command Convention
+Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/setup/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/curator:setup`. The shared CLI accepts the same command as `./bin/legoflow /curator:setup` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/curator:setup`. The shared CLI fallback is `./bin/legoflow /curator:setup` when the agent does not expose slash commands directly.

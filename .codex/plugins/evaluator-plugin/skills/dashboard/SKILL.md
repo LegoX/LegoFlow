@@ -1,11 +1,12 @@
 ---
 name: dashboard
-description: Inspect benchmark accuracy, task slices, and evaluation artifacts.
+description: Run the canonical evaluator dashboard workflow.
 ---
 
-# Inspect Evaluator
+# Canonical LegoFlow Skill
 
-Use `./bin/legoflow dashboard evaluator` and analysis scripts read-only. Summarize overall accuracy, resolved/unresolved tasks, tags, repositories, failure modes, model endpoint, and comparison to prior runs. Ask for confirmation before publishing results.
-## LegoFlow Command Convention
+Read and follow `blocks/evaluator/.claude/plugins/evaluator-plugin/skills/dashboard/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-The canonical command for this skill is `/evaluator:dashboard`. The shared CLI accepts the same command as `./bin/legoflow /evaluator:dashboard` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.
+## Unified Invocation
+
+Invoke this skill as `/evaluator:dashboard`. The shared CLI fallback is `./bin/legoflow /evaluator:dashboard` when the agent does not expose slash commands directly.
