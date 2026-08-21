@@ -126,11 +126,11 @@ We welcome all developers to use, improve and contribute to LegoFlow. Issues and
 ## Citation
 
 ```bibtex
-@misc{legoflow2026,
-  title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
-  author = {The LegoX Team},
+@misc{tao2026legoflow,
+  title  = {LegoFlow: Easy and Interactive Data Engineering for Coding Agents},
+  author = {Chaofan Tao and Jierun Chen and Yuxin Jiang and Yiming Du and Tao Yuan and Lifeng Shang and Xiaohui Li and Haoli Bai},
   year   = {2026},
-  url    = {https://github.com/LegoX/SWE-Lego-Live}
+  url    = {https://legox.com/blog/legoflow/}
 }
 ```
 
