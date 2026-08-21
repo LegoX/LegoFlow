@@ -48,7 +48,20 @@ def run_setup(root: Path, block: str) -> int:
     directory = block_dir(root, block)
     commands: list[list[str]]
     if block == "curator":
-        commands = [["bash", "scripts/setup_cc_proxy_env.sh"]]
+        commands = [
+            ["git", "submodule", "update", "--init", "repos/legoflow-curator"],
+            ["uv", "venv", "artifacts/envs/legoflow-curator-env", "--python", "3.12"],
+            [
+                "uv",
+                "pip",
+                "install",
+                "--python",
+                "artifacts/envs/legoflow-curator-env/bin/python",
+                "-e",
+                "repos/legoflow-curator",
+            ],
+            ["bash", "scripts/setup_cc_proxy_env.sh"],
+        ]
     elif block == "tracer":
         commands = [
             ["bash", "scripts/update_repos.sh"],
