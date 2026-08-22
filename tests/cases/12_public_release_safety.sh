@@ -55,7 +55,13 @@ private_networks = tuple(
         "192." + "168.0.0/16",
     )
 )
-ipv4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+# Anchored on the three private first octets rather than a bare \d, so the
+# engine can skip on a single leading character instead of testing every digit
+# in every tracked file. Equivalent: the ipaddress check below only ever fires
+# inside 10/8, 172.16/12 or 192.168/16, and every address in those starts here.
+# The second and third octets stay unconstrained -- 172.x and 192.x outside the
+# private ranges still match the pattern and are dropped by that same check.
+ipv4 = re.compile(r"(?<![\d.])(?:10|172|192)\.(?:\d{1,3}\.){2}\d{1,3}(?![\d.])")
 
 personal_markers = (
     "hao" + "li",

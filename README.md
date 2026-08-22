@@ -12,9 +12,9 @@
   &nbsp;·&nbsp;
   <a href="https://huggingface.co/Lego-X"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
   &nbsp;·&nbsp;
-  <a href="https://legox.pages.dev/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
+  <a href="https://legox.net/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
   &nbsp;·&nbsp;
-  <a href="https://legox.pages.dev/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
+  <a href="https://legox.net/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
   &nbsp;·&nbsp;
   <a href="LICENSE"><img src="docs/public/figures/icon-license.svg" height="15" alt=""> License</a>
   &nbsp;·&nbsp;
@@ -27,19 +27,19 @@
 
 ## About
 
-LegoFlow is an easy and interactive framework for code data engineering, part of the [LegoX](https://legox.pages.dev/) family. The highlights include:
+LegoFlow is an easy and interactive framework for code data engineering, part of the [LegoX](https://legox.net/) family. The highlights include:
 
-- **Agent-native Workflows**: LegoFlow turns the complicated, error-prone code data collection procedures (repo and PR collection, task verification, trajectory rollout, and the training-evaluation loop) into well-prepared plugin skills, so users can drive real data production through coding-agent interaction.
-- **Wide Coverage**: LegoFlow covers over 8+ programming languages and 20+ task tags, and trajectory rollouts across multiple coding scaffolds including Claude Code, OpenCode, OpenHands and Terminus.
-- **High Flexibility**: LegoFlow is designed to ground on **block**, the building unit that allows your coding agent to manage repositories, scripts, configurations and the runtime output of a particular stage.
-- **Live Dashboards**: LegoFlow monitors the data production process through a series of live dashboards. These dashboards are built around carefully designed rubrics for tracking task difficulty, trajectory quality, and model performance.
-- **Self-evolving**: An agent has run the whole loop on its own, diagnosed why its first fine-tune plateaued, and lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. See [the end-to-end run](https://legox.pages.dev/blog/legoflow/).
+- **Agent-native Workflows**: LegoFlow turns the complicated, error-prone steps of code data collection (repo and PR collection, task verification, trajectory rollout, and the training-evaluation loop) into plugin skills, so you can drive real data production by talking to a coding agent.
+- **Wide Coverage**: LegoFlow covers 8+ programming languages and 20+ task tags, and rolls out trajectories across multiple coding scaffolds, including Claude Code, OpenCode, OpenHands and Terminus.
+- **High Flexibility**: LegoFlow is built on the **block**, the unit that lets your coding agent manage the repositories, scripts, configuration and runtime output of a single stage.
+- **Live Dashboards**: LegoFlow tracks data production through live dashboards, with rubrics for task difficulty, trajectory quality, and model performance.
+- **Self-evolving**: An agent has run the whole loop on its own, diagnosed why its first fine-tune plateaued, and lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. See [the end-to-end run](https://legox.net/blog/legoflow/).
 
 
 
 ## News
 
-🔥 **2026-08-12**: We release LegoFlow v0.1, the initial version of a fully agentic pipeline for software-engineering data.
+🔥 **2026-08-12**: We released LegoFlow v0.1, the first version of a fully agentic pipeline for software-engineering data.
 
 ## Architecture
 
@@ -48,42 +48,41 @@ LegoFlow is an easy and interactive framework for code data engineering, part of
 LegoFlow follows the tree structure of **blocks**. The root orchestrates four children:
 
 
-| Block | Role |
-| ----- | ---- |
-| [`curator`](https://legoflow-docs.pages.dev/docs/blocks/curator/getting-started) | Curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums |
-| [`tracer`](https://legoflow-docs.pages.dev/docs/blocks/tracer/getting-started) | Collects high-quality trajectories with verified rewards, across multiple coding scaffolds |
-| [`trainer`](https://legoflow-docs.pages.dev/docs/blocks/trainer/getting-started) | Converts rollout traces into training-ready formats and launches end-to-end training |
-| [`evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis |
+| Block                                                                                | Role                                                                                 |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| [`curator`](https://legoflow-docs.pages.dev/docs/blocks/curator/getting-started)     | Curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums |
+| [`tracer`](https://legoflow-docs.pages.dev/docs/blocks/tracer/getting-started)       | Collects trajectories with verified rewards across multiple coding scaffolds         |
+| [`trainer`](https://legoflow-docs.pages.dev/docs/blocks/trainer/getting-started)     | Converts rollout traces into training-ready formats and launches end-to-end training |
+| [`evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric- and tag-level analysis       |
 
 
 > [!NOTE]
-> We have a clear definition of **block**. It plays a particular role in the workflow, following the same layout and file structure. A block maintains the relevant repositories (`repos/`), configuration (`config.yaml`) and run scripts (`scripts/`), manages its output in `artifacts/`, and communicates with its adjacent blocks. See [What is a Block](https://legoflow-docs.pages.dev/docs/development/block-design) for more details.
+> A **block** has a strict definition: it plays one role in the workflow and follows the same layout and file structure as every other block. It maintains the relevant repositories (`repos/`), configuration (`config.yaml`) and run scripts (`scripts/`), manages its output in `artifacts/`, and communicates with its adjacent blocks. See [What is a Block](https://legoflow-docs.pages.dev/docs/development/block-design) for more details.
 
 ## Released Datasets
 
-We are actively releasing the latest datasets produced by LegoFlow:
+We release datasets as LegoFlow produces them:
 
-
-| ID                  | Teacher Model | Scaffold      | Data Samples | Training Result                                           | HF Link                                                                                                 |
-| ------------------- | ------------- | ------------- | ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK (v1.14) | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/Lego-X/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
+- <a href="https://huggingface.co/datasets/Lego-X/LegoFlow-SWE"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> <b>LegoFlow-SWE</b></a> — 512 SFT samples, distilled from **GLM-5.2** as the teacher model and rolled out on the OpenHands SDK (`openhands-sdk-1.33`) scaffold. Fine-tuning on it lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified.
 
 
 ## Quick Start
 
 ### Prerequisites
 
-- **Claude Code** — the recommended coding agent to drive LegoFlow.
-- **An OpenAI-compatible LLM endpoint** — required by Curator, Tracer and Evaluator.
-- **GitHub token(s)** — supplied through `GITHUB_TOKENS`, for Curator's PR collection.
-- **Docker** — every task and every rollout runs in a container.
-- **A GPU node** — only if you train, or serve a checkpoint yourself. Validated on one node with 8× H800 80GB; multi-node is not wired up.
-- **Docker and Cloudflare credentials** — optional, for authenticated image pulls and for publishing dashboards.
+- **Claude Code**: the recommended coding agent to drive LegoFlow.
+- **An OpenAI-compatible LLM endpoint**: required by Curator, Tracer and Evaluator.
+- **GitHub token(s)**: supplied through `GITHUB_TOKENS`, for Curator's PR collection.
+- **Docker**: every task and every rollout runs in a container.
+- **A GPU node**: only if you train or serve a checkpoint yourself. Validated on one node with 8× H800 80GB; multi-node is not wired up.
+- **Docker and Cloudflare credentials**: optional, for authenticated image pulls and for publishing dashboards.
 
-What each one is for is spelled out in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Each block has its own dependent environment, which can be set up automatically following the corresponding guides. 
+[Getting Started](https://legoflow-docs.pages.dev/docs/getting-started) explains what each one is for. Every block has its own environment, and the corresponding guide sets it up automatically.
 
 ### Environment Setup
+
 1. Clone the code repository.
+
 ```bash
 git clone --recurse-submodules https://github.com/LegoX/SWE-Lego-Live LegoFlow
 cd LegoFlow
@@ -100,40 +99,39 @@ claude plugin install root@root-block
 
 ### Example Usages
 
-Users can trigger individual blocks for a particular purpose, or jointly run multiple blocks for a more complicated pipeline.
+You can trigger individual blocks for a particular purpose, or chain several blocks into a larger pipeline.
 
 #### Running Individual Blocks
 
-Every block has clear roles and functions. Users can easily trigger these blocks with their pre-defined skills. In general, the steps to trigger a block include:
+Every block has a clear role, and ships the skills that drive it. The steps usually go:
 
 - `/block:setup` prepares necessary dependencies and fills in `config.yaml`
 - `/block:check` validates the configuration and run pre-flight check
 - `/block:run` does the work and archives the intermediate output to `artifacts/`
 - `/block:dashboard` helps the user to monitor the running progress and status
 
-The detailed guides to each individual block can be found at [docs](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/block-by-block).
+The [docs](https://legoflow-docs.pages.dev/docs/running-blocks/block-by-block) carry a detailed guide for each block.
 
 #### Running Multiple Blocks
 
-Users can also customize the workflow by running multiple blocks. Step-by-step guidance is in [Running Cascaded Blocks](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/cascaded).
+You can also customize the workflow by running multiple blocks. [Running Cascaded Blocks](https://legoflow-docs.pages.dev/docs/running-blocks/cascaded) walks through it step by step.
 
-For example, our previous run with all four blocks shows that Curator built 4,166 verified Python tasks, Tracer solved 915 of them, 512 trajectories were selected for training, and the resulting fine-tune lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified. More details are recorded in the [blog](https://legox.pages.dev/blog/legoflow/).
+In our own run with all four blocks, Curator built 4,166 verified Python tasks, Tracer solved 915 of them, 512 trajectories went into training, and the resulting fine-tune lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified. The [blog](https://legox.net/blog/legoflow/) records the details.
 
 ## Contributing
 
-We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/SWE-Lego-Live). For more details, please refer to the [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development).
+We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/SWE-Lego-Live). See the [Development guide](https://legoflow-docs.pages.dev/docs/development) for more details.
 
 ## Citation
 
 ```bibtex
-@misc{tao2026legoflow,
-  title  = {LegoFlow: Easy and Interactive Data Engineering for Coding Agents},
-  author = {Chaofan Tao and Jierun Chen and Yuxin Jiang and Yiming Du and Tao Yuan and Lifeng Shang and Xiaohui Li and Haoli Bai},
+@misc{legoflow2026,
+  title  = {LegoFlow: Easy and Interactive Code Data Engineering},
+  author = {The LegoX Team},
   year   = {2026},
-  url    = {https://legox.com/blog/legoflow/}
+  url    = {https://legox.net/blog/legoflow/}
 }
 ```
-
 
 ## Acknowledgements
 
