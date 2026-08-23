@@ -100,9 +100,6 @@ claude plugin install root@root-block
 
    LegoFlow also provides Codex plugins under `.codex/plugins/`. They use the
    same slash commands, such as `/root:check` and `/curator:check`, and thinly
-   reference the canonical Claude Code skills. See the [Codex adaptation and
-   testing guide](docs/CODEX_ADAPTATION_AND_TESTING.md) for configuration,
-   maintenance, and validation details.
 
 ### Example Usages
 
@@ -136,7 +133,7 @@ We welcome all developers to use, improve and contribute to LegoFlow. Issues and
   title  = {LegoFlow: Easy and Interactive Data Engineering for Coding Agents},
   author = {The LegoX Team},
   year   = {2026},
-  url    = {https://legox.com/blog/legoflow/}
+  url    = {https://legox.net/blog/legoflow/}
 }
 ```
 
