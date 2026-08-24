@@ -127,8 +127,8 @@ claude plugin install root@root-block
 
 ```bibtex
 @misc{legoflow2026,
-  title  = {LegoFlow: An Agentic Pipeline for Coding-Agent Data},
-  author = {The LegoX Team},
+  title  = {LegoFlow: Easy and Interactive Code Data Engineering},
+  author = {LegoX Team},
   year   = {2026},
   url    = {https://github.com/LegoX/LegoFlow}
 }
