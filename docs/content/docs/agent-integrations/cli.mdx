@@ -17,6 +17,57 @@ export PATH="$PWD/bin:$PATH"
 
 You can also invoke it directly as `./bin/legoflow`.
 
+## Agent plugin installation
+
+Claude Code and Codex use different local plugin mechanisms, but expose the
+same LegoFlow commands.
+
+### Claude Code
+
+Register the five Claude Code plugin directories as local marketplaces and
+install their plugins:
+
+```bash
+claude plugin marketplace add ./.claude/plugins
+claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/tracer/.claude/plugins
+claude plugin marketplace add ./blocks/trainer/.claude/plugins
+claude plugin marketplace add ./blocks/evaluator/.claude/plugins
+
+claude plugin install root@root-block
+claude plugin install curator@curator-block
+claude plugin install tracer@tracer
+claude plugin install trainer@trainer-block
+claude plugin install evaluator@evaluator-block
+```
+
+Run `/reload-plugins` or restart Claude Code after installation.
+
+### Codex
+
+Codex uses the project-local manifests under `.codex/plugins/`. No Claude Code
+marketplace command is required. Start Codex from the repository root:
+
+```bash
+cd LegoFlow
+codex
+```
+
+The five Codex plugins are:
+
+```text
+.codex/plugins/root-plugin/
+.codex/plugins/curator-plugin/
+.codex/plugins/tracer-plugin/
+.codex/plugins/trainer-plugin/
+.codex/plugins/evaluator-plugin/
+```
+
+Each plugin has a `.codex-plugin/plugin.json` manifest and a `skills/` folder.
+Every Codex skill references the corresponding Claude Code skill, which remains
+the canonical workflow definition. This keeps behavior, safety gates, and
+reporting consistent between the two agents.
+
 ## Commands
 
 | Command | Purpose |

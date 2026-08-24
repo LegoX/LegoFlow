@@ -51,6 +51,47 @@ skills are the main entry points for LegoFlow: they guide users through setup,
 checks, runs, and inspection without requiring them to memorize the underlying
 scripts.
 
+## Codex plugin installation
+
+LegoFlow also ships project-local Codex plugins in `.codex/plugins/`. Codex
+does not use the Claude Code marketplace commands above. Start Codex from the
+repository root so it can load the local plugin manifests and skills:
+
+```bash
+cd LegoFlow
+codex
+```
+
+The available Codex plugin directories are:
+
+```text
+.codex/plugins/root-plugin/
+.codex/plugins/curator-plugin/
+.codex/plugins/tracer-plugin/
+.codex/plugins/trainer-plugin/
+.codex/plugins/evaluator-plugin/
+```
+
+Each directory contains a `.codex-plugin/plugin.json` manifest and skills. The
+Codex skills are thin wrappers that read and follow the corresponding canonical
+Claude Code skill under `.claude/plugins/`; do not maintain a separate Codex
+workflow.
+
+Claude Code and Codex use the same slash-command vocabulary:
+
+```text
+/root:check
+/curator:check
+/curator:create-tasks
+/tracer:run
+/trainer:run
+/evaluator:dashboard
+```
+
+Use `check -> confirm -> run` with either agent. Run the relevant check first,
+review its report, and wait for explicit confirmation before launching
+expensive or stateful work.
+
 
 
 ## Project setup

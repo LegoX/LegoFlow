@@ -98,8 +98,21 @@ claude plugin install root@root-block
 
    The same holds for `curator`, `tracer`, `trainer` and `evaluator`, whose plugin directories live at `./blocks/<name>/.claude/plugins`. All five pairs are listed in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Run `/reload-plugins` afterwards so the skills load.
 
-   LegoFlow also provides Codex plugins under `.codex/plugins/`. They use the
-   same slash commands, such as `/root:check` and `/curator:check`, and thinly
+   LegoFlow also provides Codex plugins under `.codex/plugins/`. Start Codex
+   from the repository root; the project-local manifests and skills are then
+   available without running `claude plugin marketplace add` or
+   `claude plugin install`:
+
+   ```bash
+   cd LegoFlow
+   codex
+   ```
+
+   Codex and Claude Code use the same slash commands, such as `/root:check`
+   and `/curator:check`. Codex skills are thin wrappers around the canonical
+   Claude Code skills, so both agents follow the same workflow and safety gates.
+   See the [Codex and CLI guide](https://legoflow-docs.pages.dev/docs/agent-integrations/cli)
+   for the complete command and troubleshooting reference.
 
 ### Example Usages
 
