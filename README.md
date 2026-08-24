@@ -127,7 +127,7 @@ We welcome all developers to use, improve and contribute to LegoFlow. Issues and
 ```bibtex
 @misc{legoflow2026,
   title  = {LegoFlow: Easy and Interactive Code Data Engineering},
-  author = {The LegoX Team},
+  author = {LegoX Team},
   year   = {2026},
   url    = {https://legox.net/blog/legoflow/}
 }
