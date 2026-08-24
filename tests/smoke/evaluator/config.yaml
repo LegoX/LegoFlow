@@ -36,7 +36,7 @@ meta_info:
     harbor:
       url: https://github.com/LegoX/harbor.git
       branch: main
-      commit: 0bdee0a6943afa8839e79038acb19a9016e27fb2
+      commit: 4d76f384302b20b8a623bf5ec8ea6598f976a862
       path: repos/harbor
       readonly: true
 
@@ -128,4 +128,3 @@ runtime_info:
       job_layout: "artifacts/jobs/<job>/<task>/{agent,evaluation}/"
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
       results_summary_format: "artifacts/jobs/<job>/results.json"
-

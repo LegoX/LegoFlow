@@ -63,6 +63,11 @@ prod_sft = prod_cfg["runtime_info"]["input"]["sft_conversion"]
 if smoke_sft.get("tokenizer_name") != prod_sft.get("tokenizer_name"):
     raise AssertionError("block smoke tokenizer_name does not match production")
 if (
+    smoke_cfg["meta_info"]["repositories"]["harbor"]["commit"]
+    != prod_cfg["meta_info"]["repositories"]["harbor"]["commit"]
+):
+    raise AssertionError("block smoke Harbor pin does not match production")
+if (
     smoke_cfg["meta_info"]["repositories"]["swe_data_process"]["commit"]
     != prod_cfg["meta_info"]["repositories"]["swe_data_process"]["commit"]
 ):

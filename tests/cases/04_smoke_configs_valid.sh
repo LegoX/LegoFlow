@@ -47,6 +47,11 @@ for b in BLOCKS:
         extra = set(scfg) - set(pcfg)
         if extra:
             errs.append(f"tests/smoke/{b}/config.yaml has top-level keys absent from production: {sorted(extra)}")
+        if b in {"tracer", "evaluator"}:
+            prod_harbor_pin = (((pcfg.get("meta_info") or {}).get("repositories") or {}).get("harbor") or {}).get("commit")
+            smoke_harbor_pin = (((scfg.get("meta_info") or {}).get("repositories") or {}).get("harbor") or {}).get("commit")
+            if smoke_harbor_pin != prod_harbor_pin:
+                errs.append(f"tests/smoke/{b}/config.yaml Harbor pin differs from production")
         if b == "tracer":
             prod_sft = (((pcfg.get("runtime_info") or {}).get("input") or {}).get("sft_conversion") or {})
             smoke_sft = (((scfg.get("runtime_info") or {}).get("input") or {}).get("sft_conversion") or {})

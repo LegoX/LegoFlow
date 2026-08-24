@@ -28,7 +28,7 @@ meta_info:
     harbor:
       url: https://github.com/LegoX/harbor.git
       branch: main
-      commit: ff0434968e5b6975af10d72ca1d7ed20e7fa2465
+      commit: 4d76f384302b20b8a623bf5ec8ea6598f976a862
       path: repos/harbor
       readonly: true
     swe_data_process:
