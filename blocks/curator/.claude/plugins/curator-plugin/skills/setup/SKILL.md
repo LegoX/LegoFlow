@@ -4,12 +4,8 @@ description: >
   Bootstrap the curator block from a fresh clone: initialise the legoflow-curator
   submodule under `repos/legoflow-curator/` (`git submodule update --init`),
   create + activate the Python venv, `pip install -e repos/legoflow-curator/`, and
-  ensure the cross-provider LLM env (`OPENAI_API_KEY`,
-  `OPENAI_API_BASE_URL`, `OPENAI_MODEL`, mirrored to `ANTHROPIC_API_KEY` /
-  `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL`), `GITHUB_TOKENS` / `GITHUB_TOKEN`,
-  `DOCKER_HOST`, and `CLAUDE_CONFIG_DIR` are set in the user's shell —
-  prompting for any that are missing. Stage `gh_token.txt` (one token per
-  line) if the user prefers the file channel. Idempotent. Triggers on
+  ensure the cross-provider LLM env, GitHub token file, Docker host, and
+  Claude runtime values hydrate from the curator and root configs. Idempotent. Triggers on
   phrases like "set up curator", "bootstrap curator", "install curator",
   "prepare curator before running".
 ---
@@ -81,9 +77,8 @@ If a required value is missing, ask once and show the exact `export` line.
 Most of these are hydrated from `config.yaml -> runtime_info.input.llm_api` by
 `scripts/load_runtime_env.sh`; confirm `cc_provider_mode` matches the provider
 (use `openai_proxy` + a running LiteLLM proxy for Qwen/GLM/sglang/vLLM).
-For GitHub collection, `repos/legoflow-curator/tools/collect_prs_wo_image.py` reads
-tokens from `repos/legoflow-curator/gh_token.txt` by default; set
-`COLLECT_GITHUB_TOKEN_FILE` when using a different token file.
+`DOCKER_HOST` and shared credentials hydrate from the root `config.yaml`.
+For GitHub collection, set `runtime_info.input.github_token` to the local TXT path.
 
 ## Step 3b - Start the local LiteLLM CC proxy (openai_proxy mode only)
 
@@ -175,7 +170,7 @@ llm_api:
 
 ### pr_collection knobs
 
-`enabled` is informational (wrappers do not gate on it). `filters` are global thresholds mapped to `LEGOFLOW_CURATOR_PR_*` env vars — null/absent keeps the collector's built-in default; per-language overrides live in the collector's `LANGUAGE_OVERRIDES` and win over these globals. The collector combines `gh_token.txt` (or `COLLECT_GITHUB_TOKEN_FILE`) with `GITHUB_TOKENS` / `GITHUB_TOKEN` — real tokens never go in config.yaml.
+`enabled` is informational (wrappers do not gate on it). `filters` are global thresholds mapped to `LEGOFLOW_CURATOR_PR_*` env vars — null/absent keeps the collector's built-in default; per-language overrides live in the collector's `LANGUAGE_OVERRIDES` and win over these globals. `github_token` is a TXT path; real tokens never go in config.yaml.
 
 ### languages
 

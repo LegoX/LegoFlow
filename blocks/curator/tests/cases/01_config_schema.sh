@@ -72,11 +72,12 @@ if name != "curator":
     print(f"FAIL: meta_info.name == {name!r}, expected 'curator'", file=sys.stderr)
     sys.exit(1)
 
-# github_token must never hold a real value in tracked config.yaml — real
-# tokens come from GITHUB_TOKENS/GITHUB_TOKEN or gh_token.txt.
 github_token = get(cfg, "runtime_info.input.github_token")
-if github_token != "":
-    print(f"FAIL: runtime_info.input.github_token must be '', got {github_token!r} — never commit a real token", file=sys.stderr)
+if not isinstance(github_token, str):
+    print("FAIL: runtime_info.input.github_token must be a string path", file=sys.stderr)
+    sys.exit(1)
+if github_token.startswith(("ghp_", "gho_", "github_pat_")):
+    print("FAIL: runtime_info.input.github_token looks like a token, expected a path", file=sys.stderr)
     sys.exit(1)
 
 # Per-language config (mirrors /curator:check Step 1).

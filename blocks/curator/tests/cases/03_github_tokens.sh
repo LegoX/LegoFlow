@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CI test 03: every GitHub token in GITHUB_TOKENS / gh_token.txt returns 200
+# CI test 03: every configured GitHub token returns 200
 # on GET /rate_limit.
 
 set -euo pipefail
@@ -15,7 +15,7 @@ source "$BLOCK_DIR/scripts/load_runtime_env.sh"
 load_runtime_env >/dev/null 2>&1 || true
 
 if [[ -z "${GITHUB_TOKENS:-}" ]]; then
-  echo "FAIL: GITHUB_TOKENS is empty (no env var and no usable gh_token.txt)"
+  echo "FAIL: GITHUB_TOKENS is empty (no env token or usable configured token file)"
   exit 1
 fi
 
