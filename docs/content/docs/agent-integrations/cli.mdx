@@ -116,6 +116,21 @@ unique Codex skills as `$root-check`, `$curator-check`, `$curator-run`,
 `$tracer-run`, `$trainer-run`, or `$evaluator-run`, or describe the desired
 workflow in natural language. Both agents execute the same canonical Claude
 workflow through the shared CLI.
+
+For Curator specifically, all equivalent entry points are:
+
+| Intent | Claude Code | Codex skill | Direct CLI |
+| --- | --- | --- | --- |
+| Check configuration | `/curator:check` | `$curator-check` | `./bin/legoflow /curator:check` |
+| Prepare environment | `/curator:setup` | `$curator-setup` | `./bin/legoflow /curator:setup` |
+| Collect pull requests | `/curator:collect-prs` | `$curator-collect-prs` | `./bin/legoflow /curator:collect-prs` |
+| Create verified tasks | `/curator:create-tasks` | `$curator-create-tasks` | `./bin/legoflow /curator:create-tasks` |
+| Run the block | `/curator:run` | `$curator-run` | `./bin/legoflow /curator:run` |
+| Inspect the dashboard | `/curator:dashboard` | `$curator-dashboard` | `./bin/legoflow /curator:dashboard` |
+
+`/curator:check` is the shared LegoFlow command vocabulary, not a Codex-native
+slash invocation. In Codex, use `$curator-check`, natural language, or the
+direct CLI form.
 | `legoflow collect-prs` | Collect Curator candidate pull requests |
 | `legoflow create-tasks` | Create and verify Curator tasks |
 

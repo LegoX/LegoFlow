@@ -106,6 +106,17 @@ corresponding namespaced native skills (`$root-check`, `$curator-check`,
 For example, `$curator-check` and `./bin/legoflow /curator:check` execute the
 same canonical workflow as Claude Code's `/curator:check`.
 
+Curator's complete command mapping is:
+
+| Claude Code | Codex skill | Direct CLI |
+| --- | --- | --- |
+| `/curator:check` | `$curator-check` | `./bin/legoflow /curator:check` |
+| `/curator:setup` | `$curator-setup` | `./bin/legoflow /curator:setup` |
+| `/curator:collect-prs` | `$curator-collect-prs` | `./bin/legoflow /curator:collect-prs` |
+| `/curator:create-tasks` | `$curator-create-tasks` | `./bin/legoflow /curator:create-tasks` |
+| `/curator:run` | `$curator-run` | `./bin/legoflow /curator:run` |
+| `/curator:dashboard` | `$curator-dashboard` | `./bin/legoflow /curator:dashboard` |
+
 Use `check -> confirm -> run` with either agent. Run the relevant check first,
 review its report, and wait for explicit confirmation before launching
 expensive or stateful work.
