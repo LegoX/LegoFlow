@@ -1,52 +1,48 @@
 meta_info:
   name: curator
-  label: Curator
-  description: Converts GitHub PRs into verified SWE-Bench tasks across 8 programming
-    languages (Python, JavaScript, TypeScript, Go, C, C++, Java, Rust).
+  label: "Curator"
+  description: Converts GitHub PRs into verified SWE-Bench tasks across 8 programming languages (Python, JavaScript, TypeScript, Go, C, C++, Java, Rust).
   parent: legoflow
   blocks: {}
   dependencies:
-    from: {}
+    from: {}   # task source block; no upstream
     to:
       merged_tasks_dir:
         to: tracer.input.task_source.dataset_name
-        when:
-          tracer.input.task_source.provider: local
+        when: {tracer.input.task_source.provider: local}
+
   repos:
     legoflow-curator:
       name: legoflow-curator
       commit_id: 53faa328fcfc000c258e0d4b47dd609a887fc23a
       role: core pipeline - CLI, task generation, validation, scoring
+
   environment:
     venv_name: legoflow-curator-env
     venv_path: artifacts/envs/legoflow-curator-env
     requirements: repos/legoflow-curator/pyproject.toml
-    python_version: 3.12+
+    python_version: "3.12+"
     description: Virtual environment for legoflow-curator CLI and dependencies
+
   resources:
-    ip: local
+    ip: local        # CPU-only; runs on any node with Docker available
+    # user / pwd / directory apply only when ip is a remote IP (SSH target).
+    # They are ignored for local execution — the block runs from its own dir.
     user: null
     pwd: null
     directory: null
     description: CPU node with Docker; runs locally by default.
     public_storage: null
+
 runtime_info:
   input:
     pr_collection:
       enabled: true
-      languages:
-      - c
-      - cpp
-      - go
-      - java
-      - javascript
-      - typescript
-      - python
-      - rust
-      repo_num: 100
+      languages: [c, cpp, go, java, javascript, typescript, python, rust]
+      repo_num: 100                   # repos WITH qualifying PRs per language
       max_prs_per_repo: 50
       output_dir: artifacts/collected_prs
-      token_limit: 32
+      token_limit: 32                 # first N combined file + env tokens (0 = all)
       filters:
         min_stars: 30
         min_merged_prs: 5
@@ -56,86 +52,45 @@ runtime_info:
         min_files_changed: 1
         max_files_changed: 25
         max_lines_changed: 1500
+
+    # Private values are read from environment variables when possible:
+    #   OPENAI_API_KEY / ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN
+    #   OPENAI_API_BASE_URL / ANTHROPIC_BASE_URL
+    # Keep tracked config.yaml free of real keys and private endpoints.
     llm_api:
-      api_key: ''
-      api_base_url: ''
-      pr_model: gpt-4o-mini
-      task_model: gpt-4o-mini
-      cc_provider_mode: openai_proxy
+      api_key: human                          # never commit a real key; prefer env/.env
+      api_base_url: human                     # OpenAI-compatible endpoint (PR eval + instruction gen)
+      pr_model: Qwen3.6-35B-A3B               # model for PR filtering/instruction generation
+      task_model: claude-sonnet-4-6           # Claude Code-visible alias for task creation
+      cc_provider_mode: openai_proxy          # native | openai_proxy
       anthropic_base_url: http://127.0.0.1:4010
       cc_proxy_port: 4010
-    github_token: ''
+
+    github_token: ""    # supplied via GITHUB_TOKENS/GITHUB_TOKEN or gh_token.txt; never commit a token
+
+    # max_verified_tasks: N = stop after N verified tasks; "all" = no cap, consume all collected PRs.
     languages:
-      py:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 24
-          max_verified_tasks: 256
-      js:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 16
-          max_verified_tasks: 128
-      ts:
-        enabled: true
-        params:
-          timeout: 3600
-          cc_timeout: 3000
-          n_concurrent: 16
-          max_verified_tasks: 128
-      go:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 16
-          max_verified_tasks: 128
-      c:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 16
-          max_verified_tasks: 128
-      cpp:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 16
-          max_verified_tasks: 128
-      java:
-        enabled: true
-        params:
-          timeout: 3200
-          cc_timeout: 2400
-          n_concurrent: 16
-          max_verified_tasks: 128
-      rust:
-        enabled: true
-        params:
-          timeout: 3600
-          cc_timeout: 3000
-          n_concurrent: 16
-          max_verified_tasks: 128
+      py:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 24, max_verified_tasks: 256 } }
+      js:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
+      ts:   { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16, max_verified_tasks: 128 } }
+      go:   { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
+      c:    { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
+      cpp:  { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
+      java: { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
+      rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16, max_verified_tasks: 128 } }
+
   output:
     swe_tasks_dir:
       path: artifacts/swe_tasks
-      description: Per-language task directories ({lang}-cc/), each with verifiable_tasks.txt
-        listing verified task IDs
-      structure: artifacts/swe_tasks/{lang}-cc/{task_id}/ with instruction.md, environment/,
-        solution/, tests/
+      description: Per-language task directories ({lang}-cc/), each with verifiable_tasks.txt listing verified task IDs
+      structure: "artifacts/swe_tasks/{lang}-cc/{task_id}/ with instruction.md, environment/, solution/, tests/"
+
     merged_tasks_dir:
       path: artifacts/merged_swe_tasks
-      description: Optional flattened directory containing all verified tasks from
-        all languages (populated by scripts/extract_verified_tasks.py)
-      structure: artifacts/merged_swe_tasks/{task_id}/ with instruction.md, environment/,
-        solution/, tests/
+      description: Optional flattened directory containing all verified tasks from all languages (populated by scripts/extract_verified_tasks.py)
+      structure: "artifacts/merged_swe_tasks/{task_id}/ with instruction.md, environment/, solution/, tests/"
       extract_command: python scripts/extract_verified_tasks.py
+
     logs:
       path: artifacts/logs/legoflow-curator-create
-      description: 'Per-language create logs: cc_<lang>_March.txt'
+      description: "Per-language create logs: cc_<lang>_March.txt"

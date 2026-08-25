@@ -1,28 +1,27 @@
 meta_info:
   name: tracer
-  label: Tracer
-  description: Generates raw agent trajectories with Harbor for downstream SFT data
-    conversion.
+  label: "Tracer"
+  description: Generates raw agent trajectories with Harbor for downstream SFT data conversion.
   parent: legoflow
   blocks: {}
   dependencies:
     from:
       task_source.dataset_name:
         from: curator.output.merged_tasks_dir
-        when:
-          task_source.provider: local
+        when: {task_source.provider: local}
     to:
       raw_trajectories_dir:
         to: trainer.input.source.job_dir
-        when:
-          trainer.input.source.type: harbor_job
+        when: {trainer.input.source.type: harbor_job}
+
   resources:
-    ip: local
+    ip: local        # CPU-only; runs on any node with Docker available
     user: null
     pwd: null
     directory: null
     description: Local CPU/Docker node. Remote SSH fields are ignored when ip is local.
     public_storage: null
+
   repositories:
     harbor:
       url: https://github.com/LegoX/harbor.git
@@ -33,73 +32,76 @@ meta_info:
     swe_data_process:
       url: https://github.com/LegoX/swe_data_process.git
       branch: main
-      commit: dda92c581a0c0eaba74bb469d92ddda767e5f1b3
+      commit: dda92c581a0c0eaba74bb469d92ddda767e5f1b3   # origin/main HEAD (verified 2026-07-28), defaults reasoning-check-mode to adaptive
       path: repos/swe_data_process
       readonly: true
+
   environment:
     harbor_uv: artifacts/env/harbor-uv
-    litellm_uv: artifacts/env/litellm-venv
+    litellm_uv: artifacts/env/litellm-venv    # separate venv; harbor env resets to litellm 1.83.0
     swe_data_process_uv: artifacts/env/swe-data-process-uv
-    swe_data_process_extras:
-    - llm
+    swe_data_process_extras: [llm]
     litellm:
-      python_version: '3.13'
-      litellm_version: 1.83.14
+      python_version: "3.13"
+      litellm_version: "1.83.14"
+
 runtime_info:
   input:
     llm_api:
-      api_key: ''
-      api_base_url: ''
-      model: openai/gpt-5.4-nano
-      description: Raw upstream model API used to configure per-job LiteLLM proxy
-        startup.
-      protocols:
-      - openai_compatible
-      - anthropic_compatible
+      api_key: human                          # fill in a private local copy before running; never commit a real key
+      api_base_url: human                     # fill in a private local copy before running; keep gateway URLs out of git
+      model: "openai/Qwen3.6-35B-A3B"
+      description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
+      protocols: [openai_compatible, anthropic_compatible]
       served_via: per_job_litellm_proxy
-      input_cost_per_token: 2.1e-06
-      output_cost_per_token: 8.4e-06
+      input_cost_per_token: 0.0000021
+      output_cost_per_token: 0.0000084
+
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
-      port: 4004
-      master_key: dummy-key-cf
+      port: 4003
+      master_key: dummy-key-cf         # functional dummy
+
     task_source:
-      provider: local
+      provider: local                  # local (curator) | huggingface — see /tracer:setup reference
       dataset_name: ../curator/artifacts/merged_swe_tasks
       split: train
+
     harbor_job:
-      jobs_dir: artifacts/jobs
+      jobs_dir: artifacts/jobs         # exported by start.sh as TRAJGEN_HARBOR_JOBS_DIR
       n_concurrent: 8
-      n_tasks: 40
+      n_tasks: 40                      # null = all manifest tasks
       max_retries: 2
       timeout_multiplier: 5
+
     agent:
-      name: custom-claude-code
-      orchestration_runtime: claude_code
+      name: custom-claude-code   # Supported pinned versions: custom-claude-code=2.1.118, custom-opencode=1.18.7, custom-openhands-sdk=1.33.0.
       version: 2.1.118
       runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
-      runtime_host_path: artifacts/agent-runtime/claude-code
+      runtime_host_path: artifacts/agent-runtime/claude-code   # pre-extracted; see /tracer:check reference
       max_turns: 80
       temperature: 0.7
+
     sft_conversion:
-      enabled: true
-      scaffold: auto
-      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base
+      enabled: true                    # true = start.sh runs convert step after the Harbor job
+      scaffold: auto                   # auto derives from agent.name; explicit choices: claude_code | open_code | openhands_sdk | terminus2
+      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base  # align conversion with trainer.model.model_name_or_path
       out_dir: artifacts/sft_data
       max_instances: null
-      exclude_repos_file: ''
+      exclude_repos_file: ""           # "" = repo default artifacts/excluded_repos.txt
       reasoning_check_mode: adaptive
       reasoning_content_ratio_threshold: 0.2
+
     env_extra:
-      HARBOR_EXCLUDE_TASKS: excluded_tasks.txt artifacts/processed_tasks.yaml
+      HARBOR_EXCLUDE_TASKS: excluded_tasks.txt artifacts/processed_tasks.yaml   # exclusion sources; literal ids also accepted
+
   output:
     raw_trajectories_dir:
       description: Harbor job directories with LiteLLM trajectory logs
       path: artifacts/jobs
-      trajectory_format: artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+      trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
     sft_data_dir:
-      description: LF-format JSON arrays converted from Harbor trajectories, ready
-        for LLaMA-Factory SFT.
+      description: LF-format JSON arrays converted from Harbor trajectories, ready for LLaMA-Factory SFT.
       path: artifacts/sft_data
       format: llamafactory_lf_v0.1
-      trajectory_format: artifacts/sft_data/<job>/lf.json
+      trajectory_format: "artifacts/sft_data/<job>/lf.json"

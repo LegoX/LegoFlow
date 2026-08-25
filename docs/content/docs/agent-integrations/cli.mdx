@@ -45,22 +45,32 @@ Run `/reload-plugins` or restart Claude Code after installation.
 
 ### Codex
 
-Codex uses the project-local manifests under `.codex/plugins/`. No Claude Code
-marketplace command is required. Start Codex from the repository root:
+Codex loads plugins from a configured marketplace and requires an explicit
+installation. Register the repository root as the local LegoFlow marketplace,
+then install the plugins you want:
 
 ```bash
 cd LegoFlow
-codex
+codex plugin marketplace add .
+codex plugin add root@legoflow
+codex plugin add curator@legoflow
+codex plugin add tracer@legoflow
+codex plugin add trainer@legoflow
+codex plugin add evaluator@legoflow
 ```
+
+Restart Codex after installation. The marketplace manifest is
+`.agents/plugins/marketplace.json`; its paths are relative to the repository
+root.
 
 The five Codex plugins are:
 
 ```text
-.codex/plugins/root-plugin/
-.codex/plugins/curator-plugin/
-.codex/plugins/tracer-plugin/
-.codex/plugins/trainer-plugin/
-.codex/plugins/evaluator-plugin/
+plugins/root/
+plugins/curator/
+plugins/tracer/
+plugins/trainer/
+plugins/evaluator/
 ```
 
 Each plugin has a `.codex-plugin/plugin.json` manifest and a `skills/` folder.
@@ -81,7 +91,7 @@ reporting consistent between the two agents.
 | `legoflow dashboard <block>` | Inspect or serve one block dashboard |
 | `legoflow create` | Show the shared block-creation contract for an agent-assisted scaffold |
 
-The canonical LegoFlow command form is slash-based:
+The canonical LegoFlow CLI command form is slash-based:
 
 ```text
 /root:check
@@ -99,6 +109,13 @@ The repository CLI accepts these exact strings as arguments:
 ./bin/legoflow /curator:check
 ./bin/legoflow /tracer:run
 ```
+
+Claude Code exposes these commands as slash commands. Codex does not map
+project skills to Claude-style slash commands; after installation, invoke the
+unique Codex skills as `$root-check`, `$curator-check`, `$curator-run`,
+`$tracer-run`, `$trainer-run`, or `$evaluator-run`, or describe the desired
+workflow in natural language. Both agents execute the same canonical Claude
+workflow through the shared CLI.
 | `legoflow collect-prs` | Collect Curator candidate pull requests |
 | `legoflow create-tasks` | Create and verify Curator tasks |
 
@@ -110,11 +127,11 @@ Claude Code and Codex use the same action names and the same CLI commands:
 
 | Action | Claude Code | Codex | Shared execution |
 | --- | --- | --- | --- |
-| Curator check | `/curator:check` | `/curator:check` skill convention | `legoflow /curator:check` |
-| Curator PR collection | `/curator:collect-prs` | `/curator:collect-prs` skill convention | `legoflow /curator:collect-prs` |
-| Tracer run | `/tracer:run` | `/tracer:run` skill convention | `legoflow /tracer:run` |
-| Trainer run | `/trainer:run` | `/trainer:run` skill convention | `legoflow /trainer:run` |
-| Evaluator dashboard | `/evaluator:dashboard` | `/evaluator:dashboard` skill convention | `legoflow /evaluator:dashboard` |
+| Curator check | `/curator:check` | `$curator-check` | `legoflow /curator:check` |
+| Curator PR collection | `/curator:collect-prs` | `$curator-collect-prs` | `legoflow /curator:collect-prs` |
+| Tracer run | `/tracer:run` | `$tracer-run` | `legoflow /tracer:run` |
+| Trainer run | `/trainer:run` | `$trainer-run` | `legoflow /trainer:run` |
+| Evaluator dashboard | `/evaluator:dashboard` | `$evaluator-dashboard` | `legoflow /evaluator:dashboard` |
 
 `create` remains agent-assisted because block scaffolding requires an intake conversation. Both agents use the same contract and must produce the same files; `legoflow create` prints that contract and the validation command.
 

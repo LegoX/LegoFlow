@@ -53,9 +53,21 @@ scripts.
 
 ## Codex plugin installation
 
-LegoFlow also ships project-local Codex plugins in `.codex/plugins/`. Codex
-does not use the Claude Code marketplace commands above. Start Codex from the
-repository root so it can load the local plugin manifests and skills:
+LegoFlow also ships Codex plugins in `plugins/`. Register this repository as a
+local marketplace and install the plugins before starting Codex:
+
+```bash
+codex plugin marketplace add .
+codex plugin add root@legoflow
+codex plugin add curator@legoflow
+codex plugin add tracer@legoflow
+codex plugin add trainer@legoflow
+codex plugin add evaluator@legoflow
+```
+
+Restart Codex after installation. Codex does not use the Claude Code
+marketplace commands above. Invoke skills such as `$curator-check` and
+`$tracer-run`, or use the shared CLI command `./bin/legoflow /curator:check`.
 
 ```bash
 cd LegoFlow
@@ -65,11 +77,11 @@ codex
 The available Codex plugin directories are:
 
 ```text
-.codex/plugins/root-plugin/
-.codex/plugins/curator-plugin/
-.codex/plugins/tracer-plugin/
-.codex/plugins/trainer-plugin/
-.codex/plugins/evaluator-plugin/
+plugins/root/
+plugins/curator/
+plugins/tracer/
+plugins/trainer/
+plugins/evaluator/
 ```
 
 Each directory contains a `.codex-plugin/plugin.json` manifest and skills. The
@@ -77,7 +89,10 @@ Codex skills are thin wrappers that read and follow the corresponding canonical
 Claude Code skill under `.claude/plugins/`; do not maintain a separate Codex
 workflow.
 
-Claude Code and Codex use the same slash-command vocabulary:
+Claude Code uses the slash-command vocabulary below. Codex uses the
+corresponding namespaced native skills (`$root-check`, `$curator-check`,
+`$curator-create-tasks`, `$tracer-run`, `$trainer-run`, and
+`$evaluator-dashboard`), while the shared CLI accepts the slash form:
 
 ```text
 /root:check
@@ -87,6 +102,9 @@ Claude Code and Codex use the same slash-command vocabulary:
 /trainer:run
 /evaluator:dashboard
 ```
+
+For example, `$curator-check` and `./bin/legoflow /curator:check` execute the
+same canonical workflow as Claude Code's `/curator:check`.
 
 Use `check -> confirm -> run` with either agent. Run the relevant check first,
 review its report, and wait for explicit confirmation before launching

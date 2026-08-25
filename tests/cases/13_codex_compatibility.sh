@@ -14,11 +14,11 @@ from pathlib import Path
 
 root = Path(sys.argv[1])
 plugins = {
-    "root": root / ".codex/plugins/root-plugin",
-    "curator": root / ".codex/plugins/curator-plugin",
-    "tracer": root / ".codex/plugins/tracer-plugin",
-    "trainer": root / ".codex/plugins/trainer-plugin",
-    "evaluator": root / ".codex/plugins/evaluator-plugin",
+    "root": root / "plugins/root",
+    "curator": root / "plugins/curator",
+    "tracer": root / "plugins/tracer",
+    "trainer": root / "plugins/trainer",
+    "evaluator": root / "plugins/evaluator",
 }
 
 claude_plugin_dirs = {
@@ -51,15 +51,16 @@ for name, plugin in plugins.items():
     codex_skills = {path.parent.name for path in skills}
     if claude_skills != codex_skills:
         raise SystemExit(f"FAIL: Claude/Codex skill names differ for {name}")
-for skill in skills:
+    for skill in skills:
         text = skill.read_text(encoding="utf-8")
         if not text.startswith("---\n") or "description:" not in text:
             raise SystemExit(f"FAIL: malformed Codex skill: {skill.relative_to(root)}")
         if "./bin/legoflow" not in text:
             raise SystemExit(f"FAIL: Codex skill does not reference shared CLI: {skill.relative_to(root)}")
         command = f"/{name}:{skill.parent.name}"
-        if command not in text:
-            raise SystemExit(f"FAIL: Codex skill does not document its slash command: {command}")
+        codex_command = f"${name}-{skill.parent.name}"
+        if command not in text or codex_command not in text:
+            raise SystemExit(f"FAIL: Codex skill does not document both invocations: {command}, {codex_command}")
         claude_skill = claude_plugin_dirs[name] / "skills" / skill.parent.name / "SKILL.md"
         claude_ref = claude_skill.relative_to(root).as_posix()
         if claude_ref not in text:
@@ -70,6 +71,10 @@ names = {entry["name"] for entry in marketplace["plugins"]}
 expected = set(plugins)
 if names != expected:
     raise SystemExit(f"FAIL: marketplace entries {sorted(names)} != {sorted(expected)}")
+for entry in marketplace["plugins"]:
+    expected_path = f"./plugins/{entry['name']}"
+    if entry["source"].get("path") != expected_path:
+        raise SystemExit(f"FAIL: marketplace path for {entry['name']} is not {expected_path}")
 
 agent_refs = {root / "AGENTS.md": root / "CLAUDE.md"}
 agent_refs.update(

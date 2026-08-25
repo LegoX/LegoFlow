@@ -34,12 +34,12 @@ def write_codex_skill(
 
 
 def main() -> None:
-    roots = [("root", ROOT / ".claude/plugins/root-plugin", ROOT / ".codex/plugins/root-plugin")]
+    roots = [("root", ROOT / ".claude/plugins/root-plugin", ROOT / "plugins/root")]
     roots.extend(
         (
             block,
             ROOT / f"blocks/{block}/.claude/plugins/{block}-plugin",
-            ROOT / f".codex/plugins/{block}-plugin",
+            ROOT / f"plugins/{block}",
         )
         for block in BLOCKS
     )
