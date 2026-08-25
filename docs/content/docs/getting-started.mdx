@@ -66,8 +66,8 @@ codex plugin add evaluator@legoflow
 ```
 
 Restart Codex after installation. Codex does not use the Claude Code
-marketplace commands above. Invoke skills such as `$curator-check` and
-`$tracer-run`, or use the shared CLI command `./bin/legoflow /curator:check`.
+marketplace commands above. Invoke native skills such as `$curator-check` and
+`$tracer-run`.
 
 ```bash
 cd LegoFlow
@@ -89,33 +89,27 @@ Codex skills are thin wrappers that read and follow the corresponding canonical
 Claude Code skill under `.claude/plugins/`; do not maintain a separate Codex
 workflow.
 
-Claude Code uses the slash-command vocabulary below. Codex uses the
-corresponding namespaced native skills (`$root-check`, `$curator-check`,
-`$curator-create-tasks`, `$tracer-run`, `$trainer-run`, and
-`$evaluator-dashboard`), while the shared CLI accepts the slash form:
+Codex uses the following namespaced native skills:
 
 ```text
-/root:check
-/curator:check
-/curator:create-tasks
-/tracer:run
-/trainer:run
-/evaluator:dashboard
+$root-check
+$curator-check
+$curator-create-tasks
+$tracer-run
+$trainer-run
+$evaluator-dashboard
 ```
 
-For example, `$curator-check` and `./bin/legoflow /curator:check` execute the
-same canonical workflow as Claude Code's `/curator:check`.
+Curator's native Codex skills are:
 
-Curator's complete command mapping is:
-
-| Claude Code | Codex skill | Direct CLI |
-| --- | --- | --- |
-| `/curator:check` | `$curator-check` | `./bin/legoflow /curator:check` |
-| `/curator:setup` | `$curator-setup` | `./bin/legoflow /curator:setup` |
-| `/curator:collect-prs` | `$curator-collect-prs` | `./bin/legoflow /curator:collect-prs` |
-| `/curator:create-tasks` | `$curator-create-tasks` | `./bin/legoflow /curator:create-tasks` |
-| `/curator:run` | `$curator-run` | `./bin/legoflow /curator:run` |
-| `/curator:dashboard` | `$curator-dashboard` | `./bin/legoflow /curator:dashboard` |
+| Workflow | Codex skill |
+| --- | --- |
+| Check | `$curator-check` |
+| Setup | `$curator-setup` |
+| Collect PRs | `$curator-collect-prs` |
+| Create tasks | `$curator-create-tasks` |
+| Run | `$curator-run` |
+| Dashboard | `$curator-dashboard` |
 
 Use `check -> confirm -> run` with either agent. Run the relevant check first,
 review its report, and wait for explicit confirmation before launching

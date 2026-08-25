@@ -1,5 +1,5 @@
 ---
-name: curator-dashboard
+name: dashboard
 description: Run the canonical curator dashboard workflow.
 ---
 
@@ -7,6 +7,6 @@ description: Run the canonical curator dashboard workflow.
 
 Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/dashboard/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-## Unified Invocation
+## Native Codex Invocation
 
-Invoke this Codex skill as `$curator-dashboard`. The shared CLI fallback is `./bin/legoflow /curator:dashboard` when the agent does not expose slash commands directly.
+Invoke this Codex skill as `$curator-dashboard`.

@@ -111,14 +111,11 @@ claude plugin install root@root-block
    codex plugin add evaluator@legoflow
    ```
 
-   Restart Codex after installation. Claude Code uses slash commands such as
-   `/root:check` and `/curator:check`; Codex uses native skill names such as
-   `$root-check` and `$curator-check`. The exact shared CLI equivalent is
-   `./bin/legoflow /curator:check`. Codex skills are thin wrappers around the
-   canonical Claude Code skills, so both agents follow the same workflow and
-   safety gates.
-   See the [Codex and CLI guide](https://legoflow-docs.pages.dev/docs/agent-integrations/cli)
-   for the complete command and troubleshooting reference.
+   Restart Codex after installation. Use native Codex skills such as
+   `$root-check` and `$curator-check`. Codex skills are thin wrappers around
+   the canonical Claude Code skills, so both agents follow the same workflow
+   and safety gates. See the [Codex plugin guide](https://legoflow-docs.pages.dev/docs/agent-integrations/cli)
+   for the complete installation and usage reference.
 
 ### Example Usages
 

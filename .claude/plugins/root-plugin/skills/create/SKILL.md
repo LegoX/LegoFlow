@@ -216,9 +216,3 @@ Print a short summary (under 10 lines):
 - Path where the block was created
 - File tree
 - "Fill in `runtime_info.input` in `config.yaml`, then run `/root:run` to preflight and execute (or `scripts/dryrun.sh` to validate without side effects)."
-## Shared LegoFlow CLI
-
-The canonical execution command for this skill is `./bin/legoflow create`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.
-## LegoFlow Command Convention
-
-The canonical command for this skill is `/root:create`. The shared CLI accepts the same command as `./bin/legoflow /root:create` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.

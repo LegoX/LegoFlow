@@ -172,9 +172,3 @@ input file at startup, so PR IDs appended later are not included in that run.
   silent `config.yaml` edits.
 - Do not delete existing `*_pr_ids.txt` or `*_prs.jsonl` unless the user asks;
   the collector resumes/extends prior state.
-## Shared LegoFlow CLI
-
-The canonical execution command for this skill is `./bin/legoflow collect-prs`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.
-## LegoFlow Command Convention
-
-The canonical command for this skill is `/curator:collect-prs`. The shared CLI accepts the same command as `./bin/legoflow /curator:collect-prs` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.

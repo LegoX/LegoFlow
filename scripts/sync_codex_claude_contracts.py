@@ -10,9 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BLOCKS = ("curator", "tracer", "trainer", "evaluator")
 
 
-def write_codex_skill(
-    codex_path: Path, claude_path: Path, command: str, description: str
-) -> None:
+def write_codex_skill(codex_path: Path, claude_path: Path, description: str) -> None:
     relative_claude = claude_path.relative_to(ROOT).as_posix()
     codex_path.parent.mkdir(parents=True, exist_ok=True)
     codex_path.write_text(
@@ -25,10 +23,8 @@ def write_codex_skill(
         "workflow shared by Claude Code and Codex; do not duplicate or "
         "reinterpret its safety gates, reporting requirements, or runtime "
         "procedure here.\n\n"
-        "## Unified Invocation\n\n"
-        f"Invoke this skill as `{command}`. The shared CLI fallback is "
-        f"`./bin/legoflow {command}` when the agent does not expose slash "
-        "commands directly.\n",
+        "## Native Codex Invocation\n\n"
+        f"Invoke this Codex skill as `${codex_path.parent.parent.parent.name}-{codex_path.parent.name}`.\n",
         encoding="utf-8",
     )
 
@@ -47,12 +43,10 @@ def main() -> None:
     for name, claude_plugin, codex_plugin in roots:
         for claude_skill in sorted((claude_plugin / "skills").glob("*/SKILL.md")):
             skill_name = claude_skill.parent.name
-            command = f"/{name}:{skill_name}"
             description = f"Run the canonical {name} {skill_name} workflow."
             write_codex_skill(
                 codex_plugin / "skills" / skill_name / "SKILL.md",
                 claude_skill,
-                command,
                 description,
             )
 

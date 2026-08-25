@@ -147,9 +147,3 @@ Production runs use `provider: local` pointing at curator's verified tasks — t
 ### sft_conversion
 
 `scaffold: auto` derives the converter scaffold from `agent.name` (choices: claude_code | open_code | openhands_sdk | terminus2). `exclude_repos_file: ""` uses the repo default `artifacts/excluded_repos.txt`.
-## Shared LegoFlow CLI
-
-The canonical execution command for this skill is `./bin/legoflow setup tracer`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.
-## LegoFlow Command Convention
-
-The canonical command for this skill is `/tracer:setup`. The shared CLI accepts the same command as `./bin/legoflow /tracer:setup` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.

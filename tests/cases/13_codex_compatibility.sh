@@ -55,12 +55,9 @@ for name, plugin in plugins.items():
         text = skill.read_text(encoding="utf-8")
         if not text.startswith("---\n") or "description:" not in text:
             raise SystemExit(f"FAIL: malformed Codex skill: {skill.relative_to(root)}")
-        if "./bin/legoflow" not in text:
-            raise SystemExit(f"FAIL: Codex skill does not reference shared CLI: {skill.relative_to(root)}")
-        command = f"/{name}:{skill.parent.name}"
         codex_command = f"${name}-{skill.parent.name}"
-        if command not in text or codex_command not in text:
-            raise SystemExit(f"FAIL: Codex skill does not document both invocations: {command}, {codex_command}")
+        if codex_command not in text:
+            raise SystemExit(f"FAIL: Codex skill does not document native invocation: {codex_command}")
         claude_skill = claude_plugin_dirs[name] / "skills" / skill.parent.name / "SKILL.md"
         claude_ref = claude_skill.relative_to(root).as_posix()
         if claude_ref not in text:

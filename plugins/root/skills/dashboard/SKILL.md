@@ -1,5 +1,5 @@
 ---
-name: root-dashboard
+name: dashboard
 description: Run the canonical root dashboard workflow.
 ---
 
@@ -7,6 +7,6 @@ description: Run the canonical root dashboard workflow.
 
 Read and follow `.claude/plugins/root-plugin/skills/dashboard/SKILL.md` in full. It is the canonical workflow shared by Claude Code and Codex; do not duplicate or reinterpret its safety gates, reporting requirements, or runtime procedure here.
 
-## Unified Invocation
+## Native Codex Invocation
 
-Invoke this Codex skill as `$root-dashboard`. The shared CLI fallback is `./bin/legoflow /root:dashboard` when the agent does not expose slash commands directly.
+Invoke this Codex skill as `$root-dashboard`.

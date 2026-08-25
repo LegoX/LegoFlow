@@ -150,9 +150,3 @@ Do **not** edit `config.yaml` after the run to record what happened — the arch
 ## Step 6 — Report
 
 Print a short summary (under 10 lines): run id, duration, exit status, archive path, and either the produced outputs (from `runtime_info.output` if `start.sh` updated them) or the failure cause. The live state is whatever the newest `artifacts/index.yaml` entry says.
-## Shared LegoFlow CLI
-
-The canonical execution command for this skill is `./bin/legoflow run [<block>]`. Claude Code and Codex use this same command; this skill supplies the agent-specific confirmation, reporting, and artifact-analysis workflow around it.
-## LegoFlow Command Convention
-
-The canonical command for this skill is `/root:run`. The shared CLI accepts the same command as `./bin/legoflow /root:run` and dispatches it to the module runtime. Claude Code and Codex use the same command convention.

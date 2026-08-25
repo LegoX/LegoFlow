@@ -17,6 +17,4 @@ Claude Code exposes the following slash commands:
 ```
 
 Codex invokes the corresponding native skills as `$root-check`, `$root-setup`,
-`$root-run`, `$root-dashboard`, and `$root-create`. The shared CLI accepts the
-exact Claude-style command as `./bin/legoflow /root:check` when a direct CLI
-fallback is preferred.
+`$root-run`, `$root-dashboard`, and `$root-create`.
