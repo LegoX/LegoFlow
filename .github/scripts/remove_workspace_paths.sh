@@ -16,11 +16,25 @@ for relative in "$@"; do
   if [[ -L "$path" || -f "$path" ]]; then
     rm -f -- "$path"
   elif [[ -d "$path" ]]; then
-    if command -v docker >/dev/null 2>&1; then
-      docker run --rm -v "$ROOT:/workspace:rw" alpine:3 \
-        sh -c 'rm -rf -- "/workspace/$1"' sh "$relative"
+    stale="$path.legoflow-stale-${GITHUB_RUN_ID:-manual}-$$"
+    if mv -- "$path" "$stale"; then
+      stale_relative="${stale#"$ROOT/"}"
+      if command -v docker >/dev/null 2>&1; then
+        docker run --detach --rm -v "$ROOT:/workspace:rw" alpine:3 \
+          sh -c 'rm -rf -- "/workspace/$1"' sh "$stale_relative" >/dev/null
+      else
+        rm -rf -- "$stale" >/dev/null 2>&1 &
+      fi
+    elif command -v docker >/dev/null 2>&1; then
+      timeout --signal=TERM --kill-after=10s 120s docker run --rm \
+        -v "$ROOT:/workspace:rw" alpine:3 \
+        sh -c 'rm -rf -- "/workspace/$1"' sh "$relative" || true
     else
       rm -rf -- "$path"
     fi
+    [[ ! -e "$path" ]] || {
+      echo "ERROR: could not remove workspace path: $relative" >&2
+      exit 1
+    }
   fi
 done

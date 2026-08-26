@@ -118,7 +118,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "HF_TOKEN=$HF_TOKEN"
@@ -134,11 +134,13 @@ jobs:
           LEGOFLOW_SUBMODULE_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
         run: |
           set -euo pipefail
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           CANON="${SHARED_RUNTIME}/curator"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh curator"; exit 1; }
           mkdir -p repos artifacts artifacts/swe_tasks
-          rm -rf repos/legoflow-curator artifacts/envs artifacts/swe_tasks/py-cc gh_token.txt
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/curator/repos/legoflow-curator blocks/curator/artifacts/envs \
+            blocks/curator/artifacts/swe_tasks/py-cc blocks/curator/gh_token.txt
 
           if [ -e "$CANON/repos/legoflow-curator/.git" ]; then
             ln -s "$CANON/repos/legoflow-curator" repos/legoflow-curator
@@ -171,7 +173,7 @@ jobs:
       - name: Run curator test cases
         env:
           GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
-        run: bash .github/scripts/align_submodules.sh
+        run: bash .github/scripts/align_submodules.sh curator
       - name: Run curator test cases
         working-directory: blocks/curator
         env:
@@ -224,7 +226,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "HF_TOKEN=$HF_TOKEN"
@@ -240,7 +242,7 @@ jobs:
           LEGOFLOW_SUBMODULE_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
         run: |
           set -euo pipefail
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           CANON="${SHARED_RUNTIME}/curator"
           mkdir -p repos artifacts
           rm -rf repos/legoflow-curator artifacts/envs gh_token.txt
@@ -272,7 +274,7 @@ jobs:
         # shared env into the COPY (never back into the template).
         run: |
           set -euo pipefail
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           cp blocks/curator/tests/smoke/config.yaml blocks/curator/config.yaml
           python3 scripts/inject_smoke_secrets.py blocks/curator/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh curator
@@ -337,7 +339,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "HF_TOKEN=$HF_TOKEN"
@@ -380,7 +382,7 @@ jobs:
       - name: Run tracer test cases
         env:
           GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
-        run: bash .github/scripts/align_submodules.sh
+        run: bash .github/scripts/align_submodules.sh tracer
       - name: Refresh tracer editable environments
         working-directory: blocks/tracer
         run: |
@@ -436,7 +438,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "HF_TOKEN=$HF_TOKEN"
@@ -479,7 +481,7 @@ jobs:
         # shared env into the COPY (never back into the template).
         run: |
           set -euo pipefail
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           cp blocks/tracer/tests/smoke/config.yaml blocks/tracer/config.yaml
           python3 scripts/inject_smoke_secrets.py blocks/tracer/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh tracer
@@ -546,7 +548,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
@@ -579,7 +581,7 @@ jobs:
       - name: Run evaluator test cases
         env:
           GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
-        run: bash .github/scripts/align_submodules.sh
+        run: bash .github/scripts/align_submodules.sh evaluator
       - name: Refresh evaluator Harbor editable environment
         working-directory: blocks/evaluator
         run: |
@@ -650,7 +652,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
@@ -677,7 +679,7 @@ jobs:
         # shared env into the COPY (never back into the template).
         run: |
           set -euo pipefail
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           cp blocks/evaluator/tests/smoke/config.yaml blocks/evaluator/config.yaml
           python3 scripts/inject_smoke_secrets.py blocks/evaluator/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh evaluator
@@ -738,7 +740,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
@@ -756,7 +758,9 @@ jobs:
           # The tracked scripts/deepspeed/*.json come from the
           # checkout (case 07), so only repos/ + the uv env are symlinked.
           mkdir -p repos artifacts
-          rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/trainer/repos/LLaMA-Factory blocks/trainer/repos/swe_data_process \
+            blocks/trainer/artifacts/env
           ln -s "$CANON/repos/LLaMA-Factory"     repos/LLaMA-Factory
           ln -s "$CANON/repos/swe_data_process"  repos/swe_data_process
           ln -s "$CANON/artifacts/env"           artifacts/env
@@ -764,7 +768,7 @@ jobs:
       - name: Run trainer test cases
         env:
           GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
-        run: bash .github/scripts/align_submodules.sh
+        run: bash .github/scripts/align_submodules.sh trainer
       - name: Run trainer test cases
         working-directory: blocks/trainer
         run: bash tests/run.sh
@@ -819,7 +823,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
@@ -892,7 +896,7 @@ jobs:
           set -euo pipefail
           CI_HOME="$RUNNER_TEMP/ci-home"; mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HF_TOKEN=$HF_TOKEN"
             echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
