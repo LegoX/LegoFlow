@@ -106,15 +106,15 @@ run_block_smoke() {  # run_block_smoke <block>
 # --- cheap cases ----------------------------------------------------------------
 if [[ "$CASES" == "1" ]]; then
   echo "================================================================="
-  echo ">> pytest/test_root_block.py"
+  echo ">> pytest/tests/test_*.py"
   echo "================================================================="
   # Prefer python3 -m pytest: a bare `pytest` on PATH may belong to python2.
   if PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest --version >/dev/null 2>&1; then
-    set +e; PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest "$ROOT_DIR/tests/test_root_block.py" -q; rc=$?; set -e
-    tally "$rc" "pytest/test_root_block.py"
+    set +e; PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest "$ROOT_DIR"/tests/test_*.py -q; rc=$?; set -e
+    tally "$rc" "pytest/tests/test_*.py"
   elif command -v pytest >/dev/null 2>&1; then
-    set +e; PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest "$ROOT_DIR/tests/test_root_block.py" -q; rc=$?; set -e
-    tally "$rc" "pytest/test_root_block.py"
+    set +e; PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest "$ROOT_DIR"/tests/test_*.py -q; rc=$?; set -e
+    tally "$rc" "pytest/tests/test_*.py"
   else
     skip=$((skip+1)); echo "[SKIP] pytest not installed"
   fi

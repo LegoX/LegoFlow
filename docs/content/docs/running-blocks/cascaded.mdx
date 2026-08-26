@@ -13,10 +13,15 @@ tree, validate it, then ask the root plugin to dispatch the work. The brief
 describes the target and constraints; it does not override block configuration
 or make undeclared handoffs automatic.
 
+The examples below show both interfaces. Use the slash command in Claude Code
+or the namespaced `$root-*` skill in Codex; both load the same canonical root
+workflow.
+
 ## Step 1: Prepare the tree
 
 ```text
-/root:setup
+Claude Code: /root:setup
+Codex:      $root-setup
 ```
 
 This checks shared tooling and ensures the root `config.yaml` exists. It can
@@ -32,7 +37,8 @@ benchmarks, and endpoint locations belong in the relevant block's
 ## Step 2: Check the tree
 
 ```text
-/root:check
+Claude Code: /root:check
+Codex:      $root-check
 ```
 
 This is operationally read-only: it validates configs, both ends of declared
@@ -45,14 +51,15 @@ only affect dashboard publishing and do not block the pipeline.
 
 <Callout title="Collect pull requests before the root run" type="warning">
 Root orchestration consumes Curator's existing collection under
-`blocks/curator/artifacts/collected_prs/`. Run `/curator:collect-prs` first and
-wait for it to finish.
+`blocks/curator/artifacts/collected_prs/`. Run `/curator:collect-prs` in Claude
+Code or `$curator-collect-prs` in Codex first and wait for it to finish.
 </Callout>
 
 ## Step 3: Run the tree
 
 ```text
-/root:run start the data pipeline
+Claude Code: /root:run start the data pipeline
+Codex:      Use $root-run to start the data pipeline.
 ```
 
 The root skill repeats preflight, presents the resolved configuration, and waits
@@ -98,10 +105,10 @@ checkpoint serving and Evaluator endpoint configuration remain explicit steps.
 </Callout>
 
 <Callout title="The root script is not cascaded mode" type="info">
-The parent-plugin contract for `/root:run` dispatches child run skills. Do not
-substitute root `scripts/start.sh`: that separate launcher starts only the
-Python Curator worker and Tracer in detached sessions, does not wait for
-Curator, and skips Trainer and Evaluator.
+The parent-plugin contract for `/root:run` in Claude Code and `$root-run` in
+Codex dispatches child run skills. Do not substitute root `scripts/start.sh`:
+that separate launcher starts only the Python Curator worker and Tracer in
+detached sessions, does not wait for Curator, and skips Trainer and Evaluator.
 </Callout>
 
 For a partial workflow, invoke the relevant child skills individually. Current

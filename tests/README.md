@@ -13,7 +13,7 @@ For per-block runtime tests (venvs, LLM endpoints, Docker, etc.) see
 
 ```bash
 pip install pytest pyyaml          # one-time
-pytest tests/test_root_block.py -v
+pytest tests/test_*.py -v
 ```
 
 Takes <1 s. No side effects.
@@ -22,8 +22,8 @@ Takes <1 s. No side effects.
 
 ## What gets checked
 
-`test_root_block.py` validates that the block tree under `blocks/` is
-structurally sound:
+The pytest modules validate the block tree, archive redaction, and the root
+dashboard:
 
 | Test | What it asserts |
 |---|---|
@@ -71,7 +71,9 @@ breakage in those areas becomes a pain point.
 ```
 tests/
   README.md            (this file)
-  test_root_block.py   single pytest module covering everything above
+  test_root_block.py          block-tree structure and contracts
+  test_archive_redaction.py   archived-config credential redaction
+  test_root_dashboard.py      aggregate dashboard rows and outputs
 ```
 
 Each block has its own `tests/` directory with the same shape (README +

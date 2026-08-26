@@ -97,8 +97,15 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
-            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+            for reclaim_id in $(timeout --signal=TERM --kill-after=5s 20s docker ps -q --filter ancestor=alpine:3 2>/dev/null || true); do
+              timeout --signal=TERM --kill-after=5s 20s docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" 2>/dev/null | grep -q 'rm -rf /x/' && \
+                timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_id" >/dev/null 2>&1 || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
               sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
@@ -112,7 +119,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "HF_TOKEN=$HF_TOKEN"
@@ -128,11 +135,13 @@ jobs:
           LEGOFLOW_SUBMODULE_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
         run: |
           set -euo pipefail
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           CANON="${SHARED_RUNTIME}/curator"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh curator"; exit 1; }
           mkdir -p repos artifacts artifacts/swe_tasks
-          rm -rf repos/legoflow-curator artifacts/envs artifacts/swe_tasks/py-cc gh_token.txt
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/curator/repos/legoflow-curator blocks/curator/artifacts/envs \
+            blocks/curator/artifacts/swe_tasks/py-cc blocks/curator/gh_token.txt
 
           if [ -e "$CANON/repos/legoflow-curator/.git" ]; then
             ln -s "$CANON/repos/legoflow-curator" repos/legoflow-curator
@@ -165,7 +174,7 @@ jobs:
       - name: Run curator test cases
         env:
           GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
-        run: bash .github/scripts/align_submodules.sh
+        run: bash .github/scripts/align_submodules.sh curator
       - name: Run curator test cases
         working-directory: blocks/curator
         env:
@@ -218,7 +227,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "HF_TOKEN=$HF_TOKEN"
@@ -234,7 +243,7 @@ jobs:
           LEGOFLOW_SUBMODULE_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
         run: |
           set -euo pipefail
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           CANON="${SHARED_RUNTIME}/curator"
           mkdir -p repos artifacts
           rm -rf repos/legoflow-curator artifacts/envs gh_token.txt
@@ -266,7 +275,7 @@ jobs:
         # shared env into the COPY (never back into the template).
         run: |
           set -euo pipefail
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           cp blocks/curator/tests/smoke/config.yaml blocks/curator/config.yaml
           python3 scripts/inject_smoke_secrets.py blocks/curator/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh curator
@@ -311,8 +320,15 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
-            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+            for reclaim_id in $(timeout --signal=TERM --kill-after=5s 20s docker ps -q --filter ancestor=alpine:3 2>/dev/null || true); do
+              timeout --signal=TERM --kill-after=5s 20s docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" 2>/dev/null | grep -q 'rm -rf /x/' && \
+                timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_id" >/dev/null 2>&1 || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
               sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
@@ -325,7 +341,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "HF_TOKEN=$HF_TOKEN"
@@ -368,7 +384,7 @@ jobs:
       - name: Run tracer test cases
         env:
           GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
-        run: bash .github/scripts/align_submodules.sh
+        run: bash .github/scripts/align_submodules.sh tracer
       - name: Refresh tracer editable environments
         working-directory: blocks/tracer
         run: |
@@ -424,7 +440,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "HF_TOKEN=$HF_TOKEN"
@@ -467,7 +483,7 @@ jobs:
         # shared env into the COPY (never back into the template).
         run: |
           set -euo pipefail
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           cp blocks/tracer/tests/smoke/config.yaml blocks/tracer/config.yaml
           python3 scripts/inject_smoke_secrets.py blocks/tracer/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh tracer
@@ -513,8 +529,15 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
-            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+            for reclaim_id in $(timeout --signal=TERM --kill-after=5s 20s docker ps -q --filter ancestor=alpine:3 2>/dev/null || true); do
+              timeout --signal=TERM --kill-after=5s 20s docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" 2>/dev/null | grep -q 'rm -rf /x/' && \
+                timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_id" >/dev/null 2>&1 || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
               sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + envs come from $SHARED_RUNTIME.
@@ -528,7 +551,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
@@ -561,7 +584,7 @@ jobs:
       - name: Run evaluator test cases
         env:
           GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
-        run: bash .github/scripts/align_submodules.sh
+        run: bash .github/scripts/align_submodules.sh evaluator
       - name: Refresh evaluator Harbor editable environment
         working-directory: blocks/evaluator
         run: |
@@ -632,7 +655,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
@@ -659,7 +682,7 @@ jobs:
         # shared env into the COPY (never back into the template).
         run: |
           set -euo pipefail
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           cp blocks/evaluator/tests/smoke/config.yaml blocks/evaluator/config.yaml
           python3 scripts/inject_smoke_secrets.py blocks/evaluator/config.yaml
       - name: Run smoke via .github/scripts/smoke_run.sh evaluator
@@ -699,8 +722,15 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
-            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+            for reclaim_id in $(timeout --signal=TERM --kill-after=5s 20s docker ps -q --filter ancestor=alpine:3 2>/dev/null || true); do
+              timeout --signal=TERM --kill-after=5s 20s docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" 2>/dev/null | grep -q 'rm -rf /x/' && \
+                timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_id" >/dev/null 2>&1 || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
               sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
@@ -714,7 +744,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
@@ -732,7 +762,9 @@ jobs:
           # The tracked scripts/deepspeed/*.json come from the
           # checkout (case 07), so only repos/ + the uv env are symlinked.
           mkdir -p repos artifacts
-          rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/trainer/repos/LLaMA-Factory blocks/trainer/repos/swe_data_process \
+            blocks/trainer/artifacts/env
           ln -s "$CANON/repos/LLaMA-Factory"     repos/LLaMA-Factory
           ln -s "$CANON/repos/swe_data_process"  repos/swe_data_process
           ln -s "$CANON/artifacts/env"           artifacts/env
@@ -740,7 +772,7 @@ jobs:
       - name: Run trainer test cases
         env:
           GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
-        run: bash .github/scripts/align_submodules.sh
+        run: bash .github/scripts/align_submodules.sh trainer
       - name: Run trainer test cases
         working-directory: blocks/trainer
         run: bash tests/run.sh
@@ -795,7 +827,7 @@ jobs:
           CI_HOME="$RUNNER_TEMP/ci-home"
           mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HOME=$CI_HOME"
             echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
@@ -868,7 +900,7 @@ jobs:
           set -euo pipefail
           CI_HOME="$RUNNER_TEMP/ci-home"; mkdir -p "$CI_HOME"
           # shellcheck disable=SC1091
-          source "$CICD_SHARED/.env"
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
           {
             echo "HF_TOKEN=$HF_TOKEN"
             echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"

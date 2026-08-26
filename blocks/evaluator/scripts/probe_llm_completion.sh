@@ -28,9 +28,9 @@ print((cur.get(sys.argv[2]) or "").strip())
 PY
 }
 
-BASE_URL="${1:-$(cfg api_base_url)}"
-MODEL_RAW="${2:-$(cfg model)}"
-API_KEY="${3:-$(cfg api_key)}"
+BASE_URL="${1:-${OPENAI_API_BASE_URL:-${OPENAI_BASE_URL:-$(cfg api_base_url)}}}"
+MODEL_RAW="${2:-${OPENAI_MODEL:-${ANTHROPIC_MODEL:-$(cfg model)}}}"
+API_KEY="${3:-${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-${ANTHROPIC_AUTH_TOKEN:-$(cfg api_key)}}}}"
 
 [[ -n "$BASE_URL" && -n "$MODEL_RAW" ]] || { echo "FAIL: api_base_url or model not configured"; exit 1; }
 # Strip a leading provider prefix (openai/, hosted_vllm/, …); the raw upstream

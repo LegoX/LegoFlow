@@ -55,7 +55,7 @@ mkdir -p "$RUN_DIR"
 
 # Snapshot config.yaml and scripts/ (top-level files + non-hidden subdirs only —
 # skip any hidden state dir a tool may leave inside scripts/).
-[[ -f "$BLOCK_DIR/config.yaml" ]] && cp -p "$BLOCK_DIR/config.yaml" "$RUN_DIR/config.yaml"
+[[ -f "$BLOCK_DIR/config.yaml" ]] && python3 "$BLOCK_DIR/scripts/redact_archive_config.py" "$BLOCK_DIR/config.yaml" "$RUN_DIR/config.yaml"
 if [[ -d "$BLOCK_DIR/scripts" ]]; then
     mkdir -p "$RUN_DIR/scripts"
     shopt -s nullglob

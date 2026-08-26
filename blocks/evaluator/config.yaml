@@ -36,8 +36,8 @@ runtime_info:
     # MODE A (remote API) example: /evaluator:setup reference; MODE B (local vLLM checkpoint) active;
     # How to fill: docs/content/docs/reference/io.mdx -> LLM endpoint
     llm_api:
-      api_key: human
-      api_base_url: human
+      api_key: ""                             # supplied by runtime environment or EVAL_CONFIG
+      api_base_url: ""                        # supplied by runtime environment or EVAL_CONFIG
       model: "openai/Qwen3.5-35B-A3B"
       description: Example local checkpoint served via vLLM; see scripts/serve_local_model.sh.
       protocols: [openai_compatible, anthropic_compatible]
@@ -52,7 +52,7 @@ runtime_info:
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
       port: 4101
-      master_key: dummy-key-cf                 # functional dummy
+      master_key: legoflow-local-proxy-key     # local proxy credential; not an upstream secret
 
     task_source:
       provider: harbor_registry                # benchmark catalog: CLAUDE.md "Benchmark Selection"

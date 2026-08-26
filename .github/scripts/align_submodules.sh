@@ -6,16 +6,20 @@ set -euo pipefail
 
 ROOT="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}"
 SHARED_RUNTIME="${SHARED_RUNTIME:-}"
+LEGOFLOW_EXPLICIT_GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
 if [[ -n "${CICD_SHARED:-}" && -f "$CICD_SHARED/.env" ]]; then
   # shellcheck disable=SC1090
-  source "$CICD_SHARED/.env"
+  source "$ROOT/.github/scripts/load_shared_ci_env.sh"
 fi
 
 git_credentials=(git)
-if [[ -n "${GITHUB_TOKENS:-}" ]]; then
+if [[ -n "$LEGOFLOW_EXPLICIT_GITHUB_TOKEN" ]]; then
+  export GITHUB_TOKEN="$LEGOFLOW_EXPLICIT_GITHUB_TOKEN"
+elif [[ -n "${GITHUB_TOKENS:-}" ]]; then
   export GITHUB_TOKEN="${GITHUB_TOKENS%%,*}"
 fi
+unset LEGOFLOW_EXPLICIT_GITHUB_TOKEN
 
 remove_local_path() {
   local path="$1"
@@ -27,7 +31,7 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
 fi
 
 align_one() {
-  local block="$1" repo="$2" pin_source canonical_block
+  local block="$1" repo="$2" pin_source canonical_block use_canonical=0
   pin_source="${3:-blocks/$block/repos/$repo}"
   canonical_block="${4:-$block}"
   local relative="blocks/$block/repos/$repo"
@@ -49,11 +53,12 @@ align_one() {
   fi
   if [[ -n "$SHARED_RUNTIME" && ( -e "$canonical/.git" || -f "$canonical/.git" ) ]]; then
     actual="$(git -C "$canonical" rev-parse HEAD 2>/dev/null || true)"
-  elif [[ -z "$SHARED_RUNTIME" && ( -e "$local_path/.git" || -f "$local_path/.git" ) ]]; then
+    use_canonical=1
+  elif [[ -e "$local_path/.git" || -f "$local_path/.git" ]]; then
     actual="$(git -C "$local_path" rev-parse HEAD 2>/dev/null || true)"
   fi
   if [[ "$actual" == "$expected" ]]; then
-    if [[ -n "$SHARED_RUNTIME" ]]; then
+    if [[ "$use_canonical" == "1" ]]; then
       remove_local_path "$local_path"
       mkdir -p "$(dirname "$local_path")"
       ln -s "$canonical" "$local_path"
@@ -68,7 +73,8 @@ align_one() {
   target_mode="$(git -C "$ROOT" ls-tree HEAD -- "$relative" | awk '{print $1}')"
   if [[ "$target_mode" == "160000" ]]; then
     remove_local_path "$local_path"
-    (cd "$ROOT" && "${git_credentials[@]}" submodule update --init --recursive --force -- "$relative")
+    (cd "$ROOT" && GIT_TERMINAL_PROMPT=0 timeout --signal=TERM --kill-after=10s 180s \
+      "${git_credentials[@]}" submodule update --init --recursive --force -- "$relative")
   else
     checkout_path="$local_path"
     if [[ -n "$SHARED_RUNTIME" ]]; then
@@ -79,8 +85,8 @@ align_one() {
       echo "ERROR: managed checkout missing for $relative: $checkout_path" >&2
       return 1
     fi
-    git -C "$checkout_path" -c "credential.helper=!f() { echo username=x-access-token; echo password=\$GITHUB_TOKEN; }; f" \
-      fetch --depth 1 origin "$expected"
+    GIT_TERMINAL_PROMPT=0 timeout --signal=TERM --kill-after=10s 180s \
+      "${git_credentials[@]}" -C "$checkout_path" fetch --depth 1 origin "$expected"
     git -C "$checkout_path" checkout --detach "$expected"
     if [[ -n "$SHARED_RUNTIME" ]]; then
       remove_local_path "$local_path"
@@ -95,9 +101,34 @@ align_one() {
   }
 }
 
-align_one curator legoflow-curator
-align_one tracer harbor
-align_one tracer swe_data_process blocks/trainer/repos/swe_data_process trainer
-align_one evaluator harbor
-align_one trainer LLaMA-Factory
-align_one trainer swe_data_process
+targets=("${@:-all}")
+for target in "${targets[@]}"; do
+  case "$target" in
+    all)
+      align_one curator legoflow-curator
+      align_one tracer harbor
+      align_one tracer swe_data_process blocks/trainer/repos/swe_data_process trainer
+      align_one evaluator harbor
+      align_one trainer LLaMA-Factory
+      align_one trainer swe_data_process
+      ;;
+    curator)
+      align_one curator legoflow-curator
+      ;;
+    tracer)
+      align_one tracer harbor
+      align_one tracer swe_data_process blocks/trainer/repos/swe_data_process trainer
+      ;;
+    evaluator)
+      align_one evaluator harbor
+      ;;
+    trainer)
+      align_one trainer LLaMA-Factory
+      align_one trainer swe_data_process
+      ;;
+    *)
+      echo "ERROR: unknown block for submodule alignment: $target" >&2
+      exit 2
+      ;;
+  esac
+done

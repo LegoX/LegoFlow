@@ -56,23 +56,7 @@ mkdir -p "$RUN_DIR"
 
 # Snapshot config.yaml and scripts/ (top-level files + non-hidden subdirs only —
 # skip any hidden state dir a tool may leave inside scripts/).
-if [[ -f "$CONFIG" ]]; then
-    python3 - "$CONFIG" "$RUN_DIR/config.yaml" <<'PY'
-import sys
-import yaml
-
-with open(sys.argv[1], encoding="utf-8") as fh:
-    config = yaml.safe_load(fh) or {}
-credentials = (
-    ((config.get("runtime_info") or {}).get("input") or {}).get("credentials")
-)
-if isinstance(credentials, dict):
-    for key in list(credentials):
-        credentials[key] = ""
-with open(sys.argv[2], "w", encoding="utf-8") as fh:
-    yaml.safe_dump(config, fh, sort_keys=False, allow_unicode=True)
-PY
-fi
+[[ -f "$CONFIG" ]] && python3 "$BLOCK_DIR/../../scripts/redact_archive_config.py" "$CONFIG" "$RUN_DIR/config.yaml"
 if [[ -d "$BLOCK_DIR/scripts" ]]; then
     mkdir -p "$RUN_DIR/scripts"
     shopt -s nullglob
