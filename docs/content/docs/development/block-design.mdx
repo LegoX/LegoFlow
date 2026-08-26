@@ -106,17 +106,19 @@ code. This is installed as an exit trap, so an interrupted or failed run is
 archived exactly like a successful one. A timeline with holes in it would be
 worse than no timeline.
 
-## 3. The Block Plugin
+## 3. The Block Plugins
 
 Every block ships a Claude Code plugin at `.claude/plugins/<block>-plugin/`,
-exposing the same four skills:
+and a Codex plugin at `plugins/<block>/`. The Codex skills are thin wrappers
+that read and follow the canonical Claude Code skill files rather than copying
+their workflow logic.
 
-| Skill | Purpose |
-| --- | --- |
-| `/<block>:setup` | Bring the block from a fresh clone to a state where `check` passes: install environments, sync pinned repos, fill in unset inputs. Idempotent. |
-| `/<block>:check` | Read-only preflight: schema, inputs, repo pins, environments, reachability of endpoints and hosts. Reports every failure at once. Mandatory before a run. |
-| `/<block>:run` | Preflight, confirm, then execute. At a leaf block this runs `scripts/start.sh`; at a parent block it dispatches to each child's own `run` skill in dependency order. |
-| `/<block>:dashboard` | Surface the block's state, as a summary and optionally a web board. Read-only. |
+| Lifecycle | Claude Code | Codex | Purpose |
+| --- | --- | --- | --- |
+| Setup | `/<block>:setup` | `$<block>-setup` | Bring the block from a fresh clone to a state where `check` passes: install environments, sync pinned repos, fill in unset inputs. Idempotent. |
+| Check | `/<block>:check` | `$<block>-check` | Read-only preflight: schema, inputs, repo pins, environments, reachability of endpoints and hosts. Reports every failure at once. Mandatory before a run. |
+| Run | `/<block>:run` | `$<block>-run` | Preflight, confirm, then execute. At a leaf block this runs `scripts/start.sh`; at a parent block it dispatches to each child's own `run` skill in dependency order. |
+| Dashboard | `/<block>:dashboard` | `$<block>-dashboard` | Surface the block's state, as a summary and optionally a web board. Read-only. |
 
 The uniformity is the point. Learning one block is most of the work of learning
 the next, and an agent can operate a block it has never seen from the same four
@@ -128,6 +130,7 @@ Two deliberate exceptions:
 - **Termination is not a skill.** `scripts/stop.sh` does the signal handling
   directly, because stopping a run should not depend on an agent being available
   to interpret a request.
-- **`/root:create` exists only at the root.** Creating a block mutates the tree,
-  and that authority is not delegated to blocks inside it. See [Adding New
+- **Root creation exists only at the root.** Use `/root:create` in Claude Code
+  or `$root-create` in Codex. Creating a block mutates the tree, and that
+  authority is not delegated to blocks inside it. See [Adding New
   Blocks](/docs/development/adding-new-blocks) for the development workflow.
