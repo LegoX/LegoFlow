@@ -128,8 +128,8 @@ serve it through the local model path.
 
 | Field | Required? | Default | When to change |
 | --- | --- | --- | --- |
-| `llm_api.api_key` | Yes | `human` | Put the real key in env/private config. Never commit it. |
-| `llm_api.api_base_url` | Yes | `human` | Point Evaluator at a remote endpoint or local vLLM server. |
+| `llm_api.api_key` | Yes | `""` | Supply `OPENAI_API_KEY` or use a private config. Never commit it. |
+| `llm_api.api_base_url` | Yes | `""` | Supply `OPENAI_API_BASE_URL` for a remote endpoint or local vLLM server. |
 | `llm_api.model` | Yes | `openai/Qwen3.5-35B-A3B` | Change when evaluating another model/checkpoint. |
 | `local_model_serving.model_path` | For local eval | `artifacts/models/Qwen3.5-35B-A3B` | Point to the checkpoint served by vLLM. |
 | `local_model_serving.model_name` | For local eval | `Qwen3.5-35B-A3B` | Keep aligned with the served model name. |

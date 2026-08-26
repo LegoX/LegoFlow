@@ -3,7 +3,8 @@
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG="${TRAJGEN_CONFIG:-$BLOCK_DIR/config.yaml}"
+export TRAJGEN_CONFIG="$CONFIG"
 LOG_DIR="$BLOCK_DIR/artifacts/logs"
 PRINT_COMMAND_ONLY=0
 
@@ -122,6 +123,7 @@ write_litellm_config() {
   local output="$1"
   local template="$2"
   python3 - "$CONFIG" "$output" "$template" <<'PY'
+import os
 from pathlib import Path
 import sys
 
@@ -135,8 +137,21 @@ config_path, output_path, template_path = sys.argv[1:4]
 with open(config_path, encoding="utf-8") as fh:
     config = yaml.safe_load(fh) or {}
 
-model_api = (config.get("runtime_info") or {}).get("input", {}).get("llm_api") or {}
+model_api = dict((config.get("runtime_info") or {}).get("input", {}).get("llm_api") or {})
 proxy = (config.get("runtime_info") or {}).get("input", {}).get("litellm_proxy") or {}
+
+env_base = os.getenv("OPENAI_API_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+env_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")
+env_model = os.getenv("OPENAI_MODEL") or os.getenv("ANTHROPIC_MODEL")
+if env_base:
+    model_api["api_base_url"] = env_base
+    model_api["api_base"] = env_base
+if env_key:
+    model_api["api_key"] = env_key
+if env_model:
+    normalized_model = env_model if "/" in env_model else f"openai/{env_model}"
+    model_api["model"] = normalized_model
+    model_api["upstream_model"] = normalized_model
 
 # normalize key names: api_base_url → api_base, model → upstream_model
 if "api_base_url" in model_api and "api_base" not in model_api:
@@ -267,7 +282,12 @@ fi
 AGENT_NAME="$(cfg runtime_info.input.agent.name)"
 AGENT_VERSION="$(cfg runtime_info.input.agent.version)"
 AGENT_MODEL_NAME="$(cfg runtime_info.input.agent.model_name)"
-if [[ -z "$AGENT_MODEL_NAME" ]]; then
+RUNTIME_MODEL="${OPENAI_MODEL:-${ANTHROPIC_MODEL:-}}"
+if [[ -n "$RUNTIME_MODEL" ]]; then
+  AGENT_MODEL_FULL="$RUNTIME_MODEL"
+  [[ "$AGENT_MODEL_FULL" == */* ]] || AGENT_MODEL_FULL="openai/$AGENT_MODEL_FULL"
+  AGENT_MODEL_NAME="${AGENT_MODEL_FULL##*/}"
+elif [[ -z "$AGENT_MODEL_NAME" ]]; then
   AGENT_MODEL_NAME="$(cfg runtime_info.input.llm_api.model)"
   if [[ -z "$AGENT_MODEL_NAME" ]]; then
     AGENT_MODEL_NAME="$(cfg runtime_info.input.llm_api.upstream_model)"
@@ -367,7 +387,7 @@ then
   echo "       Check runtime_info.input.task_source, then run: bash scripts/prepare_tasks.sh" >&2
   exit 1
 fi
-cp "$CONFIG" "$JOB_DIR/config.yaml"
+python3 "$BLOCK_DIR/../../scripts/redact_archive_config.py" "$CONFIG" "$JOB_DIR/config.yaml"
 
 export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
 export TRAJGEN_ARTIFACTS_DIR="$BLOCK_DIR/artifacts"

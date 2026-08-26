@@ -3,7 +3,7 @@
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG="${TRAJGEN_CONFIG:-$BLOCK_DIR/config.yaml}"
 
 PASS=0
 FAIL=0
@@ -16,7 +16,7 @@ warn() { echo "  [WARN] $1"; WARN=$((WARN+1)); }
 # --- shared block-contract validation (schema, deps, fill markers) ------------
 REPO_ROOT="$(cd "$BLOCK_DIR/../.." && pwd)"
 if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
-  if VAL_OUT="$(python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" 2>&1)"; then
+  if VAL_OUT="$(python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" --config "$CONFIG" 2>&1)"; then
     ok "validate_config: block contract OK"
   else
     echo "$VAL_OUT" | sed 's/^/    /'
@@ -211,6 +211,13 @@ if [[ $FAIL -eq 0 ]]; then
     MODEL_API_MODEL="$(cfg runtime_info.input.llm_api.upstream_model)"
   fi
   MODEL_API_KEY="$(cfg runtime_info.input.llm_api.api_key)"
+  MODEL_API_BASE_URL="${OPENAI_API_BASE_URL:-${OPENAI_BASE_URL:-$MODEL_API_BASE_URL}}"
+  MODEL_API_KEY="${OPENAI_API_KEY:-${ANTHROPIC_API_KEY:-${ANTHROPIC_AUTH_TOKEN:-$MODEL_API_KEY}}}"
+  RUNTIME_MODEL="${OPENAI_MODEL:-${ANTHROPIC_MODEL:-}}"
+  if [[ -n "$RUNTIME_MODEL" ]]; then
+    MODEL_API_MODEL="$RUNTIME_MODEL"
+    [[ "$MODEL_API_MODEL" == */* ]] || MODEL_API_MODEL="openai/$MODEL_API_MODEL"
+  fi
   MODEL_API_INPUT_COST="$(cfg runtime_info.input.llm_api.input_cost_per_token)"
   MODEL_API_OUTPUT_COST="$(cfg runtime_info.input.llm_api.output_cost_per_token)"
   RUN_COMMAND="$(cfg command_override)"

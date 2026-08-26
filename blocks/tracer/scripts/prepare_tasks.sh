@@ -3,7 +3,7 @@
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG="${TRAJGEN_CONFIG:-$BLOCK_DIR/config.yaml}"
 OVERWRITE=0
 
 usage() {

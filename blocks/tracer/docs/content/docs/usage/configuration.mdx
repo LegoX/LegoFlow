@@ -128,8 +128,8 @@ when Tracer should produce that file after rollout.
 
 | Field | Required? | Default | When to change |
 | --- | --- | --- | --- |
-| `llm_api.api_key` | Yes | `human` | Put the real key in env/private config before rollout. Never commit it. |
-| `llm_api.api_base_url` | Yes | `human` | Point Tracer at your OpenAI-compatible endpoint. |
+| `llm_api.api_key` | Yes | `""` | Supply `OPENAI_API_KEY` or use a private config. Never commit it. |
+| `llm_api.api_base_url` | Yes | `""` | Supply `OPENAI_API_BASE_URL` for your OpenAI-compatible endpoint. |
 | `llm_api.model` | Yes | `openai/Qwen3.6-35B-A3B` | Change when testing a different teacher model. |
 | `litellm_proxy.port` | Yes | `4003` | Change only if the local port is already occupied. |
 | `task_source.provider` | Yes | `local` | Use `local` for Curator output; use `huggingface` for a published dataset. |

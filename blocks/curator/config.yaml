@@ -58,8 +58,8 @@ runtime_info:
     #   OPENAI_API_BASE_URL / ANTHROPIC_BASE_URL
     # Keep tracked config.yaml free of real keys and private endpoints.
     llm_api:
-      api_key: human                          # never commit a real key; prefer env/.env
-      api_base_url: human                     # OpenAI-compatible endpoint (PR eval + instruction gen)
+      api_key: ""                             # supplied by OPENAI_API_KEY; never commit a real key
+      api_base_url: ""                        # supplied by OPENAI_API_BASE_URL
       pr_model: Qwen3.6-35B-A3B               # model for PR filtering/instruction generation
       task_model: claude-sonnet-4-6           # Claude Code-visible alias for task creation
       cc_provider_mode: openai_proxy          # native | openai_proxy

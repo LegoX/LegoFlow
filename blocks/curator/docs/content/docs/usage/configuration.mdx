@@ -120,8 +120,8 @@ to Tracer.
 | `pr_collection.repo_num` | Yes | `100` | Lower for smoke runs; raise for larger data collection. |
 | `pr_collection.max_prs_per_repo` | Yes | `50` | Lower when collection is too broad or expensive. |
 | `pr_collection.filters.*` | Yes | Quality filters | Tune difficulty, recency, repo quality, and PR size. |
-| `llm_api.api_key` | Yes | `human` | Put the real key in env/private config. Never commit it. |
-| `llm_api.api_base_url` | Yes | `human` | Point Curator at your OpenAI-compatible endpoint. |
+| `llm_api.api_key` | Yes | `""` | Supply `OPENAI_API_KEY` or use a private config. Never commit it. |
+| `llm_api.api_base_url` | Yes | `""` | Supply `OPENAI_API_BASE_URL` for your OpenAI-compatible endpoint. |
 | `llm_api.pr_model` | Yes | `Qwen3.6-35B-A3B` | Change the model used for PR filtering and instruction work. |
 | `llm_api.task_model` | Yes | `claude-sonnet-4-6` | Change the Claude Code-visible model alias for task creation. |
 | `llm_api.cc_proxy_port` | Yes | `4010` | Change only if the local proxy port is occupied. |

@@ -91,7 +91,7 @@ runtime_info:
       ddp_timeout: 180000000
       enable_liger_kernel: true
       use_unsloth_gc: true
-      flash_attn: fa2
+      flash_attn: sdpa
 
     infrastructure:
       n_gpus_per_node: 8

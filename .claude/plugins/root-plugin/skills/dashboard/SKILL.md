@@ -1,40 +1,23 @@
 ---
 name: dashboard
 description: >
-  Open (or bring up) the unified project dashboard for the root block tree.
-  Aggregates the live state of every block — last run id, status,
-  duration, key metrics — into one webui served on a local port. The skill
-  starts the dashboard server if it isn't already running, prints the URL,
-  and (if a browser is available on the host) opens it. Read-only; never
-  mutates block state. Triggers on phrases like "open the dashboard",
-  "show me what's running", "bring up the webui", "where do I see the
-  pipeline status".
+  Print the unified project dashboard for the root block tree. Aggregates
+  every child's latest archived run into one read-only textual table.
 ---
 
 # /root:dashboard
 
-**STATUS: stub — fill in.**
+Run only from the repository root. Read config.yaml and verify
+meta_info.name is legoflow, then execute:
 
-Per the block plugin guidelines (`resources/BLOCK_DEFINITION.md` → § Plugin
-skills), every block exposes a `:dashboard` skill that surfaces a single
-human-readable view of that block's state. At the root level this is the
-project-wide aggregate.
+    python3 scripts/root_dashboard.py --root .
 
-## Intent
+The table is the required deliverable. It must contain every block declared in
+meta_info.blocks and these columns:
 
-1. Check whether a dashboard server is already up (well-known port + a
-   `/health` probe).
-2. If not, launch one (background, log to `./logs/dashboard.log`), passing
-   it the locations of every block's `artifacts/index.yaml`.
-3. Print the URL. If `xdg-open` / `open` is available, open the browser.
-4. Surface the same data textually as a fallback (a compact table of
-   `block | last_run | status | started_at | notes`) so the skill is
-   still useful in a headless session.
+    block | last_run | status | started_at | duration | notes
 
-## TODO
-
-- [ ] Choose the dashboard tech (reuse an existing block webui, or a new
-      lightweight aggregator).
-- [ ] Spec the well-known port and `/health` contract.
-- [ ] Decide whether the dashboard auto-launches on `/root:run`, or stays
-      strictly opt-in via this skill.
+An absent artifacts/index.yaml is reported as never-run, not as an error.
+After the aggregate table, inspect each block's configured static output paths
+and report whether they currently exist. Do not start child dashboards or
+servers unless the user explicitly requests one. This workflow is read-only.
