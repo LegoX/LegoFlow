@@ -55,7 +55,12 @@ REQUIRED = [
     "runtime_info.input.sft_conversion.enabled",
     "runtime_info.input.sft_conversion.tokenizer_name",
 ]
-missing = [k for k in REQUIRED if get(cfg, k) in (None, "")]
+RUNTIME_FILLED = {
+    "runtime_info.input.llm_api.api_key",
+    "runtime_info.input.llm_api.api_base_url",
+}
+missing = [k for k in REQUIRED if get(cfg, k) is None or
+           (get(cfg, k) == "" and k not in RUNTIME_FILLED)]
 if missing:
     for k in missing: print(f"FAIL: missing or empty: {k}", file=sys.stderr)
     sys.exit(1)

@@ -6,7 +6,9 @@ BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV="${LITELLM_PROXY_VENV:-$BLOCK_DIR/artifacts/envs/litellm-proxy}"
 PYTHON_VERSION="${LITELLM_PROXY_PYTHON:-3.12}"
 
-if command -v uv >/dev/null 2>&1; then
+if [[ -x "$VENV/bin/python" ]] && "$VENV/bin/python" -c 'import backoff, litellm.proxy.proxy_server; from fastapi.dependencies.utils import get_flat_dependant' >/dev/null 2>&1; then
+  echo "Reusing existing LiteLLM proxy environment: $VENV"
+elif command -v uv >/dev/null 2>&1; then
   uv venv "$VENV" --python "$PYTHON_VERSION"
   uv pip install --python "$VENV/bin/python" \
     'litellm[proxy]' 'fastapi==0.140.6'

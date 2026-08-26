@@ -29,7 +29,11 @@ print((urlparse(os.environ["MODEL_API_BASE_URL"]).hostname or "").lower())
 PY
 )"
 
-[[ -n "$MODEL_API_BASE_URL" && -n "$MODEL_API_MODEL" ]] || { echo "FAIL: api_base_url or model not configured"; exit 1; }
+if [[ -z "$MODEL_API_BASE_URL" || -z "$MODEL_API_KEY" ]]; then
+  echo "SKIP: llm_api endpoint credentials are not injected in this cases-only run"
+  exit 77
+fi
+[[ -n "$MODEL_API_MODEL" ]] || { echo "FAIL: model not configured"; exit 1; }
 
 # `human` is the fill-marker for "must be filled in before a run" (see
 # BLOCK_DEFINITION.md's fill-marker convention) — not a real URL. Probing it

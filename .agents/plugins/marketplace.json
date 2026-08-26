@@ -1,0 +1,68 @@
+{
+  "name": "legoflow",
+  "interface": {
+    "displayName": "LegoFlow"
+  },
+  "plugins": [
+    {
+      "name": "root",
+      "source": {
+        "source": "local",
+        "path": "./plugins/root"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "curator",
+      "source": {
+        "source": "local",
+        "path": "./plugins/curator"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "tracer",
+      "source": {
+        "source": "local",
+        "path": "./plugins/tracer"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "trainer",
+      "source": {
+        "source": "local",
+        "path": "./plugins/trainer"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "evaluator",
+      "source": {
+        "source": "local",
+        "path": "./plugins/evaluator"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

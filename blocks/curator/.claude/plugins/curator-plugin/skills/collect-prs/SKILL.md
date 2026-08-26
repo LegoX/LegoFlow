@@ -36,16 +36,13 @@ Read `config.yaml -> runtime_info.input.pr_collection` and `CLAUDE.md`
 
 ## Step 1 - Resolve collection tokens
 
-The collector first reads `repos/legoflow-curator/gh_token.txt` (one token per line)
-unless `COLLECT_GITHUB_TOKEN_FILE` overrides that path, then merges
-`GITHUB_TOKENS` and `GITHUB_TOKEN`. `scripts/load_runtime_env.sh` preserves the
-caller's exported environment and may hydrate `GITHUB_TOKENS` from ignored
-block/home token files when the caller did not provide one.
+`scripts/load_runtime_env.sh` reads the TXT path from
+`runtime_info.input.github_token` and exports the token variables. Explicit
+token environment variables remain overrides.
 
 ```bash
 source scripts/load_runtime_env.sh
 load_runtime_env
-COLLECT_GITHUB_TOKEN_FILE="${COLLECT_GITHUB_TOKEN_FILE:-repos/legoflow-curator/gh_token.txt}"
 test -s "$COLLECT_GITHUB_TOKEN_FILE" || \
   test -n "${GITHUB_TOKENS:-}${GITHUB_TOKEN:-}"
 ```
