@@ -20,8 +20,12 @@ for relative in "$@"; do
     if mv -- "$path" "$stale"; then
       stale_relative="${stale#"$ROOT/"}"
       if command -v docker >/dev/null 2>&1; then
-        docker run --detach --rm -v "$ROOT:/workspace:rw" alpine:3 \
-          sh -c 'rm -rf -- "/workspace/$1"' sh "$stale_relative" >/dev/null
+        if ! timeout --signal=TERM --kill-after=5s 30s docker run --detach --rm \
+          -v "$ROOT:/workspace:rw" alpine:3 \
+          sh -c 'rm -rf -- "/workspace/$1"' sh "$stale_relative" >/dev/null 2>&1; then
+          echo "WARN: detached cleanup could not start for $stale_relative" >&2
+          rm -rf -- "$stale" >/dev/null 2>&1 &
+        fi
       else
         rm -rf -- "$stale" >/dev/null 2>&1 &
       fi
