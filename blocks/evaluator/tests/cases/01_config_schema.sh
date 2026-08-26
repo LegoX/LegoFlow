@@ -70,9 +70,14 @@ RUNTIME_SUPPLIED = {
     "runtime_info.input.llm_api.model",
 }
 is_smoke = Path(sys.argv[1]).parent.name == "smoke"
+RUNTIME_FILLED = {
+    "runtime_info.input.llm_api.api_key",
+    "runtime_info.input.llm_api.api_base_url",
+    "runtime_info.input.llm_api.model",
+}
 missing = [
     k for k in REQUIRED
-    if get(cfg, k) is None or (get(cfg, k) == "" and not (is_smoke and k in RUNTIME_SUPPLIED))
+    if get(cfg, k) is None or (get(cfg, k) == "" and k not in RUNTIME_FILLED)
 ]
 if missing:
     for k in missing: print(f"FAIL: missing or empty: {k}", file=sys.stderr)

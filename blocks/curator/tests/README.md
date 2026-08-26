@@ -49,10 +49,10 @@ never to PRs, so PR builds don't burn LLM tokens.
 | 02: `.git missing` | `/curator:setup` never ran on this machine | run `/curator:setup` |
 | 02: `HEAD does not match commit_id` | someone fetched a different commit into `repos/legoflow-curator` | `git -C repos/legoflow-curator checkout <pin>` |
 | 02: `legoflow-curator not importable` | venv exists but editable install was never done | `pip install -e repos/legoflow-curator/` inside `artifacts/envs/legoflow-curator-env` |
-| 03: HTTP 401 on a token | PAT expired or was revoked | regenerate the PAT, replace the line in `gh_token.txt` |
+| 03: HTTP 401 on a token | PAT expired or was revoked | replace the line in the configured token file |
 | 04: `chat.completions … raised` | `OPENAI_MODEL` / `ANTHROPIC_MODEL` resolve to different providers | check `config.yaml` `runtime_info.input.llm_api` — both should match the same backend |
 | 04: 401 from Claude shell only | sandboxed-shell artifact, not a real cred bug (memo `project-legoflow-curator-llm-endpoint`) | re-probe from a non-sandboxed shell |
-| 05: `docker info failed` | daemon down or `DOCKER_HOST` stale | `export DOCKER_HOST=unix:///var/run/docker.sock` |
+| 05: `docker info failed` | daemon down or `DOCKER_HOST` stale | check root `config.yaml` → `runtime_info.input.docker.host` |
 | 06: SKIPped | the `tox-dev__tox-3813` fixture isn't on disk at `artifacts/swe_tasks/py-cc/` | not a failure; copy the bundled verified fixture into that dataset path or ignore the optional check |
 | 10: budget hit, no verified task | LLM/Docker stall, or the candidate PRs got harder | tail `artifacts/swe_tasks/.legoflow-curator-smoke-py.log` — usually identifies the slow step |
 
@@ -90,8 +90,8 @@ depends on is present and non-empty: `meta_info.name == "curator"`,
 `meta_info.environment.{venv_path, requirements}`, `meta_info.repos.legoflow-curator`,
 `runtime_info.input.llm_api.{api_key, api_base_url, pr_model, task_model}`,
 `runtime_info.output.swe_tasks_dir.path`. Also asserts
-`runtime_info.input.github_token == ""` — that field must never hold a real
-token in tracked config.yaml. Pure-Python check, no I/O.
+`runtime_info.input.github_token` is a string path and does not look like a
+real token. Pure-Python check, no I/O.
 </details>
 
 <details>
@@ -106,13 +106,9 @@ the pin (a `null` pin is treated as "track latest"); (3)
 <details>
 <summary><code>cases/03_github_tokens.sh</code> — every PAT authenticates</summary>
 
-Sources `scripts/load_runtime_env.sh`, then checks only the comma-separated
-`GITHUB_TOKENS` list. That loader imports the interactive environment and, when
-the list is absent, searches the block, home, and Harbor token files. A lone
-`GITHUB_TOKEN` is accepted by the collector but is not copied into
-`GITHUB_TOKENS` by this test path. The collector separately reads
-`repos/legoflow-curator/gh_token.txt` and merges both environment variables. The test
-reports the last six characters of any failing PAT.
+Sources `scripts/load_runtime_env.sh`, then checks the comma-separated
+`GITHUB_TOKENS` list. The loader uses explicit token environment variables or
+the TXT path in `runtime_info.input.github_token`.
 </details>
 
 <details>

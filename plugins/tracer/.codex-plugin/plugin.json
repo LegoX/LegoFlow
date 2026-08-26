@@ -1,0 +1,11 @@
+{
+  "name": "tracer",
+  "version": "0.1.0",
+  "description": "Generate and inspect verified coding-agent trajectories with Harbor in LegoFlow.",
+  "author": { "name": "LegoX", "url": "https://github.com/LegoX" },
+  "repository": "https://github.com/LegoX/LegoFlow",
+  "license": "Apache-2.0",
+  "keywords": ["legoflow", "harbor", "trajectories", "swe"],
+  "skills": "./skills/",
+  "interface": { "displayName": "LegoFlow Tracer", "shortDescription": "Generate agent trajectories", "longDescription": "Generate verified coding-agent trajectories from LegoFlow tasks with Harbor and inspect their quality and conversion outputs.", "developerName": "LegoX", "category": "Developer Tools", "capabilities": ["Interactive", "Write"], "defaultPrompt": ["Check the tracer configuration.", "Run an approved trajectory job.", "Analyze trajectory quality and conversion."] }
+}

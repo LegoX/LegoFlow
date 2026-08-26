@@ -1,0 +1,11 @@
+{
+  "name": "curator",
+  "version": "0.1.0",
+  "description": "Curate GitHub PRs and create verified software-engineering tasks in LegoFlow.",
+  "author": { "name": "LegoX", "url": "https://github.com/LegoX" },
+  "repository": "https://github.com/LegoX/LegoFlow",
+  "license": "Apache-2.0",
+  "keywords": ["legoflow", "github", "pull-request", "swe-tasks"],
+  "skills": "./skills/",
+  "interface": { "displayName": "LegoFlow Curator", "shortDescription": "Curate verified SWE tasks", "longDescription": "Collect GitHub pull requests and turn them into verified software-engineering tasks for LegoFlow.", "developerName": "LegoX", "category": "Developer Tools", "capabilities": ["Interactive", "Write"], "defaultPrompt": ["Check curator inputs and GitHub access.", "Collect candidate pull requests.", "Create and verify SWE tasks."] }
+}

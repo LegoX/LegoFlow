@@ -163,6 +163,10 @@ jobs:
             ln -s "$CANON/artifacts/swe_tasks/py-cc" artifacts/swe_tasks/py-cc || true
           ls -la repos artifacts artifacts/swe_tasks
       - name: Run curator test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh
+      - name: Run curator test cases
         working-directory: blocks/curator
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
@@ -337,8 +341,11 @@ jobs:
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/tracer"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh tracer"; exit 1; }
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/tracer/repos/harbor blocks/tracer/repos/swe_data_process \
+            blocks/tracer/artifacts/env blocks/tracer/artifacts/agent-runtime \
+            blocks/tracer/artifacts/processed_tasks.yaml
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
           ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
           ln -s "$CANON/artifacts/env"                      artifacts/env
@@ -358,6 +365,16 @@ jobs:
               > artifacts/processed_tasks.yaml
           fi
           ls -la repos artifacts
+      - name: Run tracer test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh
+      - name: Refresh tracer editable environments
+        working-directory: blocks/tracer
+        run: |
+          set -euo pipefail
+          bash scripts/setup_harbor_env.sh
+          bash scripts/setup_swe_data_process_env.sh
       - name: Run tracer test cases
         working-directory: blocks/tracer
         env:
@@ -422,8 +439,11 @@ jobs:
         run: |
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/tracer"
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/tracer/repos/harbor blocks/tracer/repos/swe_data_process \
+            blocks/tracer/artifacts/env blocks/tracer/artifacts/agent-runtime \
+            blocks/tracer/artifacts/processed_tasks.yaml
           mkdir -p repos artifacts
-          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
           ln -s "$CANON/repos/harbor"                       repos/harbor
           ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
           ln -s "$CANON/artifacts/env"                      artifacts/env
@@ -522,9 +542,12 @@ jobs:
           CANON="${SHARED_RUNTIME}/evaluator"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh evaluator"; exit 1; }
           # actions/checkout creates empty placeholder dirs for declared
-          # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
+          # submodules; ln -sfn would put the link INSIDE them. Remove only
+          # checkout-local paths before creating the links.
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/evaluator/repos/harbor blocks/evaluator/artifacts/env \
+            blocks/evaluator/artifacts/runtime blocks/evaluator/artifacts/index.yaml
           mkdir -p repos artifacts
-          rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
           ln -s "$CANON/repos/harbor"        repos/harbor
           ln -s "$CANON/artifacts/env"       artifacts/env
           # agent.runtime_host_path: harbor bind-mounts this into every task
@@ -535,6 +558,31 @@ jobs:
           [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
             || printf 'runs: []\n' > artifacts/index.yaml
           ls -la repos artifacts
+      - name: Run evaluator test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh
+      - name: Refresh evaluator Harbor editable environment
+        working-directory: blocks/evaluator
+        run: |
+          set -euo pipefail
+          HARBOR_UV="$(python3 - <<'PY'
+          import yaml
+          config = yaml.safe_load(open("config.yaml", encoding="utf-8")) or {}
+          print(config["meta_info"]["environment"]["harbor_uv"])
+          PY
+          )"
+          case "$HARBOR_UV" in
+            /*) HARBOR_UV_ABS="$HARBOR_UV" ;;
+            *) HARBOR_UV_ABS="$PWD/$HARBOR_UV" ;;
+          esac
+          mkdir -p "$(dirname "$HARBOR_UV_ABS")"
+          (
+            cd repos/harbor
+            UV_PROJECT_ENVIRONMENT="$HARBOR_UV_ABS" uv sync
+          )
+          HARBOR_EDITABLE_ROOT="$PWD/repos/harbor" \
+            "$HARBOR_UV_ABS/bin/python" scripts/check_harbor_editable.py
       - name: Run evaluator test cases
         working-directory: blocks/evaluator
         env:
@@ -597,8 +645,10 @@ jobs:
           set -euo pipefail
           CANON="${SHARED_RUNTIME}/evaluator"
           [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh evaluator"; exit 1; }
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/evaluator/repos/harbor blocks/evaluator/artifacts/env \
+            blocks/evaluator/artifacts/runtime blocks/evaluator/artifacts/index.yaml
           mkdir -p repos artifacts
-          rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
           ln -s "$CANON/repos/harbor"        repos/harbor
           ln -s "$CANON/artifacts/env"       artifacts/env
           ln -s "$CANON/artifacts/runtime"   artifacts/runtime
@@ -687,6 +737,10 @@ jobs:
           ln -s "$CANON/repos/swe_data_process"  repos/swe_data_process
           ln -s "$CANON/artifacts/env"           artifacts/env
           ls -la repos artifacts
+      - name: Run trainer test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh
       - name: Run trainer test cases
         working-directory: blocks/trainer
         run: bash tests/run.sh

@@ -1,6 +1,6 @@
 # block — a Claude Code plugin for block-structured projects
 
-This plugin packages the **block** convention used by [LegoFlow](https://github.com/LegoX/SWE-Lego-Live) into five slash commands you can use in any Claude Code session.
+This plugin packages the **block** convention used by [LegoFlow](https://github.com/LegoX/LegoFlow) into five slash commands you can use in any Claude Code session.
 
 A **block** is the basic collaboration unit in a block-structured project: a self-describing directory containing a `config.yaml` (identity, I/O, status), a `CLAUDE.md` (agent contract), `scripts/{start,dryrun,clean}.sh`, `artifacts/`, and a `blocks/` tree of children. See `resources/BLOCK_DEFINITION.md` (bundled) for the full specification.
 

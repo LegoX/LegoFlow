@@ -1,0 +1,102 @@
+---
+title: Codex Plugin Usage
+description: Install and use LegoFlow through Codex native plugins and skills.
+---
+
+# Codex Plugin Usage
+
+LegoFlow integrates with Codex through repository-local plugins. Codex discovers
+these plugins from `.agents/plugins/marketplace.json` and installs them into the
+Codex plugin cache.
+
+## Installation
+
+Run these commands from the LegoFlow repository root:
+
+```bash
+codex plugin marketplace add .
+codex plugin add root@legoflow
+codex plugin add curator@legoflow
+codex plugin add tracer@legoflow
+codex plugin add trainer@legoflow
+codex plugin add evaluator@legoflow
+```
+
+Restart Codex after installation. Confirm the installation with:
+
+```bash
+codex plugin list
+```
+
+Every LegoFlow plugin should show `installed, enabled`.
+
+## Native Skills
+
+Codex uses namespaced native skills. It does not use Claude Code's slash-command
+syntax as its plugin invocation mechanism.
+
+| LegoFlow workflow | Codex skill |
+| --- | --- |
+| Root check | `$root-check` |
+| Curator check | `$curator-check` |
+| Curator setup | `$curator-setup` |
+| Curator PR collection | `$curator-collect-prs` |
+| Curator task creation | `$curator-create-tasks` |
+| Curator run | `$curator-run` |
+| Curator dashboard | `$curator-dashboard` |
+| Tracer check | `$tracer-check` |
+| Tracer run | `$tracer-run` |
+| Trainer run | `$trainer-run` |
+| Evaluator run | `$evaluator-run` |
+
+For example, in a Codex session use:
+
+```text
+$curator-check
+```
+
+Or provide a scoped natural-language request:
+
+```text
+Use $curator-check to validate the Curator configuration and dependencies only.
+Do not collect pull requests or create tasks.
+```
+
+## Shared Workflow
+
+Codex skills are thin wrappers around the canonical Claude Code skills under
+`.claude/plugins/`. They preserve the same safety gates, confirmation rules,
+configuration requirements, and reporting expectations without duplicating the
+workflow implementation.
+
+The standard sequence is:
+
+```text
+$curator-check -> user confirmation -> $curator-run
+```
+
+Do not start expensive or stateful jobs before the relevant check succeeds and
+the user explicitly confirms the run.
+
+## Curator Example
+
+To use Curator from a fresh checkout:
+
+```bash
+git submodule update --init --recursive
+codex plugin marketplace add .
+codex plugin add curator@legoflow
+codex
+```
+
+Then invoke:
+
+```text
+$curator-check
+```
+
+The skill reads the canonical workflow from:
+
+```text
+blocks/curator/.claude/plugins/curator-plugin/skills/check/SKILL.md
+```

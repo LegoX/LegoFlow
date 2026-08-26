@@ -12,6 +12,13 @@ load_runtime_env() {
         source "${block_root}/.env"
     fi
 
+    local shared_credentials="${block_root}/../../scripts/shared_credentials.sh"
+    if [[ -f "$shared_credentials" ]]; then
+        # shellcheck source=/dev/null
+        source "$shared_credentials"
+        load_shared_credentials "$block_root"
+    fi
+
     # Last-resort hydration from config.yaml.runtime_info.input.llm_api:
     # only fills exported vars still unset after the caller environment and
     # the subsequently sourced .env.
@@ -35,7 +42,8 @@ try:
         cfg = yaml.safe_load(f) or {}
 except Exception:
     sys.exit(0)
-llm = (((cfg.get("runtime_info") or {}).get("input") or {}).get("llm_api") or {})
+inputs = ((cfg.get("runtime_info") or {}).get("input") or {})
+llm = (inputs.get("llm_api") or {})
 mapping = {
     "OPENAI_API_KEY":       llm.get("api_key"),
     "OPENAI_API_BASE_URL":  llm.get("api_base_url"),
@@ -51,6 +59,7 @@ mapping = {
     # Informational: surfaced so dryrun/skills can warn when the proxy is required.
     "LEGOFLOW_CURATOR_CC_PROVIDER_MODE": llm.get("cc_provider_mode"),
     "LEGOFLOW_CURATOR_CC_PROXY_PORT":    llm.get("cc_proxy_port"),
+    "LEGOFLOW_CURATOR_GITHUB_TOKEN_FILE": inputs.get("github_token"),
 }
 for k, v in mapping.items():
     if v and not os.environ.get(k):
@@ -120,18 +129,23 @@ PY
         fi
     fi
 
-    if [ -z "${GITHUB_TOKENS:-}" ]; then
-        for token_file in \
-            "$PWD/gh_token.txt" \
-            "$HOME/gh_token.txt" \
-            "$HOME/harbor/gh_token.txt"
-        do
-            if [ -f "$token_file" ]; then
-                GITHUB_TOKENS="$(grep -vE '^[[:space:]]*(#|$)' "$token_file" | paste -sd, -)"
-                export GITHUB_TOKENS
-                break
-            fi
-        done
+    local configured_token_file="${LEGOFLOW_CURATOR_GITHUB_TOKEN_FILE:-}"
+    if [[ -n "$configured_token_file" ]]; then
+        if [[ "$configured_token_file" != /* ]]; then
+            configured_token_file="${block_root}/${configured_token_file}"
+        fi
+        export COLLECT_GITHUB_TOKEN_FILE="$configured_token_file"
+    fi
+
+    if [[ -z "${GITHUB_TOKENS:-}" && -n "${GITHUB_TOKEN:-}" ]]; then
+        GITHUB_TOKENS="$GITHUB_TOKEN"
+        export GITHUB_TOKENS
+    fi
+
+    if [[ -z "${GITHUB_TOKENS:-}" && -n "${COLLECT_GITHUB_TOKEN_FILE:-}" \
+          && -f "$COLLECT_GITHUB_TOKEN_FILE" ]]; then
+        GITHUB_TOKENS="$(grep -vE '^[[:space:]]*(#|$)' "$COLLECT_GITHUB_TOKEN_FILE" | paste -sd, -)"
+        export GITHUB_TOKENS
     fi
 
     if [ -z "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_TOKENS:-}" ]; then

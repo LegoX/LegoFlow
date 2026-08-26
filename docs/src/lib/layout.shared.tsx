@@ -39,7 +39,7 @@ export function baseOptions(): BaseLayoutProps {
     },
     links: [
       {
-        url: "https://github.com/LegoX/SWE-Lego-Live",
+        url: "https://github.com/LegoX/LegoFlow",
         text: "GitHub",
         icon: <GitHubIcon />,
         active: "none",

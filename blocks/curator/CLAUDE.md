@@ -36,15 +36,13 @@ vars by hand. The mapping is:
 | `cc_provider_mode` | `LEGOFLOW_CURATOR_CC_PROVIDER_MODE` | `native` or `openai_proxy` (see below) |
 | `cc_proxy_port` | `LEGOFLOW_CURATOR_CC_PROXY_PORT` | local LiteLLM proxy port (openai_proxy only) |
 
-GitHub tokens are never stored in `config.yaml`: runtime tokens come from
-`GITHUB_TOKENS`, `GITHUB_TOKEN`, or local token files (`gh_token.txt`).
+GitHub token values are never stored in `config.yaml`. Set
+`runtime_info.input.github_token` to the local TXT path; explicit token
+environment variables remain overrides.
 
-`scripts/load_runtime_env.sh` imports selected variables from the interactive
-shell, then sources the block's `.env`, so `.env` overrides the imported shell
-values. `config.yaml` only fills still-unset exported variables. Keep real keys
-out of `config.yaml`; prefer the shell or an ignored `.env`. The collector also
-combines `GITHUB_TOKENS` / `GITHUB_TOKEN` with
-`repos/legoflow-curator/gh_token.txt` (or `COLLECT_GITHUB_TOKEN_FILE`).
+`scripts/load_runtime_env.sh` preserves explicit environment values, then
+hydrates remaining values from the curator and root configs. It reads GitHub
+tokens only from the configured path instead of searching fallback directories.
 
 ### LLM provider modes (read this before your first run)
 

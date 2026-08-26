@@ -15,7 +15,7 @@ itself.
 | --- | --- | --- |
 | PR collection | You want to change languages, collection scale, or repository/PR filters. | `pr_collection.languages`, `repo_num`, `max_prs_per_repo`, `filters` |
 | LLM endpoint | You want Curator to call a different PR model or Claude Code proxy. | `llm_api.api_key`, `api_base_url`, `pr_model`, `task_model` |
-| GitHub tokens | You want faster or more stable PR collection. | `github_token`, `GITHUB_TOKENS`, `gh_token.txt` |
+| GitHub tokens | You want faster or more stable PR collection. | `github_token` TXT path, `GITHUB_TOKENS` |
 | Language generation | You want to enable languages or change generation caps. | `languages.<lang>.enabled`, `n_concurrent`, `max_verified_tasks` |
 | Remote machine | You want Curator to run on another server instead of the current host. | `meta_info.resources.ip`, `user`, `pwd`, `directory` |
 | Tracer handoff | You need Tracer to consume verified tasks from Curator. | `output.merged_tasks_dir`, `dependencies.to.merged_tasks_dir` |
@@ -27,7 +27,7 @@ per-language task cap. This gives you a practical first run without asking
 Curator to exhaust every collected candidate.
 
 <ConfigSnippet title="blocks/curator/config.yaml">
-{"runtime_info:\n  input:\n    pr_collection:\n      enabled: true\n      languages: [python, javascript, typescript]\n      repo_num: 10\n      max_prs_per_repo: 20\n      output_dir: artifacts/collected_prs\n      token_limit: 32\n      filters:\n        min_stars: 30\n        min_merged_prs: 5\n        max_files_changed: 25\n        max_lines_changed: 1500\n\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      pr_model: Qwen3.6-35B-A3B\n      task_model: claude-sonnet-4-6\n      cc_provider_mode: openai_proxy\n      anthropic_base_url: http://127.0.0.1:4010\n      cc_proxy_port: 4010\n\n    github_token: \"\"             # prefer GITHUB_TOKENS or gh_token.txt\n\n    languages:\n      py: { enabled: true, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 4, max_verified_tasks: 10 } }\n      js: { enabled: true, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 4, max_verified_tasks: 10 } }\n      ts: { enabled: true, params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 4, max_verified_tasks: 10 } }"}
+{"runtime_info:\n  input:\n    pr_collection:\n      enabled: true\n      languages: [python, javascript, typescript]\n      repo_num: 10\n      max_prs_per_repo: 20\n      output_dir: artifacts/collected_prs\n      token_limit: 32\n      filters:\n        min_stars: 30\n        min_merged_prs: 5\n        max_files_changed: 25\n        max_lines_changed: 1500\n\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      pr_model: Qwen3.6-35B-A3B\n      task_model: claude-sonnet-4-6\n      cc_provider_mode: openai_proxy\n      anthropic_base_url: http://127.0.0.1:4010\n      cc_proxy_port: 4010\n\n    github_token: scripts/gh_token.txt\n\n    languages:\n      py: { enabled: true, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 4, max_verified_tasks: 10 } }\n      js: { enabled: true, params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 4, max_verified_tasks: 10 } }\n      ts: { enabled: true, params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 4, max_verified_tasks: 10 } }"}
 </ConfigSnippet>
 
 Use `/curator:check` after editing. It checks token access, model endpoint
@@ -125,7 +125,7 @@ to Tracer.
 | `llm_api.pr_model` | Yes | `Qwen3.6-35B-A3B` | Change the model used for PR filtering and instruction work. |
 | `llm_api.task_model` | Yes | `claude-sonnet-4-6` | Change the Claude Code-visible model alias for task creation. |
 | `llm_api.cc_proxy_port` | Yes | `4010` | Change only if the local proxy port is occupied. |
-| `github_token` | No | `""` | Prefer `GITHUB_TOKENS`, `GITHUB_TOKEN`, or `gh_token.txt`. |
+| `github_token` | No | `""` | TXT path relative to the Curator block; token env vars override it. |
 | `languages.<lang>.enabled` | Yes | `true` | Toggle a language for the current run. |
 | `languages.<lang>.params.n_concurrent` | Yes | language-specific | Tune for API rate limits and machine capacity. |
 | `languages.<lang>.params.max_verified_tasks` | Yes | language-specific | Lower for smoke runs; raise or use `"all"` for production. |

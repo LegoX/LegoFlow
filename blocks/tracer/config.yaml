@@ -32,7 +32,7 @@ meta_info:
     swe_data_process:
       url: https://github.com/LegoX/swe_data_process.git
       branch: main
-      commit: 538d3838eb8e32fa9e73b2e4b854b1cd1abd01f5   # origin/main HEAD (verified 2026-07-28), defaults reasoning-check-mode to adaptive
+      commit: dda92c581a0c0eaba74bb469d92ddda767e5f1b3   # origin/main HEAD (verified 2026-07-28), defaults reasoning-check-mode to adaptive
       path: repos/swe_data_process
       readonly: true
 

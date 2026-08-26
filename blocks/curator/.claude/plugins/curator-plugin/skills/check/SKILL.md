@@ -62,10 +62,9 @@ If the config says `null`, report the HEAD as informational, not a failure.
 
 ## Step 2 - GitHub credentials
 
-Resolve tokens from `GITHUB_TOKENS`, `GITHUB_TOKEN`, or an explicit token
-file. Note that the collector `repos/legoflow-curator/tools/collect_prs_wo_image.py`
-defaults to `repos/legoflow-curator/gh_token.txt` unless
-`COLLECT_GITHUB_TOKEN_FILE` overrides it.
+Resolve tokens from `GITHUB_TOKENS`, `GITHUB_TOKEN`, or
+`runtime_info.input.github_token`. The config value is a TXT file path;
+relative paths resolve from `blocks/curator/`.
 
 For each token, call:
 

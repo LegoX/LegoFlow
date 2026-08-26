@@ -51,6 +51,70 @@ skills are the main entry points for LegoFlow: they guide users through setup,
 checks, runs, and inspection without requiring them to memorize the underlying
 scripts.
 
+## Codex plugin installation
+
+LegoFlow also ships Codex plugins in `plugins/`. Register this repository as a
+local marketplace and install the plugins before starting Codex:
+
+```bash
+codex plugin marketplace add .
+codex plugin add root@legoflow
+codex plugin add curator@legoflow
+codex plugin add tracer@legoflow
+codex plugin add trainer@legoflow
+codex plugin add evaluator@legoflow
+```
+
+Restart Codex after installation. Codex does not use the Claude Code
+marketplace commands above. Invoke native skills such as `$curator-check` and
+`$tracer-run`.
+
+```bash
+cd LegoFlow
+codex
+```
+
+The available Codex plugin directories are:
+
+```text
+plugins/root/
+plugins/curator/
+plugins/tracer/
+plugins/trainer/
+plugins/evaluator/
+```
+
+Each directory contains a `.codex-plugin/plugin.json` manifest and skills. The
+Codex skills are thin wrappers that read and follow the corresponding canonical
+Claude Code skill under `.claude/plugins/`; do not maintain a separate Codex
+workflow.
+
+Codex uses the following namespaced native skills:
+
+```text
+$root-check
+$curator-check
+$curator-create-tasks
+$tracer-run
+$trainer-run
+$evaluator-dashboard
+```
+
+Curator's native Codex skills are:
+
+| Workflow | Codex skill |
+| --- | --- |
+| Check | `$curator-check` |
+| Setup | `$curator-setup` |
+| Collect PRs | `$curator-collect-prs` |
+| Create tasks | `$curator-create-tasks` |
+| Run | `$curator-run` |
+| Dashboard | `$curator-dashboard` |
+
+Use `check -> confirm -> run` with either agent. Run the relevant check first,
+review its report, and wait for explicit confirmation before launching
+expensive or stateful work.
+
 
 
 ## Project setup
