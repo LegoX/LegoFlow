@@ -97,8 +97,14 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
-            timeout --signal=TERM --kill-after=30s 180s docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+            for reclaim_id in $(docker ps -q --filter ancestor=alpine:3); do
+              docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" | grep -q 'rm -rf /x/' && docker rm -f "$reclaim_id" >/dev/null || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
               sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
@@ -311,8 +317,14 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
-            timeout --signal=TERM --kill-after=30s 180s docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+            for reclaim_id in $(docker ps -q --filter ancestor=alpine:3); do
+              docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" | grep -q 'rm -rf /x/' && docker rm -f "$reclaim_id" >/dev/null || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
               sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       - uses: actions/checkout@v4
@@ -513,8 +525,14 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
-            timeout --signal=TERM --kill-after=30s 180s docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+            for reclaim_id in $(docker ps -q --filter ancestor=alpine:3); do
+              docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" | grep -q 'rm -rf /x/' && docker rm -f "$reclaim_id" >/dev/null || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
               sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + envs come from $SHARED_RUNTIME.
@@ -699,8 +717,14 @@ jobs:
         run: |
           if [ -d "$RUNNER_WORKSPACE" ]; then
             t0=$(date +%s)
-            timeout --signal=TERM --kill-after=30s 180s docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+            for reclaim_id in $(docker ps -q --filter ancestor=alpine:3); do
+              docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" | grep -q 'rm -rf /x/' && docker rm -f "$reclaim_id" >/dev/null || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
               sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
             echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
           fi
       # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
