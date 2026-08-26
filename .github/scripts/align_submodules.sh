@@ -6,6 +6,7 @@ set -euo pipefail
 
 ROOT="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}"
 SHARED_RUNTIME="${SHARED_RUNTIME:-}"
+LEGOFLOW_EXPLICIT_GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
 if [[ -n "${CICD_SHARED:-}" && -f "$CICD_SHARED/.env" ]]; then
   # shellcheck disable=SC1090
@@ -13,9 +14,12 @@ if [[ -n "${CICD_SHARED:-}" && -f "$CICD_SHARED/.env" ]]; then
 fi
 
 git_credentials=(git)
-if [[ -n "${GITHUB_TOKENS:-}" ]]; then
+if [[ -n "$LEGOFLOW_EXPLICIT_GITHUB_TOKEN" ]]; then
+  export GITHUB_TOKEN="$LEGOFLOW_EXPLICIT_GITHUB_TOKEN"
+elif [[ -n "${GITHUB_TOKENS:-}" ]]; then
   export GITHUB_TOKEN="${GITHUB_TOKENS%%,*}"
 fi
+unset LEGOFLOW_EXPLICIT_GITHUB_TOKEN
 
 remove_local_path() {
   local path="$1"
@@ -69,7 +73,8 @@ align_one() {
   target_mode="$(git -C "$ROOT" ls-tree HEAD -- "$relative" | awk '{print $1}')"
   if [[ "$target_mode" == "160000" ]]; then
     remove_local_path "$local_path"
-    (cd "$ROOT" && "${git_credentials[@]}" submodule update --init --recursive --force -- "$relative")
+    (cd "$ROOT" && GIT_TERMINAL_PROMPT=0 timeout --signal=TERM --kill-after=10s 180s \
+      "${git_credentials[@]}" submodule update --init --recursive --force -- "$relative")
   else
     checkout_path="$local_path"
     if [[ -n "$SHARED_RUNTIME" ]]; then
@@ -80,8 +85,8 @@ align_one() {
       echo "ERROR: managed checkout missing for $relative: $checkout_path" >&2
       return 1
     fi
-    git -C "$checkout_path" -c "credential.helper=!f() { echo username=x-access-token; echo password=\$GITHUB_TOKEN; }; f" \
-      fetch --depth 1 origin "$expected"
+    GIT_TERMINAL_PROMPT=0 timeout --signal=TERM --kill-after=10s 180s \
+      "${git_credentials[@]}" -C "$checkout_path" fetch --depth 1 origin "$expected"
     git -C "$checkout_path" checkout --detach "$expected"
     if [[ -n "$SHARED_RUNTIME" ]]; then
       remove_local_path "$local_path"
