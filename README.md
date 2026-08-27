@@ -8,7 +8,7 @@
 <p align="center"><b>Easy and Interactive Code Data Engineering</b></p>
 
 <p align="center">
-  <a href="https://legoflow-docs.pages.dev/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
+  <a href="https://legoflow-docs.legox.net/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
   &nbsp;·&nbsp;
   <a href="https://huggingface.co/Lego-X"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
   &nbsp;·&nbsp;
@@ -50,14 +50,14 @@ LegoFlow follows the tree structure of **blocks**. The root orchestrates four ch
 
 | Block | Role |
 | ----- | ---- |
-| [`curator`](https://legoflow-docs.pages.dev/docs/blocks/curator/getting-started) | Curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums |
-| [`tracer`](https://legoflow-docs.pages.dev/docs/blocks/tracer/getting-started) | Collects high-quality trajectories with verified rewards, across multiple coding scaffolds |
-| [`trainer`](https://legoflow-docs.pages.dev/docs/blocks/trainer/getting-started) | Converts rollout traces into training-ready formats and launches end-to-end training |
-| [`evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis |
+| [`curator`](https://legoflow-docs.legox.net/docs/blocks/curator/getting-started) | Curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums |
+| [`tracer`](https://legoflow-docs.legox.net/docs/blocks/tracer/getting-started) | Collects high-quality trajectories with verified rewards, across multiple coding scaffolds |
+| [`trainer`](https://legoflow-docs.legox.net/docs/blocks/trainer/getting-started) | Converts rollout traces into training-ready formats and launches end-to-end training |
+| [`evaluator`](https://legoflow-docs.legox.net/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis |
 
 
 > [!NOTE]
-> We have a clear definition of **block**. It plays a particular role in the workflow, following the same layout and file structure. A block maintains the relevant repositories (`repos/`), configuration (`config.yaml`) and run scripts (`scripts/`), manages its output in `artifacts/`, and communicates with its adjacent blocks. See [What is a Block](https://legoflow-docs.pages.dev/docs/development/block-design) for more details.
+> We have a clear definition of **block**. It plays a particular role in the workflow, following the same layout and file structure. A block maintains the relevant repositories (`repos/`), configuration (`config.yaml`) and run scripts (`scripts/`), manages its output in `artifacts/`, and communicates with its adjacent blocks. See [What is a Block](https://legoflow-docs.legox.net/docs/development/block-design) for more details.
 
 ## Released Datasets
 
@@ -80,7 +80,7 @@ We are actively releasing the latest datasets produced by LegoFlow:
 - **A GPU node** — only if you train, or serve a checkpoint yourself. Validated on one node with 8× H800 80GB; multi-node is not wired up.
 - **Docker and Cloudflare credentials** — optional, for authenticated image pulls and for publishing dashboards.
 
-What each one is for is spelled out in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Each block has its own dependent environment, which can be set up automatically following the corresponding guides. 
+What each one is for is spelled out in [Getting Started](https://legoflow-docs.legox.net/docs/getting-started). Each block has its own dependent environment, which can be set up automatically following the corresponding guides.
 
 ### Environment Setup
 1. Clone the code repository.
@@ -96,7 +96,7 @@ claude plugin marketplace add ./.claude/plugins
 claude plugin install root@root-block
 ```
 
-   The same holds for `curator`, `tracer`, `trainer` and `evaluator`, whose plugin directories live at `./blocks/<name>/.claude/plugins`. All five pairs are listed in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Run `/reload-plugins` afterwards so the skills load.
+   The same holds for `curator`, `tracer`, `trainer` and `evaluator`, whose plugin directories live at `./blocks/<name>/.claude/plugins`. All five pairs are listed in [Getting Started](https://legoflow-docs.legox.net/docs/getting-started). Run `/reload-plugins` afterwards so the skills load.
 
    LegoFlow also provides Codex plugins under `plugins/`. Register the
    repository root as a local Codex marketplace and install the plugins:
@@ -114,7 +114,7 @@ claude plugin install root@root-block
    Restart Codex after installation. Use native Codex skills such as
    `$root-check` and `$curator-check`. Codex skills are thin wrappers around
    the canonical Claude Code skills, so both agents follow the same workflow
-   and safety gates. See the [Codex plugin guide](https://legoflow-docs.pages.dev/docs/agent-integrations/cli)
+   and safety gates. See the [Codex plugin guide](https://legoflow-docs.legox.net/docs/agent-integrations/cli)
    for the complete installation and usage reference.
 
 ### Example Usages
@@ -130,17 +130,17 @@ Every block has clear roles and functions. Users can easily trigger these blocks
 - `/block:run` does the work and archives the intermediate output to `artifacts/`
 - `/block:dashboard` helps the user to monitor the running progress and status
 
-The detailed guides to each individual block can be found at [docs](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/block-by-block).
+The detailed guides to each individual block can be found at [docs](https://legoflow-docs.legox.net/docs/running-blocks/block-by-block).
 
 #### Running Multiple Blocks
 
-Users can also customize the workflow by running multiple blocks. Step-by-step guidance is in [Running Cascaded Blocks](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/cascaded).
+Users can also customize the workflow by running multiple blocks. Step-by-step guidance is in [Running Cascaded Blocks](https://legoflow-docs.legox.net/docs/running-blocks/cascaded).
 
 For example, our previous run with all four blocks shows that Curator built 4,166 verified Python tasks, Tracer solved 915 of them, 512 trajectories were selected for training, and the resulting fine-tune lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified. More details are recorded in the [blog](https://legox.pages.dev/blog/legoflow/).
 
 ## Contributing
 
-We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/LegoFlow). For more details, please refer to the [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development).
+We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/LegoFlow). For more details, please refer to the [Development guide](https://legoflow-docs.legox.net/docs/development).
 
 ## Citation
 

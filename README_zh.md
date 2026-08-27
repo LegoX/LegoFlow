@@ -8,7 +8,7 @@
 <p align="center"><b>简单、可交互的代码数据工程</b></p>
 
 <p align="center">
-  <a href="https://legoflow-docs.pages.dev/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
+  <a href="https://legoflow-docs.legox.net/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
   &nbsp;·&nbsp;
   <a href="https://huggingface.co/Lego-X"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
   &nbsp;·&nbsp;
@@ -50,14 +50,14 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排四个子 block：
 
 | Block | 职责 |
 | ----- | ---- |
-| [`curator`](https://legoflow-docs.pages.dev/docs/blocks/curator/getting-started) | 从 GitHub PR、issue 以及在线论坛中构建高质量 SWE 与编程任务 |
-| [`tracer`](https://legoflow-docs.pages.dev/docs/blocks/tracer/getting-started) | 采集带可验证奖励的高质量轨迹，支持多种编程 scaffold |
-| [`trainer`](https://legoflow-docs.pages.dev/docs/blocks/trainer/getting-started) | 把 rollout 轨迹转成可训练格式，并启动端到端训练 |
-| [`evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) | 在编程 benchmark 上评测 checkpoint，并支持按 rubric 与标签做细粒度分析 |
+| [`curator`](https://legoflow-docs.legox.net/docs/blocks/curator/getting-started) | 从 GitHub PR、issue 以及在线论坛中构建高质量 SWE 与编程任务 |
+| [`tracer`](https://legoflow-docs.legox.net/docs/blocks/tracer/getting-started) | 采集带可验证奖励的高质量轨迹，支持多种编程 scaffold |
+| [`trainer`](https://legoflow-docs.legox.net/docs/blocks/trainer/getting-started) | 把 rollout 轨迹转成可训练格式，并启动端到端训练 |
+| [`evaluator`](https://legoflow-docs.legox.net/docs/blocks/evaluator/getting-started) | 在编程 benchmark 上评测 checkpoint，并支持按 rubric 与标签做细粒度分析 |
 
 
 > [!NOTE]
-> 我们对 **block** 有明确的定义：它在工作流中承担特定职责，并遵循统一的目录与文件结构。一个 block 维护自己相关的仓库（`repos/`）、配置（`config.yaml`）与运行脚本（`scripts/`），在 `artifacts/` 中管理产物，并与相邻的 block 通信。更多细节见 [What is a Block](https://legoflow-docs.pages.dev/docs/development/block-design)。
+> 我们对 **block** 有明确的定义：它在工作流中承担特定职责，并遵循统一的目录与文件结构。一个 block 维护自己相关的仓库（`repos/`）、配置（`config.yaml`）与运行脚本（`scripts/`），在 `artifacts/` 中管理产物，并与相邻的 block 通信。更多细节见 [What is a Block](https://legoflow-docs.legox.net/docs/development/block-design)。
 
 ## 已发布数据集
 
@@ -80,7 +80,7 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排四个子 block：
 - **GPU 节点** —— 仅在你要训练或自行部署 checkpoint 时需要。已验证配置为单节点 8× H800 80GB，多机训练尚未接通。
 - **Docker 与 Cloudflare 凭据** —— 可选，分别用于认证镜像拉取和发布看板。
 
-每一项的具体用途见 [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started)。每个 block 有各自依赖的环境，可以按对应指引自动完成安装。
+每一项的具体用途见 [Getting Started](https://legoflow-docs.legox.net/docs/getting-started)。每个 block 有各自依赖的环境，可以按对应指引自动完成安装。
 
 ### 环境准备
 1. 克隆代码仓库。
@@ -96,7 +96,7 @@ claude plugin marketplace add ./.claude/plugins
 claude plugin install root@root-block
 ```
 
-   `curator`、`tracer`、`trainer`、`evaluator` 同理，它们的插件目录位于 `./blocks/<name>/.claude/plugins`。五组完整命令见 [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started)。装完执行 `/reload-plugins` 以加载这些 skills。
+   `curator`、`tracer`、`trainer`、`evaluator` 同理，它们的插件目录位于 `./blocks/<name>/.claude/plugins`。五组完整命令见 [Getting Started](https://legoflow-docs.legox.net/docs/getting-started)。装完执行 `/reload-plugins` 以加载这些 skills。
 
 ### 使用示例
 
@@ -111,17 +111,17 @@ claude plugin install root@root-block
 - `/block:run` 执行任务，并把中间产物归档到 `artifacts/`
 - `/block:dashboard` 帮助用户监控运行进度与状态
 
-各个 block 的详细指引见 [docs](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/block-by-block)。
+各个 block 的详细指引见 [docs](https://legoflow-docs.legox.net/docs/running-blocks/block-by-block)。
 
 #### 运行多个 Block
 
-用户也可以通过运行多个 block 来定制工作流。分步指引见 [Running Cascaded Blocks](https://docs-dev.legoflow-docs.pages.dev/docs/running-blocks/cascaded)。
+用户也可以通过运行多个 block 来定制工作流。分步指引见 [Running Cascaded Blocks](https://legoflow-docs.legox.net/docs/running-blocks/cascaded)。
 
 例如，我们此前一次四个 block 全链路的运行显示：Curator 构建了 4,166 个已验证的 Python 任务，Tracer 成功解决其中 915 个，筛选出 512 条轨迹用于训练，最终微调把 `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上从 **7.6% 提升到 64.4%**。更多细节记录在[博客](https://legox.pages.dev/blog/legoflow/)中。
 
 ## 参与贡献
 
-我们欢迎所有开发者使用、改进 LegoFlow 并为之贡献。issue 和 pull request 请提交到 [GitHub](https://github.com/LegoX/LegoFlow)。更多细节请参阅 [Development guide](https://docs-dev.legoflow-docs.pages.dev/docs/development)。
+我们欢迎所有开发者使用、改进 LegoFlow 并为之贡献。issue 和 pull request 请提交到 [GitHub](https://github.com/LegoX/LegoFlow)。更多细节请参阅 [Development guide](https://legoflow-docs.legox.net/docs/development)。
 
 ## 引用
 
