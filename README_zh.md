@@ -73,7 +73,7 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排四个子 block：
 
 ### 前置条件
 
-- **Claude Code** —— 推荐用来驱动 LegoFlow 的编程智能体。
+- **Claude Code 或 Codex CLI** —— 通过插件 skills 操作 LegoFlow 的编程智能体，推荐使用 Claude Code。
 - **一个 OpenAI 兼容的 LLM 端点** —— Curator、Tracer 和 Evaluator 都需要。
 - **GitHub token** —— 通过 `GITHUB_TOKENS` 提供，用于 Curator 采集 PR。
 - **Docker** —— 每个任务、每次 rollout 都在容器中运行。
@@ -83,20 +83,48 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排四个子 block：
 每一项的具体用途见 [Getting Started](https://legoflow-docs.legox.net/docs/getting-started)。每个 block 有各自依赖的环境，可以按对应指引自动完成安装。
 
 ### 环境准备
-1. 克隆代码仓库。
+
+#### 1. 克隆代码仓库
+
 ```bash
 git clone --recurse-submodules https://github.com/LegoX/LegoFlow LegoFlow
 cd LegoFlow
 ```
 
-2. 安装插件。每个 block 各自带一个插件。把它的目录注册为 Claude Code marketplace，再从中安装：
+#### 2. 为编程智能体安装插件
+
+##### Claude Code
 
 ```bash
 claude plugin marketplace add ./.claude/plugins
+claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/tracer/.claude/plugins
+claude plugin marketplace add ./blocks/trainer/.claude/plugins
+claude plugin marketplace add ./blocks/evaluator/.claude/plugins
+
 claude plugin install root@root-block
+claude plugin install curator@curator-block
+claude plugin install tracer@tracer
+claude plugin install trainer@trainer-block
+claude plugin install evaluator@evaluator-block
 ```
 
-   `curator`、`tracer`、`trainer`、`evaluator` 同理，它们的插件目录位于 `./blocks/<name>/.claude/plugins`。五组完整命令见 [Getting Started](https://legoflow-docs.legox.net/docs/getting-started)。装完执行 `/reload-plugins` 以加载这些 skills。
+安装完成后执行 `/reload-plugins` 以加载这些 skills。完整使用说明见 [Getting Started](https://legoflow-docs.legox.net/docs/getting-started)。
+
+##### Codex
+
+LegoFlow 还在 `plugins/` 下提供了封装 Claude Code skills 的 Codex 插件。将仓库根目录注册为本地 Codex marketplace，然后安装插件：
+
+```bash
+codex plugin marketplace add .
+codex plugin add root@legoflow
+codex plugin add curator@legoflow
+codex plugin add tracer@legoflow
+codex plugin add trainer@legoflow
+codex plugin add evaluator@legoflow
+```
+
+安装完成后重启 Codex。Codex 使用 `$<block>-<skill>` 形式的原生 skills，例如 `$curator-check`。
 
 ### 使用示例
 
@@ -106,10 +134,14 @@ claude plugin install root@root-block
 
 每个 block 职责与功能都很清晰，用户可以用预定义的 skills 轻松触发。触发一个 block 的一般步骤包括：
 
-- `/block:setup` 准备必要依赖并填写 `config.yaml`
-- `/block:check` 校验配置并执行预检
-- `/block:run` 执行任务，并把中间产物归档到 `artifacts/`
-- `/block:dashboard` 帮助用户监控运行进度与状态
+| 工作流 | Claude Code | Codex |
+| --- | --- | --- |
+| 准备 | `/<block>:setup` | `$<block>-setup` |
+| 检查 | `/<block>:check` | `$<block>-check` |
+| 运行 | `/<block>:run` | `$<block>-run` |
+| 看板 | `/<block>:dashboard` | `$<block>-dashboard` |
+
+setup skill 用于准备依赖并填写 `config.yaml`；check 用于校验配置并执行预检；run 用于执行任务并把中间产物归档到 `artifacts/`；dashboard 用于监控运行进度与状态。
 
 各个 block 的详细指引见 [docs](https://legoflow-docs.legox.net/docs/running-blocks/block-by-block)。
 

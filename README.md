@@ -73,7 +73,7 @@ We are actively releasing the latest datasets produced by LegoFlow:
 
 ### Prerequisites
 
-- **Claude Code** — the recommended coding agent to drive LegoFlow.
+- **Claude Code or Codex CLI** — coding agents that operate LegoFlow through its plugin skills. Claude Code is recommended.
 - **An OpenAI-compatible LLM endpoint** — required by Curator, Tracer and Evaluator.
 - **GitHub token(s)** — supplied through `GITHUB_TOKENS`, for Curator's PR collection.
 - **Docker** — every task and every rollout runs in a container.
@@ -83,39 +83,48 @@ We are actively releasing the latest datasets produced by LegoFlow:
 What each one is for is spelled out in [Getting Started](https://legoflow-docs.legox.net/docs/getting-started). Each block has its own dependent environment, which can be set up automatically following the corresponding guides.
 
 ### Environment Setup
-1. Clone the code repository.
+
+#### 1. Clone the code repository.
+
 ```bash
 git clone --recurse-submodules https://github.com/LegoX/LegoFlow LegoFlow
 cd LegoFlow
 ```
 
-2. Install the plugins. Every block ships one. Register its directory as a Claude Code marketplace, then install from it:
+#### 2. Install the plugins for coding agents.
+
+##### Claude Code
 
 ```bash
 claude plugin marketplace add ./.claude/plugins
+claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/tracer/.claude/plugins
+claude plugin marketplace add ./blocks/trainer/.claude/plugins
+claude plugin marketplace add ./blocks/evaluator/.claude/plugins
+
 claude plugin install root@root-block
+claude plugin install curator@curator-block
+claude plugin install tracer@tracer
+claude plugin install trainer@trainer-block
+claude plugin install evaluator@evaluator-block
 ```
 
-   The same holds for `curator`, `tracer`, `trainer` and `evaluator`, whose plugin directories live at `./blocks/<name>/.claude/plugins`. All five pairs are listed in [Getting Started](https://legoflow-docs.legox.net/docs/getting-started). Run `/reload-plugins` afterwards so the skills load.
+Run `/reload-plugins` afterwards so the skills load. See [Getting Started](https://legoflow-docs.legox.net/docs/getting-started) for the complete usage guide.
 
-   LegoFlow also provides Codex plugins under `plugins/`. Register the
-   repository root as a local Codex marketplace and install the plugins:
+##### Codex
 
-   ```bash
-   cd LegoFlow
-   codex plugin marketplace add .
-   codex plugin add root@legoflow
-   codex plugin add curator@legoflow
-   codex plugin add tracer@legoflow
-   codex plugin add trainer@legoflow
-   codex plugin add evaluator@legoflow
-   ```
+LegoFlow also provides Codex plugins under `plugins/`, which wrap the Claude Code skills. Register the repository root as a local Codex marketplace and install the plugins:
 
-   Restart Codex after installation. Use native Codex skills such as
-   `$root-check` and `$curator-check`. Codex skills are thin wrappers around
-   the canonical Claude Code skills, so both agents follow the same workflow
-   and safety gates. See the [Codex plugin guide](https://legoflow-docs.legox.net/docs/agent-integrations/cli)
-   for the complete installation and usage reference.
+```bash
+codex plugin marketplace add .
+codex plugin add root@legoflow
+codex plugin add curator@legoflow
+codex plugin add tracer@legoflow
+codex plugin add trainer@legoflow
+codex plugin add evaluator@legoflow
+```
+
+Restart Codex after installation. Use native Codex skills such as `$<block>-<skill>`, for example `$curator-check`.
 
 ### Example Usages
 
@@ -125,10 +134,14 @@ Users can trigger individual blocks for a particular purpose, or jointly run mul
 
 Every block has clear roles and functions. Users can easily trigger these blocks with their pre-defined skills. In general, the steps to trigger a block include:
 
-- `/block:setup` prepares necessary dependencies and fills in `config.yaml`
-- `/block:check` validates the configuration and run pre-flight check
-- `/block:run` does the work and archives the intermediate output to `artifacts/`
-- `/block:dashboard` helps the user to monitor the running progress and status
+| Workflow | Claude Code | Codex |
+| --- | --- | --- |
+| Setup | `/<block>:setup` | `$<block>-setup` |
+| Check | `/<block>:check` | `$<block>-check` |
+| Run | `/<block>:run` | `$<block>-run` |
+| Dashboard | `/<block>:dashboard` | `$<block>-dashboard` |
+
+The setup skill prepares dependencies and fills in `config.yaml`; check validates the configuration and performs a preflight; run does the work and archives intermediate output to `artifacts/`; and dashboard helps monitor progress and status.
 
 The detailed guides to each individual block can be found at [docs](https://legoflow-docs.legox.net/docs/running-blocks/block-by-block).
 

@@ -8,7 +8,7 @@ title: Getting Started
 Before starting, make sure you have the pieces that LegoFlow cannot create
 for you:
 
-- Claude Code, which is the recommended way to operate LegoFlow.
+- Claude Code or Codex CLI, which operate LegoFlow through plugin skills. Claude Code is recommended.
 - LLM endpoints for Curator, Tracer, and Evaluator jobs.
 - GitHub token(s), used by Curator when collecting pull requests.
 - A GPU server if you plan to run training or evaluate self-hosted models.
@@ -114,6 +114,11 @@ Curator's native Codex skills are:
 Use `check -> confirm -> run` with either agent. Run the relevant check first,
 review its report, and wait for explicit confirmation before launching
 expensive or stateful work.
+
+For consistency, the rest of this documentation uses Claude Code skill syntax
+for its examples: `/<block>:<skill>`. Codex users can replace each example with
+the equivalent `$<block>-<skill>` form. For example, use `$tracer-run` wherever
+the documentation shows `/tracer:run`; both invoke the same canonical workflow.
 
 
 
