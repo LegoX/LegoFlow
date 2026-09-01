@@ -1477,7 +1477,7 @@ def build_instance_index(
         reward = safe_float(fact.get("reward"))
         if reward is not None and reward >= 1:
             bucket["pass_count"] += 1
-        elif status == "fail":
+        elif reward is not None or status == "fail":
             bucket["fail_count"] += 1
         if status == "error":
             bucket["error_count"] += 1

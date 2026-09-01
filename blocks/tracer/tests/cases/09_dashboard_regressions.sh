@@ -240,6 +240,7 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         len(reward_instances) != 1
         or reward_instances[0].get("pass_rate") != 0.6667
         or reward_instances[0].get("pass_count") != 2
+        or reward_instances[0].get("fail_count") != 1
         or reward_instances[0].get("error_count") != 2
     ):
         raise AssertionError(f"instance pass rate did not follow mean reward: {reward_instances}")
