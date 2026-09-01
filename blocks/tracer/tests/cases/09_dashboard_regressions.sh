@@ -173,7 +173,9 @@ with tempfile.TemporaryDirectory() as raw_tmp:
         [{
             "job": "reward-job",
             "primary_mean": 0.625,
-            "primary_reward_1_count": 7,
+            "primary_reward_1_count": 5,
+            "n_trials": 8,
+            "n_errors": 4,
             "finished_at": None,
         }],
     )
@@ -184,9 +186,55 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     if (
         authoritative_segment.get("pass_rate") != 0.625
         or authoritative_segment.get("avg_reward") != 0.625
-        or authoritative_segment.get("passed") != 7
+        or authoritative_segment.get("trials") != 8
+        or authoritative_segment.get("passed") != 5
+        or authoritative_segment.get("errors") != 4
     ):
         raise AssertionError(f"job segment did not prefer Harbor's authoritative mean: {authoritative_segment}")
+    if (
+        authoritative_analysis["summary"].get("pass_rate") != 0.625
+        or authoritative_analysis["summary"].get("avg_reward") != 0.625
+    ):
+        raise AssertionError(
+            f"global reward metrics did not use the authoritative job aggregate: "
+            f"{authoritative_analysis['summary']}"
+        )
+    weighted_analysis = dashboard.build_analysis(
+        {},
+        reward_facts,
+        [],
+        [
+            {
+                "job": "reward-job",
+                "primary_mean": 0.625,
+                "primary_reward_1_count": 5,
+                "n_trials": 8,
+                "n_errors": 4,
+                "finished_at": None,
+            },
+            {
+                "job": "aggregate-only-job",
+                "primary_mean": 0.25,
+                "primary_reward_1_count": 1,
+                "n_trials": 4,
+                "n_errors": 1,
+                "finished_at": None,
+            },
+        ],
+    )
+    if weighted_analysis["summary"].get("pass_rate") != 0.5:
+        raise AssertionError(f"global job means were not trial-weighted: {weighted_analysis['summary']}")
+    aggregate_only_segment = next(
+        row for row in weighted_analysis["segments"]
+        if row.get("dim") == "job" and row.get("value") == "aggregate-only-job"
+    )
+    if (
+        aggregate_only_segment.get("trials") != 4
+        or aggregate_only_segment.get("passed") != 1
+        or aggregate_only_segment.get("errors") != 1
+        or aggregate_only_segment.get("pass_rate") != 0.25
+    ):
+        raise AssertionError(f"aggregate-only job metrics were missing: {aggregate_only_segment}")
     reward_instances = dashboard.build_instance_index({}, reward_facts, [])
     if (
         len(reward_instances) != 1

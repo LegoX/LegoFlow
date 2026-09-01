@@ -1278,6 +1278,36 @@ def job_finished_fields(job: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def aggregate_reward_mean(
+    trial_facts: list[dict[str, Any]],
+    jobs_by_name: dict[str, dict[str, Any]],
+) -> float | None:
+    """Combine Harbor job means without mixing aggregate and scan snapshots."""
+    reward_sum = 0.0
+    reward_count = 0
+    authoritative_jobs: set[str] = set()
+    for job_name, job in jobs_by_name.items():
+        job_mean = safe_float(job.get("primary_mean"))
+        job_trials = safe_int(job.get("n_trials"))
+        if not job_name or job_mean is None or job_trials is None or job_trials <= 0:
+            continue
+        reward_sum += job_mean * job_trials
+        reward_count += job_trials
+        authoritative_jobs.add(job_name)
+
+    # Imported or partially available data may not have a Harbor root result.
+    # Preserve the per-trial fallback for those jobs only.
+    for fact in trial_facts:
+        if str(fact.get("job") or "") in authoritative_jobs:
+            continue
+        reward = safe_float(fact.get("reward"))
+        if reward is not None:
+            reward_sum += reward
+            reward_count += 1
+
+    return reward_sum / reward_count if reward_count else None
+
+
 def build_analysis(
     task_dim: dict[str, dict[str, Any]],
     trial_facts: list[dict[str, Any]],
@@ -1298,6 +1328,9 @@ def build_analysis(
             buckets.setdefault(key, make_bucket(dim, value))
             bucket_add(buckets[key], fact, kind="quality")
     jobs_by_name = {str(job.get("job") or ""): job for job in jobs}
+    for job_name in jobs_by_name:
+        if job_name:
+            buckets.setdefault(("job", job_name), make_bucket("job", job_name))
     segments = []
     for bucket in buckets.values():
         segment = finalize_bucket(bucket)
@@ -1312,6 +1345,12 @@ def build_analysis(
             if primary_mean is not None:
                 segment["pass_rate"] = maybe_round(primary_mean)
                 segment["avg_reward"] = maybe_round(primary_mean)
+                aggregate_trials = safe_int(job_row.get("n_trials"))
+                aggregate_errors = safe_int(job_row.get("n_errors"))
+                if aggregate_trials is not None:
+                    segment["trials"] = aggregate_trials
+                if aggregate_errors is not None:
+                    segment["errors"] = aggregate_errors
             primary_reward_1_count = (
                 safe_int(job_row.get("primary_reward_1_count")) if job_row else None
             )
@@ -1333,7 +1372,7 @@ def build_analysis(
         ),
     )[:1500]
     scores = [safe_float(f.get("score")) for f in quality_facts if safe_float(f.get("score")) is not None]
-    rewards = [safe_float(f.get("reward")) for f in trial_facts if safe_float(f.get("reward")) is not None]
+    aggregate_mean = aggregate_reward_mean(trial_facts, jobs_by_name)
     return {
         "dims": SEGMENT_DIMS,
         "dim_labels": SEGMENT_LABELS,
@@ -1349,8 +1388,8 @@ def build_analysis(
             "p25_score": maybe_round(percentile(scores, 0.25)),
             "p50_score": maybe_round(percentile(scores, 0.50)),
             "p75_score": maybe_round(percentile(scores, 0.75)),
-            "avg_reward": maybe_round(mean(rewards)),
-            "pass_rate": maybe_round(mean(rewards)),
+            "avg_reward": maybe_round(aggregate_mean),
+            "pass_rate": maybe_round(aggregate_mean),
         },
         "segments": segments,
         "quality_examples": quality_examples,
