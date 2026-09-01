@@ -1190,7 +1190,8 @@ def bucket_add(bucket: dict[str, Any], fact: dict[str, Any], *, kind: str) -> No
         if existing_difficulty is None or (existing_difficulty == "unknown" and difficulty != "unknown"):
             bucket["task_difficulties"][task_key] = difficulty
         bucket["trials"] += 1
-        if fact.get("status") == "pass":
+        reward = safe_float(fact.get("reward"))
+        if reward is not None and reward >= 1:
             bucket["passed"] += 1
         if fact.get("status") == "error":
             bucket["errors"] += 1
@@ -1243,7 +1244,10 @@ def finalize_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
         "trials": trials,
         "passed": bucket["passed"],
         "errors": bucket["errors"],
-        "pass_rate": maybe_round(bucket["passed"] / trials if trials else None),
+        # Harbor's reported mean treats the verifier reward as the pass signal.
+        # Keep exceptions as a separate diagnostic instead of overriding a
+        # successful verifier result when calculating pass rate.
+        "pass_rate": maybe_round(mean(rewards)),
         "avg_reward": maybe_round(mean(rewards)),
         "avg_duration_sec": maybe_round(mean(bucket["durations"]), 1),
         "avg_trial_tokens": maybe_round(mean(bucket["tokens"]), 1),
@@ -1298,7 +1302,21 @@ def build_analysis(
     for bucket in buckets.values():
         segment = finalize_bucket(bucket)
         if segment.get("dim") == "job":
-            segment.update(job_finished_fields(jobs_by_name.get(str(segment.get("value") or ""))))
+            job_row = jobs_by_name.get(str(segment.get("value") or ""))
+            segment.update(job_finished_fields(job_row))
+            # A running job's root result.json is Harbor's authoritative
+            # aggregate. Its mean includes every evaluated trial, including
+            # reward-bearing trials that also recorded an agent exception and
+            # trials whose per-trial result file is not visible in this scan.
+            primary_mean = safe_float(job_row.get("primary_mean")) if job_row else None
+            if primary_mean is not None:
+                segment["pass_rate"] = maybe_round(primary_mean)
+                segment["avg_reward"] = maybe_round(primary_mean)
+            primary_reward_1_count = (
+                safe_int(job_row.get("primary_reward_1_count")) if job_row else None
+            )
+            if primary_reward_1_count is not None:
+                segment["passed"] = primary_reward_1_count
         segments.append(segment)
     segments.sort(key=lambda x: (x["dim"], -(x.get("quality_records") or 0), -(x.get("trials") or 0), x["value"]))
 
@@ -1332,10 +1350,7 @@ def build_analysis(
             "p50_score": maybe_round(percentile(scores, 0.50)),
             "p75_score": maybe_round(percentile(scores, 0.75)),
             "avg_reward": maybe_round(mean(rewards)),
-            "pass_rate": maybe_round(
-                sum(1 for f in trial_facts if f.get("status") == "pass") / len(trial_facts)
-                if trial_facts else None
-            ),
+            "pass_rate": maybe_round(mean(rewards)),
         },
         "segments": segments,
         "quality_examples": quality_examples,
@@ -1420,11 +1435,12 @@ def build_instance_index(
         bucket = ensure(key, fact)
         bucket["trial_count"] += 1
         status = fact.get("status")
-        if status == "pass":
+        reward = safe_float(fact.get("reward"))
+        if reward is not None and reward >= 1:
             bucket["pass_count"] += 1
         elif status == "fail":
             bucket["fail_count"] += 1
-        elif status == "error":
+        if status == "error":
             bucket["error_count"] += 1
         for set_key, fact_key in (("sources", "source"), ("jobs", "job"), ("models", "model"), ("scaffolds", "scaffold")):
             if fact.get(fact_key):
@@ -1469,7 +1485,7 @@ def build_instance_index(
             "pass_count": bucket["pass_count"],
             "fail_count": bucket["fail_count"],
             "error_count": bucket["error_count"],
-            "pass_rate": maybe_round(bucket["pass_count"] / trials if trials else None),
+            "pass_rate": maybe_round(mean(rewards)),
             "quality_count": bucket["quality_count"],
             "avg_score": maybe_round(mean(scores)),
             "p25_score": maybe_round(percentile(scores, 0.25)),
@@ -1723,6 +1739,8 @@ def build_traj_source_summary(
         job_row = jobs_by_name.get(str(row["source"] or ""))
         tool_call_errors = sft_row.get("tool_call_errors") if isinstance(sft_row, dict) else {}
         error_rate = safe_float(tool_call_errors.get("error_rate")) if isinstance(tool_call_errors, dict) else None
+        token_lens = sft_row.get("token_lens") if isinstance(sft_row, dict) else {}
+        sft_token_mean = safe_float(token_lens.get("mean")) if isinstance(token_lens, dict) else None
         reward_1_count = safe_int(job_row.get("primary_reward_1_count")) if isinstance(job_row, dict) else None
         conversion_drop_count = reward_1_count - n if reward_1_count is not None else None
         cot_turns = int(row["cot_turns"])
@@ -1741,7 +1759,11 @@ def build_traj_source_summary(
                 "comp": maybe_round(mean(row["scores"])),
                 "avg_turns": maybe_round(mean(row["turns"])),
                 "avg_calls": maybe_round(mean(row["calls"])),
-                "avg_tokens": maybe_round(mean(row["tokens"])),
+                # This table describes converted SFT trajectories, so prefer
+                # tokenizer-derived sequence length over API usage accounting.
+                "avg_tokens": maybe_round(
+                    sft_token_mean if sft_token_mean is not None else mean(row["tokens"])
+                ),
                 "error_rate": maybe_round(error_rate),
                 "cot_rate": maybe_round(cot_nonempty / cot_turns if cot_turns else None),
                 "cot_chars_mean": maybe_round(
@@ -1754,7 +1776,10 @@ def build_traj_source_summary(
                     for key, values in row["subs"].items()
                 },
                 "reproduce_first": maybe_round(mean(row["reproduce_first"])),
-                "pass_rate": 1.0 if n else None,
+                "pass_rate": maybe_round(
+                    safe_float(job_row.get("primary_mean"))
+                    if isinstance(job_row, dict) else None
+                ),
                 "embedded_rate": None,
                 "scaffold": top_label(row["scaffolds"]),
                 "model": top_label(row["models"]),
@@ -3410,7 +3435,7 @@ def render_html(
             <th class="num" data-source-sort="turns">Turns</th>
             <th class="num" data-source-sort="calls">Calls/Traj</th>
             <th class="num" data-source-sort="error_rate">Error Rate</th>
-            <th class="num" data-source-sort="tokens">Tokens</th>
+            <th class="num" data-source-sort="tokens" title="Mean tokenizer-derived sequence length from lf.stats.json.">SFT Tokens</th>
             <th class="num" data-source-sort="cot_rate" title="Share of assistant turns with nonempty reasoning_content.">COT Turn Ratio</th>
             <th class="num" data-source-sort="cot_chars" title="Mean character length of nonempty assistant reasoning_content.">COT Chars/Turn</th>
             <th class="num" data-source-sort="task_difficulty" title="easy=1, medium=2, hard=3; unknown excluded.">Task Difficulty</th>
@@ -3825,6 +3850,7 @@ function sourceComparisonRows() {{
       error: 0,
       embedded: 0,
       scores: [],
+      rewards: [],
       turns: [],
       calls: [],
       tokens: [],
@@ -3844,6 +3870,8 @@ function sourceComparisonRows() {{
     if (card.embedded_available) row.embedded += 1;
     const score = Number(card.score ?? card.reward);
     if (Number.isFinite(score)) row.scores.push(score);
+    const reward = Number(card.reward);
+    if (Number.isFinite(reward)) row.rewards.push(reward);
     const turns = Number(card.turns);
     if (Number.isFinite(turns)) row.turns.push(turns);
     const calls = Number(card.tool_calls);
@@ -3876,7 +3904,7 @@ function sourceComparisonRows() {{
       cot_rate: row.cot_turns ? row.cot_nonempty_turns / row.cot_turns : null,
       cot_chars_mean: row.cot_nonempty_turns ? row.cot_chars_sum / row.cot_nonempty_turns : null,
       task_difficulty_avg: avg(row.difficulty_scores),
-      pass_rate: row.n ? row.pass / row.n : null,
+      pass_rate: avg(row.rewards),
       embedded_rate: row.n ? row.embedded / row.n : null,
       scaffold: topCountLabel(row.scaffolds),
       model: topCountLabel(row.models),

@@ -145,6 +145,69 @@ with tempfile.TemporaryDirectory() as raw_tmp:
     if ("category", "repair") not in segment_keys or ("source", "unit-test") not in segment_keys:
         raise AssertionError(f"category/source segment buckets are missing: {segment_keys}")
 
+    # Pass rate follows Harbor's mean verifier reward. A successful verifier
+    # result remains a pass-rate success even when the trial also records an
+    # agent exception; errors are reported independently.
+    reward_facts = [
+        {"task_name": "owner__repo-1", "job": "reward-job", "status": "error", "reward": 1.0},
+        {"task_name": "owner__repo-1", "job": "reward-job", "status": "error", "reward": 0.0},
+        {"task_name": "owner__repo-1", "job": "reward-job", "status": "pass", "reward": 1.0},
+    ]
+    reward_analysis = dashboard.build_analysis({}, reward_facts, [], [])
+    if reward_analysis["summary"].get("pass_rate") != 0.6667:
+        raise AssertionError(f"global pass rate did not follow mean reward: {reward_analysis['summary']}")
+    reward_segment = next(
+        row for row in reward_analysis["segments"]
+        if row.get("dim") == "job" and row.get("value") == "reward-job"
+    )
+    if (
+        reward_segment.get("pass_rate") != 0.6667
+        or reward_segment.get("passed") != 2
+        or reward_segment.get("errors") != 2
+    ):
+        raise AssertionError(f"segment pass/error metrics used the wrong semantics: {reward_segment}")
+    authoritative_analysis = dashboard.build_analysis(
+        {},
+        reward_facts,
+        [],
+        [{
+            "job": "reward-job",
+            "primary_mean": 0.625,
+            "primary_reward_1_count": 7,
+            "finished_at": None,
+        }],
+    )
+    authoritative_segment = next(
+        row for row in authoritative_analysis["segments"]
+        if row.get("dim") == "job" and row.get("value") == "reward-job"
+    )
+    if (
+        authoritative_segment.get("pass_rate") != 0.625
+        or authoritative_segment.get("avg_reward") != 0.625
+        or authoritative_segment.get("passed") != 7
+    ):
+        raise AssertionError(f"job segment did not prefer Harbor's authoritative mean: {authoritative_segment}")
+    reward_instances = dashboard.build_instance_index({}, reward_facts, [])
+    if (
+        len(reward_instances) != 1
+        or reward_instances[0].get("pass_rate") != 0.6667
+        or reward_instances[0].get("pass_count") != 2
+        or reward_instances[0].get("error_count") != 2
+    ):
+        raise AssertionError(f"instance pass rate did not follow mean reward: {reward_instances}")
+
+    source_summary = dashboard.build_traj_source_summary(
+        [{**quality_facts[0], "job": "quality-dataset", "dataset": "quality-dataset"}],
+        [{"job": "quality-dataset", "tool_call_errors": {}, "token_lens": {"mean": 12345}}],
+        [{"job": "quality-dataset", "primary_mean": 0.375, "primary_reward_1_count": 1}],
+    )
+    if (
+        len(source_summary) != 1
+        or source_summary[0].get("pass_rate") != 0.375
+        or source_summary[0].get("avg_tokens") != 12345
+    ):
+        raise AssertionError(f"trajectory source pass rate did not follow Harbor mean: {source_summary}")
+
     data_dir = tmp / "site" / "data"
     data_dir.mkdir(parents=True)
     stale = data_dir / "traj_embedded.000.jsonl"
