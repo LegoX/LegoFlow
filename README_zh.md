@@ -147,7 +147,7 @@ setup skill 用于准备依赖并填写 `config.yaml`；check 用于校验配置
 
 #### 运行多个 Block
 
-用户也可以通过运行多个 block 来定制工作流。分步指引见 [Running Cascaded Blocks](https://legoflow-docs.legox.net/docs/running-blocks/cascaded)。
+用户也可以通过运行多个 block 来定制工作流。分步指引见 [Running the Full Pipeline](https://legoflow-docs.legox.net/docs/running-blocks/full-pipeline)。
 
 例如，我们此前一次四个 block 全链路的运行显示：Curator 构建了 4,166 个已验证的 Python 任务，Tracer 成功解决其中 915 个，筛选出 512 条轨迹用于训练，最终微调把 `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上从 **7.6% 提升到 64.4%**。更多细节记录在[博客](https://legox.pages.dev/blog/legoflow/)中。
 

@@ -13,7 +13,7 @@ and commands in order, and you will see how a Curator run is put together.
 
 Before starting, make sure these are available:
 
-- Claude Code with the Curator plugin loaded.
+- Claude Code or Codex with the Curator plugin loaded.
 - Docker, used by Harbor task validation.
 - Python, used to install and run the pinned `repos/legoflow-curator` package.
 - GitHub token(s), used to collect pull requests and read PR metadata.
@@ -89,9 +89,9 @@ bottlenecks on larger runs.
 
 Now run setup:
 
-```text
-/curator:setup
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/curator:setup` | `$curator-setup` |
 
 This prepares `repos/legoflow-curator`, builds the Python environment, installs `legoflow-curator`,
 and checks that the needed environment variables are available. Re-running it is
@@ -101,9 +101,9 @@ fine.
 
 Before anything expensive, run:
 
-```text
-/curator:check
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/curator:check` | `$curator-check` |
 
 This is read-only. It checks config, `repos/legoflow-curator`, GitHub tokens, the LLM
 endpoint, and Docker. For exact pass conditions, see
@@ -127,9 +127,9 @@ Fix required failures before continuing.
 
 Collect candidate PRs:
 
-```text
-/curator:collect-prs
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/curator:collect-prs` | `$curator-collect-prs` |
 
 This reads `runtime_info.input.pr_collection` and writes PR pools under:
 
@@ -150,9 +150,9 @@ to finish before creating tasks.
 
 Turn collected PRs into verified SWE tasks:
 
-```text
-/curator:create-tasks
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/curator:create-tasks` | `$curator-create-tasks` |
 
 Curator validates tasks before exposing them downstream. Trust a task only after
 it appears in:
@@ -205,9 +205,9 @@ For the artifact layout and handoff contract, see [Output Format](/docs/blocks/c
 
 After tasks are generated, open the dataset dashboard:
 
-```text
-/curator:dashboard
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/curator:dashboard` | `$curator-dashboard` |
 
 The dashboard summarizes difficulty scores and semantic tags. It is not a live
 progress monitor; during generation, watch logs, `verifiable_tasks.txt`, and

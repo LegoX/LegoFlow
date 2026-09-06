@@ -13,7 +13,7 @@ and commands in order, and you will see how a Tracer run is put together.
 
 Before starting, make sure these are available:
 
-- Claude Code with the Tracer plugin loaded.
+- Claude Code or Codex with the Tracer plugin loaded.
 - Docker, used by Harbor to run task containers.
 - `uv` and Python, used to build the Harbor, LiteLLM, and conversion envs.
 - An OpenAI-compatible LLM endpoint and API key.
@@ -109,9 +109,9 @@ leave it off and use raw trajectories only.
 
 Now run setup:
 
-```text
-/tracer:setup
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/tracer:setup` | `$tracer-setup` |
 
 This prepares the pinned `repos/harbor` and `repos/swe_data_process` checkouts,
 builds the Harbor/LiteLLM/conversion environments, and checks the local runtime
@@ -121,9 +121,9 @@ paths. Re-running it is fine.
 
 Before launching containers or spending model tokens, run:
 
-```text
-/tracer:check
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/tracer:check` | `$tracer-check` |
 
 This is read-only. It checks config, repo pins, environments, task source,
 model endpoint, proxy port, Docker, agent runtime, and conversion settings. For
@@ -137,9 +137,9 @@ Fix required failures before continuing.
 
 Launch the rollout job:
 
-```text
-/tracer:run
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/tracer:run` | `$tracer-run` |
 
 Tracer starts the per-job LiteLLM proxy, builds the Harbor command from
 `config.yaml`, stages tasks under `artifacts/tasks/<dataset>/`, excludes
@@ -216,9 +216,9 @@ downstream config.
 
 After a job starts or finishes, open the dashboard:
 
-```text
-/tracer:dashboard
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/tracer:dashboard` | `$tracer-dashboard` |
 
 The dashboard helps inspect job progress, per-task trajectories, rewards,
 failure patterns, and converted SFT data. It reads `artifacts/` directly; if a

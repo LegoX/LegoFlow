@@ -1,0 +1,138 @@
+---
+title: Running the Full Pipeline
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+The full pipeline workflow uses the root plugin to run Curator, Tracer, Trainer,
+and Evaluator in dependency order. Use it after running the blocks individually at least once,
+when their inputs, outputs, and approval gates are already familiar.
+
+The workflow has four steps: prepare the pipeline, validate it, collect the
+pull requests Curator will use, then ask the root plugin to run it. Block
+configuration remains authoritative, and undeclared handoffs are never inferred
+automatically.
+
+The examples below show both interfaces. Use the slash command in Claude Code
+or the namespaced `$root-*` skill in Codex; both load the same canonical root
+workflow.
+
+## Step 1: Preparation
+
+### Configure the blocks
+
+Fill each block's `config.yaml` before asking the root plugin to run the
+pipeline. The previous page, [Running Block by Block](/docs/running-blocks/block-by-block),
+links to the Configuration Guide for Curator, Tracer, Trainer, and Evaluator;
+use those guides for field-level examples rather than repeating them here.
+
+Treat every handoff as part of the receiving block's configuration. Root checks
+only dependencies declared on both neighboring blocks and never invents a
+missing path. Curator's local task output and Tracer's raw Harbor jobs can use
+declared dependencies; Trainer's usual `local_lf` input and the
+Trainer-to-Evaluator model endpoint must still be set explicitly.
+
+Keep secrets such as LLM API keys and `GITHUB_TOKENS` in environment variables
+or ignored private files. Non-secret decisions such as model names, languages,
+benchmarks, and endpoint locations belong in the relevant block's
+`runtime_info.input`.
+
+### Run setup
+
+| Claude Code | Codex |
+| --- | --- |
+| `/root:setup` | `$root-setup` |
+
+This checks shared tooling and ensures the root `config.yaml` exists. It can
+offer to invoke each child's setup, but recursion is optional and confirmed one
+block at a time. Setup can create environments, synchronize pinned repositories,
+and fill approved inputs; it does not launch workloads.
+
+## Step 2: Validation
+
+| Claude Code | Codex |
+| --- | --- |
+| `/root:check` | `$root-check` |
+
+This is operationally read-only: it validates configs, both ends of declared
+dependencies, repository pins, environments, per-block dry runs, and live model
+endpoints without launching workloads. It cannot infer a dependency that has
+not been declared, so a missing edge is still a design decision to resolve.
+
+Fix every required failure before continuing. Optional Cloudflare credentials
+only affect dashboard publishing and do not block the pipeline.
+
+## Step 3: Collect Curator input
+
+| Claude Code | Codex |
+| --- | --- |
+| `/curator:collect-prs` | `$curator-collect-prs` |
+
+Root orchestration consumes Curator's existing collection under
+`blocks/curator/artifacts/collected_prs/`. Wait for collection to finish before
+starting the root run.
+
+## Step 4: Run
+
+| Claude Code | Codex |
+| --- | --- |
+| `/root:run ${INSTRUCTION}` | `$root-run ${INSTRUCTION}` |
+
+
+The root skill repeats preflight, presents the resolved configuration, and waits
+for explicit approval before expensive work. Natural-language instructions may
+lead the skills to propose concrete config changes, but those inputs remain
+user-owned and every change requires confirmation. We provide an example instruction during our experiment below:
+
+
+<Accordions>
+<Accordion title="INSTRUCTION">
+
+> Using this LegoFlow project, run a Python-only Curator -> Tracer -> Trainer -> Evaluator experiment and make the result as reproducible as the available resources allow. Use `GITHUB_TOKENS` and LLM credentials only from secure environment variables; never print or commit secrets or private endpoint details. The base model and evaluation tasks can be downloaded from Hugging Face.
+>
+> Before planning execution, inspect the root and every relevant block's `config.yaml`, `CLAUDE.md`, documentation, scripts, plugin instructions, dependency declarations, and existing artifacts. Prefer the LegoFlow block plugins as the standard operating interface, but use them as guidance rather than an inflexible requirement. Choose the safest interface that preserves each block's setup, validation, approval, execution, and archiving expectations.
+>
+> - Curator should produce enough verified Python tasks for the downstream data target. Accept only tasks that pass NOP/Oracle validation, publish an ordered verified-task manifest, and preserve collection and verification evidence.
+> - Tracer should use the available teacher-model API to solve the verified tasks and preserve successful raw trajectories. Select concurrency and retry behavior that fit endpoint quota and health, and record any routing or runtime adaptation.
+> - Selection and conversion should normalize trajectories into the training-compatible format, retain successful rewards, deduplicate by task, remove malformed or shallow examples, and freeze exactly **512** deeply-reasoned, high-quality passed trajectories with an ordered manifest and content hash.
+> - Trainer should full-parameter fine-tune `Qwen3.5-35B-A3B-Base` on the selected dataset. Derive the training configuration from the model requirements, available GPU topology, relevant block documentation, and previously successful artifacts. Preserve the resolved config, logs, checkpoints, and training curves, and adjust settings when runtime evidence shows a resource or stability problem.
+> - Evaluator should serve the resulting checkpoint and evaluate all 500 SWE-bench Verified tasks under one consistent agent, serving, and verifier configuration. Resume infrastructure failures without changing the evaluation conditions, and preserve the ordered task list, retry history, per-task verifier reports, and final result.
+>
+> Monitor every stage through its logs, manifests, archives, and dashboards. When a failure or quality regression appears, document the evidence -> hypothesis -> change -> result chain, update the smallest responsible module, rerun only the affected downstream stages, and preserve failed and improved attempts separately. Do not chase a target score by changing evaluation conditions; optimize for a traceable and reviewable improvement.
+
+</Accordion>
+</Accordions>
+
+
+What each stage should produce, and what to hold it to:
+
+| Stage | Target | The condition that matters |
+| --- | --- | --- |
+| Curator | Verified Python tasks | Only tasks that pass NOP and Oracle validation reach the manifest. |
+| Tracer | Solved rollouts | Preserve the raw trajectory and verified reward; adapt concurrency to endpoint health rather than dropping tasks silently. |
+| Selection and conversion | A frozen training set | This is a data-preparation operation, not a registered block. Deduplicate, remove malformed and shallow examples, and freeze an ordered set. |
+| Trainer | One checkpoint | Derive the training configuration from the model and GPU topology; preserve the resolved config, logs, and curves. |
+| Evaluator | One completed benchmark run | Keep one agent, serving, and verifier configuration; resume infrastructure failures without changing evaluation conditions. |
+
+
+For a partial workflow, invoke the relevant child skills individually. Current
+root target resolution treats multiple named blocks as ambiguous rather than
+as a requested slice.
+
+## Monitor and recover
+
+Use each block's dashboard for progress, its logs and outputs for diagnosis, and
+the latest `artifacts/index.yaml` entry for run history. Each leaf run records
+metadata, a config snapshot, its scripts, and repository HEAD SHAs. Generated
+trajectories, checkpoints, and curves remain in the block's artifact directory.
+
+When a failure or quality regression appears, use the same loop throughout:
+read the evidence, form a hypothesis, change the smallest responsible thing,
+rerun only the affected downstream stages, and retain both failed and improved
+attempts.
+
+## Worked example
+
+For a detailed end-to-end example of a full LegoFlow pipeline run, including the
+agent's recovery process and the resulting improvements, read the
+[LegoFlow case study on LegoX](https://legox.pages.dev/blog/legoflow/).

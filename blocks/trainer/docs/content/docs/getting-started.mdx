@@ -13,7 +13,7 @@ and commands in order, and you will see how a Trainer run is put together.
 
 Before starting, make sure these are available:
 
-- Claude Code with the Trainer plugin loaded.
+- Claude Code or Codex with the Trainer plugin loaded.
 - A GPU node for training; the checked-in example targets one 8-GPU node.
 - `uv`, CUDA, and visible GPUs on the training host.
 - Training data: a Tracer LF file, a Hugging Face LF dataset/file, or a raw Tracer Harbor job.
@@ -136,9 +136,9 @@ variables instead of the tracked config file.
 
 Now run setup:
 
-```text
-/trainer:setup
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/trainer:setup` | `$trainer-setup` |
 
 This initializes the pinned repos, builds the `uv` training environment,
 installs LLaMA-Factory and `swe_data_process`, and checks the key imports.
@@ -152,9 +152,9 @@ locally and not version-controlled.
 
 Before using GPUs, run:
 
-```text
-/trainer:check
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/trainer:check` | `$trainer-check` |
 
 This is read-only. It checks config, repo pins, the training environment, source
 data, converter availability, model path, output directory safety, GPU
@@ -167,9 +167,9 @@ Fix required failures before launching training.
 
 Launch the full training pipeline:
 
-```text
-/trainer:run
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/trainer:run` | `$trainer-run` |
 
 Trainer obtains LF data, registers it in LLaMA-Factory's
 `dataset_info.json`, generates a training YAML, runs LLaMA-Factory, and updates
@@ -226,9 +226,9 @@ will show how to serve the checkpoint and point its config at the served model.
 
 After a run starts, open the dashboard:
 
-```text
-/trainer:dashboard
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/trainer:dashboard` | `$trainer-dashboard` |
 
 The dashboard reads training logs and model artifacts directly. Use it to watch
 loss curves, compare runs, and inspect final metrics. During long training,

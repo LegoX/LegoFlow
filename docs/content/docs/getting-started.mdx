@@ -8,7 +8,7 @@ title: Getting Started
 Before starting, make sure you have the pieces that LegoFlow cannot create
 for you:
 
-- Claude Code or Codex CLI, which operate LegoFlow through plugin skills. Claude Code is recommended.
+- Claude Code or Codex, which operate LegoFlow through plugin skills.
 - LLM endpoints for Curator, Tracer, and Evaluator jobs.
 - GitHub token(s), used by Curator when collecting pull requests.
 - A GPU server if you plan to run training or evaluate self-hosted models.
@@ -152,5 +152,4 @@ credentials are only needed for authenticated image pulls, especially in Tracer
 when pulling SWE task images and in Evaluator when pulling test-case images.
 Each block explains its own `config.yaml` in its Configuration Guide.
 
-Work through one independent run per block before launching the cascaded root
-pipeline. Continue with [Running Block by Block](/docs/running-blocks/block-by-block).
+Work through one independent run per block before launching the full pipeline from the root. Continue with [Running Block by Block](/docs/running-blocks/block-by-block).

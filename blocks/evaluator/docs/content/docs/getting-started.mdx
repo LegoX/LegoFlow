@@ -16,7 +16,7 @@ Curator tasks; it resolves benchmark tasks from Harbor's registry.
 
 Before starting, make sure these are available:
 
-- Claude Code with the Evaluator plugin loaded.
+- Claude Code or Codex with the Evaluator plugin loaded.
 - Docker, used by Harbor to run benchmark task containers.
 - `uv`, Python, and Python 3.13 for the Harbor and LiteLLM environments.
 - An OpenAI- or Anthropic-compatible model endpoint.
@@ -107,9 +107,9 @@ normal runs:
 
 Now run setup:
 
-```text
-/evaluator:setup
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/evaluator:setup` | `$evaluator-setup` |
 
 This prepares the pinned Harbor checkout, builds the Harbor and LiteLLM
 environments, and checks the local runtime paths. Re-running it is fine.
@@ -118,9 +118,9 @@ environments, and checks the local runtime paths. Re-running it is fine.
 
 Before launching the benchmark, run:
 
-```text
-/evaluator:check
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/evaluator:check` | `$evaluator-check` |
 
 This is read-only. It checks config, Harbor repo state, environments, benchmark
 registry, LLM endpoint, proxy port, Docker, and agent runtime. For exact pass
@@ -134,9 +134,9 @@ also make sure the vLLM endpoint is already serving before the check.
 
 Launch the benchmark:
 
-```text
-/evaluator:run
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/evaluator:run` | `$evaluator-run` |
 
 Evaluator starts the per-job LiteLLM proxy, builds the Harbor command from
 `config.yaml`, runs the selected benchmark, captures trajectories and verifier
@@ -181,9 +181,9 @@ after evaluation.
 
 After an Evaluator run starts or finishes, open the dashboard:
 
-```text
-/evaluator:dashboard
-```
+| Claude Code | Codex |
+| --- | --- |
+| `/evaluator:dashboard` | `$evaluator-dashboard` |
 
 The dashboard helps browse jobs, benchmark scores, trajectories, verifier
 reports, and post-eval analysis. It reads `artifacts/jobs/` directly, so keep
