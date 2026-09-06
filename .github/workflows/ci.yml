@@ -68,21 +68,37 @@ jobs:
       trainer: ${{ steps.filter.outputs.trainer }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      # v4.0.3+ is required for 'some-with-excludes' below.
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
+          # A file matches when it hits at least one positive pattern and none
+          # of the negated ones. Under the default 'some' quantifier the '!'
+          # patterns would match every file *outside* the block and make each
+          # filter true for any change at all.
+          predicate-quantifier: 'some-with-excludes'
           filters: |
             curator:
               - 'blocks/curator/**'
+              # Block documentation is covered by the always-on root sanity
+              # job and does not need a scarce Docker-capable runner.
+              - '!blocks/curator/**/*.md'
+              - '!blocks/curator/**/*.mdx'
               - '.github/workflows/ci.yml'
             tracer:
               - 'blocks/tracer/**'
+              - '!blocks/tracer/**/*.md'
+              - '!blocks/tracer/**/*.mdx'
               - '.github/workflows/ci.yml'
             evaluator:
               - 'blocks/evaluator/**'
+              - '!blocks/evaluator/**/*.md'
+              - '!blocks/evaluator/**/*.mdx'
               - '.github/workflows/ci.yml'
             trainer:
               - 'blocks/trainer/**'
+              - '!blocks/trainer/**/*.md'
+              - '!blocks/trainer/**/*.mdx'
               - '.github/workflows/ci.yml'
 
   # --- curator: cheap test cases (self-hosted, fixed-paths CI runner) ---------

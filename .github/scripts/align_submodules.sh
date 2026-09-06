@@ -30,6 +30,45 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   git_credentials=(git -c 'credential.helper=!f() { echo username=x-access-token; echo password=$GITHUB_TOKEN; }; f')
 fi
 
+# Retry a network-bound git call. A single attempt is not enough on the CI
+# host: its resolver drops queries intermittently, so the call dies either at
+# the timeout (rc 124) or inside git with "Could not resolve host" (rc 128).
+# Both are transient — curator and trainer pass because their pins are already
+# aligned and never reach the network, while tracer and evaluator fetch every
+# run and so lose the coin flip. Retrying is what makes the two paths behave
+# the same.
+#
+# The two failure modes cost very differently: rc 128 comes back in seconds,
+# rc 124 burns the whole timeout. Spending 180s on every attempt therefore buys
+# only a handful of tries per job. Since a --depth 1 fetch completes in seconds
+# once the name resolves, most attempts use a short timeout and only the last
+# one gets the long one — so a genuinely slow fetch can still finish, while a
+# wedged resolver costs a minute instead of three.
+#
+# Worst case: (NET_ATTEMPTS-1) * 60s + 180s + ~2min of backoff, against a
+# 30-minute job budget that normally completes in 6-9 minutes.
+NET_ATTEMPTS="${LEGOFLOW_GIT_NET_ATTEMPTS:-10}"
+NET_SHORT_TIMEOUT="${LEGOFLOW_GIT_SHORT_TIMEOUT:-60}"
+NET_LONG_TIMEOUT="${LEGOFLOW_GIT_LONG_TIMEOUT:-180}"
+retry_git_net() {
+  local desc="$1"; shift
+  local attempt=1 rc=0 delay=5 limit
+  while :; do
+    rc=0
+    if (( attempt >= NET_ATTEMPTS )); then limit="$NET_LONG_TIMEOUT"; else limit="$NET_SHORT_TIMEOUT"; fi
+    GIT_TERMINAL_PROMPT=0 timeout --signal=TERM --kill-after=10s "${limit}s" "$@" || rc=$?
+    [[ "$rc" -eq 0 ]] && return 0
+    if (( attempt >= NET_ATTEMPTS )); then
+      echo "ERROR: $desc failed after $attempt attempts (last rc=$rc)" >&2
+      return "$rc"
+    fi
+    echo "WARN: $desc failed (rc=$rc, timeout ${limit}s); attempt $attempt/$NET_ATTEMPTS, retrying in ${delay}s" >&2
+    sleep "$delay"
+    (( delay < 15 )) && delay=$(( delay * 2 ))
+    attempt=$(( attempt + 1 ))
+  done
+}
+
 align_one() {
   local block="$1" repo="$2" pin_source canonical_block use_canonical=0
   pin_source="${3:-blocks/$block/repos/$repo}"
@@ -73,7 +112,7 @@ align_one() {
   target_mode="$(git -C "$ROOT" ls-tree HEAD -- "$relative" | awk '{print $1}')"
   if [[ "$target_mode" == "160000" ]]; then
     remove_local_path "$local_path"
-    (cd "$ROOT" && GIT_TERMINAL_PROMPT=0 timeout --signal=TERM --kill-after=10s 180s \
+    (cd "$ROOT" && retry_git_net "submodule update $relative" \
       "${git_credentials[@]}" submodule update --init --recursive --force -- "$relative")
   else
     checkout_path="$local_path"
@@ -85,7 +124,7 @@ align_one() {
       echo "ERROR: managed checkout missing for $relative: $checkout_path" >&2
       return 1
     fi
-    GIT_TERMINAL_PROMPT=0 timeout --signal=TERM --kill-after=10s 180s \
+    retry_git_net "fetch $relative" \
       "${git_credentials[@]}" -C "$checkout_path" fetch --depth 1 origin "$expected"
     git -C "$checkout_path" checkout --detach "$expected"
     if [[ -n "$SHARED_RUNTIME" ]]; then

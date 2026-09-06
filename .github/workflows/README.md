@@ -9,8 +9,10 @@ shape of CI before diving into `ci.yml` (which is mechanical detail).
 - **One workflow**: `.github/workflows/ci.yml`. It runs two tiers of tests
   for the **root block** and each **block** (`curator`, `tracer`, `evaluator`,
   `trainer`).
-- **Cases** — fast unit-shaped tests under each block's `tests/`. Run on
-  *every* push and PR. Goal: catch regressions in minutes, not hours.
+- **Cases** — fast unit-shaped tests under each block's `tests/`. Run when
+  that block changes in anything other than `.md`/`.mdx`; documentation-only
+  changes still get the always-on root sanity job without waiting for a
+  self-hosted runner. Goal: catch regressions in minutes, not hours.
 - **Smoke** — end-to-end "actually launch the real pipeline against real
   LLMs / Docker / GPUs for a small fixture". Gated: only runs on pushes to
   `dev`/`main` or when you tick **Also run smoke tests** in the manual
@@ -75,9 +77,19 @@ Always runs.
 
 ### Detect changed blocks
 
-`dorny/paths-filter` against `blocks/<b>/**` (plus the workflow file
-itself). Emits per-block boolean outputs (`curator`, `tracer`, `evaluator`,
-`trainer`). Each downstream cases/smoke job has
+`dorny/paths-filter` against `blocks/<b>/**` (plus the workflow file itself),
+with `.md`/`.mdx` under the block subtracted via `!` patterns. Documentation-only
+block changes are handled by the always-on root sanity job and do not reserve a
+self-hosted runner.
+
+The `!` patterns only subtract because the step sets
+`predicate-quantifier: 'some-with-excludes'` — under the default `some`
+quantifier a negated pattern matches every file *outside* the block, which
+would make each filter true for any change at all. That quantifier needs
+`dorny/paths-filter@v4.0.3` or newer, hence the `@v4` pin.
+
+The filter emits per-block boolean outputs (`curator`, `tracer`,
+`evaluator`, `trainer`). Each downstream cases/smoke job has
 `if: needs.detect-changes.outputs.<b> == 'true'`, so a curator-only PR
 doesn't burn cycles on the other three blocks.
 
