@@ -29,17 +29,17 @@
 
 LegoFlow is an easy and interactive framework for code data engineering, part of the [LegoX](https://legox.pages.dev/) family. The highlights include:
 
-- **Agent-native Workflows**: LegoFlow turns the complicated, error-prone code data collection procedures (repo and PR collection, task verification, trajectory rollout, and the training-evaluation loop) into well-prepared plugin skills, so users can drive real data production through coding-agent interaction.
-- **Wide Coverage**: LegoFlow covers over 8+ programming languages and 20+ task tags, and trajectory rollouts across multiple coding scaffolds including Claude Code, OpenCode, OpenHands and Terminus.
-- **High Flexibility**: LegoFlow is designed to ground on **block**, the building unit that allows your coding agent to manage repositories, scripts, configurations and the runtime output of a particular stage.
-- **Live Dashboards**: LegoFlow monitors the data production process through a series of live dashboards. These dashboards are built around carefully designed rubrics for tracking task difficulty, trajectory quality, and model performance.
-- **Self-evolving**: An agent has run the whole loop on its own, diagnosed why its first fine-tune plateaued, and lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. See [the end-to-end run](https://legox.pages.dev/blog/legoflow/).
+- **Agent-native, end-to-end workflows**: LegoFlow packages repository and PR collection, task verification, trajectory rollout, training, and evaluation as plugin skills that users operate through a coding agent.
+- **Reproducible block contracts**: Each stage owns its configuration, pinned repositories, scripts, artifacts, dashboard, and handoffs, making runs easier to audit, resume, and extend.
+- **Broad coverage**: LegoFlow supports **8+ programming languages**, **20+ task tags**, and four coding-agent scaffolds: Claude Code, OpenCode, OpenHands, and Terminus.
+- **Rubric-guided visibility**: Live dashboards apply consistent rubrics to task difficulty, trajectory quality, training progress, and model performance.
+- **A proven improvement loop**: In one autonomous run, Curator produced **4,166 verified tasks**, Tracer solved **915**, and **512 trajectories** were selected for training. After diagnosing a plateau and revising data selection, the agent lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. See [the end-to-end run](https://legox.pages.dev/blog/legoflow/).
 
 
 
 ## News
 
-🔥 **2026-08-12**: We release LegoFlow v0.1, the initial version of a fully agentic pipeline for software-engineering data.
+🔥 **2026-09-10**: We released LegoFlow v0.1, the initial version of a fully agentic pipeline for software-engineering data.
 
 ## Architecture
 
@@ -64,9 +64,13 @@ LegoFlow follows the tree structure of **blocks**. The root orchestrates four ch
 We are actively releasing the latest datasets produced by LegoFlow:
 
 
-| ID                  | Teacher Model | Scaffold      | Data Samples | Training Result                                           | HF Link                                                                                                 |
-| ------------------- | ------------- | ------------- | ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK (v1.14) | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/Lego-X/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
+> ### `swe-sft-512-glm52`
+>
+> **512 samples** · Teacher: **GLM-5.2** · Scaffold: **OpenHands SDK v1.14**
+>
+> Fine-tuning `Qwen3.5-35B-A3B-Base` with this dataset improved its SWE-bench Verified score from **7.6% to 64.4%**.
+>
+> <a href="https://huggingface.co/datasets/Lego-X/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="16" align="absmiddle" alt=""> <b>Download on Hugging Face</b></a>
 
 
 ## Quick Start

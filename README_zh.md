@@ -29,17 +29,17 @@
 
 LegoFlow 是一个简单、可交互的代码数据工程框架，隶属于 [LegoX](https://legox.pages.dev/) 品牌。主要特点包括：
 
-- **智能体原生工作流**：LegoFlow 把繁琐易错的代码数据生产流程（仓库与 PR 采集、任务验证、轨迹生成、训练与评测闭环）封装成面向编程智能体的插件技能，用户可以通过与智能体交互来驱动真实的数据生产。
-- **广泛覆盖**：LegoFlow 覆盖 8+ 种编程语言、20+ 类任务标签，并支持在 Claude Code、OpenCode、OpenHands、Terminus 等多种编程 scaffold 上做轨迹 rollout。
-- **高度灵活**：LegoFlow 以 **block** 为基础单元，让你的编程智能体统一管理某个阶段的仓库、脚本、配置与运行产物。
-- **实时看板**：LegoFlow 通过一系列实时看板监控数据生产过程。这些看板围绕精心设计的评分标准构建，用于追踪任务难度、轨迹质量与模型表现。
-- **自我演进**：一个智能体独立跑完了整条链路，诊断出第一次微调为何停滞，并把 `Qwen3.5-35B-A3B-Base` 在 **SWE-bench Verified 上从 7.6% 提升到 64.4%**。详见[这次端到端运行](https://legox.pages.dev/blog/legoflow/)。
+- **智能体原生的端到端工作流**：LegoFlow 将仓库与 PR 采集、任务验证、轨迹生成、训练和评测封装为插件技能，用户可以通过编程智能体操作整个流程。
+- **可复现的 block 契约**：每个阶段独立管理配置、固定版本的仓库、脚本、产物、看板和交接关系，让运行过程更容易审计、恢复和扩展。
+- **广泛覆盖**：LegoFlow 支持 **8+ 种编程语言**、**20+ 类任务标签**，以及 Claude Code、OpenCode、OpenHands 和 Terminus 四种编程智能体 scaffold。
+- **基于 rubric 的过程观测**：实时看板使用一致的 rubric 追踪任务难度、轨迹质量、训练进度和模型表现。
+- **经过验证的改进闭环**：在一次由智能体自主完成的运行中，Curator 产出 **4,166 个已验证任务**，Tracer 成功解决 **915 个**，并筛选出 **512 条轨迹**用于训练。智能体诊断训练停滞并调整数据筛选后，将 `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上的成绩从 **7.6% 提升到 64.4%**。详见[这次端到端运行](https://legox.pages.dev/blog/legoflow/)。
 
 
 
 ## 最新动态
 
-🔥 **2026-08-12**：我们发布 LegoFlow v0.1，首个面向软件工程数据的全智能体化流水线版本。
+🔥 **2026-09-10**：我们发布 LegoFlow v0.1，首个面向软件工程数据的全智能体化流水线版本。
 
 ## 系统架构
 
@@ -64,9 +64,13 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排四个子 block：
 我们持续发布由 LegoFlow 生产的最新数据集：
 
 
-| ID | Teacher Model | Scaffold | 数据量 | 训练结果 | HF 链接 |
-| -- | ------------- | -------- | ------ | -------- | ------- |
-| `swe-sft-512-glm52` | GLM-5.2 | OpenHands SDK (v1.14) | 512 | `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上 7.6% → 64.4% | <a href="https://huggingface.co/datasets/Lego-X/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
+> ### `swe-sft-512-glm52`
+>
+> **512 条样本** · Teacher：**GLM-5.2** · Scaffold：**OpenHands SDK v1.14**
+>
+> 使用该数据集微调后，`Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上的成绩从 **7.6% 提升到 64.4%**。
+>
+> <a href="https://huggingface.co/datasets/Lego-X/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="16" align="absmiddle" alt=""> <b>在 Hugging Face 下载</b></a>
 
 
 ## 快速开始
