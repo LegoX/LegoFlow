@@ -27,19 +27,18 @@
 
 ## About
 
-LegoFlow is an easy and interactive framework for code data engineering, part of the [LegoX](https://legox.pages.dev/) family. The highlights include:
+Coding is a core capability of modern LLMs, yet producing high-quality coding data remains surprisingly complex. The pipeline spans multiple platforms, sandboxes, and compute resources, with substantial human effort required at every step. LegoFlow is an easy-to-use and interactive framework that lets users operate this pipeline end to end through a coding agent. It is part of the [LegoX](https://legox.pages.dev/) family.
 
-- **Agent-native Workflows**: LegoFlow turns the complicated, error-prone code data collection procedures (repo and PR collection, task verification, trajectory rollout, and the training-evaluation loop) into well-prepared plugin skills, so users can drive real data production through coding-agent interaction.
-- **Wide Coverage**: LegoFlow covers over 8+ programming languages and 20+ task tags, and trajectory rollouts across multiple coding scaffolds including Claude Code, OpenCode, OpenHands and Terminus.
-- **High Flexibility**: LegoFlow is designed to ground on **block**, the building unit that allows your coding agent to manage repositories, scripts, configurations and the runtime output of a particular stage.
-- **Live Dashboards**: LegoFlow monitors the data production process through a series of live dashboards. These dashboards are built around carefully designed rubrics for tracking task difficulty, trajectory quality, and model performance.
-- **Self-evolving**: An agent has run the whole loop on its own, diagnosed why its first fine-tune plateaued, and lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. See [the end-to-end run](https://legox.pages.dev/blog/legoflow/).
+- **Agent-native workflows**: LegoFlow exposes repository and PR collection, task verification, trajectory rollout, training, evaluation, and live dashboards as plugin skills that coding agents can trigger.
+- **Broad coverage**: LegoFlow supports **8+ programming languages**, **20+ task tags**, and trajectory rollouts across Claude Code, OpenCode, and OpenHands.
+- **Open-source dataset**: We release [**LegoFlow-SWE**](https://huggingface.co/datasets/Lego-X/LegoFlow-SWE), built from more than **12M PRs** and containing **5,000 verified tasks** with **9,767 rollouts**, including **2,780 successful trajectories**. With only 1K training samples, `Qwen3.5-35B-A3B` reaches **70.2% on SWE-bench Verified**, **48.8% on SWE-bench Pro**, and **57.0% on SWE-bench Multilingual**.
+- **End-to-end iteration**: LegoFlow allows an agent to run the full loop without human intervention, from PR collection and task verification to trajectory rollout, model training, and evaluation. In one run, this process improved `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. See [the end-to-end run](https://legox.pages.dev/blog/legoflow/).
 
 
 
 ## News
 
-🔥 **2026-08-12**: We release LegoFlow v0.1, the initial version of a fully agentic pipeline for software-engineering data.
+🔥 **2026-09-10**: We released LegoFlow v0.1, the initial version of a fully agentic pipeline for software-engineering data.
 
 ## Architecture
 
@@ -61,12 +60,9 @@ LegoFlow follows the tree structure of **blocks**. The root orchestrates four ch
 
 ## Released Datasets
 
-We are actively releasing the latest datasets produced by LegoFlow:
+We will keep this section updated as LegoFlow releases new tasks and trajectories:
 
-
-| ID                  | Teacher Model | Scaffold      | Data Samples | Training Result                                           | HF Link                                                                                                 |
-| ------------------- | ------------- | ------------- | ------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `swe-sft-512-glm52` | GLM-5.2       | OpenHands SDK (v1.14) | 512          | `Qwen3.5-35B-A3B-Base` 7.6% → 64.4% on SWE-bench Verified | <a href="https://huggingface.co/datasets/Lego-X/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
+- <a href="https://huggingface.co/datasets/Lego-X/LegoFlow-SWE"><img src="docs/public/figures/icon-huggingface.svg" height="16" align="absmiddle" alt=""> <b>LegoFlow-SWE</b></a> — Built from more than **12M candidate PRs**, with **5,000 verified tasks** and **9,767 rollouts**, including **2,780 successful trajectories**. With 1K training samples, `Qwen3.5-35B-A3B` reaches **70.2% on SWE-bench Verified**, **48.8% on SWE-bench Pro**, and **57.0% on SWE-bench Multilingual**.
 
 
 ## Quick Start
@@ -175,6 +171,14 @@ LegoFlow builds on [Harbor](https://www.harborframework.com/) for isolated task 
 [vLLM](https://github.com/vllm-project/vllm) for serving local checkpoints,
 [Claude Code](https://claude.com/claude-code) and the Claude Agent SDK for agent operation,
 and [Fumadocs](https://fumadocs.dev/) for the documentation site.
+
+## Roadmap
+
+- [ ] **TerminalBench**: Migrate and upgrade [Terminal-Lego](https://www.legox.net/blog/terminal-lego/) workflows in LegoFlow for [Terminal-Bench 3.0](https://www.tbench.ai/news/terminal-bench-3-0) and [Terminal-Bench 4.0](https://www.tbench.ai/news/terminal-bench-4-0).
+- [ ] **ProgramBench and NL2Repo**: Mine more complex, long-horizon software-engineering tasks that begin with either an executable program or a natural-language requirement.
+- [ ] **Recursive self-improvement**: Use block execution feedback to support more general, long-running self-improving systems.
+
+These extensions will follow the standard [Harbor task format](https://www.harborframework.com/docs/tasks) and LegoFlow's block structure so their artifacts remain easy to share across organizations and developer communities.
 
 ## License
 

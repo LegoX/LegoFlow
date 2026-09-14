@@ -7,21 +7,17 @@ title: Introduction
 
 ## What is LegoFlow?
 
-LegoFlow is an easy and interactive framework for code data engineering. It helps users curate coding tasks, roll out agent trajectories, convert data for training, evaluate checkpoints, and inspect the whole process through live dashboards.
-
-The project starts from software-engineering data, where the loop is especially hard to run cleanly: useful GitHub changes have to become verifiable tasks, agents need to run in isolated environments, successful trajectories need to be filtered and converted, and checkpoints have to be trained and evaluated under traceable conditions. LegoFlow turns that loop into a guided workflow operated through coding-agent plugin skills.
+Coding is a core capability of modern LLMs, yet producing high-quality coding data remains surprisingly complex. The pipeline spans multiple platforms, sandboxes, and compute resources, with substantial human effort required at every step. LegoFlow is an easy-to-use and interactive framework that lets users operate this pipeline end to end through a coding agent. It is part of the [LegoX](https://legox.pages.dev/) family.
 
 ## Highlights
 
-- **Agent-native Workflows**: LegoFlow turns repo and PR collection, task verification, trajectory rollout, and the training-evaluation loop into prepared plugin skills. Users can drive real data production through a coding agent instead of stitching scripts together by hand.
+- **Agent-native workflows**: LegoFlow exposes repository and PR collection, task verification, trajectory rollout, training, evaluation, and live dashboards as plugin skills that coding agents can trigger.
 
-- **Wide coverage**: LegoFlow covers **8+** programming languages and **20+** task tags, with trajectory rollouts across Claude Code, OpenCode, OpenHands, and Terminus scaffolds.
+- **Broad coverage**: LegoFlow supports **8+ programming languages**, **20+ task tags**, and trajectory rollouts across Claude Code, OpenCode, and OpenHands.
 
-- **Block-based extensibility**: LegoFlow is built around **blocks**, the runnable units that manage repositories, scripts, configuration, artifacts, dashboards, and handoffs for one stage of the workflow.
+- **Open-source dataset**: We release [**LegoFlow-SWE**](https://huggingface.co/datasets/Lego-X/LegoFlow-SWE), built from more than **12M PRs** and containing **5,000 verified tasks** with **9,767 rollouts**, including **2,780 successful trajectories**. With only 1K training samples, `Qwen3.5-35B-A3B` reaches **70.2% on SWE-bench Verified**, **48.8% on SWE-bench Pro**, and **57.0% on SWE-bench Multilingual**.
 
-- **Live analytics dashboards**: Each major stage ships with a dashboard. The dashboards use carefully designed rubrics to track task difficulty, trajectory quality, training progress, and model performance.
-
-- **Self-evolving loop**: An agent has run the full loop, diagnosed why a first fine-tune plateaued, changed the selection rule, and lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. See the [end-to-end run](https://legox.pages.dev/blog/legoflow/).
+- **End-to-end iteration**: LegoFlow allows an agent to run the full loop without human intervention, from PR collection and task verification to trajectory rollout, model training, and evaluation. In one run, this process improved `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4% on SWE-bench Verified**. See the [end-to-end run](https://legox.pages.dev/blog/legoflow/).
 
 ## System Design
 

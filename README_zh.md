@@ -27,19 +27,18 @@
 
 ## 关于
 
-LegoFlow 是一个简单、可交互的代码数据工程框架，隶属于 [LegoX](https://legox.pages.dev/) 品牌。主要特点包括：
+编程是现代大语言模型的核心能力，但生产高质量的编程数据仍然十分复杂。整条流水线横跨多个平台、沙箱和计算资源，每一步都需要大量人工投入。LegoFlow 是一个简单易用、可交互的代码数据工程框架，让用户能够通过编程智能体运行完整流程。它隶属于 [LegoX](https://legox.pages.dev/) 品牌。
 
-- **智能体原生工作流**：LegoFlow 把繁琐易错的代码数据生产流程（仓库与 PR 采集、任务验证、轨迹生成、训练与评测闭环）封装成面向编程智能体的插件技能，用户可以通过与智能体交互来驱动真实的数据生产。
-- **广泛覆盖**：LegoFlow 覆盖 8+ 种编程语言、20+ 类任务标签，并支持在 Claude Code、OpenCode、OpenHands、Terminus 等多种编程 scaffold 上做轨迹 rollout。
-- **高度灵活**：LegoFlow 以 **block** 为基础单元，让你的编程智能体统一管理某个阶段的仓库、脚本、配置与运行产物。
-- **实时看板**：LegoFlow 通过一系列实时看板监控数据生产过程。这些看板围绕精心设计的评分标准构建，用于追踪任务难度、轨迹质量与模型表现。
-- **自我演进**：一个智能体独立跑完了整条链路，诊断出第一次微调为何停滞，并把 `Qwen3.5-35B-A3B-Base` 在 **SWE-bench Verified 上从 7.6% 提升到 64.4%**。详见[这次端到端运行](https://legox.pages.dev/blog/legoflow/)。
+- **智能体原生工作流**：LegoFlow 将仓库与 PR 采集、任务验证、轨迹生成、训练、评测和实时看板封装为编程智能体可以直接调用的插件技能。
+- **广泛覆盖**：LegoFlow 支持 **8+ 种编程语言**、**20+ 类任务标签**，并支持通过 Claude Code、OpenCode 和 OpenHands 生成轨迹。
+- **开源数据集**：我们发布 [**LegoFlow-SWE**](https://huggingface.co/datasets/Lego-X/LegoFlow-SWE)。该数据集从超过 **1200 万个 PR** 中构建，包含 **5,000 个已验证任务**和 **9,767 条 rollout**，其中有 **2,780 条成功轨迹**。仅使用 1K 条训练样本，`Qwen3.5-35B-A3B` 即可在 SWE-bench Verified、Pro 和 Multilingual 上分别达到 **70.2%**、**48.8%** 和 **57.0%**。
+- **端到端迭代**：LegoFlow 允许智能体在没有人工介入的情况下运行完整闭环，从 PR 采集、任务验证到轨迹生成、模型训练和评测。在一次运行中，该流程将 `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上的成绩从 **7.6% 提升到 64.4%**。详见[这次端到端运行](https://legox.pages.dev/blog/legoflow/)。
 
 
 
 ## 最新动态
 
-🔥 **2026-08-12**：我们发布 LegoFlow v0.1，首个面向软件工程数据的全智能体化流水线版本。
+🔥 **2026-09-10**：我们发布 LegoFlow v0.1，首个面向软件工程数据的全智能体化流水线版本。
 
 ## 系统架构
 
@@ -61,12 +60,9 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排四个子 block：
 
 ## 已发布数据集
 
-我们持续发布由 LegoFlow 生产的最新数据集：
+随着 LegoFlow 发布新的任务和轨迹，我们会持续更新这里的数据集：
 
-
-| ID | Teacher Model | Scaffold | 数据量 | 训练结果 | HF 链接 |
-| -- | ------------- | -------- | ------ | -------- | ------- |
-| `swe-sft-512-glm52` | GLM-5.2 | OpenHands SDK (v1.14) | 512 | `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上 7.6% → 64.4% | <a href="https://huggingface.co/datasets/Lego-X/samples_for_llama_factory_sft"><img src="docs/public/figures/icon-huggingface.svg" height="14" alt=""> samples_for_llama_factory_sft</a> |
+- <a href="https://huggingface.co/datasets/Lego-X/LegoFlow-SWE"><img src="docs/public/figures/icon-huggingface.svg" height="16" align="absmiddle" alt=""> <b>LegoFlow-SWE</b></a> —— 从超过 **1200 万个候选 PR** 中构建，包含 **5,000 个已验证任务**和 **9,767 条 rollout**，其中有 **2,780 条成功轨迹**。使用 1K 条训练样本，`Qwen3.5-35B-A3B` 在 SWE-bench Verified、Pro 和 Multilingual 上分别达到 **70.2%**、**48.8%** 和 **57.0%**。
 
 
 ## 快速开始
@@ -175,6 +171,14 @@ LegoFlow 构建在以下项目之上：[Harbor](https://www.harborframework.com/
 [vLLM](https://github.com/vllm-project/vllm) 用于本地 checkpoint 推理服务，
 [Claude Code](https://claude.com/claude-code) 与 Claude Agent SDK 负责智能体操作，
 [Fumadocs](https://fumadocs.dev/) 支撑文档站点。
+
+## Roadmap
+
+- [ ] **TerminalBench**：将 [Terminal-Lego](https://www.legox.net/blog/terminal-lego/) 的工作流迁移并升级到 LegoFlow，以适配 [Terminal-Bench 3.0](https://www.tbench.ai/news/terminal-bench-3-0) 和 [Terminal-Bench 4.0](https://www.tbench.ai/news/terminal-bench-4-0)。
+- [ ] **ProgramBench 与 NL2Repo**：挖掘更加复杂的长程软件工程任务，这些任务从一个可执行程序或自然语言需求开始。
+- [ ] **递归自我改进**：利用 block 的执行反馈，支持更加通用、可长期运行的自我改进系统。
+
+这些扩展都会采用标准的 [Harbor task 格式](https://www.harborframework.com/docs/tasks)和 LegoFlow block 结构，使产物更容易在不同组织和开发者社区之间共享。
 
 ## 许可证
 
