@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 PROJECT_NAME="${PROJECT_NAME:-legoflow-docs}"
-BRANCH_NAME="${BRANCH_NAME:-main}"
+BRANCH_NAME="${BRANCH_NAME:-master}"
 OUT_DIR="${OUT_DIR:-out}"
 # Node 22 supports current wrangler.
 WRANGLER_PKG="${WRANGLER_PKG:-wrangler@latest}"
