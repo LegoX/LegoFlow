@@ -1,0 +1,63 @@
+---
+title: Dashboard
+---
+
+Trainer's dashboard is a read-only monitor for LLaMA-Factory training runs. Run
+`/trainer:dashboard` to check training health, compare runs, and inspect final
+metrics. It never launches, pauses, resumes or edits a job; use `/trainer:run`
+for training.
+
+A demo dashboard is available [here](/dashboard_demo/trainer/).
+
+## Deployment mode
+
+Both modes read the same files, so the numbers never depend on which one you pick.
+
+- **Local** (default): run `/trainer:dashboard`. You get a status summary in the
+  terminal, and the web UI on request. Everything stays on the training host,
+  which matters because logs and config snapshots carry model paths, dataset
+  names and host paths.
+- **Cloud**: run `/trainer:dashboard publish to Cloudflare`. Set
+  `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and the target Pages project
+  first. For anything long-lived, prefer an access-controlled setup, since the
+  URL alone exposes the run.
+
+## Where it reads from
+
+The board reads two fixed locations, both written by `scripts/train.sh`:
+
+| Path | What it holds |
+| --- | --- |
+| `artifacts/model/` | Training runs, one per immediate subdirectory, including checkpoints. Progress comes from each run's `trainer_log.jsonl` and `trainer_state.json`, and the final numbers from its `*_results.json`. |
+| `artifacts/logs/` | Console logs from the launcher, which is where to look when a run dies before writing any metrics. |
+
+<Callout title="Import External Data" type="info">
+The board only reads `artifacts/`. Symlink an outside run into
+`artifacts/model/`, and the link name becomes the run name.
+</Callout>
+
+## What it monitors
+
+| Monitor | What it tells you |
+| --- | --- |
+| **Run progress** | Current step, epoch, percentage, ETA, and whether the run is active or finished. |
+| **Training loss** | Loss curve, for spotting divergence, instability, or stalled learning. |
+| **Learning rate** | Scheduler behavior, warmup, and decay across steps. |
+| **Gradient norm** | Stability signal for catching exploding gradients. |
+| **Performance** | Step time, samples/sec, runtime, throughput, and FLOPs. |
+| **Evaluation metrics** | Eval loss and best checkpoint, when the run includes an eval split. |
+| **Run comparison** | Side-by-side comparison of runs, datasets, models, or hyperparameters. |
+| **Logs and artifacts** | Console logs, result JSONs, trainer state, checkpoints, and loss plots. |
+
+## When to Use It
+
+Use `/trainer:dashboard` when you want to answer questions like:
+
+- Is the training run still alive?
+- Is loss decreasing normally?
+- Did throughput or step time suddenly change?
+- Which checkpoint is the latest or the best?
+- How does this run compare with previous data or model settings?
+
+For training mechanics, see [Design](/docs/blocks/trainer/design). For artifact
+contracts, see [Output Format](/docs/blocks/trainer/outputs).

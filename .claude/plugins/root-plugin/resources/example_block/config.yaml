@@ -1,0 +1,42 @@
+meta_info:
+  name: sft_training
+  label: SFT Training
+  description: Trains a language model using supervised fine-tuning (SFT).
+  parent: root
+  blocks: {}
+  dependencies:
+    from:
+      # This block's own upstream hand-off: dataset_path receives curator's output.
+      dataset_path: curator.output.verified_tasks_dir
+    to:
+      # This block's own downstream hand-off: model_checkpoint feeds <consumer>'s input.
+      model_checkpoint: eval_demo.input.model.checkpoint_path
+
+  repos:
+    trl:
+      commit_id: a1b2c3d4
+      role: SFT trainer implementation
+
+  environment:
+    requirements: repos/trl/requirements.txt
+
+  resources:
+    ip: runner.example.com
+    pwd: null
+    apikey: null
+    model: null
+    public_storage: artifacts/shared/sft_training/
+
+runtime_info:
+  # Only external inputs (API keys, human decisions, external paths).
+  # Inter-block values are wired via meta_info.dependencies — the dep key names
+  # which input path here receives them.
+  input:
+    dataset_path: null    # wired from curator via meta_info.dependencies
+    learning_rate: 1.0e-4
+    num_epochs: 3
+
+  output:
+    model_checkpoint:
+      description: Path to saved model checkpoint after training
+      value: null         # run-produced; written back by scripts/start.sh

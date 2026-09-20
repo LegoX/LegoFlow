@@ -1,0 +1,137 @@
+# ROOT SMOKE — stage 2/4: tracer.
+# Overlaid onto blocks/tracer/config.yaml by tests/smoke/run_pipeline.sh.
+# Schema-compatible with production tracer; deltas from production tagged
+# "# ROOT:".
+#
+# Unlike the per-block tracer smoke (a 10-task HuggingFace slice), this consumes
+# the real verified tasks curator just produced (provider=local, filtered by its
+# verifiable_tasks.txt), runs Harbor, and converts the reward==1 trajectories
+# into the LF SFT data trainer trains on.
+
+meta_info:
+  name: tracer
+  label: "Trajectory Generation"
+  description: Generates agent trajectories with Harbor from curator's verified tasks; converts reward==1 trajectories to SFT data.
+  parent: legoflow
+  blocks: {}
+  dependencies:
+    from:
+      task_source.dataset_name:
+        from: curator.output.swe_tasks_dir
+        when: {task_source.provider: local}
+    # stage 2 -> 3; the chain wires the LF dir, not the raw job dir production uses
+    to:
+      sft_data_dir: trainer.input.source.upstream_lf_dir
+
+  resources:
+    ip: local
+    user: null
+    pwd: null
+    directory: null
+    public_storage: null
+
+  repositories:
+    harbor:
+      url: https://github.com/LegoX/harbor.git
+      branch: main
+      commit: 73fd120e731217b38f31667932ea26a28cdd4fff
+      path: repos/harbor
+      readonly: true
+    swe_data_process:
+      url: https://github.com/LegoX/swe_data_process.git
+      branch: main
+      commit: dda92c581a0c0eaba74bb469d92ddda767e5f1b3
+      path: repos/swe_data_process
+      readonly: true
+
+  environment:
+    harbor_uv: artifacts/env/harbor-uv
+    litellm_uv: artifacts/env/litellm-venv
+    swe_data_process_uv: artifacts/env/swe-data-process-uv
+    swe_data_process_extras: [llm]
+    litellm:
+      python_version: "3.13"
+      litellm_version: "1.83.14"
+
+runtime_info:
+  input:
+    llm_api:
+      api_key: ""
+      api_base_url: ""
+      model: ""
+      description: Raw upstream model API used to configure per-job LiteLLM proxy startup.
+      protocols: [openai_compatible, anthropic_compatible]
+      served_via: per_job_litellm_proxy
+      input_cost_per_token: 0.0000021
+      output_cost_per_token: 0.0000084
+
+    litellm_proxy:
+      config_template: scripts/serve_llm/litellm_config.example.yaml
+      port: 4003
+      master_key: dummy-key-cf
+
+    # ROOT: consume curator's verified tasks (NOT a HF slice). For provider=local,
+    # prepare_tasks.sh reads the source dir from `dataset_name` and copies only
+    # the IDs listed in that dir's verifiable_tasks.txt. Path is relative to the
+    # tracer block dir; run_pipeline.sh rewrites it to the absolute legoflow-curator smoke
+    # output dir at launch.
+    task_source:
+      provider: local
+      dataset_name: ../curator/artifacts/swe_tasks/py-cc-root-smoke
+      split: train
+
+    # ROOT: harbor has no native "run a task N times" knob, and max_retries only
+    # retries on FAILURE (not on reward==0). legoflow-curator hands off few verified tasks,
+    # so a single solve attempt makes the reward==1 gate luck-dependent. The
+    # orchestrator replicates each verified task `smoke_attempts` times (distinct
+    # dir names == distinct harbor tasks) so tracer gets that many independent
+    # solve attempts. P(>=1 reward==1) rises from ~p to ~1-(1-p)^N. With legoflow-curator
+    # now banking several DIVERSE verified tasks, a small N suffices. At
+    # n_concurrent=1 (below) replication just multiplies wall-clock, so keep N=1:
+    # 6 diverse verified tasks already give 6 sequential solve attempts.
+    smoke_attempts: 1
+
+    harbor_job:
+      jobs_dir: artifacts/jobs/root-smoke   # ROOT: isolate from prod + the block smoke
+      # ROOT: 1 = one agent at a time. The shared upstream endpoint was
+      # overloaded (429/500/timeout/overloaded) under concurrent agent load and
+      # contended by another job; one-at-a-time spares it.
+      n_concurrent: 1
+      n_tasks: null                          # ROOT: infer on ALL handed-off tasks
+      max_retries: 1
+      timeout_multiplier: 5
+
+    agent:
+      name: custom-claude-code
+      version: 2.1.118
+      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1
+      runtime_host_path: artifacts/agent-runtime/claude-code
+      max_turns: 60                          # ROOT: between prod (80) and block smoke (30)
+      temperature: 0.7
+
+    # ROOT: conversion ON. convert_trajectories.sh inherently keeps only the
+    # resolved (reward=1.0) instances; reward_min documents that intent for the
+    # chain (and is asserted by tests/cases/05).
+    sft_conversion:
+      enabled: true
+      reward_min: 1
+      scaffold: auto
+      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base
+      out_dir: artifacts/sft_data
+      max_instances: null
+      exclude_repos_file: ""
+
+    env_extra:
+      HARBOR_EXCLUDE_TASKS: ""
+      LITELLM_NUM_WORKERS: "1"
+
+  output:
+    raw_trajectories_dir:
+      description: Harbor job directories with LiteLLM trajectory logs
+      path: artifacts/jobs
+      trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
+    sft_data_dir:
+      description: LF-format JSON arrays converted from reward==1 Harbor trajectories, ready for LLaMA-Factory SFT.
+      path: artifacts/sft_data
+      format: llamafactory_lf_v0.1
+      trajectory_format: "artifacts/sft_data/<job>/lf.json"

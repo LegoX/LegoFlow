@@ -1,0 +1,42 @@
+---
+title: Overview
+---
+
+Trainer turns agent trajectories into training-ready datasets and fine-tunes SWE
+coding models on them.
+
+It is the supervised-fine-tuning stage of the
+[LegoFlow](https://github.com/LegoX/LegoFlow) pipeline, sitting between
+trajectory generation (`tracer`) and evaluation (`evaluator`). It can convert
+good rollouts produced upstream or consume a ready-made Hugging Face/local
+ShareGPT dataset, then train a model with the patched
+[LegoX LLaMA-Factory](https://github.com/LegoX/LLaMA-Factory) and
+DeepSpeed ZeRO-3. A single `config.yaml` drives the run.
+
+Training here is a measurement, not a one-off deliverable: it is how the pipeline
+finds out whether the upstream data carries signal. Both the data selection and
+the training hyperparameters are config fields, so an operator, human or agent,
+can change one variable, rerun, and compare against the previous run rather than
+rebuilding a training setup by hand.
+
+Trainer provides:
+
+- One-config runs where source trajectories, conversion settings, dataset,
+  model, hyperparameters, and infrastructure live in `config.yaml`.
+- Flexible data intake from Tracer LF files, Hugging Face datasets, local
+  ShareGPT JSON, or raw Harbor jobs.
+- A clean Tracer handoff through `lf.json`, with raw-trajectory conversion
+  available as a fallback.
+- Eval-leak protection that filters SWE-bench benchmark repos out of training
+  data by default.
+- Multi-GPU training through LLaMA-Factory, torchrun, and DeepSpeed ZeRO-3 on a
+  single 8-GPU node.
+- A web dashboard that reads training output directly, supports multi-run
+  comparison, and can include wandb.
+
+## Where to go next
+
+- [Getting Started](/docs/blocks/trainer/getting-started): set up the environment and run your first training job.
+- [Design](/docs/blocks/trainer/design): see how Trainer converts data, registers datasets, launches training, and publishes checkpoints.
+- [Output Format](/docs/blocks/trainer/outputs): find checkpoints, logs, generated configs, and the Evaluator handoff.
+- [Dashboard](/docs/blocks/trainer/dashboard): monitor training runs in real time.

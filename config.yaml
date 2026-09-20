@@ -1,0 +1,36 @@
+meta_info:
+  name: legoflow
+  label: "LegoFlow"
+  description: Root orchestration block for the LegoFlow data pipeline.
+  parent: null
+  blocks:
+    curator:
+      role: "Collect GitHub PRs, and turn them into verified SWE tasks"
+    tracer:
+      role: "Generate LLM trajectories from verified tasks via Harbor"
+    trainer:
+      role: "SFT on trajectories via LLaMA-Factory + DeepSpeed"
+    evaluator:
+      role: "Run registered benchmarks via Harbor"
+  dependencies:
+    from: {}
+    to: {}
+  resources:
+    ip: local
+    directory: null
+    description: Orchestrator — runs wherever the tree is checked out.
+    public_storage: null
+
+runtime_info:
+  # Optionally shared credentials, by default they are set to "" (off)
+  input:
+    cloudflare:
+      account_id: ""
+      api_token: ""
+    docker:
+      registry: ""            # "" = docker.io
+      username: ""
+      password: ""
+      mirror: ""
+      host: ""                 # "" = daemon default; recommended: unix:///var/run/docker.sock
+  output: {}

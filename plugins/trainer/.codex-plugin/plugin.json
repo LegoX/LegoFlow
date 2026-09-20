@@ -1,0 +1,11 @@
+{
+  "name": "trainer",
+  "version": "0.1.0",
+  "description": "Convert LegoFlow trajectories and launch reproducible supervised fine-tuning runs.",
+  "author": { "name": "LegoX", "url": "https://github.com/LegoX" },
+  "repository": "https://github.com/LegoX/LegoFlow",
+  "license": "Apache-2.0",
+  "keywords": ["legoflow", "training", "sft", "llama-factory"],
+  "skills": "./skills/",
+  "interface": { "displayName": "LegoFlow Trainer", "shortDescription": "Train on agent trajectories", "longDescription": "Convert LegoFlow trajectories into training data and launch reproducible supervised fine-tuning experiments.", "developerName": "LegoX", "category": "Developer Tools", "capabilities": ["Interactive", "Write"], "defaultPrompt": ["Check the trainer resources.", "Prepare the training dataset.", "Run an approved fine-tuning experiment."] }
+}

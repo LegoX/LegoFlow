@@ -1,0 +1,119 @@
+# ROOT SMOKE — stage 1/4: curator.
+# Overlaid onto blocks/curator/config.yaml by tests/smoke/run_pipeline.sh.
+# Schema-compatible with production; smoke-only knobs live under
+# runtime_info.input.smoke.*.
+#
+# Unlike the per-block curator smoke (which replays a committed 10-PR list and
+# stops at the first verified task), this collects ~200 PRs from scratch and
+# generates until `smoke.max_pr` are verified — those are the real handoff
+# tracer consumes in stage 2.
+
+meta_info:
+  name: curator
+  label: "Curator"
+  description: Converts GitHub PRs into verified SWE-Bench tasks. Root smoke collects ~200 PRs from scratch.
+  parent: legoflow
+  blocks: {}
+  dependencies:
+    from: {}
+    # stage 1 -> 2; mirrors tracer's own `from`
+    to:
+      swe_tasks_dir:
+        to: tracer.input.task_source.dataset_name
+        when: {tracer.input.task_source.provider: local}
+
+  repos:
+    legoflow-curator:
+      name: legoflow-curator
+      commit_id: null
+
+  environment:
+    venv_name: legoflow-curator-env
+    venv_path: artifacts/envs/legoflow-curator-env
+
+  resources:
+    ip: local
+    user: root
+    pwd: null
+    directory: null
+
+runtime_info:
+  input:
+    # OpenAI-only endpoint via a local LiteLLM CC proxy, started by
+    # run_pipeline.sh on cc_proxy_port. native-anthropic was abandoned: one model
+    # failed categorically (0/46), another was flaky (0–3 verified per run), and
+    # 0 verified fails the whole chain at stage 1.
+    llm_api:
+      api_key: ""
+      api_base_url: ""
+      pr_model: ""
+      task_model: ""
+      cc_provider_mode: openai_proxy
+      anthropic_base_url: http://127.0.0.1:4010
+      cc_proxy_port: 4010
+
+    languages:
+      py:
+        enabled: true
+        params:
+          # Fuller per-task budget than the 1-PR block smoke, so tasks actually
+          # materialize.
+          timeout: 3000
+          cc_timeout: 2200
+          n_concurrent: 4
+
+    # Root-smoke-only knobs. Production hardcodes these inside
+    # scripts/create_<lang>.sh; the smoke surfaces them so the chain stays
+    # declarative and tests/cases/07 can validate the scale.
+    smoke:
+      # Stop after N verified tasks. >1 so tracer (stage 2) has several tasks
+      # to infer on — with a single task, reward==1 becomes a coin-flip and the
+      # whole chain gets flaky on one trial's luck.
+      max_pr: 5
+      min_source_files: 1
+      max_source_files: 10
+      docker_prune_batch: 10
+      # Verified tasks land here (appended to runtime_info.output.swe_tasks_dir.path).
+      # Result: artifacts/swe_tasks/py-cc-root-smoke — the dir tracer consumes.
+      output_subdir: py-cc-root-smoke
+      state_subdir: .legoflow-curator-root-smoke-py
+
+      # Collect ~200 PRs from scratch (design step 1). run_pipeline.sh runs
+      # repos/legoflow-curator/tools/collect_prs_wo_image.py with these params, then feeds
+      # the resulting <lang>_pr_ids.txt into `legoflow-curator create`.
+      collect:
+        enabled: true
+        languages: python
+        # Genuinely pull ~200 PRs from scratch (design step 1). The collector
+        # (repos/legoflow-curator/tools/collect_prs_wo_image.py) stops once it has
+        # `repo_num` QUALIFYING repos, each contributing up to `max_prs_per_repo`
+        # PRs, so repo_num*max_prs_per_repo is the upper bound on the pool; the
+        # orchestrator then head-caps to `target_prs`. time_budget_s is a
+        # generous backstop (collection runs to completion well within it), NOT
+        # a 20-min cap. The committed fallback_prs is now an EMERGENCY floor only
+        # (used when collection yields < min_ids — i.e. an endpoint/API outage),
+        # not the normal path. repo_num*max_prs_per_repo >= target_prs (cases/07).
+        repo_num: 15
+        max_prs_per_repo: 50
+        target_prs: 200
+        time_budget_s: 7200       # generous backstop for a real ~200-PR pull
+        min_ids: 8                # emergency-only fallback floor
+        # Known-good PRs (shared with the block legoflow-curator smoke) — the safety net
+        # so the chain never stalls on collection flakiness. Real PRs, real
+        # create/verify downstream.
+        fallback_prs:
+          - tox-dev/tox:pr-3813
+          - tox-dev/tox:pr-3814
+          - tox-dev/tox:pr-3810
+          - tox-dev/tox:pr-3803
+          - tox-dev/tox:pr-3804
+          - tox-dev/tox:pr-3800
+          - AnswerDotAI/RAGatouille:pr-157
+          - electricitymaps/electricitymaps-contrib:pr-8113
+          - electricitymaps/electricitymaps-contrib:pr-8119
+          - morpheus65535/bazarr:pr-2691
+        output_dir: artifacts/collected_prs/root-smoke
+
+  output:
+    swe_tasks_dir:
+      path: artifacts/swe_tasks

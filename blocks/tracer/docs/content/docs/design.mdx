@@ -1,0 +1,239 @@
+---
+title: Design
+---
+
+This page explains how Tracer turns verified tasks into trajectories and, when
+enabled, SFT-ready data. It follows the workflow in [Overview](/docs): task
+intake, model proxy, containerized rollout, SFT conversion, and the live board.
+
+![Tracer workflow from verified task intake to trajectories and SFT data](/figures/tracer.png)
+
+## Repositories
+
+Tracer runs two pinned external repositories. `scripts/update_repos.sh` checks
+each one out at the commit recorded in `meta_info.repos` in `config.yaml`, and
+both checkouts are read-only: local edits are overwritten on the next update, so
+changes belong upstream.
+
+| Repository | Path | Role |
+| --- | --- | --- |
+| [harbor](https://github.com/LegoX/harbor) | `repos/harbor` | The rollout runtime. It builds each task's container, runs the agent inside it, applies the verifier, and writes the trial directory. It also supplies the trajectory logger the LiteLLM proxy loads. |
+| [swe_data_process](https://github.com/LegoX/swe_data_process) | `repos/swe_data_process` | The trajectory converters. One module per scaffold turns raw rollouts into IM records and then LLaMA-Factory LF data, and computes the TQS quality scores. |
+
+## 1. Task Intake
+
+Tracer starts from a verified task source. In `config.yaml`, this is controlled
+by `runtime_info.input.task_source`:
+
+- `local`: read Curator output, usually `../curator/artifacts/merged_swe_tasks`.
+- `huggingface`: download a compatible task dataset snapshot.
+
+The intake logic lives in `scripts/prepare_tasks.sh`. It stages Harbor task
+directories under:
+
+```text
+artifacts/tasks/<dataset>/
+```
+
+For local Curator output, Tracer looks for `verifiable_tasks.txt`. If the
+manifest exists, only listed task IDs are staged. If it is missing, Tracer
+stages every valid Harbor task directory. This is the manifest gate in the
+diagram: verified Curator tasks get through; unfinished or failed task
+candidates stay out.
+
+A local source is staged by **linking, not copying**: the dataset directory is
+real, and holds one symlink per task id pointing back at Curator's pool. Nothing
+is duplicated on disk, and a staged batch never drifts from the pool Curator
+keeps writing to. Linking per task rather than linking the pool as a whole is
+what lets the manifest gate above still apply. A Hugging Face source is copied
+out of its downloaded snapshot instead.
+
+Tracer also keeps a consumption ledger:
+
+```text
+artifacts/processed_tasks.yaml
+```
+
+Before a new run, `scripts/start.sh` calls `scripts/resolve_exclude_tasks.py` to
+turn this ledger, plus `HARBOR_EXCLUDE_TASKS`, into Harbor
+`--exclude-task-name` flags. That gives Tracer exactly-once behavior for normal
+runs: completed or retired tasks are not rolled out again by accident.
+
+## 2. Model Proxy
+
+Tracer never points an agent at the upstream model API. Every run starts its own
+LiteLLM proxy, rendered by `scripts/start.sh` from `runtime_info.input.llm_api`
+and `runtime_info.input.litellm_proxy` into:
+
+```text
+artifacts/litellm/<job>/litellm_config_tracer.yaml
+```
+
+The agent container only ever sees the proxy:
+
+```text
+ANTHROPIC_BASE_URL=http://<host>:<proxy-port>
+ANTHROPIC_API_KEY=<litellm master key>
+ANTHROPIC_MODEL=<configured model>
+```
+
+That indirection is the load-bearing design decision in this block, and it buys
+four things at once.
+
+**One capture point.** The proxy sits below the agent, so every model call is
+recorded without patching the agent or trusting it to write its own log. An agent
+that crashes mid-run still leaves behind every turn it managed to make.
+
+**One protocol surface.** The generated config sets
+`use_chat_completions_url_for_anthropic_messages: true`, so an Anthropic-style
+agent (Claude Code) and an OpenAI-style agent (OpenCode, OpenHands SDK) both
+reach the same upstream chat-completions endpoint. `drop_params: true` lets a
+scaffold send parameters the upstream does not accept without failing the call.
+This is why swapping scaffolds does not mean swapping model providers.
+
+**Per-job isolation.** The config, the master key and the copied logger all live
+under that job's directory, so two jobs never share proxy state. Token costs from
+`llm_api` are attached to the model entry, which is what makes per-run spend
+visible; LiteLLM's own spend logs are disabled since the trajectory records
+already carry usage.
+
+**Cache-friendly routing.** The logger derives a sticky routing key from each
+task's trajectory path, so all turns of one task keep landing on the same
+upstream deployment. Long agent rollouts repeat a growing prefix on every turn,
+and prefix caching only pays off if the turns stay together.
+
+### How a turn becomes a record
+
+`scripts/start.sh` copies `trajectory_logger.py` out of the pinned Harbor
+checkout and registers it as a LiteLLM callback
+(`callbacks: trajectory_logger.trajectory_logger`). On every completed call, and
+on failures too, it writes one JSON line containing:
+
+| Field | What it holds |
+| --- | --- |
+| `session_id` | The task instance the call belongs to. |
+| `request_body` | `messages`, `tools`, `model`, `max_tokens`, `top_p`, `temperature`. |
+| `response_body` | `choices[].message` with `content`, `reasoning_content` and `tool_calls`. |
+| `usage` | Prompt and completion tokens, plus the computed cost. |
+| `success`, `duration_ms`, `timestamp` | Outcome and timing; a failed call adds a `failure` block instead of a silent gap. |
+
+The important part is that the logger **normalizes into OpenAI chat-completions
+shape before writing**. Anthropic-format traffic is rewritten into the same
+record layout as OpenAI traffic, so the raw capture does not remember which
+protocol the agent spoke.
+
+Where the line lands is decided per request, through the
+`x-trajectory-output-path` header (or the equivalent request metadata) that
+Harbor attaches. Tracer sets that pattern to:
+
+```text
+artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+```
+
+So a single shared proxy still produces one clean, per-task trajectory file, with
+no post-hoc demultiplexing.
+
+## 3. Containerized Rollout
+
+After the proxy is ready, `scripts/start.sh` builds the Harbor command from
+`runtime_info.input.harbor_job` and `runtime_info.input.agent`.
+
+The generated command is effectively:
+
+```text
+uv run harbor run \
+  --path artifacts/tasks/<dataset> \
+  --jobs-dir artifacts/jobs \
+  --agent-import-path <agent class> \
+  --job-name <dataset-agent-version-model-timestamp> \
+  --model <model> \
+  --n-concurrent <N> \
+  --timeout-multiplier <factor> \
+  --max-retries <N>
+```
+
+The agent runtime is mounted into each task container. For the default
+`custom-claude-code` scaffold, Tracer derives the agent import path and
+Anthropic protocol automatically. For other scaffolds, the config must keep the
+agent name, import path, protocol, version, runtime image, runtime mount, and
+SFT conversion scaffold aligned.
+
+The current pinned runtime versions are Claude Code `2.1.118`, OpenCode
+`1.18.7`, and OpenHands SDK `1.33.0`. These version numbers should match the
+runtime image tag and the conversion scaffold used for the job.
+
+Each task produces a Harbor trial directory:
+
+```text
+artifacts/jobs/<job>/<task>/
+├── result.json
+└── agent/
+    └── litellm-trajectory.jsonl
+```
+
+`result.json` records the verified reward, and `litellm-trajectory.jsonl`
+contains the full turn-by-turn model and agent trace.
+
+## 4. SFT Conversion
+
+SFT conversion is optional. It runs automatically after Harbor only when
+`runtime_info.input.sft_conversion.enabled` is `true`, or manually through:
+
+```text
+bash scripts/convert_trajectories.sh --job <job>
+```
+
+The proxy gave every scaffold the same record *shape*, but not the same record
+*meaning*. How an agent frames a system prompt, represents a tool call, or splits
+work across sub-agent turns is still its own convention. Conversion is where that
+difference is resolved: `scripts/convert_trajectories.sh` picks a converter per
+scaffold, derived from `agent.name` unless `sft_conversion.scaffold` names one
+explicitly.
+
+| Scaffold | Converter module |
+| --- | --- |
+| `claude_code` | `swe_data_process.claudecode_opencode.convert_cc_to_im` |
+| `open_code` | `swe_data_process.claudecode_opencode.convert_oc_to_im` |
+| `openhands_sdk` | `swe_data_process.openhands.convert_openhands_sdk_to_im` |
+| `terminus2` | `swe_data_process.terminus2.convert_terminus2_to_im` |
+
+Every converter emits the same IM record, so scaffold-specific handling stops at
+this boundary and one LF writer serves all of them. Two filters run here rather
+than at training time, because they are judgements about the rollout: only
+resolved instances (reward `1.0`) are converted at all, and for the converters
+that support it, turns are screened for reasoning content, adaptively and against
+a ratio threshold. A rollout that passed its tests but reasoned in one-line
+stubs is not the same training signal as one that worked the problem.
+
+The output lands under:
+
+```text
+artifacts/sft_data/<job>/
+├── im.jsonl
+├── lf.json
+├── lf.stats.json
+└── .convert_sig.json
+```
+
+`im.jsonl` keeps intermediate records and quality facts. `lf.json` is the
+LLaMA-Factory ShareGPT-style file Trainer can consume directly.
+
+## 5. Live Board
+
+The dashboard reads Tracer artifacts rather than a separate database. Its main
+inputs are:
+
+```text
+artifacts/index.yaml
+artifacts/jobs/<job>/result.json
+artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+artifacts/sft_data/<job>/lf.stats.json
+artifacts/sft_data/<job>/im.jsonl
+```
+
+That is why dashboard refreshes can be cheap: the board scans the files Tracer
+already writes, then renders job status, rewards, errors, trajectories, and SFT
+conversion statistics.
+
+For the shortest runnable path, see [Getting Started](/docs/blocks/tracer/getting-started).
+For the exact files written by each stage, see [Output Format](/docs/blocks/tracer/outputs).

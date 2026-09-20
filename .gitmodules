@@ -1,0 +1,18 @@
+[submodule "blocks/curator/repos/legoflow-curator"]
+	path = blocks/curator/repos/legoflow-curator
+	url = https://github.com/LegoX/LegoFlow-SWE-Curator.git
+	branch = main
+[submodule "blocks/trainer/repos/swe_data_process"]
+	path = blocks/trainer/repos/swe_data_process
+	url = https://github.com/LegoX/swe_data_process.git
+	branch = main
+[submodule "blocks/tracer/repos/harbor"]
+	path = blocks/tracer/repos/harbor
+	url = https://github.com/LegoX/harbor.git
+[submodule "blocks/trainer/repos/LLaMA-Factory"]
+	path = blocks/trainer/repos/LLaMA-Factory
+	url = https://github.com/LegoX/LLaMA-Factory.git
+	branch = main
+[submodule "blocks/evaluator/repos/harbor"]
+	path = blocks/evaluator/repos/harbor
+	url = https://github.com/LegoX/harbor.git

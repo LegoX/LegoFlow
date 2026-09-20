@@ -1,0 +1,101 @@
+---
+title: Dashboard
+---
+
+Tracer's dashboard is the progress and trajectory monitor for rollout jobs. Run
+`/tracer:dashboard` to inspect jobs, task outcomes, trajectory previews, and the
+optional SFT conversion output.
+
+A demo dashboard is available [here](/dashboard_demo/tracer/).
+The checked-in demo is a static UI preview; full-trace loading requires a
+generated dashboard with trajectory shards.
+
+## Deployment mode
+
+Both modes read the same files, so the numbers never depend on which one you pick.
+
+- **Local** (default): run `/tracer:dashboard`. The board is built and served on
+  the machine that ran the job, so prompts, tool output, model responses and
+  failure traces stay here.
+- **Cloud**: run `/tracer:dashboard publish to Cloudflare`. Set
+  `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and the target Pages project,
+  for example `legoflow-tracer`. Full online trajectory loading also needs the
+  matching R2 bucket binding; without it, publish metrics and bounded previews
+  only.
+
+## Where it reads from
+
+The sources are fixed rather than configured. `config.yaml` does not name them,
+and editing it will not change what the board shows:
+
+| Path | What it holds |
+| --- | --- |
+| `artifacts/tasks/` | Staged task batches, one per immediate subdirectory. |
+| `artifacts/jobs/` | Harbor jobs, one per immediate subdirectory. |
+| `artifacts/sft_data/` | Converted datasets, one per immediate subdirectory. Optional. |
+| `artifacts/index.yaml` | Archived run history retained in the dashboard's source report. |
+| `artifacts/processed_tasks.yaml` | The consumption ledger, which records what has already been run. |
+
+To see exactly what the board resolved, without rendering anything:
+
+```bash
+./dashboard/progress_monitor.py --report-only
+```
+
+That prints the absolute path of every source and the batches found under each.
+`/tracer:dashboard` runs it and waits for your confirmation before rendering.
+
+By default the trajectories come from rollouts run on this machine. To bring in
+trajectories generated elsewhere:
+
+1. Arrange them in the Harbor job layout: one directory per job, one directory
+   per task inside it, and the agent output under `<task>/agent/`, matching an
+   existing job under `artifacts/jobs/`.
+2. Put that job directory under `artifacts/jobs/`, or symlink it there. The
+   directory name becomes the job name on the board.
+3. Convert it if you want the SFT panels, following
+   [Trajectory Conversion](/docs/blocks/tracer/usage/trajectory-conversion).
+   Conversion writes `artifacts/sft_data/<job>/lf.json`, and it is also what
+   computes the quality scores.
+
+If you already hold LF-format SFT data and no raw trajectories, put it at
+`artifacts/sft_data/<name>/lf.json` and the SFT panels will pick it up on their
+own.
+
+<Callout title="Import External Data" type="info">
+The board only reads `artifacts/`. Symlink an outside job into `artifacts/jobs/`,
+or an LF dataset into `artifacts/sft_data/`, and the link name becomes the name
+on the board.
+</Callout>
+
+### SFT data is optional
+
+Trajectory scores are computed during conversion, so a block that has not
+converted anything has no scores yet. The board then leaves out the score
+surfaces, meaning the score distribution, the score matrix and the scoring
+rubric, rather than drawing them empty. Jobs, trials, pass rate and task coverage
+still render. An absent score panel means nothing was scored, not that the
+trajectories scored zero.
+
+## What it monitors
+
+| Monitor | What it tells you |
+| --- | --- |
+| **Harbor jobs** | Job-level task counts, reward summaries, retries, and errors. |
+| **Task coverage** | Which tasks were attempted, completed, skipped, failed, or already processed. |
+| **Agent trajectories** | Per-task messages, tool calls, observations, bounded previews, and failure traces. |
+| **SFT conversion** | Whether successful rollouts were converted into LF data for Trainer. *(only with SFT data)* |
+| **Quality signals** | Score distributions, low-score examples, tool-error rates, and segment comparisons. *(only with SFT data)* |
+
+## When to Use It
+
+Use `/tracer:dashboard` when you want to answer questions like:
+
+- How many tasks resolved successfully?
+- Which tasks failed repeatedly and should be excluded?
+- Which scaffold or model is producing better trajectories?
+- Did the run produce Trainer-ready SFT data?
+- Are errors coming from the agent, environment, verifier, or model endpoint?
+
+For rollout mechanics, see [Design](/docs/blocks/tracer/design). For artifact
+contracts, see [Output Format](/docs/blocks/tracer/outputs).

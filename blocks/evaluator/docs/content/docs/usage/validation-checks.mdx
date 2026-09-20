@@ -1,0 +1,66 @@
+---
+title: Validation Checks
+---
+
+Use this page when `/evaluator:check` reports a problem and you want to
+understand what Evaluator is validating. The slash command is the user-facing
+preflight: it checks the benchmark registry, Harbor checkout, Python
+environments, LiteLLM setup, runtime images, agent runtime, model endpoint, and
+launch gates before an evaluation spends model tokens.
+
+The shell tests below are the lower-level version of that contract. Most users
+do not need to run them directly; they are useful when changing Evaluator code,
+benchmark launch logic, plugin skills, or CI.
+
+## Run the Suite
+
+```bash
+# Cheap checks only. Safe for local development.
+bash blocks/evaluator/tests/run.sh
+
+# Full path with the real-LLM, real-Docker registry smoke.
+bash blocks/evaluator/tests/run.sh --with-smoke
+```
+
+Each test returns `0` for pass, `77` for skip, and any other code for failure.
+The aggregate `run.sh` fails only when at least one test fails. Skipped tests
+are reported but do not fail the suite.
+
+## Check cases
+
+| Case | What it checks | Pass condition |
+| --- | --- | --- |
+| `01_config_schema.sh` | Evaluator `config.yaml` shape and registry task source. | Required fields are present; provider is `harbor_registry`; job paths and task caps are valid. |
+| `02_repo_pin.sh` | Harbor repo pin and update override behavior. | `repos/harbor` exists, matches its pin, has the expected origin, and supports `update_repos.sh --ref`. |
+| `03_uv_envs_editable.sh` | Harbor and LiteLLM environments. | Harbor imports from the vendored checkout; LiteLLM CLI and pinned version are present. |
+| `04_llm_endpoint.sh` | LLM model catalog. | `/models` is reachable and the configured model appears, unless a remote gateway condition is explicitly skipped. |
+| `05_litellm_port.sh` | LiteLLM proxy port. | The configured proxy port is free before launch. |
+| `06_runtime_image.sh` | Agent runtime image. | `docker image inspect` succeeds for the configured runtime image. |
+| `07_registry_dataset.sh` | Harbor registry dataset. | The configured dataset and version resolve in `registry.json` and expand to at least one task. |
+| `08_agent_runtime.sh` | Bind-mounted agent runtime. | The runtime host path contains the expected marker and executable for the selected agent. |
+| `09_probe_completion.sh` | Completion launch gate. | Mocked valid, malformed, auth, and 5xx cases are classified correctly without spending real rollout tokens. |
+| `10_start_contract.sh` | Source-level start contract. | Start ordering, isolated config handling, dataset versioning, and model-path behavior stay guarded. |
+| `11_script_utilities.sh` | Utility scripts and archive behavior. | Unsafe clean is rejected; archive metadata and index updates work under isolated/concurrent cases. |
+| `12_smoke_verifier.sh` | Smoke verifier fixtures. | Missing, stale, clean scored, and exception-scored trial fixtures classify as expected. |
+| `13_smoke_contract.sh` | Smoke config and cleanup guard. | Fixture pins, image/path/port alignment, temporary config, and container cleanup stay safe. |
+
+## Smoke run
+
+The smoke test is `smoke/10_registry_task_demo.sh`. It runs an isolated
+evaluation config against the first tasks of the configured registry dataset.
+
+It passes when at least one trial reaches a clean scored state within the time
+budget. "Clean scored" means the verifier recorded a reward and the trial did
+not raise an agent exception. The pass condition is intentionally a pipeline
+health signal, not a requirement that the model solves a task.
+
+## Files
+
+```text
+blocks/evaluator/tests/
+|-- cases/
+|-- smoke/
+`-- run.sh
+```
+
+See `blocks/evaluator/tests/README.md` for detailed failure recipes.

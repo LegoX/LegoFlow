@@ -1,0 +1,63 @@
+---
+title: Validation Checks
+---
+
+Use this page when `/curator:check` reports a problem and you want to understand
+what Curator is validating. The slash command is the user-facing preflight: it
+checks your config, repo checkout, GitHub tokens, LLM endpoint, and Docker before
+you spend time creating tasks.
+
+The shell tests below are the lower-level version of that contract. Most users
+do not need to run them directly; they are useful when you are changing Curator
+code, plugin skills, docs, or CI wiring and want to know exactly what "ready to
+run" means.
+
+## Run the Suite
+
+```bash
+# Cheap checks only. Safe for local development.
+bash blocks/curator/tests/run.sh
+
+# Full path with the real-LLM, real-Docker smoke run.
+bash blocks/curator/tests/run.sh --with-smoke
+```
+
+Each test returns `0` for pass, `77` for skip, and any other code for failure.
+The aggregate `run.sh` fails only when at least one test fails. Skipped tests
+are reported but do not fail the suite.
+
+## Check cases
+
+| Case | What it checks | Pass condition |
+| --- | --- | --- |
+| `01_config_schema.sh` | Curator `config.yaml` shape and required runtime keys. | Required fields are present; `meta_info.name` is `curator`; tracked config does not contain a real GitHub token. |
+| `02_repo_pin.sh` | `repos/legoflow-curator` checkout and Python environment. | The repo exists, matches its configured pin when a pin is set, and `legoflow-curator` imports inside the configured venv. |
+| `03_github_tokens.sh` | GitHub token hydration. | Every token in `GITHUB_TOKENS` authenticates against GitHub `/rate_limit`. |
+| `04_llm_endpoint.sh` | Cross-provider LLM configuration and chat completion. | The hydrated endpoint can run a small chat completion and return content. |
+| `05_docker_daemon.sh` | Docker availability. | `docker` is available and `docker info` succeeds. |
+| `06_harbor_smoke.sh` | Known verified task fixture. | If the fixture exists, `tox-dev__tox-3813` still yields NOP reward 0 and oracle reward 1. Missing fixture is skipped. |
+| `07_create_tasks_skill.sh` | Curator task-generation command surface. | The canonical `/curator:create-tasks` skill, compatibility adapter, and plugin metadata stay wired correctly. |
+| `08_create_tasks_docs.sh` | Public Curator documentation contract. | Docs recommend the canonical command and keep the expected Pages target. |
+
+## Smoke run
+
+The smoke test is `smoke/10_pr_demo.sh`. It runs `legoflow-curator create` over a small
+10-PR fixture and is meant for self-hosted or manually triggered validation,
+not routine PR checks.
+
+It passes when at least one verified task is produced under the smoke output
+directory within the time budget. If it times out or produces no verified task,
+inspect `artifacts/swe_tasks/.legoflow-curator-smoke-py.log` first; the tail usually
+shows whether the slow step was GitHub access, Docker, validation, or the LLM
+call.
+
+## Files
+
+```text
+blocks/curator/tests/
+|-- cases/
+|-- smoke/
+`-- run.sh
+```
+
+See `blocks/curator/tests/README.md` for detailed failure recipes.

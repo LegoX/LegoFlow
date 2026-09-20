@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LegoFlow-Evaluator</title>
+    <!-- Resolve the theme before first paint: the reader's saved choice, else
+         light. This board opens light regardless of the OS preference. -->
+    <script>
+      (() => {
+        let saved = null;
+        try { saved = localStorage.getItem("evaluator-theme"); } catch (e) {}
+        document.documentElement.dataset.theme = saved === "dark" ? "dark" : "light";
+      })();
+    </script>
+    <link rel="stylesheet" href="/styles.css?v=25" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <div id="app" class="layout">
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-logo">
+          <div class="logo-mark">LF</div>
+          <div class="logo-title">Evaluator Dashboard</div>
+        </div>
+        <nav id="nav" class="nav"></nav>
+        <div class="sidebar-section">
+          <div id="jobs-section-label" class="section-label">Jobs</div>
+          <input id="job-filter" class="filter-input" placeholder="Filter jobs…" />
+          <div id="job-list" class="job-list"></div>
+        </div>
+        <div class="sidebar-footer">
+          <div class="row">
+            <span id="compare-label" class="muted">Compare</span>
+            <span id="compare-count" class="badge">0</span>
+          </div>
+          <button id="open-compare" class="btn-mini">Open compare</button>
+          <button id="clear-compare" class="btn-mini ghost">Clear</button>
+          <div id="compare-help" class="muted small compare-help">Use the + button next to a job to add it to Compare.</div>
+        </div>
+      </aside>
+      <main class="main">
+        <header class="topbar">
+          <div class="crumbs" id="crumbs"></div>
+          <div class="top-actions">
+            <span id="status" class="muted small"></span>
+            <!-- Order is shared with every block's board: last-update text, then
+                 block-specific controls, then info / refresh / theme. -->
+            <span id="update-status" class="update-status"></span>
+            <button id="lang-toggle" class="icon-btn" title="Switch language" aria-label="Switch language">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 8 6 6"></path><path d="m4 14 6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="m22 22-5-10-5 10"></path><path d="M14 18h6"></path></svg>
+            </button>
+            <button id="info-toggle" class="icon-btn" title="What this board is reading" aria-label="Dashboard info">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-5"></path><path d="M12 8h.01"></path></svg>
+            </button>
+            <button id="reload" class="icon-btn" title="Reload" aria-label="Reload">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.9 11A7 7 0 0 0 7.1 6.1L4 9"></path><path d="M5.1 13A7 7 0 0 0 16.9 17.9L20 15"></path></svg>
+            </button>
+            <button id="theme-toggle" class="icon-btn theme-toggle" title="Toggle theme" aria-label="Toggle theme">
+              <span class="theme-moon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.7 8.7 0 0 1 9.5 3.5a7 7 0 1 0 11 11Z"></path></svg></span>
+              <span class="theme-sun"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg></span>
+            </button>
+          </div>
+        </header>
+        <section id="content" class="content"></section>
+      </main>
+    </div>
+    <div class="modal" id="info-panel" role="dialog" aria-modal="true" hidden>
+      <div class="modal-box">
+        <div class="modal-head">
+          <div><h3>What this board is reading</h3>
+            <div class="sub">resolved at load time</div></div>
+          <button class="modal-close" data-close type="button" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body" id="info-body"></div>
+      </div>
+    </div>
+    <script src="/app.js?v=25"></script>
+  </body>
+</html>

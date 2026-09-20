@@ -1,0 +1,192 @@
+---
+title: Getting Started
+---
+
+This page gets Evaluator from a benchmark config to completed scores,
+trajectories, and analysis reports. The path is: fill `config.yaml`, run setup,
+check the block, launch the benchmark, then open the dashboard.
+
+You can read it as a concrete walkthrough: follow the example config snippets
+and commands in order, and you will see how an Evaluator run is put together.
+
+Evaluator wraps pinned Harbor and LiteLLM environments. It does not stage
+Curator tasks; it resolves benchmark tasks from Harbor's registry.
+
+## Prerequisites
+
+Before starting, make sure these are available:
+
+- Claude Code or Codex with the Evaluator plugin loaded.
+- Docker, used by Harbor to run benchmark task containers.
+- `uv`, Python, and Python 3.13 for the Harbor and LiteLLM environments.
+- An OpenAI- or Anthropic-compatible model endpoint.
+- A benchmark registered in Harbor's `registry.json`.
+- Optional vLLM serving on a GPU node, only when using a local checkpoint.
+
+If the Evaluator slash commands are not visible in Claude Code, see
+[FAQ](/docs/faq#i-am-in-the-repository-root-but-cannot-find-the-plugin-skills).
+
+## Setup
+
+Most Evaluator issues come from the benchmark name, model endpoint, agent
+runtime, or proxy port. Once `config.yaml` is right, the skills take over.
+
+For a first run, leave `meta_info` and `runtime_info.output` alone. Fill the
+`runtime_info.input` pieces below. For every field, see the
+<a href="/docs/blocks/evaluator/usage/configuration">Configuration Guide</a>.
+
+### Benchmark config
+
+Evaluator is registry-driven. Pick the benchmark and version first:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    task_source:\n      provider: harbor_registry\n      dataset_name: swebench-verified          # e.g. swebench-verified, swebench_multilingual, swebenchpro\n      version: \"1.0\"\n      registry_path: repos/harbor/registry.json\n      no_hack: true                            # hardened swebench-verified mode"}
+</ConfigSnippet>
+
+For a fast first run, either choose a small benchmark variant when available or
+set `harbor_job.n_tasks` below.
+
+### Receive Trainer output
+
+If you are evaluating a checkpoint produced by Trainer, serve it with vLLM on a
+GPU node and make Evaluator call that OpenAI-compatible endpoint:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    local_model_serving:\n      model_path: ../trainer/artifacts/model/<run> # Trainer checkpoint directory to serve\n      model_name: Qwen3.5-35B-A3B                 # name exposed by the vLLM server\n\n    llm_api:\n      api_key: dummy-key                          # must match the vLLM server key\n      api_base_url: http://<GPU_NODE_IP>:8000/v1  # vLLM OpenAI-compatible endpoint\n      model: openai/Qwen3.5-35B-A3B               # openai/<model_name> exposed by vLLM"}
+</ConfigSnippet>
+
+This handoff is not declared in `meta_info.dependencies` today because
+Evaluator can benchmark many model sources: a Trainer checkpoint, a remote API,
+or another local model. The important pieces are `model_path`, which chooses the
+checkpoint to serve, and `llm_api`, which tells Evaluator how to call it. Keep
+`local_model_serving.model_name` aligned with `llm_api.model`.
+
+### LLM API config
+
+Evaluator starts a per-job LiteLLM proxy in front of your model. For a remote
+API, point `llm_api` at the shared endpoint:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      model: openai/Qwen3.5-35B-A3B             # openai/<served-model-name>\n      protocols: [openai_compatible, anthropic_compatible]\n      served_via: per_job_litellm_proxy\n      input_cost_per_token: 0.0\n      output_cost_per_token: 0.0\n\n    litellm_proxy:\n      port: 4101\n      master_key: dummy-key-cf"}
+</ConfigSnippet>
+
+For a standalone local checkpoint, use the same shape and point `model_path` at
+that model directory:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    local_model_serving:\n      model_path: artifacts/models/Qwen3.5-35B-A3B\n      model_name: Qwen3.5-35B-A3B\n\n    llm_api:\n      api_key: dummy-key                         # must match the vLLM server key\n      api_base_url: http://<GPU_NODE_IP>:8000/v1\n      model: openai/Qwen3.5-35B-A3B"}
+</ConfigSnippet>
+
+See [Local Model Evaluation](/docs/blocks/evaluator/usage/local-model-evaluation)
+for the vLLM serving steps.
+
+### Harbor job config
+
+Keep a first run small:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    harbor_job:\n      jobs_dir: artifacts/jobs\n      n_concurrent: 4                           # keep small for the first run\n      n_tasks: 10                               # null = full benchmark\n      max_retries: 2\n      timeout_multiplier: 1"}
+</ConfigSnippet>
+
+### Agent config
+
+Choose one scaffold and keep its runtime image or host path aligned:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    agent:\n      name: custom-openhands-sdk                # custom-openhands-sdk | custom-claude-code | custom-opencode\n      version: 1.33.0\n      runtime_image: docker.io/jierun/c-oh-sdk-1.33.0:v0.1\n      runtime_host_path: artifacts/runtime/openhands-sdk\n      max_turns: 200\n      temperature: 1.0"}
+</ConfigSnippet>
+
+### Job analysis config
+
+Post-eval analysis creates the artifacts used by the dashboard. Leave it on for
+normal runs:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  input:\n    job_analysis:\n      enabled: true\n      tag_llm:\n        base_url: \"\"                            # empty = reuse llm_api\n        model: \"\"\n        api_key: \"\""}
+</ConfigSnippet>
+
+Now run setup:
+
+| Claude Code | Codex |
+| --- | --- |
+| `/evaluator:setup` | `$evaluator-setup` |
+
+This prepares the pinned Harbor checkout, builds the Harbor and LiteLLM
+environments, and checks the local runtime paths. Re-running it is fine.
+
+## Check
+
+Before launching the benchmark, run:
+
+| Claude Code | Codex |
+| --- | --- |
+| `/evaluator:check` | `$evaluator-check` |
+
+This is read-only. It checks config, Harbor repo state, environments, benchmark
+registry, LLM endpoint, proxy port, Docker, and agent runtime. For exact pass
+conditions, see
+[Validation Checks](/docs/blocks/evaluator/usage/validation-checks).
+
+Fix required failures before continuing. If you are using a local checkpoint,
+also make sure the vLLM endpoint is already serving before the check.
+
+## Run Evaluator
+
+Launch the benchmark:
+
+| Claude Code | Codex |
+| --- | --- |
+| `/evaluator:run` | `$evaluator-run` |
+
+Evaluator starts the per-job LiteLLM proxy, builds the Harbor command from
+`config.yaml`, runs the selected benchmark, captures trajectories and verifier
+results, then runs post-eval analysis.
+
+Behind the command, the pipeline is:
+
+```text
+STEP 0  Resolve benchmark      Harbor registry -> task set
+STEP 1  Start model proxy      LiteLLM per-job proxy -> trajectory logger
+STEP 2  Run Harbor trials      task containers -> rewards and trajectories
+STEP 3  Analyze job            failure reports -> dashboard artifacts
+```
+
+The main outputs are:
+
+```text
+artifacts/jobs/<job>/result.json
+artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl
+artifacts/jobs/<job>/<task>/verifier/report.json
+artifacts/jobs/<job>/analysis/
+```
+
+For benchmark selection and proxy details, see
+[Select Benchmark](/docs/blocks/evaluator/usage/select-benchmark) and
+[LiteLLM Proxy](/docs/blocks/evaluator/usage/litellm-proxy). For the
+full artifact layout, see [Output Format](/docs/blocks/evaluator/outputs).
+
+## Final outputs
+
+Evaluator is the terminal block in the current LegoFlow pipeline, so there is
+no next block to configure. Its outputs are the final benchmark artifacts:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"runtime_info:\n  output:\n    eval_results_dir:\n      path: artifacts/jobs                         # benchmark jobs, trajectories, verifier reports, and analysis\n      results_summary_format: artifacts/jobs/<job>/result.json\n      trajectory_format: artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"}
+</ConfigSnippet>
+
+Use these paths for reporting, dashboard review, or any custom analysis you add
+after evaluation.
+
+## Dashboard visualization
+
+After an Evaluator run starts or finishes, open the dashboard:
+
+| Claude Code | Codex |
+| --- | --- |
+| `/evaluator:dashboard` | `$evaluator-dashboard` |
+
+The dashboard helps browse jobs, benchmark scores, trajectories, verifier
+reports, and post-eval analysis. It reads `artifacts/jobs/` directly, so keep
+the job directory and run log around when debugging.
+
+For the internal Evaluator mechanism, see [Design](/docs/blocks/evaluator/design).

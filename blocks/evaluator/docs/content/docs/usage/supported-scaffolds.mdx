@@ -1,0 +1,42 @@
+---
+title: Supported Scaffolds
+---
+
+The agent scaffold decides how the model is driven inside each task container:
+how it plans, which tools it gets, and which API protocol it speaks. Evaluator
+validates these three end to end.
+
+| `agent.name` | Protocol | Runtime image |
+| --- | --- | --- |
+| `custom-claude-code` | Anthropic | `docker.io/jierun/c-cc-2.1.118:v0.1` |
+| `custom-openhands-sdk` | OpenAI | `docker.io/jierun/c-oh-sdk-1.14.0:v0.5` |
+| `custom-opencode` | OpenAI-compatible | `docker.io/yjiangcm/c-oc-1.14.22:v0.2` |
+
+All three share one evaluation shell, because the per-job LiteLLM proxy exposes
+both OpenAI- and Anthropic-compatible paths. Changing scaffold does not mean
+changing model provider.
+
+## Switching scaffold
+
+Four fields move together, and a mismatch between them is the usual cause of a
+job that starts and then fails in every container:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"agent:\n  name: custom-openhands-sdk\n  version: \"1.14.0\"\n  runtime_image: docker.io/jierun/c-oh-sdk-1.14.0:v0.5\n  runtime_host_path: artifacts/runtime/openhands-sdk"}
+</ConfigSnippet>
+
+`runtime_host_path` must contain the extracted agent runtime tree. Evaluator
+bind-mounts that directory into every task container rather than installing the
+agent inside each one: the install would be repeated once per task, would need
+network access from inside the container, and would let two tasks in the same job
+end up on different agent builds.
+
+Agent-specific flags follow from `agent.name`. OpenHands SDK receives
+`max_iterations`, the LiteLLM OpenAI URL, the API key and the mounted runtime
+path; Claude Code receives the Anthropic-compatible LiteLLM URL.
+
+<Callout title="Keep the version in the image tag" type="info">
+`version` and the version inside `runtime_image` refer to the same agent build.
+When they drift, the job still launches, and the trajectories it produces are
+attributed to the wrong agent version.
+</Callout>

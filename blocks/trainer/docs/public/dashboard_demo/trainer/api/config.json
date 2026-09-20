@@ -1,0 +1,1 @@
+{"save_dirs": ["/workspace/legoflow/blocks/trainer/artifacts/model"], "log_dirs": ["/workspace/legoflow/blocks/trainer/artifacts/logs"], "wandb_entity": "", "wandb_project": "", "data_source": "log"}

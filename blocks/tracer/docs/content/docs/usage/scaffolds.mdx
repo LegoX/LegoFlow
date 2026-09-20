@@ -1,0 +1,60 @@
+---
+title: Supported Scaffolds
+---
+
+A scaffold is the harness that produced a trajectory. Tracer supports multiple
+agent scaffolds, and each one logs messages, tools, reasoning, and observations
+in a slightly different shape. Conversion normalizes those shapes into the IM
+schema before scoring and LF export.
+
+## Supported scaffolds
+
+| Scaffold | Current pinned version | Agent name | Config / converter key | Converter module |
+| --- | --- | --- | --- | --- |
+| Claude Code | `2.1.118` | `custom-claude-code` | `claude_code` | `swe_data_process.claudecode_opencode.convert_cc_to_im` |
+| OpenCode | `1.18.7` | `custom-opencode` | `open_code` | `swe_data_process.claudecode_opencode.convert_oc_to_im` |
+| OpenHands SDK | `1.33.0` | `custom-openhands-sdk` | `openhands_sdk` | `swe_data_process.openhands.convert_openhands_sdk_to_im` |
+| Terminus-2 | converter only | `terminus2` | `terminus2` | `swe_data_process.terminus2.convert_terminus2_to_im` |
+
+The mapping is encoded in `scripts/convert_trajectories.sh`, so the block's
+conversion path and docs use the same scaffold keys.
+
+## Automatic detection
+
+When `sft_conversion.scaffold: auto`, Tracer derives the converter from
+`runtime_info.input.agent.name`:
+
+| Agent name | Scaffold key |
+| --- | --- |
+| `custom-claude-code`, `claude-code`, `claude_code` | `claude_code` |
+| `custom-opencode`, `open-code`, `opencode`, `open_code` | `open_code` |
+| `custom-openhands-sdk`, `openhands-sdk`, `openhands_sdk`, `openhands` | `openhands_sdk` |
+| `terminus2`, `terminus-2` | `terminus2` |
+
+This is convenient for new jobs, but be careful with old jobs. A historical job
+may have been produced by a scaffold different from the current config. In that
+case, refresh conversion with the explicit scaffold key.
+
+## What the Converter Normalizes
+
+Each converter produces one shared IM shape:
+
+- user, assistant, and tool messages are ordered into one conversation;
+- tool invocations become OpenAI-style `tool_calls`;
+- tool observations are attached to the right calls;
+- scaffold-specific reasoning fields are either preserved or filtered according
+  to the conversion settings;
+- repeated or malformed prefixes are cleaned where the converter can do so
+  safely;
+- task, job, model, scaffold, and score metadata are attached for downstream
+  filtering.
+
+The goal is not to erase scaffold identity. The goal is to make the parts that
+Trainer and scoring need consistent while preserving enough metadata for
+dashboard analysis.
+
+<Callout title="Match scaffold to job" type="warn">
+Using the wrong scaffold key can produce malformed IM rows. If conversion looks
+strange, first check whether the job's agent scaffold matches
+`sft_conversion.scaffold`.
+</Callout>

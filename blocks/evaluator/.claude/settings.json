@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "evaluator-block": {
+      "source": { "source": "directory", "path": ".claude/plugins" }
+    }
+  },
+  "enabledPlugins": {
+    "evaluator@evaluator-block": true
+  }
+}

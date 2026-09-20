@@ -1,0 +1,10 @@
+# Wrangler local deploy cache (Cloudflare Pages). Machine-local, never commit.
+.wrangler/
+site/.wrangler/
+
+# Python bytecode cache
+__pycache__/
+
+
+# Rendered board: a build artifact that embeds this machine's absolute paths.
+site/

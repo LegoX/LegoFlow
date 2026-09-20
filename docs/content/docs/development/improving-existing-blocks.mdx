@@ -1,0 +1,137 @@
+---
+title: Improving Existing Blocks
+---
+
+Improving a block starts by deciding which layer you are changing. Some changes
+belong to the block workflow. Others belong to the implementation repository
+that the block pins under `repos/`.
+
+## Workflow-Level Changes
+
+Change the block itself when the user-facing workflow is wrong, incomplete, or
+hard to operate. These changes live in the block directory.
+
+### Skill instructions
+
+Edit `.claude/plugins/<block>-plugin/skills/*/SKILL.md` when the slash-command
+workflow needs to change.
+
+Good skill changes include:
+
+- clarifying what `/block:setup` prepares;
+- making `/block:check` explain failures more clearly;
+- adding confirmation steps before expensive runs;
+- pointing users to the right dashboard, output, or test case;
+- keeping slash-command behavior aligned with the current scripts.
+
+Skills should describe how the agent should operate the block. They should not
+become long copies of implementation code.
+
+### `CLAUDE.md`
+
+Edit `CLAUDE.md` when the block's operating contract changes.
+
+Use it to document:
+
+- what the block is responsible for;
+- what inputs it consumes and outputs it publishes;
+- which files or directories the agent must not touch;
+- the normal setup, check, run, and dashboard sequence;
+- known pitfalls and recovery steps.
+
+`CLAUDE.md` is the durable instruction layer for agents working inside that
+block, so keep it current when the workflow changes.
+
+### Config and Handoffs
+
+Edit `config.yaml` when the block contract changes: new inputs, new outputs,
+new dependencies, new resource settings, or new runtime knobs.
+
+When changing handoffs, update both sides:
+
+<ConfigSnippet title="blocks/<consumer>/config.yaml">
+{"meta_info:\n  dependencies:\n    from:\n      input.path:\n        from: producer.output.output_dir"}
+</ConfigSnippet>
+
+<ConfigSnippet title="blocks/<producer>/config.yaml">
+{"meta_info:\n  dependencies:\n    to:\n      output_dir:\n        to: consumer.input.path"}
+</ConfigSnippet>
+
+Then update the relevant Getting Started and Configuration pages so users know
+how to fill the new fields.
+
+### Scripts
+
+Edit `scripts/` when the workflow needs a different executable path.
+
+Common script-level changes include:
+
+- adding a preflight check to `dryrun.sh`;
+- changing how `start.sh` reads config and writes artifacts;
+- improving archiving, cleanup, or stop behavior;
+- adding helper scripts that are called by skills or the dashboard.
+
+Keep the boundary clear: scripts orchestrate a block run. They may call code in
+`repos/`, but they should not silently become a second implementation of that
+repo.
+
+### Dashboard and Artifacts
+
+Edit `dashboard/` when users need a better way to inspect block state. A
+dashboard should read `artifacts/` and render summaries, examples, quality
+signals, and errors. It should not mutate task data, model outputs, or run
+state.
+
+If the dashboard needs a new field, make sure the run path writes that field
+under `artifacts/` in a stable location.
+
+## Repository-Level Feature Development
+
+Change the pinned repo when the feature is part of the domain implementation,
+not the LegoFlow workflow.
+
+Examples:
+
+- Curator task generation logic belongs in the Curator implementation repo.
+- Tracer trajectory conversion logic belongs in the data-processing or Harbor
+  repo that owns that converter.
+- Trainer model training behavior belongs in LLaMA-Factory or the training
+  implementation repo.
+- Evaluator benchmark execution behavior belongs in Harbor or the benchmark
+  adapter repo.
+
+The block should call these repos, pin their commits, configure their inputs,
+archive their outputs, and expose their behavior through skills. The repo should
+own the actual feature implementation.
+
+## How to Keep the Boundary Clean
+
+Use this rule of thumb:
+
+| If you are changing... | Work in... |
+| --- | --- |
+| how users run, check, configure, archive, or inspect a stage | the block |
+| a slash command or agent-facing workflow | `.claude/plugins/` and `CLAUDE.md` |
+| handoff fields between blocks | `config.yaml` in both neighboring blocks |
+| a preflight, launcher, cleanup, or dashboard wrapper | `scripts/` or `dashboard/` |
+| the algorithm, converter, benchmark adapter, or training implementation | the pinned repo under `repos/` |
+
+After a repo-level change is merged upstream, update the block's repo pin and
+record the reason in the block docs or memory notes. That keeps runs
+reproducible while still letting the implementation evolve.
+
+## Before you finish
+
+For workflow-level changes:
+
+- run `/block:check`;
+- run a smoke path when possible;
+- verify outputs still land under `artifacts/`;
+- update the block docs that users read first.
+
+For repo-level changes:
+
+- run the repo's own tests;
+- update the pinned commit in `config.yaml`;
+- run the block check that validates the pin;
+- explain the user-visible behavior in the block docs.

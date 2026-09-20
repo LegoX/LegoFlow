@@ -1,0 +1,148 @@
+# ROOT SMOKE — stage 3/4: trainer.
+# Overlaid onto blocks/trainer/config.yaml by tests/smoke/run_pipeline.sh.
+# Deltas from production are tagged "# ROOT:".
+#
+# Model and dataset match production; only the step count differs and tracer's
+# reward==1 output is merged in. source.type "combined_lf" is chain-level:
+# run_pipeline merges fixture_lf + every lf.json under upstream_lf_dir, then
+# lowers this to the block's native local_lf before launch.
+#
+# Runs on the GPU pod in meta_info.resources; eval serves the checkpoint from
+# there (tests/smoke/serve_checkpoint.sh).
+
+meta_info:
+  name: trainer
+  label: "SFT Training"
+  description: SFT on the production dataset + tracer reward==1 trajectories; persists a checkpoint for eval.
+  parent: legoflow
+  blocks: {}
+  dependencies:
+    from:
+      # stage 2 -> 3: the CONVERTED reward==1 LF, not raw trajectories
+      source.upstream_lf_dir: tracer.output.sft_data_dir
+    to:
+      # stage 3 -> 4: eval serves this checkpoint and points llm_api at it
+      checkpoint_path: evaluator.input.llm_api.api_base_url
+
+  resources:
+    ip: ""
+    user: root
+    pwd: null
+    key: ""
+    port: ""
+    directory: ""
+
+  repositories:
+    llama_factory:
+      url: https://github.com/hiyouga/LLaMA-Factory.git
+      branch: null
+      commit: 3e32f8ca86a71b94d79d1cd51ad457900ec1dc20
+      path: repos/LLaMA-Factory
+      readonly: true
+    swe_data_process:
+      url: https://github.com/LegoX/swe_data_process.git
+      branch: main
+      commit: dda92c581a0c0eaba74bb469d92ddda767e5f1b3
+      path: repos/swe_data_process
+      readonly: true
+
+  environment:
+    sft_uv: artifacts/env/lf
+    python_version: "3.12"
+    packages:
+      - repos/LLaMA-Factory
+      - repos/swe_data_process
+
+runtime_info:
+  input:
+    source:
+      # ROOT: logical combined source — run_pipeline.sh lowers this to local_lf
+      # against the merged json before launch (see header).
+      type: combined_lf
+      scaffold: openhands-sdk
+      job_dir: ""
+      # hf_* must be HERE, not only in the block's smoke config: run_pipeline
+      # overlays this file before prepare_smoke_data.sh reads them.
+      hf_hub_url: Lego-X/samples_for_llama_factory_sft
+      hf_file_name: jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
+      fixture_lf: artifacts/data/examples/jierun_glm52_openswe_mirror_score4_proto_oh_sdk_512_for_qwen3_5.json
+      # Relative to the trainer block; run_pipeline rewrites to an absolute path.
+      upstream_lf_dir: ../tracer/artifacts/sft_data
+      # Filled in by run_pipeline.sh after the merge:
+      lf_path: ""
+
+    conversion:
+      max_instances: 0
+      exclude_repos_file: scripts/excluded_repos.txt
+      data_name: "root_smoke_combined"
+
+    dataset:
+      name: ""                          # auto-derived from conversion.data_name
+
+    model:
+      model_name_or_path: Qwen/Qwen3.5-35B-A3B-Base
+      trust_remote_code: true
+
+    training:
+      stage: sft
+      finetuning_type: full
+      deepspeed: scripts/deepspeed/ds_z3_config.json
+      template: qwen3_5
+      cutoff_len: 131072
+      rope_scaling: null
+      max_samples: 1000000
+      preprocessing_num_workers: 16
+      dataloader_num_workers: 4
+      # ROOT: persisted (not a throwaway _smoke_* dir) — eval serves this.
+      output_dir: "root_smoke_model"
+      logging_steps: 1
+      # ROOT: 'no' still writes the final model; it only drops intermediate checkpoints.
+      save_strategy: "no"
+      save_steps: 200
+      overwrite_output_dir: true
+      save_only_model: true
+      resume_from_checkpoint: null
+      per_device_train_batch_size: 1
+      gradient_accumulation_steps: 8
+      learning_rate: 1.0e-4
+      weight_decay: 0.01
+      max_grad_norm: 1.0
+      # Enough to produce a servable checkpoint, not to train a good model:
+      # this validates the CHAIN. At 35B/131072 a step costs ~12 min, so 8 is
+      # already ~1.5h of the stage's budget.
+      max_steps: 8
+      num_train_epochs: 1.0
+      lr_scheduler_type: cosine
+      warmup_ratio: 0.03
+      bf16: true
+      ddp_timeout: 180000000
+      enable_liger_kernel: true
+      use_unsloth_gc: true
+      flash_attn: fa2
+
+    infrastructure:
+      n_gpus_per_node: 8
+
+    experiment:
+      run_name: ""
+      wandb_mode: disabled
+      wandb_run_id: ""
+
+    credentials:
+      wandb_api_key: ""
+      hf_token: ""
+
+  output:
+    checkpoint_path:
+      description: Path to the trained model checkpoint (consumed by eval stage 4)
+      value: null
+    artifacts:
+      train_results: null
+      train_loss_plot: null
+      training_log: null
+    training_curves:
+      description: WandB run id with loss, learning rate, and token metrics
+      value: null
+    training_metrics:
+      description: Final training metrics from LLaMA-Factory
+      value: null

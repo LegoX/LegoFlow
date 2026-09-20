@@ -1,0 +1,149 @@
+---
+title: Design
+---
+
+Curator's problem is not finding code changes. GitHub has an unlimited supply of
+those. The problem is turning a merged pull request, which is a record of what
+somebody already did, into a task that can be given to an agent and then judged
+automatically. Everything below follows from that: a task is only useful if a
+solver cannot see the answer, and only trustworthy if a machine can decide
+whether the answer was reached.
+
+![Curator workflow from pull request discovery to verified task publication](/figures/curator.png)
+
+## Repositories
+
+Curator runs one pinned external repository. `/curator:setup` checks it out at
+the commit recorded in `meta_info.repos` in `config.yaml`, and the checkout is
+treated as read-only: local edits are overwritten on the next update, so changes
+belong upstream.
+
+| Repository | Path | Role |
+| --- | --- | --- |
+| [legoflow-curator](https://github.com/LegoX/legoflow-curator) | `repos/legoflow-curator` | The `legoflow-curator` CLI and its tools: PR collection, task generation through the Claude Code path, NOP/Oracle validation, and difficulty scoring. |
+
+## 1. Selection is a Filter, Not a Crawl
+
+The goal is explicitly not to collect every PR. Selection runs as three stages,
+each narrowing the set before the next one spends more to look closer:
+repositories, then pull requests inside them, then the tasks those PRs can
+actually become. The ordering is the whole point. Stage one costs a few GitHub
+search queries, stage two costs one metadata fetch per PR, and stage three costs
+a container build plus two verification runs per candidate. Putting the cheap
+filters first is what keeps a language sweep affordable.
+
+### Stage 1: repositories
+
+Search is repository-first, driven by `pr_collection.filters` in `config.yaml`:
+
+| Filter | What it is really asking |
+| --- | --- |
+| `min_stars`, `min_merged_prs` | Does this project have review discipline? Both are proxies for merged changes being real, reviewed fixes rather than drive-by commits. |
+| `min_language_percentage` | Is the target language actually this codebase's language? In a repo where it is a minority, the container ends up building a toolchain for code the task never touches, and failures turn into build problems rather than code problems. |
+| `max_days_since_push` | Is the project still alive? An abandoned repo pins dependencies that no longer resolve, so its tasks fail at image build time, sometimes long after collection. |
+
+`repo_num` caps how many qualifying repositories are kept per language.
+
+### Stage 2: pull requests
+
+Inside each surviving repository, at most `max_prs_per_repo` candidates are kept,
+filtered again:
+
+| Filter | What it is really asking |
+| --- | --- |
+| `min_issue_body_length` | Is there a stated problem to work from? The linked issue is the raw material for `instruction.md`; without one there is nothing to write a task from except the diff, which is the answer. |
+| `min_files_changed`, `max_files_changed`, `max_lines_changed` | Is the change one coherent unit of work? Below the floor, the fix is a one-liner and the task is ambiguous. Above the ceiling, the PR has bundled a refactor with the fix and the tests no longer isolate a single behavior. |
+
+Some languages cannot meet the global thresholds. The collector therefore keeps a
+per-language override table that takes precedence over these values (C, for
+instance, runs with lower star and merged-PR floors and a wider file budget).
+Those overrides live in the collector rather than in `config.yaml`, on the view
+that they are properties of the ecosystem, not knobs for a run.
+
+The output is one candidate list per language:
+
+```text
+artifacts/collected_prs/
+├── python_pr_ids.txt
+├── javascript_pr_ids.txt
+└── ...
+```
+
+### Stage 3: tasks
+
+Generation applies the last filter, because some things can only be judged once
+the PR is opened up. `--min-source-files` and `--max-source-files` set the
+yield-versus-difficulty dial: a floor of `1` keeps the most PRs, including small
+fixes, and the shipped per-language scripts use `2` to drop single-file trivia.
+`--no-require-issue` relaxes the linked-issue requirement when a language's pool
+is too thin without it.
+
+Whatever survives here is still only a candidate. Nothing counts as a task until
+the two baselines in section 3 agree.
+
+## 2. The Visibility Boundary
+
+Each surviving candidate becomes a Harbor task directory:
+
+```text
+artifacts/swe_tasks/py-cc/<task_id>/
+├── task.toml
+├── instruction.md
+├── environment/
+│   ├── Dockerfile
+│   └── bug.patch
+├── solution/
+│   ├── fix.patch
+│   └── solve.sh
+└── tests/
+    └── test.sh
+```
+
+The layout encodes the single rule the whole dataset depends on: `instruction.md`
+is what a future agent reads, and `solution/` and `tests/` exist only for
+verification. Generation is asked to state the problem without describing the
+patch, because the reference fix reaching the prompt does not produce a wrong
+score, it produces a convincing one. That kind of leak is invisible in the
+resulting numbers, which is why it is enforced by structure rather than by
+review.
+
+## 3. Two Baselines Decide What Counts as Verifiable
+
+A task directory existing proves nothing. During generation, Harbor runs two
+baseline agents against every candidate:
+
+- **NOP baseline**: change nothing. The tests must fail, reward `0`.
+- **Oracle pass**: apply the ground-truth fix. The tests must pass, reward `1`.
+
+Both bounds are needed, and each one rules out a different failure. Without the
+NOP run, a task whose tests already pass would be accepted and would be scored as
+solved by an agent that did nothing. Without the Oracle run, a task whose tests
+can never pass, because the environment is broken or the fix is incomplete, would
+be accepted and would be scored as failed no matter how good the agent is. Only
+candidates that fail before and pass after are appended to:
+
+```text
+artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt
+```
+
+Difficulty and the semantic tags are computed here too and written back into each
+task's own `task.toml`, so the metadata travels with the task rather than living
+in a side index that can drift.
+
+## 4. The Manifest is the Contract
+
+`verifiable_tasks.txt` is the only authoritative statement of what Curator
+produced. The task directory tree is not: it also holds candidates that are
+half-generated, failed validation, or are still being written by a running worker.
+
+This is why downstream blocks filter through the manifest instead of scanning
+directories. Tracer's staging step reads it and links only the listed ids, which
+is what lets Curator keep generating into the same pool while Tracer is already
+rolling out against it.
+
+The merged pool at `artifacts/merged_swe_tasks/` is the same contract in
+materialized form, built by an aggregator that runs alongside generation, so the
+downstream side always has one directory to point at.
+
+For the shortest runnable path, see [Getting Started](/docs/blocks/curator/getting-started).
+For the exact files written by each stage, see [Output Format](/docs/blocks/curator/outputs).

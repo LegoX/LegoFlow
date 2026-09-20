@@ -1,0 +1,30 @@
+# Harbor submodule working tree contents (the gitlink itself is tracked).
+# Ignore everything inside repos/harbor/ so local checkouts don't pollute status.
+repos/harbor/
+
+# Runtime artifacts can contain config snapshots, trajectories, logs, host
+# paths, endpoint details, and credentials. Never publish them.
+artifacts/
+
+# Local Claude Code settings (not shared).
+.claude/settings.local.json
+
+# Local environment and caches.
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+*.log
+.DS_Store
+
+# Editor/sync backup artifacts (e.g. .efc_<hashes>_<name>).
+.efc_*
+
+# Local backups of config.yaml (e.g. config.yaml.prod-bak)
+config.yaml.*-bak
+*.bak

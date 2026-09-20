@@ -1,0 +1,107 @@
+---
+title: Design
+---
+
+Trainer exists to answer one question repeatedly and cheaply: **is this batch of
+data worth training on?** Fine-tuning is how the pipeline finds out whether the
+tasks Curator built and the trajectories Tracer collected actually carry signal,
+so the block is built for iteration rather than for a single hero run. Data
+selection and training hyperparameters both come from `config.yaml`, which is
+what lets an operator, human or agent, change one variable, rerun, and compare
+against the previous run instead of rebuilding a training setup by hand.
+
+## Repositories
+
+Trainer runs two pinned external repositories, both tracked as git submodules.
+`/trainer:setup` checks each one out at the commit recorded in `meta_info.repos`
+in `config.yaml`, and both checkouts are read-only: local edits are overwritten
+on the next update, so changes belong upstream.
+
+| Repository | Path | Role |
+| --- | --- | --- |
+| [LLaMA-Factory](https://github.com/LegoX/LLaMA-Factory) | `repos/LLaMA-Factory` | The training framework, patched for this pipeline. Trainer drives it through `llamafactory.cli train` with DeepSpeed ZeRO-3. |
+| [swe_data_process](https://github.com/LegoX/swe_data_process) | `repos/swe_data_process` | The trajectory converters, shared with Tracer. Trainer only uses them on the `harbor_job` path, when it has to build LF data from raw rollouts itself. |
+
+## 1. Read the Data Source
+
+`/trainer:run` enters through `scripts/start.sh`. The script first runs
+`scripts/dryrun.sh`, then hands the real work to `scripts/train.sh`.
+
+The first decision comes from `runtime_info.input.source.type`:
+
+| Source type | What Trainer reads |
+| --- | --- |
+| `harbor_job` | Raw trajectories from a Tracer Harbor job. |
+| `hf_lf` | A ShareGPT-style LF dataset from the Hugging Face Hub. |
+| `local_lf` | A local ShareGPT-style JSON file. |
+
+Three sources exist because a training run is not always a pipeline run. `hf_lf`
+gives you a public dataset to sanity-check the training stack against, `local_lf`
+is the normal LegoFlow handoff (point Trainer at the `lf.json` Tracer already
+produced), and `harbor_job` is the fallback for when only raw rollouts exist.
+Preferring Tracer's `lf.json` over reconverting is deliberate: converting the same
+trajectories twice, in two blocks, is how the training set and the reported
+conversion statistics quietly stop matching.
+
+## 2. Prepare and Register the Dataset
+
+Whatever the source, Trainer's job is to hand LLaMA-Factory exactly one
+registered LF dataset:
+
+| Source type | Preparation |
+| --- | --- |
+| `local_lf` | Register the LF JSON file directly. |
+| `hf_lf` | Download one exact Hub file, or let LLaMA-Factory load the Hub dataset at train time. |
+| `harbor_job` | Convert raw Tracer trajectories into LF data, then register the result. |
+
+On the raw path Trainer writes both `artifacts/data/im_data/<data_name>.jsonl`
+and `artifacts/data/lf_data/<data_name>.json`. LLaMA-Factory consumes the LF
+file; the IM file is kept because conversion quality is the thing you end up
+debugging. For scaffold-specific conversion and scoring, see Tracer's
+[Trajectory Conversion](/docs/blocks/tracer/usage/trajectory-conversion).
+
+Registration itself is a single generated `dataset_info.json`, which is what
+makes a data change a one-line config change rather than a manual edit in the
+framework's own files.
+
+### Evaluation leakage protection
+
+Training data and benchmark data come from the same universe of GitHub
+repositories, so overlap is the default outcome, not an unlucky one. A model
+trained on a repository it is later benchmarked on will score well for the wrong
+reason, and nothing downstream can detect that from the score alone.
+
+Trainer therefore filters raw Harbor jobs through `conversion.exclude_repos_file`
+by default, dropping trajectories whose repository appears in the evaluation
+benchmark. The protection is on by default because the failure it prevents is
+silent, and a silent inflated score is worse than no score. `conversion.max_instances`
+caps the set when you want a smoke-sized run.
+
+## 3. Launch Training
+
+The training command is:
+
+```bash
+python -m llamafactory.cli train artifacts/training_config/<run_name>.yaml
+```
+
+`scripts/train.sh` sets `FORCE_TORCHRUN=1` and `NPROC_PER_NODE` from
+`runtime_info.input.infrastructure.n_gpus_per_node`, so a multi-GPU run stays
+driven by one config file. Relative `training.output_dir` values resolve under
+`artifacts/model/<output_dir>/`, which keeps runs inside the block unless an
+absolute path is chosen on purpose, so successive attempts sit side by side and
+stay comparable.
+
+Logs are written to:
+
+```text
+artifacts/logs/<run_name>_<timestamp>.log
+artifacts/logs/torchelastic/
+```
+
+The second directory captures per-rank torch errors. Distributed failures usually
+show up as a stack trace on one rank and a timeout everywhere else, so the
+per-rank split is what makes them diagnosable at all.
+
+For the shortest runnable path, see [Getting Started](/docs/blocks/trainer/getting-started).
+For the exact files written by each stage, see [Output Format](/docs/blocks/trainer/outputs).

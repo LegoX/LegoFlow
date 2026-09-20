@@ -1,0 +1,82 @@
+---
+title: Motivation
+---
+
+Long-horizon, high-quality agentic code data is becoming central to pushing the
+capabilities of modern LLMs. However, building a good coding-agent data pipeline
+is non-trivial in practice. Taking software-engineering data as an example, the
+pipeline involves multiple stages: mining real repositories, collecting valid
+PRs, creating verified tasks with runnable environments, rolling out and
+filtering successful trajectories, and closing the training-evaluation loop.
+
+LegoFlow aims to simplify the whole process of code data engineering by turning the whole agentic-data pipeline
+into a set of reusable, inspectable blocks. Each block has a clear contract, standard plugin skills, its own dashboard, 
+and archived artifacts, so users can run the pipeline stage by stage without memorizing hidden handoffs. The same
+structure also keeps the system extensible: new data domains, new coding agents,
+new training recipes, and new evaluation rubrics can be added while preserving a
+consistent way to configure, run, debug, and compare results.
+
+## Blocks as Workflow Contracts
+
+LegoFlow is built upon **blocks**, a structured way to define how agent
+workflows proceed and interact with each other.
+
+![Anatomy of a LegoFlow block](/figures/block-definition-editable.png)
+
+A block is one runnable unit in the pipeline. It owns one stage of work, such as
+task curation, trajectory rollout, training, or evaluation, and packages that
+stage so a person and an agent can operate it in the same way.
+
+Each block follows the same contract:
+
+- `config.yaml` declares the block identity, runtime inputs, published outputs,
+  remote machine settings, pinned repositories, and dependency edges;
+- `CLAUDE.md` explains the operating contract for the agent working inside the
+  block;
+- `.claude/plugins/` exposes the block through predictable skills such as
+  setup, check, run, and dashboard;
+- `scripts/` contains the executable workflow;
+- `repos/` pins the implementation code that the block runs but does not own;
+- `artifacts/` stores outputs, logs, environments, and archived runs;
+- `dashboard/` reads artifacts and makes the block's state visible.
+
+This structure turns an informal pipeline into a set of explicit contracts. A
+block states what it consumes, what it produces, how it should be run, where it
+runs, and how its outputs are handed to neighboring blocks. 
+
+Note that a block can run on any accessible cluster, local machine, or remote server that satisfies its environment requirements. This allows easy collaboration between different workflows. 
+For the full anatomy, see [What is a Block](/docs/development/block-design).
+
+## Easy Expansion
+
+The block design makes LegoFlow easier to extend because new workflow stages can
+be added without rewriting the whole pipeline. A new block only needs to obey
+the same contract: declare its inputs and outputs, expose standard plugin
+skills, write artifacts under its own directory, and document how it connects to
+neighboring blocks.
+
+This gives developers a clean boundary. Workflow changes, such as new skills,
+new checks, new dashboards, or new handoff fields, live in the block. Domain
+implementation changes, such as a new task generator, converter, training
+method, or benchmark adapter, live in the pinned repository under `repos/`.
+Because the boundary is explicit, LegoFlow can grow from SWE data to other
+long-horizon agent-data domains without forcing every stage to share the same
+codebase or runtime.
+
+## (Recursive) Self-improvement
+
+LegoFlow thus has the potential for (recursive) self-improvement by
+concatenating the workflows of multiple blocks. Given a particular objective,
+the root block can orchestrate its subblocks: Curator creates tasks, Tracer
+collects successful trajectories, Trainer turns those trajectories into a new
+checkpoint, and Evaluator measures whether the checkpoint actually improves.
+
+In other words, LegoFlow can repeatedly collect tasks, generate trajectories,
+train, and evaluate in one connected loop. A concrete end-to-end example is
+described in [this temporary blog post](https://legox.pages.dev/blog/legoflow/).
+
+![End-to-end solve-rate improvement](/showcase/live-e2e-20260730/solve-rate-comparison.png)
+
+The same loop can also be used to tune block-level choices, such as task
+filters, rollout agents, trajectory selection rules, training settings, and
+evaluation suites, then compare the resulting artifacts across runs.

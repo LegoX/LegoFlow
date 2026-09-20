@@ -1,0 +1,55 @@
+---
+title: Supported Benchmarks
+---
+
+Evaluator is registry driven: it does not stage tasks locally. Switch benchmark by editing fields in `config.yaml → runtime_info.input.task_source`:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"task_source:\n  provider: harbor_registry\n  dataset_name: swebench-verified\n  version: \"1.0\"\n  registry_path: repos/harbor/registry.json\n  no_hack: false"}
+</ConfigSnippet>
+
+Harbor resolves `(dataset_name, version)` against `repos/harbor/registry.json` and fetches the underlying task data automatically. No `artifacts/tasks/` staging is required.
+
+## Nohack (agent egress control)
+
+Set `task_source.no_hack: true` to run the **hardened** SWE-Bench Verified variant that limits agent network egress to the per-job LiteLLM host (verifier stays public so the SWE-Bench parser can still resolve PyPI deps).
+
+When enabled, `start.sh`:
+
+1. Keeps `dataset_name: swebench-verified` as the **source** in config
+2. Runs `scripts/prepare_nohack.sh` to generate (if missing) the local dataset under `repos/harbor/datasets/swebench-verified-nohack` and registry at `repos/harbor/scripts/git_ignore/hack_control/registry.swebench_verified_nohack.json`
+3. Launches Harbor against `swebench-verified-nohack@1.0` with `--agent-extra-allowed-host <LiteLLM host>`
+
+Currently **only** `dataset_name: swebench-verified` is supported. The `-100` subset is **rejected** with `no_hack` because the remap would silently expand it to the full 500-task set. Cap a smoke run with `harbor_job.n_tasks` instead. `n_tasks` also limits nohack registry generation to a separate `registry....limitN.json` so a short probe does not replace the full nohack registry. Stale `limitN` variants are removed by `scripts/clean.sh`. Refresh a stale local nohack tree with `NOHACK_REFRESH=1` before `start.sh`.
+
+See Harbor's `docs_dev/network-policy-nohack.md` for the phase-level network policy details.
+
+## Curated benchmarks
+
+These are validated to run end to end under the agent configured by Evaluator, for example `custom-claude-code`:
+
+| `dataset_name` | `version` | Tasks | Source |
+| --- | --- | --- | --- |
+| `swebench-verified` | `1.0` | 500 | human-validated SWE-bench |
+| `swebench-verified-100` | `1.0` | 100 | 100-task subset of swebench-verified |
+| `swebench_multilingual` | `1.0` | 300 | multilingual SWE-bench |
+| `swebench_multilingual-100` | `1.0` | 100 | random subset of swebench_multilingual (seed=42) |
+| `swebenchpro` | `1.0` | 731 | SWE-bench Pro multi-language |
+| `swebenchpro-100` | `1.0` | 100 | 100-task subset of swebenchpro |
+| `terminal-bench` | `2.0` | 89 | Terminal-Bench 2.0 |
+
+<Callout title="Mind the version" type="info">
+The `version` field is not always `1.0`: `terminal-bench` is `2.0`. `-100` subsets share the same registry entry shape as their full-set parents.
+</Callout>
+
+## Smoke runs
+
+For a fast run, either pick a `-100` subset from the table, or cap the full benchmark with `harbor_job.n_tasks`:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml">
+{"harbor_job:\n  n_tasks: 16   # null = full benchmark; an int caps the run"}
+</ConfigSnippet>
+
+<Callout title="Pin and registry move together" type="warn">
+Before changing `meta_info.repositories.harbor.commit`, confirm the new commit's `registry.json` still contains your chosen `(dataset_name, version)` pair. The Harbor pin moves as the block tracks newer registry contents.
+</Callout>

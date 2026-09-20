@@ -1,0 +1,99 @@
+meta_info:
+  name: evaluator
+  label: "Evaluator"
+  description: Runs registered benchmark evaluations through Harbor against a configurable upstream LLM. Mirrors tracer's runtime shell, but loads tasks from Harbor's registry.json instead of a local curator export.
+  parent: legoflow
+  blocks: {}
+  dependencies:
+    from: {}
+    to: {}
+
+  resources:
+    ip: local
+    user: null
+    pwd: null
+    directory: .
+    description: Local execution; set host-specific values in your private run profile
+    public_storage: ./artifacts
+
+  repositories:
+    harbor:
+      url: https://github.com/LegoX/harbor.git
+      branch: main
+      commit: 73fd120e731217b38f31667932ea26a28cdd4fff
+      path: repos/harbor
+      readonly: true
+
+  environment:
+    harbor_uv: artifacts/env/harbor-uv
+    litellm_uv: artifacts/env/litellm-venv
+    litellm:
+      python_version: "3.13"
+      litellm_version: "1.83.14"
+
+runtime_info:
+  input:
+    # MODE A (remote API) example: /evaluator:setup reference; MODE B (local vLLM checkpoint) active;
+    # How to fill: docs/content/docs/reference/io.mdx -> LLM endpoint
+    llm_api:
+      api_key: ""                             # supplied by runtime environment or EVAL_CONFIG
+      api_base_url: ""                        # supplied by runtime environment or EVAL_CONFIG
+      model: "openai/Qwen3.5-35B-A3B"
+      description: Example local checkpoint served via vLLM; see scripts/serve_local_model.sh.
+      protocols: [openai_compatible, anthropic_compatible]
+      served_via: per_job_litellm_proxy
+      input_cost_per_token: 0.0
+      output_cost_per_token: 0.0
+
+    local_model_serving:                       # read by scripts/serve_local_model.sh; ignored for remote APIs
+      model_path: artifacts/models/Qwen3.5-35B-A3B
+      model_name: Qwen3.5-35B-A3B              # must match basename of llm_api.model
+
+    litellm_proxy:
+      config_template: scripts/serve_llm/litellm_config.example.yaml
+      port: 4101
+      master_key: legoflow-local-proxy-key     # local proxy credential; not an upstream secret
+
+    task_source:
+      provider: harbor_registry                # benchmark catalog: CLAUDE.md "Benchmark Selection"
+      dataset_name: swebench-verified
+      version: "1.0"
+      registry_path: repos/harbor/registry.json
+      # When true: generate/use local swebench-verified-nohack (agent egress allowlist to
+      # LiteLLM only; verifier stays public). Currently supports swebench-verified only.
+      no_hack: true
+
+    harbor_job:
+      jobs_dir: artifacts/jobs
+      n_concurrent: 24
+      n_tasks: null                            # null = full benchmark; int = smoke cap
+      max_retries: 2
+      timeout_multiplier: 1
+
+    job_analysis:
+      enabled: true                            # post-eval analysis via scripts/analyze_job.sh
+      tag_llm:                                 # "" = fall back to llm_api; see /evaluator:check reference
+        base_url: ""
+        model: ""
+        api_key: ""
+
+    # reference to /evaluator:setup
+    agent:
+      name: custom-openhands-sdk
+      version: 1.33.0
+      runtime_image: docker.io/jierun/c-oh-sdk-1.33.0:v0.1
+      runtime_host_path: artifacts/runtime/openhands-sdk
+      max_turns: 200
+      temperature: 1.0
+
+    env_extra:
+      HARBOR_EXCLUDE_TASKS: ""                 # space-separated task IDs to skip (prior timeouts/OOMs)
+      LITELLM_STICKY_ROUTING_ALIASES: ""       # workaround for Harbor serve_litellm.sh under set -u
+
+  output:
+    eval_results_dir:
+      description: Harbor job directories containing per-task evaluation results and LiteLLM trajectory logs
+      path: artifacts/jobs
+      job_layout: "artifacts/jobs/<job>/<task>/{agent,verifier}/"
+      trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
+      results_summary_format: "artifacts/jobs/<job>/result.json"

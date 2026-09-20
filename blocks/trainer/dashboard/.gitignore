@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.tsbuildinfo
+__pycache__/
+# Static snapshot written by export_static.py before publishing
+site/

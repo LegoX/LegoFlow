@@ -1,0 +1,998 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      smoke_scope:
+        description: "Which smoke to run (real LLM tokens + Docker/GPU)"
+        type: choice
+        options:
+          - none        # cheap cases only
+          - blocks   # each block's ISOLATED smoke (~30 min each)
+          - root        # the ROOT chained end-to-end smoke (all 4 blocks, hours)
+          - all         # blocks + root
+        default: none
+      root_budget:
+        description: "Per-stage budget (sec) for the ROOT chain; blank = config defaults (curator 4h). Set e.g. 1800 for a quick pass."
+        type: string
+        default: ""
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# These paths are operator-configured repository variables for self-hosted
+# runners. The defaults are neutral examples; production runners should point
+# them at their own protected env and runtime mirror.
+env:
+  CICD_SHARED: ${{ vars.LEGOFLOW_CI_SHARED || '/opt/legoflow-ci/shared' }}
+  SHARED_RUNTIME: ${{ vars.LEGOFLOW_SHARED_RUNTIME || '/opt/legoflow-ci/shared/runtime' }}
+  LEGOFLOW_CLI_HOME: ${{ vars.LEGOFLOW_CLI_HOME }}
+
+jobs:
+  # --- Cheap cloud job: structural sanity of the block tree -------------------
+  root-block:
+    name: Root block sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test deps
+        run: pip install --no-cache-dir pytest pyyaml
+
+      - name: Run root block cheap cases (pytest + shell cases)
+        # tests/run.sh (no --smoke) runs pytest tests/test_root_block.py AND the
+        # tests/cases/*.sh shell cases — all cheap, no network/Docker/GPU. They
+        # read the block + tests/smoke config.yaml files present on checkout.
+        run: bash tests/run.sh
+
+  # --- Decide which blocks need their CI run -------------------------------
+  detect-changes:
+    name: Detect changed blocks
+    runs-on: ubuntu-latest
+    outputs:
+      curator: ${{ steps.filter.outputs.curator }}
+      tracer: ${{ steps.filter.outputs.tracer }}
+      evaluator: ${{ steps.filter.outputs.evaluator }}
+      trainer: ${{ steps.filter.outputs.trainer }}
+    steps:
+      - uses: actions/checkout@v4
+      # v4.0.3+ is required for 'some-with-excludes' below.
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          # A file matches when it hits at least one positive pattern and none
+          # of the negated ones. Under the default 'some' quantifier the '!'
+          # patterns would match every file *outside* the block and make each
+          # filter true for any change at all.
+          predicate-quantifier: 'some-with-excludes'
+          filters: |
+            curator:
+              - 'blocks/curator/**'
+              # Block documentation is covered by the always-on root sanity
+              # job and does not need a scarce Docker-capable runner.
+              - '!blocks/curator/**/*.md'
+              - '!blocks/curator/**/*.mdx'
+              - '.github/workflows/ci.yml'
+            tracer:
+              - 'blocks/tracer/**'
+              - '!blocks/tracer/**/*.md'
+              - '!blocks/tracer/**/*.mdx'
+              - '.github/workflows/ci.yml'
+            evaluator:
+              - 'blocks/evaluator/**'
+              - '!blocks/evaluator/**/*.md'
+              - '!blocks/evaluator/**/*.mdx'
+              - '.github/workflows/ci.yml'
+            trainer:
+              - 'blocks/trainer/**'
+              - '!blocks/trainer/**/*.md'
+              - '!blocks/trainer/**/*.mdx'
+              - '.github/workflows/ci.yml'
+
+  # --- curator: cheap test cases (self-hosted, fixed-paths CI runner) ---------
+  curator-cases:
+    name: curator tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.curator == 'true'
+    runs-on: [self-hosted, legoflow-ci]
+    timeout-minutes: 30   # network-filesystem cold-cache setup can take several minutes
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
+            for reclaim_id in $(timeout --signal=TERM --kill-after=5s 20s docker ps -q --filter ancestor=alpine:3 2>/dev/null || true); do
+              timeout --signal=TERM --kill-after=5s 20s docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" 2>/dev/null | grep -q 'rm -rf /x/' && \
+                timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_id" >/dev/null 2>&1 || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
+          fi
+      # Source-only checkout — submodules + venvs come from $SHARED_RUNTIME.
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=$CICD_SHARED/uv/bin:$HOME/.local/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link shared runtime state
+        working-directory: blocks/curator
+        env:
+          LEGOFLOW_SUBMODULE_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: |
+          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          CANON="${SHARED_RUNTIME}/curator"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh curator"; exit 1; }
+          mkdir -p repos artifacts artifacts/swe_tasks
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/curator/repos/legoflow-curator blocks/curator/artifacts/envs \
+            blocks/curator/artifacts/swe_tasks/py-cc blocks/curator/gh_token.txt
+
+          if [ -e "$CANON/repos/legoflow-curator/.git" ]; then
+            ln -s "$CANON/repos/legoflow-curator" repos/legoflow-curator
+          else
+            if [ -n "${GITHUB_TOKENS:-}" ]; then
+              export GITHUB_TOKEN="${GITHUB_TOKENS%%,*}"
+            elif [ -n "${LEGOFLOW_SUBMODULE_TOKEN:-}" ]; then
+              export GITHUB_TOKEN="$LEGOFLOW_SUBMODULE_TOKEN"
+            fi
+            [ -n "${GITHUB_TOKEN:-}" ] || { echo "ERROR: no private-submodule token configured"; exit 1; }
+            GIT_TERMINAL_PROMPT=0 git -C ../.. \
+              -c 'credential.helper=!f() { echo username=x-access-token; echo password=$GITHUB_TOKEN; }; f' \
+              submodule update --init --recursive -- blocks/curator/repos/legoflow-curator
+          fi
+
+          mkdir -p artifacts/envs
+          if [ -x "$CANON/artifacts/envs/legoflow-curator-env/bin/python" ]; then
+            ln -s "$CANON/artifacts/envs/legoflow-curator-env" \
+              artifacts/envs/legoflow-curator-env
+          else
+            uv venv artifacts/envs/legoflow-curator-env --python 3.12
+            uv pip install --python artifacts/envs/legoflow-curator-env/bin/python \
+              -e repos/legoflow-curator
+          fi
+          [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
+          # Optional Harbor smoke fixture (case 06 SKIPs if absent)
+          [ -d "$CANON/artifacts/swe_tasks/py-cc" ] && \
+            ln -s "$CANON/artifacts/swe_tasks/py-cc" artifacts/swe_tasks/py-cc || true
+          ls -la repos artifacts artifacts/swe_tasks
+      - name: Run curator test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh curator
+      - name: Run curator test cases
+        working-directory: blocks/curator
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+          CURATOR_SKIP_EXTERNAL_PREFLIGHT: "1"
+        run: bash tests/run.sh
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: curator-cases-logs-${{ github.run_id }}
+          path: |
+            blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py.log
+            blocks/curator/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # --- curator: end-to-end 10-PR smoke (~30 min) ------------------------------
+  curator-smoke:
+    name: curator tests (smoke)
+    needs: [detect-changes, curator-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because curator-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # curator-cases FAILURE; only a SKIP (no diff) is tolerated.
+    if: |
+      always() && needs.curator-cases.result != 'failure' &&
+      (
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'blocks' || inputs.smoke_scope == 'all')) ||
+        (needs.detect-changes.outputs.curator == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+      )
+    runs-on: [self-hosted, legoflow-ci]
+    timeout-minutes: 70
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=$CICD_SHARED/uv/bin:$HOME/.local/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link shared runtime state
+        working-directory: blocks/curator
+        env:
+          LEGOFLOW_SUBMODULE_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: |
+          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          CANON="${SHARED_RUNTIME}/curator"
+          mkdir -p repos artifacts
+          rm -rf repos/legoflow-curator artifacts/envs gh_token.txt
+          if [ -e "$CANON/repos/legoflow-curator/.git" ]; then
+            ln -s "$CANON/repos/legoflow-curator" repos/legoflow-curator
+          else
+            if [ -n "${GITHUB_TOKENS:-}" ]; then
+              export GITHUB_TOKEN="${GITHUB_TOKENS%%,*}"
+            elif [ -n "${LEGOFLOW_SUBMODULE_TOKEN:-}" ]; then
+              export GITHUB_TOKEN="$LEGOFLOW_SUBMODULE_TOKEN"
+            fi
+            [ -n "${GITHUB_TOKEN:-}" ] || { echo "ERROR: no private-submodule token configured"; exit 1; }
+            GIT_TERMINAL_PROMPT=0 git -C ../.. \
+              -c 'credential.helper=!f() { echo username=x-access-token; echo password=$GITHUB_TOKEN; }; f' \
+              submodule update --init --recursive -- blocks/curator/repos/legoflow-curator
+          fi
+          mkdir -p artifacts/envs
+          if [ -x "$CANON/artifacts/envs/legoflow-curator-env/bin/python" ]; then
+            ln -s "$CANON/artifacts/envs/legoflow-curator-env" \
+              artifacts/envs/legoflow-curator-env
+          else
+            uv venv artifacts/envs/legoflow-curator-env --python 3.12
+            uv pip install --python artifacts/envs/legoflow-curator-env/bin/python \
+              -e repos/legoflow-curator
+          fi
+          [ -f "$CANON/gh_token.txt" ] && ln -s "$CANON/gh_token.txt" gh_token.txt || true
+      - name: Overlay smoke config.yaml from blocks/curator/tests/smoke
+        # The template carries no endpoint/key; inject them from the
+        # shared env into the COPY (never back into the template).
+        run: |
+          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          cp blocks/curator/tests/smoke/config.yaml blocks/curator/config.yaml
+          python3 scripts/inject_smoke_secrets.py blocks/curator/config.yaml
+      - name: Run smoke via .github/scripts/smoke_run.sh curator
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash .github/scripts/smoke_run.sh curator 3600
+      - name: Verify smoke
+        if: always()
+        shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
+        run: |
+          bash blocks/curator/tests/smoke/verify.sh
+          rc=$?
+          if [[ $rc -eq 77 ]]; then echo "::warning::curator smoke SKIPped"; exit 0; fi
+          exit $rc
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: curator-smoke-logs-${{ github.run_id }}
+          path: |
+            blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py.log
+            blocks/curator/artifacts/swe_tasks/py-cc-smoke/verifiable_tasks.txt
+            blocks/curator/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --- tracer: cheap test cases ---------------------------------------------
+  tracer-cases:
+    name: tracer tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.tracer == 'true'
+    runs-on: [self-hosted, legoflow-ci]
+    timeout-minutes: 30   # network-filesystem cold-cache setup can take several minutes
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        # Prior tracer smokes drop root-owned files in the workspace —
+        # Harbor's bind-mounted agent-runtime AND Docker trial containers
+        # running as root drop sessions/state under jobs/smoke/. Any of
+        # these makes actions/checkout's workspace-clean fail with EACCES.
+        # Run docker (which IS root on the daemon) to chown anything in the
+        # workspace not owned by uid 1000 back to us. Idempotent.
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
+            for reclaim_id in $(timeout --signal=TERM --kill-after=5s 20s docker ps -q --filter ancestor=alpine:3 2>/dev/null || true); do
+              timeout --signal=TERM --kill-after=5s 20s docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" 2>/dev/null | grep -q 'rm -rf /x/' && \
+                timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_id" >/dev/null 2>&1 || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=$CICD_SHARED/uv/bin:$HOME/.local/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link shared runtime state
+        working-directory: blocks/tracer
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/tracer"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh tracer"; exit 1; }
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/tracer/repos/harbor blocks/tracer/repos/swe_data_process \
+            blocks/tracer/artifacts/env blocks/tracer/artifacts/agent-runtime \
+            blocks/tracer/artifacts/processed_tasks.yaml
+          mkdir -p repos artifacts
+          ln -s "$CANON/repos/harbor"                       repos/harbor
+          ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
+          ln -s "$CANON/artifacts/env"                      artifacts/env
+          # agent.runtime_host_path: harbor bind-mounts this into every trial
+          # container at /opt/custom-agent-runtime/claude-code. Without the
+          # symlink the workspace dir is empty → "Mounted runtime detection
+          # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
+          [ -d "$CANON/artifacts/agent-runtime" ] && \
+            ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
+          # dryrun.sh FAILs outright without the ledger, and it is gitignored
+          # runtime state, so a runner whose canonical copy lacks it could never
+          # get past preflight. Link it when present, otherwise start an empty one.
+          if [ -f "$CANON/artifacts/processed_tasks.yaml" ]; then
+            ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml
+          else
+            printf 'description: %s\nruns: []\n' 'Tracer task processed-tasks ledger' \
+              > artifacts/processed_tasks.yaml
+          fi
+          ls -la repos artifacts
+      - name: Run tracer test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh tracer
+      - name: Refresh tracer editable environments
+        working-directory: blocks/tracer
+        run: |
+          set -euo pipefail
+          bash scripts/setup_harbor_env.sh
+          bash scripts/setup_swe_data_process_env.sh
+      - name: Run tracer test cases
+        working-directory: blocks/tracer
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracer-cases-logs-${{ github.run_id }}
+          path: blocks/tracer/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # --- tracer: end-to-end 10-HF-task smoke (~30 min) -----------------------
+  tracer-smoke:
+    name: tracer tests (smoke)
+    needs: [detect-changes, tracer-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because tracer-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # tracer-cases FAILURE; only a SKIP (no diff) is tolerated.
+    if: |
+      always() && needs.tracer-cases.result != 'failure' &&
+      (
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'blocks' || inputs.smoke_scope == 'all')) ||
+        (needs.detect-changes.outputs.tracer == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+      )
+    runs-on: [self-hosted, legoflow-ci]
+    timeout-minutes: 55
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          {
+            echo "HOME=$CI_HOME"
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=$CICD_SHARED/uv/bin:$HOME/.local/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link shared runtime state
+        working-directory: blocks/tracer
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/tracer"
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/tracer/repos/harbor blocks/tracer/repos/swe_data_process \
+            blocks/tracer/artifacts/env blocks/tracer/artifacts/agent-runtime \
+            blocks/tracer/artifacts/processed_tasks.yaml
+          mkdir -p repos artifacts
+          ln -s "$CANON/repos/harbor"                       repos/harbor
+          ln -s "$CANON/repos/swe_data_process"             repos/swe_data_process
+          ln -s "$CANON/artifacts/env"                      artifacts/env
+          # agent.runtime_host_path: harbor bind-mounts this into every trial
+          # container at /opt/custom-agent-runtime/claude-code. Without the
+          # symlink the workspace dir is empty → "Mounted runtime detection
+          # failed" → fallback `curl claude.ai/install.sh` → 403 → 0 trajectories.
+          [ -d "$CANON/artifacts/agent-runtime" ] && \
+            ln -s "$CANON/artifacts/agent-runtime"            artifacts/agent-runtime || true
+          # dryrun.sh FAILs outright without the ledger, and it is gitignored
+          # runtime state, so a runner whose canonical copy lacks it could never
+          # get past preflight. Link it when present, otherwise start an empty one.
+          if [ -f "$CANON/artifacts/processed_tasks.yaml" ]; then
+            ln -s "$CANON/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml
+          else
+            printf 'description: %s\nruns: []\n' 'Tracer task processed-tasks ledger' \
+              > artifacts/processed_tasks.yaml
+          fi
+      - name: Overlay smoke config.yaml from blocks/tracer/tests/smoke
+        # The template carries no endpoint/key; inject them from the
+        # shared env into the COPY (never back into the template).
+        run: |
+          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          cp blocks/tracer/tests/smoke/config.yaml blocks/tracer/config.yaml
+          python3 scripts/inject_smoke_secrets.py blocks/tracer/config.yaml
+      - name: Run smoke via .github/scripts/smoke_run.sh tracer
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+          LITELLM_NUM_WORKERS: "1"
+        run: bash .github/scripts/smoke_run.sh tracer 2400
+      - name: Verify smoke
+        if: always()
+        shell: bash {0}    # no -e — let verify.sh exit 77 fall through to the SKIP mapping
+        run: |
+          bash blocks/tracer/tests/smoke/verify.sh
+          rc=$?
+          if [[ $rc -eq 77 ]]; then echo "::warning::tracer smoke SKIPped"; exit 0; fi
+          exit $rc
+      - name: Upload logs
+        if: always()
+        continue-on-error: true   # harbor's root-owned agent/sessions can survive cleanup → upload EACCES, don't fail the job
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracer-smoke-logs-${{ github.run_id }}
+          path: |
+            blocks/tracer/artifacts/logs/
+            blocks/tracer/artifacts/jobs/smoke/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --- evaluator: cheap test cases ------------------------------------------------
+  evaluator-cases:
+    name: evaluator tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.evaluator == 'true'
+    runs-on: [self-hosted, legoflow-ci]
+    timeout-minutes: 30   # network-filesystem cold-cache setup can take several minutes
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        # evaluator smokes drop root-owned files in the workspace — Harbor's
+        # bind-mounted agent-runtime AND Docker trial containers running as
+        # root drop state under artifacts/jobs/smoke/. Any of these makes
+        # actions/checkout's workspace-clean fail with EACCES. Run docker
+        # (root on the daemon) to chown anything not owned by uid 1000 back to
+        # us. Idempotent.
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
+            for reclaim_id in $(timeout --signal=TERM --kill-after=5s 20s docker ps -q --filter ancestor=alpine:3 2>/dev/null || true); do
+              timeout --signal=TERM --kill-after=5s 20s docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" 2>/dev/null | grep -q 'rm -rf /x/' && \
+                timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_id" >/dev/null 2>&1 || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
+          fi
+      # Source-only checkout — submodules + envs come from $SHARED_RUNTIME.
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          {
+            echo "HOME=$CI_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=$CICD_SHARED/uv/bin:$HOME/.local/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link shared runtime state
+        working-directory: blocks/evaluator
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/evaluator"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh evaluator"; exit 1; }
+          # actions/checkout creates empty placeholder dirs for declared
+          # submodules; ln -sfn would put the link INSIDE them. Remove only
+          # checkout-local paths before creating the links.
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/evaluator/repos/harbor blocks/evaluator/artifacts/env \
+            blocks/evaluator/artifacts/runtime blocks/evaluator/artifacts/index.yaml
+          mkdir -p repos artifacts
+          ln -s "$CANON/repos/harbor"        repos/harbor
+          ln -s "$CANON/artifacts/env"       artifacts/env
+          # agent.runtime_host_path: harbor bind-mounts this into every task
+          # container at container_runtime_root. Without the symlink the dir is
+          # empty → agent falls back to an in-container install → 403 on
+          # isolated networks → zero usable trajectories.
+          ln -s "$CANON/artifacts/runtime"   artifacts/runtime
+          [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
+            || printf 'runs: []\n' > artifacts/index.yaml
+          ls -la repos artifacts
+      - name: Run evaluator test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh evaluator
+      - name: Refresh evaluator Harbor editable environment
+        working-directory: blocks/evaluator
+        run: |
+          set -euo pipefail
+          HARBOR_UV="$(python3 - <<'PY'
+          import yaml
+          config = yaml.safe_load(open("config.yaml", encoding="utf-8")) or {}
+          print(config["meta_info"]["environment"]["harbor_uv"])
+          PY
+          )"
+          case "$HARBOR_UV" in
+            /*) HARBOR_UV_ABS="$HARBOR_UV" ;;
+            *) HARBOR_UV_ABS="$PWD/$HARBOR_UV" ;;
+          esac
+          mkdir -p "$(dirname "$HARBOR_UV_ABS")"
+          (
+            cd repos/harbor
+            UV_PROJECT_ENVIRONMENT="$HARBOR_UV_ABS" uv sync
+          )
+          HARBOR_EDITABLE_ROOT="$PWD/repos/harbor" \
+            "$HARBOR_UV_ABS/bin/python" scripts/check_harbor_editable.py
+      - name: Run evaluator test cases
+        working-directory: blocks/evaluator
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash tests/run.sh
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluator-cases-logs-${{ github.run_id }}
+          path: blocks/evaluator/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # --- evaluator: end-to-end registry-task smoke (~40 min) ------------------------
+  evaluator-smoke:
+    name: evaluator tests (smoke)
+    needs: [detect-changes, evaluator-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because evaluator-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # evaluator-cases FAILURE; only a SKIP (no diff) is tolerated.
+    if: |
+      always() && needs.evaluator-cases.result != 'failure' &&
+      (
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'blocks' || inputs.smoke_scope == 'all')) ||
+        (needs.detect-changes.outputs.evaluator == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+      )
+    runs-on: [self-hosted, legoflow-ci]
+    timeout-minutes: 55
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          {
+            echo "HOME=$CI_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=$CICD_SHARED/uv/bin:$HOME/.local/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link shared runtime state
+        working-directory: blocks/evaluator
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/evaluator"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh evaluator"; exit 1; }
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/evaluator/repos/harbor blocks/evaluator/artifacts/env \
+            blocks/evaluator/artifacts/runtime blocks/evaluator/artifacts/index.yaml
+          mkdir -p repos artifacts
+          ln -s "$CANON/repos/harbor"        repos/harbor
+          ln -s "$CANON/artifacts/env"       artifacts/env
+          ln -s "$CANON/artifacts/runtime"   artifacts/runtime
+          [ -f "$CANON/artifacts/index.yaml" ] && ln -s "$CANON/artifacts/index.yaml" artifacts/index.yaml \
+            || printf 'runs: []\n' > artifacts/index.yaml
+      - name: Overlay smoke config.yaml from blocks/evaluator/tests/smoke
+        # The template carries no endpoint/key; inject them from the
+        # shared env into the COPY (never back into the template).
+        run: |
+          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          cp blocks/evaluator/tests/smoke/config.yaml blocks/evaluator/config.yaml
+          python3 scripts/inject_smoke_secrets.py blocks/evaluator/config.yaml
+      - name: Run smoke via .github/scripts/smoke_run.sh evaluator
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+          LITELLM_NUM_WORKERS: "1"
+        run: bash .github/scripts/smoke_run.sh evaluator 2400
+      - name: Verify smoke
+        if: always()
+        run: bash blocks/evaluator/tests/smoke/verify.sh
+      - name: Upload logs
+        if: always()
+        continue-on-error: true   # harbor's root-owned agent/sessions can survive cleanup → upload EACCES, don't fail the job
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluator-smoke-logs-${{ github.run_id }}
+          path: |
+            blocks/evaluator/artifacts/logs/
+            blocks/evaluator/artifacts/jobs/smoke/
+            blocks/evaluator/artifacts/litellm/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --- trainer: cheap test cases -------------------------------------------------
+  trainer-cases:
+    name: trainer tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.trainer == 'true'
+    runs-on: [self-hosted, legoflow-ci]
+    timeout-minutes: 30   # network-filesystem cold-cache imports can take several minutes
+    steps:
+      - name: Pre-checkout — reclaim residue from prior runs
+        # trainer-cases doesn't write root-owned files itself, but a co-tenant
+        # tracer/evaluator smoke on this runner might have; reclaim and drop
+        # everyone's smoke residue so actions/checkout's workspace-clean
+        # never trips on EACCES.
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
+            for reclaim_id in $(timeout --signal=TERM --kill-after=5s 20s docker ps -q --filter ancestor=alpine:3 2>/dev/null || true); do
+              timeout --signal=TERM --kill-after=5s 20s docker inspect --format '{{json .Config.Cmd}}' "$reclaim_id" 2>/dev/null | grep -q 'rm -rf /x/' && \
+                timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_id" >/dev/null 2>&1 || true
+            done
+            reclaim_name="legoflow-reclaim-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            timeout --signal=TERM --kill-after=30s 180s docker run --name "$reclaim_name" --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            timeout --signal=TERM --kill-after=5s 30s docker rm -f "$reclaim_name" >/dev/null 2>&1 || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
+          fi
+      # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          {
+            echo "HOME=$CI_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=$CICD_SHARED/uv/bin:$HOME/.local/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link shared runtime state
+        working-directory: blocks/trainer
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/trainer"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh trainer"; exit 1; }
+          # actions/checkout creates empty placeholder dirs for declared
+          # submodules; ln -sfn would put the link INSIDE them. rm -rf first.
+          # The tracked scripts/deepspeed/*.json come from the
+          # checkout (case 07), so only repos/ + the uv env are symlinked.
+          mkdir -p repos artifacts
+          bash "$GITHUB_WORKSPACE/.github/scripts/remove_workspace_paths.sh" \
+            blocks/trainer/repos/LLaMA-Factory blocks/trainer/repos/swe_data_process \
+            blocks/trainer/artifacts/env
+          ln -s "$CANON/repos/LLaMA-Factory"     repos/LLaMA-Factory
+          ln -s "$CANON/repos/swe_data_process"  repos/swe_data_process
+          ln -s "$CANON/artifacts/env"           artifacts/env
+          ls -la repos artifacts
+      - name: Run trainer test cases
+        env:
+          GITHUB_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: bash .github/scripts/align_submodules.sh trainer
+      - name: Run trainer test cases
+        working-directory: blocks/trainer
+        run: bash tests/run.sh
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trainer-cases-logs-${{ github.run_id }}
+          path: blocks/trainer/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # --- trainer: GPU training smoke (gated) --------------------------------------
+  trainer-smoke:
+    name: trainer tests (smoke)
+    needs: [detect-changes, trainer-cases]
+    # `always()` so a manual smoke_scope dispatch isn't cascade-skipped just
+    # because trainer-cases was skipped (no path diff vs dev — the normal
+    # state right after this branch merges). Still blocks on an actual
+    # trainer-cases FAILURE; only a SKIP (no diff) is tolerated.
+    if: |
+      always() && needs.trainer-cases.result != 'failure' &&
+      (
+        (github.event_name == 'workflow_dispatch' && (inputs.smoke_scope == 'blocks' || inputs.smoke_scope == 'all')) ||
+        (needs.detect-changes.outputs.trainer == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+      )
+    # The legoflow-ci runner orchestrates either a configured remote GPU host
+    # (private sft-remote.env) or a local GPU. Missing/failed prerequisites are
+    # real failures; this job is green only after guarded training completes.
+    runs-on: [self-hosted, legoflow-ci]
+    timeout-minutes: 75
+    steps:
+      - name: Pre-checkout — reclaim residue from prior runs
+        # Reclaim anything not owned by uid 1000 so checkout's workspace-clean
+        # never trips on EACCES, and drop any leftover _smoke_* run dirs from a
+        # killed prior smoke (the in-script trap normally removes them).
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
+          fi
+      # Source-only checkout — submodules + uv env come from $SHARED_RUNTIME.
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          clean: false   # pre-checkout step handles residue; default `clean: true` triggers destructive recreate on EACCES from harbor docker leftovers
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"
+          mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          {
+            echo "HOME=$CI_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=$CICD_SHARED/uv/bin:$HOME/.local/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link shared runtime state
+        working-directory: blocks/trainer
+        run: |
+          set -euo pipefail
+          CANON="${SHARED_RUNTIME}/trainer"
+          [ -d "$CANON" ] || { echo "ERROR: $CANON not found — rebuild it with $CICD_SHARED/sync_runtime.sh trainer"; exit 1; }
+          mkdir -p repos artifacts artifacts/data
+          rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env artifacts/data/examples
+          ln -s "$CANON/repos/LLaMA-Factory"     repos/LLaMA-Factory
+          ln -s "$CANON/repos/swe_data_process"  repos/swe_data_process
+          ln -s "$CANON/artifacts/env"           artifacts/env
+          # The 512-sample snapshot the local_lf smoke trains on (source.type
+          # is overridden to local_lf by the smoke's disposable config copy).
+          # Link it only if seeded — a missing snapshot must let the smoke SKIP
+          # (exit 77), not fail the job, on a freshly-registered GPU runner.
+          if [ -s "$CANON/artifacts/data/examples/lf_512.json" ]; then
+            ln -s "$CANON/artifacts/data/examples" artifacts/data/examples
+          else
+            echo "WARNING: staged smoke dataset missing at $CANON/artifacts/data/examples/lf_512.json — the smoke will SKIP. Seed it with: bash blocks/trainer/tests/smoke/prepare_smoke_data.sh"
+          fi
+          ls -la repos artifacts artifacts/data
+      - name: Run guarded SFT training smoke
+        run: bash .github/scripts/sft_smoke_run.sh 2700
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trainer-smoke-logs-${{ github.run_id }}
+          path: blocks/trainer/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # --- root: CHAINED end-to-end smoke (manual dispatch only) -----------------
+  # Runs tests/smoke/run_pipeline.sh, which overlays each tests/smoke/<block>/
+  # config.yaml and runs all four blocks in sequence (curator -> tracer -> trainer
+  # -> evaluator), feeding each block's real output into the next. Far heavier than
+  # the per-block smokes (hours; touches the remote GPU pod for trainer + serving),
+  # so it is workflow_dispatch-only and never runs on push. Set `root_budget`
+  # (e.g. 1800) for a quick pass; blank uses the config defaults (curator 4h),
+  # which can exceed the 6h job cap — tune accordingly.
+  root-smoke:
+    name: root smoke (chained end-to-end)
+    needs: root-block
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.smoke_scope == 'root' || inputs.smoke_scope == 'all')
+    runs-on: [self-hosted, legoflow-ci]
+    timeout-minutes: 420   # 7h: real trainer training (~3h20m) + curator/tracer/eval; self-hosted has no GH cap
+    steps:
+      - name: Pre-checkout — reclaim root-owned residue from prior runs
+        run: |
+          if [ -d "$RUNNER_WORKSPACE" ]; then
+            t0=$(date +%s)
+            docker run --rm -v "$RUNNER_WORKSPACE:/x:rw" alpine:3 \
+              sh -c "rm -rf /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/tracer/artifacts/agent-runtime /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/jobs/smoke /x/${GITHUB_REPOSITORY#*/}/blocks/evaluator/artifacts/runtime /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/py-cc-smoke /x/${GITHUB_REPOSITORY#*/}/blocks/curator/artifacts/swe_tasks/.legoflow-curator-smoke-py /x/${GITHUB_REPOSITORY#*/}/blocks/trainer/artifacts/model/_smoke_* 2>/dev/null; for j in /x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/jobs; do [ -d \"\$j\" ] && find \"\$j\" -type d -path '*agent/sessions' -exec rm -rf {} + 2>/dev/null; done; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( ! -user 1000 \) -exec chown 1000:1000 {} + 2>/dev/null; find /x \( -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/repos' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/env' -o -path '/x/${GITHUB_REPOSITORY#*/}/blocks/*/artifacts/envs' \) -prune -o \( -type d ! -perm -u+rx \) -exec chmod u+rx {} + 2>/dev/null" || true
+            echo "INFO: workspace reclaim took $(( $(date +%s) - t0 ))s"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          clean: false
+      - name: Isolate HOME + load shared CI env
+        run: |
+          set -euo pipefail
+          CI_HOME="$RUNNER_TEMP/ci-home"; mkdir -p "$CI_HOME"
+          # shellcheck disable=SC1091
+          source "$GITHUB_WORKSPACE/.github/scripts/load_shared_ci_env.sh"
+          {
+            echo "HF_TOKEN=$HF_TOKEN"
+            echo "HUGGING_FACE_HUB_TOKEN=$HUGGING_FACE_HUB_TOKEN"
+            echo "HF_HOME=$HF_HOME"
+            echo "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+            echo "UV_CACHE_DIR=$UV_CACHE_DIR"
+            echo "PATH=$CICD_SHARED/uv/bin:$HOME/.local/bin:$PATH"
+          } >> "$GITHUB_ENV"
+      - name: Link runtime state for ALL blocks (curator, tracer, trainer, evaluator)
+        run: |
+          set -euo pipefail
+          # curator — venv + repo + gh_token
+          C="${SHARED_RUNTIME}/curator"; cd "$GITHUB_WORKSPACE/blocks/curator"
+          mkdir -p repos artifacts
+          rm -rf repos/legoflow-curator artifacts/envs gh_token.txt
+          ln -s "$C/repos/legoflow-curator" repos/legoflow-curator
+          ln -s "$C/artifacts/envs" artifacts/envs
+          [ -f "$C/gh_token.txt" ] && ln -s "$C/gh_token.txt" gh_token.txt || true
+          # tracer — uv envs + repos + agent runtime + ledger
+          C="${SHARED_RUNTIME}/tracer"; cd "$GITHUB_WORKSPACE/blocks/tracer"
+          mkdir -p repos artifacts
+          rm -rf repos/harbor repos/swe_data_process artifacts/env artifacts/agent-runtime artifacts/processed_tasks.yaml
+          ln -s "$C/repos/harbor" repos/harbor
+          ln -s "$C/repos/swe_data_process" repos/swe_data_process
+          ln -s "$C/artifacts/env" artifacts/env
+          [ -d "$C/artifacts/agent-runtime" ] && ln -s "$C/artifacts/agent-runtime" artifacts/agent-runtime || true
+          if [ -f "$C/artifacts/processed_tasks.yaml" ]; then
+            ln -s "$C/artifacts/processed_tasks.yaml" artifacts/processed_tasks.yaml
+          else
+            printf 'description: %s\nruns: []\n' 'Tracer task processed-tasks ledger' \
+              > artifacts/processed_tasks.yaml
+          fi
+          # trainer — uv env + repos + 512 fixture (remote pod hosts the GPUs)
+          C="${SHARED_RUNTIME}/trainer"; cd "$GITHUB_WORKSPACE/blocks/trainer"
+          mkdir -p repos artifacts artifacts/data
+          rm -rf repos/LLaMA-Factory repos/swe_data_process artifacts/env artifacts/data/examples
+          ln -s "$C/repos/LLaMA-Factory" repos/LLaMA-Factory
+          ln -s "$C/repos/swe_data_process" repos/swe_data_process
+          ln -s "$C/artifacts/env" artifacts/env
+          [ -s "$C/artifacts/data/examples/lf_512.json" ] && ln -s "$C/artifacts/data/examples" artifacts/data/examples || true
+          # evaluator — uv env + repo + agent runtime
+          C="${SHARED_RUNTIME}/evaluator"; cd "$GITHUB_WORKSPACE/blocks/evaluator"
+          mkdir -p repos artifacts
+          rm -rf repos/harbor artifacts/env artifacts/runtime artifacts/index.yaml
+          ln -s "$C/repos/harbor" repos/harbor
+          ln -s "$C/artifacts/env" artifacts/env
+          ln -s "$C/artifacts/runtime" artifacts/runtime
+          [ -f "$C/artifacts/index.yaml" ] && ln -s "$C/artifacts/index.yaml" artifacts/index.yaml || printf 'runs: []\n' > artifacts/index.yaml
+      - name: Run the ROOT chained smoke
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+          LITELLM_NUM_WORKERS: "1"
+          # Pass the dispatch input through the environment (not string-spliced
+          # into the script) so a crafted value like $(...) cannot execute — and
+          # validate it is digits before use. See PR #54 P1 review.
+          ROOT_BUDGET: ${{ inputs.root_budget }}
+        # LEGOFLOW_CLI_HOME may point at an operator-provisioned Claude CLI home.
+        # (mirrors .github/scripts/smoke_run.sh); CLAUDE_SDK=1 uses that launcher.
+        run: |
+          set -uo pipefail
+          BUDGET_ARG=""
+          if [ -n "$ROOT_BUDGET" ]; then
+            case "$ROOT_BUDGET" in
+              *[!0-9]*) echo "ERROR: root_budget must be digits, got: $ROOT_BUDGET" >&2; exit 2 ;;
+            esac
+            BUDGET_ARG="--budget $ROOT_BUDGET"
+          fi
+          HOME="${LEGOFLOW_CLI_HOME:-$HOME}" CLAUDE_SDK=1 bash tests/smoke/run_pipeline.sh $BUDGET_ARG
+      - name: Upload logs
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-smoke-logs-${{ github.run_id }}
+          path: |
+            .root-smoke-run.log
+            blocks/*/artifacts/logs/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,143 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@import "tw-animate-css";
+
+:root {
+  --legoflow-accent: #b3431f;
+}
+
+/* ── Warm "paper" palette — match the project-page landing site.
+   Light mode only (:root:not(.dark)); the dark theme stays fumadocs neutral. ── */
+:root:not(.dark) {
+  --color-fd-background: #fafaf7;        /* paper  */
+  --color-fd-foreground: #111111;        /* ink    */
+  --color-fd-card: #fafaf7;
+  --color-fd-popover: #fafaf7;
+  --color-fd-muted: #f1efe9;             /* warm hover / code bg   */
+  --color-fd-muted-foreground: #6b6b66;  /* muted text  */
+  --color-fd-secondary: #f1efe9;
+  --color-fd-accent: #efece4;            /* sidebar / item hover   */
+  --color-fd-accent-foreground: #111111;
+  --color-fd-border: #e6e3da;            /* rule   */
+  --color-fd-ring: #b3431f;
+  --color-fd-primary: #b3431f;           /* rust accent */
+  --color-fd-primary-foreground: #fafaf7;
+}
+
+/* Remove shadow from code blocks */
+figure.shiki {
+  box-shadow: none;
+}
+
+:root:not(.dark) figure.shiki {
+  background: #eeece6 !important;
+  border: 1px solid #dfdacf;
+}
+
+:root:not(.dark) figure.shiki pre,
+:root:not(.dark) figure.shiki code {
+  background: transparent !important;
+}
+
+.docs-hf-link {
+  white-space: nowrap;
+}
+
+.docs-hf-logo {
+  display: inline-block !important;
+  width: 1em !important;
+  height: 1em !important;
+  margin: 0 0.14em 0 0 !important;
+  vertical-align: -0.14em !important;
+}
+
+article p,
+article li {
+  text-align: start;
+  text-wrap: pretty;
+  overflow-wrap: break-word;
+}
+
+article p {
+  hyphens: auto;
+}
+
+.docs-tldr {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin: 1.25rem 0 1.4rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid color-mix(in oklab, var(--legoflow-accent) 24%, #e6e3da);
+  border-left: 4px solid var(--legoflow-accent);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--legoflow-accent) 8%, #fafaf7);
+  color: var(--color-fd-foreground);
+}
+
+.docs-tldr-label {
+  flex: 0 0 auto;
+  color: var(--legoflow-accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.55;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.docs-tldr span:last-child {
+  line-height: 1.65;
+}
+
+@media (max-width: 640px) {
+  .docs-tldr {
+    display: block;
+  }
+
+  .docs-tldr-label {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+}
+
+.docs-brand-title {
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+  font-size: 1.18rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.docs-live-word {
+  position: relative;
+  display: inline-flex;
+  color: var(--legoflow-accent);
+}
+
+.docs-live-pulse-dot {
+  position: absolute;
+  top: -0.08em;
+  right: -0.46em;
+  width: 0.32em;
+  height: 0.32em;
+  border-radius: 999px;
+  background: var(--legoflow-accent);
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--legoflow-accent) 45%, transparent);
+  animation: docs-live-dot-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes docs-live-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.38;
+    transform: scale(0.82);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--legoflow-accent) 22%, transparent);
+  }
+
+  45% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0.34em color-mix(in oklab, var(--legoflow-accent) 0%, transparent);
+  }
+}

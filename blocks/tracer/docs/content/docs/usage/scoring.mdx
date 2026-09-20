@@ -1,0 +1,270 @@
+---
+title: Trajectory Scoring
+---
+
+Not every successful rollout makes useful training data. Tracer separates
+**result correctness** from **trajectory quality** and can attach several
+independent scores during SFT conversion:
+
+1. Harbor verifier reward checks whether the final patch solves the task.
+2. TQS V2 measures process quality with deterministic rules.
+3. Optional fixed-checklist LLM scoring evaluates semantic quality.
+4. Optional dynamic-checklist scoring checks task-specific requirements.
+
+These signals answer different questions and should not be combined
+implicitly. In particular, a `reward=1` trajectory can still be inefficient,
+truncated, repetitive, or poorly verified.
+
+## Verifier reward versus quality score
+
+Harbor runs each task's executable verifier after the rollout:
+
+```text
+reward = 1.0  task resolved
+reward = 0.0  task unresolved
+```
+
+By default, conversion selects resolved instances before building IM and LF
+records. The verifier reward is therefore a correctness gate, while trajectory
+scores rank the quality of the successful process that produced the patch.
+Neither score should replace the other.
+
+## TQS V2 rule scoring
+
+TQS V2 is the default trajectory-quality rubric. It runs during conversion,
+requires no API call, and returns a deterministic `composite_score` in
+`[0, 1]`.
+
+The scorer uses a fail-soft weighted aggregate. When a component lacks enough
+evidence, it returns `null` and is omitted from both the numerator and the
+denominator instead of being treated as zero.
+
+```text
+composite_score =
+  sum(weight * transformed_component) / sum(active_weights)
+```
+
+| Component | Weight | Signal |
+| --- | ---: | --- |
+| `SUB` | 0.33 | Submission completeness and end-of-trajectory quality. |
+| `STP` | 0.27 | Step efficiency from assistant-turn count. |
+| `TVR` | 0.23 | Test writing, test execution, and final test outcome. |
+| `FEC` | 0.10 | Repeated edits per file, transformed as `FEC^5`. |
+| `DPI` | 0.07 | Truncation, missing writes, loops, and repeated errors, transformed as `DPI^3`. |
+
+### SUB: submission completeness
+
+`SUB` rewards a clean, intentional finish. For Claude Code and OpenCode, a
+final assistant message without another tool call receives the full base score.
+OpenHands-style agents normally finish through the `finish` tool, and Terminus-2
+uses `task_complete=true`.
+
+The base score is adjusted by the error rate in the final 30% of observations:
+
+```text
+SUB = base * (0.7 + 0.3 * late_success_rate)
+```
+
+Running a test in the final 20% of assistant turns adds up to `0.15`, capped at
+`1.0`. This distinguishes a stable, verified handoff from a trajectory that
+stops during a tool call or finishes after repeated errors.
+
+### STP: step efficiency
+
+`STP` uses assistant turns rather than raw messages:
+
+```text
+5-80 turns:    1.0
+fewer than 5:  turns / 5
+80-200 turns:  progressive decay
+200+ turns:    0.0
+```
+
+For the decay region, the pinned scorer uses:
+
+```text
+linear = 1 - (turns - 80) / 120
+STP = linear^1.5
+```
+
+Very short traces are not assumed to be complete, while trajectories that run
+to the common 200-turn cap receive no step-efficiency credit. STP measures
+economy, not reasoning correctness; genuinely difficult tasks may require more
+turns.
+
+### TVR: test verification
+
+`TVR` measures whether the agent establishes a verification loop:
+
+```text
+TVR =
+  0.3 * has_test_write
+  + 0.3 * has_test_run
+  + 0.4 * late_test_success
+```
+
+The outcome of the final recognized test run is mapped as follows:
+
+| Outcome | `late_test_success` | Interpretation |
+| --- | ---: | --- |
+| `pass` | 1.0 | Output contains an explicit non-zero passing summary. |
+| `unknown` | 0.6 | A test ran, but its outcome cannot be established. |
+| `fail` | 0.3 | Output contains an explicit failure signal. |
+
+For example, running a clearly passing test without writing a test scores
+`0.70`; writing and running a passing test scores `1.00`. Writing and running a
+test that still fails scores `0.72`, because TVR measures verification behavior,
+not final correctness. Harbor reward supplies the correctness decision.
+
+The recognizer covers common Python, JavaScript/TypeScript, Go, Rust, Java,
+C/C++, C#, PHP, Ruby, and other test conventions. It also recognizes focused
+reproduction and smoke scripts. Zero-test results such as `no tests ran`,
+`collected 0 items`, and `OK (0 tests)` are not counted as successful tests.
+
+### FEC: file-edit concentration
+
+`FEC` penalizes repeatedly editing the same files:
+
+```text
+mean_edits_per_file = edit_operations / unique_edited_files
+FEC = 1 - clip((mean_edits_per_file - 1) / 4, 0, 1)
+```
+
+| Mean edits per file | Raw FEC | Value used in aggregate (`FEC^5`) |
+| ---: | ---: | ---: |
+| 1 | 1.00 | 1.000 |
+| 2 | 0.75 | 0.237 |
+| 3 | 0.50 | 0.031 |
+| 4 | 0.25 | 0.001 |
+| 5+ | 0.00 | 0.000 |
+
+The metric does not directly penalize touching several files. It penalizes
+repeated trial-and-error edits per file. If no edit can be detected, FEC is
+`null` and is excluded by fail-soft aggregation rather than incorrectly
+receiving a perfect score.
+
+### DPI: dirty-pattern index
+
+`DPI` starts at `1.0` and subtracts penalties for clear failure patterns:
+
+| Pattern | Penalty |
+| --- | ---: |
+| No successful write detected | `0.40` |
+| Truncated or abnormal ending | `0.40` |
+| Repeated action loop | Up to `0.30` |
+| Consecutive repeated errors | Up to `0.30` |
+
+```text
+DPI = max(0, 1 - total_penalty)
+aggregate value = DPI^3
+```
+
+The cubic transform makes dirty trajectories separate more clearly: raw DPI
+values of `0.8`, `0.6`, and `0.4` contribute approximately `0.512`, `0.216`,
+and `0.064` before the component weight is applied.
+
+## Diagnostic-only signals
+
+The scorer also emits zero-weight diagnostics. They do not change
+`composite_score`, but help explain why agents behave differently:
+
+| Signal | What it diagnoses |
+| --- | --- |
+| `OEC` | Repeated or collapsed observation content. |
+| `IAC` | Alignment between stated intent and actual tool action. |
+| `PED` | Drift between recently inspected files and edited files. |
+| `PSN` | Stability of the target-file set across turn windows. |
+| `TTE` | Diversity of transitions between tool types. |
+| `SCP` | Whether the first successful edit occurs too early or too late. |
+| `reproduce_first` | Whether the agent reproduced the issue before editing source code. |
+
+Diagnostics may be `null` when the trace lacks enough evidence. Treat `null` as
+"not measurable," not as zero quality.
+
+## Main-agent and subagent records
+
+Main-agent records receive `_score`; subagent records are retained with
+`_score: null`. Score filtering is instance-aware: if a main-agent record passes
+the threshold, its associated main and subagent records are kept together.
+Dropping subagent records independently can break the conversation context that
+made the main trajectory meaningful.
+
+## Optional fixed-checklist LLM scoring
+
+The fixed-checklist judge adds semantic evaluation that deterministic tool and
+message patterns cannot provide. It evaluates 15 checks across five categories:
+
+| Category | Checks |
+| --- | --- |
+| Problem understanding | Diagnosis depth, scope precision, plan quality. |
+| Solution quality | Fix elegance, change minimality, robustness. |
+| Reasoning quality | Coherence, hypothesis-driven work, adaptability. |
+| Verification rigor | Reproduction, fix verification, test quality. |
+| Efficiency | Navigation efficiency, tool proficiency, iteration economy. |
+
+Each check receives an integer score from `1` to `5`. Each category is
+normalized to `[0, 1]`:
+
+```text
+category_score = (sum_of_three_checks - 3) / 12
+llm_composite_score = mean(five_category_scores)
+```
+
+The output includes `llm_composite_score`, per-category scores, detailed check
+results, and judge metadata. This path requires one LLM call per trajectory and
+is independent of TQS V2.
+
+## Optional dynamic-checklist scoring
+
+The dynamic scorer generates a task-specific checklist from the user request,
+system prompt, tool schemas, and visible repository policies, then evaluates
+the trajectory in a second LLM call. It generates approximately 15-35 atomic
+binary checks across sources such as `user_query`, `system_prompt`,
+`tool_schema`, `repo_policy`, `implementation`, `verification`, and
+`communication`.
+
+It reports two primary metrics:
+
+```text
+ISR = 1 if every check passes, otherwise 0
+CSR = passed_checks / total_checks
+```
+
+`llm_checklist_isr` is deliberately strict; `llm_checklist_csr` and per-category
+CSR values are more useful for ranking partially compliant trajectories. This
+path needs two LLM calls per trajectory and costs more than the fixed checklist.
+
+## Where scores appear
+
+Scores are attached to:
+
+```text
+artifacts/sft_data/<job>/im.jsonl
+artifacts/sft_data/<job>/lf.json
+artifacts/sft_data/<job>/lf.stats.json
+```
+
+The dashboard reads these files to show distributions, low-score examples,
+tool-error patterns, and segment-level comparisons.
+
+## How to use the rubrics
+
+A practical curation sequence is:
+
+```text
+Harbor reward=1
+  -> TQS V2 for every resolved trajectory
+  -> remove or inspect extremely low-quality traces
+  -> optional fixed LLM scoring for semantic ranking
+  -> optional dynamic checklist for strict task-level compliance
+  -> human review of threshold and disagreement cases
+```
+
+Do not interpret `composite_score` as a probability that the patch is correct.
+It is a process-quality heuristic. Compare distributions within the same agent
+scaffold, language, and task-difficulty slice before choosing thresholds;
+different tools and interaction protocols can produce systematically different
+trajectory shapes.
+
+The pinned implementation and full pattern coverage live in
+[`swe_data_process`](https://github.com/LegoX/swe_data_process/tree/dda92c581a0c0eaba74bb469d92ddda767e5f1b3).

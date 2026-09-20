@@ -1,0 +1,71 @@
+---
+title: Dashboard
+---
+
+Evaluator's dashboard is the benchmark result and analysis browser. Run
+`/evaluator:dashboard` to inspect jobs, scores, failure modes, post-eval
+analysis, and step-by-step trajectories.
+
+A demo dashboard is available [here](/dashboard_demo/evaluator/). Stepping into a
+single trajectory is inert there, because that view streams chunked data only the
+live deployment serves.
+
+## Deployment mode
+
+Both modes read the same files, so the numbers never depend on which one you pick.
+
+- **Local** (default): run `/evaluator:dashboard`. You get a summary of the
+  latest or selected job, and the web board on request. Trajectories, verifier
+  logs and model output stay on the machine that produced the job.
+- **Cloud**: run `/evaluator:dashboard publish to Cloudflare`. Set
+  `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and the target Pages project
+  first. For public trajectory browsing at scale, switch on the chunked or
+  R2-backed trajectory mode before publishing.
+
+## Where it reads from
+
+Everything the board shows comes out of one directory tree:
+
+| Path | What it holds |
+| --- | --- |
+| `artifacts/jobs/` | Harbor eval jobs, one per immediate subdirectory. |
+| `artifacts/jobs/<job>/<task>/agent/` | The agent side of one task: trajectory, tool calls, and the model exchange behind them. |
+| `artifacts/jobs/<job>/<task>/verifier/` | The verifier side of that task: reward and verifier output, which is what pass and fail are computed from. |
+| `artifacts/jobs/<job>/analysis/` | Post-eval analysis from `scripts/analyze_job.sh`, which fills the failure attribution and task breakdown panels. |
+
+Evaluator is registry-driven and stages no tasks locally, so a job appears on the
+board as soon as it has run here. A job that was never analyzed simply has no
+`analysis/` directory, and the board leaves those panels out rather than drawing
+them empty. Run `scripts/analyze_job.sh <job_dir>` at any time, including on old
+jobs, to fill them in. See
+[Job Analysis](/docs/blocks/evaluator/usage/job-analysis).
+
+<Callout title="Import External Data" type="info">
+The board only reads `artifacts/jobs/`. Symlink an outside job there, and the
+link name becomes the job name.
+</Callout>
+
+## What it monitors
+
+| Monitor | What it tells you |
+| --- | --- |
+| **Benchmark jobs** | Which dataset, model endpoint, agent scaffold, and config profile each job used. |
+| **Resolve rate** | Pass/fail reward summaries and per-job success rates. |
+| **Failure patterns** | Error types, verifier failures, unresolved categories, empty patches, and timeouts. |
+| **Task breakdowns** | Performance by language, area, topic, bug class, difficulty, and benchmark slice. |
+| **Agent trajectories** | Messages, tool calls, observations, file edits, and final answers for each task. |
+| **Job comparison** | Side-by-side comparison across models, checkpoints, scaffolds, or benchmark runs. |
+| **Analysis artifacts** | Reports produced after a job finishes, including instance and trajectory analysis. |
+
+## When to Use It
+
+Use `/evaluator:dashboard` when you want to answer questions like:
+
+- What is the model's benchmark resolve rate?
+- Which task categories are failing?
+- Did failures come from verifier errors, agent behavior, endpoint issues, or timeouts?
+- How does this checkpoint compare with another model or scaffold?
+- Which trajectories should be inspected manually?
+
+For Evaluator mechanics, see [Design](/docs/blocks/evaluator/design). For artifact
+contracts, see [Output Format](/docs/blocks/evaluator/outputs).

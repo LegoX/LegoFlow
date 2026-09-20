@@ -1,0 +1,11 @@
+{
+  "name": "root-block",
+  "owner": { "name": "LegoX" },
+  "plugins": [
+    {
+      "name": "root",
+      "source": "./root-plugin",
+      "description": "root block skills — create, check, setup, run, dashboard (per BLOCK_DEFINITION.md and config.yaml)."
+    }
+  ]
+}

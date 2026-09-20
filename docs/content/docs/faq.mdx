@@ -1,0 +1,85 @@
+---
+title: FAQ
+---
+
+This page collects common issues users may hit while running LegoFlow locally.
+Start here when a block skill is missing, a setup step feels unclear, or a run
+fails before it launches expensive work.
+
+## Q1: I am in the repository root but cannot find the plugin skills
+
+A: Both Claude Code and Codex only show skills from installed plugins.
+
+For Claude Code, if commands such as
+`/root:setup`, `/curator:check`, or `/tracer:run` are missing, register the
+local plugin marketplaces from the repository root:
+
+```bash
+claude plugin marketplace add ./.claude/plugins
+claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/tracer/.claude/plugins
+claude plugin marketplace add ./blocks/trainer/.claude/plugins
+claude plugin marketplace add ./blocks/evaluator/.claude/plugins
+```
+
+Then install the plugins:
+
+```bash
+claude plugin install root@root-block
+claude plugin install curator@curator-block
+claude plugin install tracer@tracer
+claude plugin install trainer@trainer-block
+claude plugin install evaluator@evaluator-block
+```
+
+In an active Claude Code session, run:
+
+```text
+/reload-plugins
+```
+
+Then type `/` and search for the block command again. You can also restart the
+session after installation.
+
+For Codex, register the repository-level LegoFlow marketplace and install the
+plugins you need:
+
+```bash
+codex plugin marketplace add .
+codex plugin add root@legoflow
+codex plugin add curator@legoflow
+codex plugin add tracer@legoflow
+codex plugin add trainer@legoflow
+codex plugin add evaluator@legoflow
+```
+
+Restart Codex, confirm that every plugin is `installed, enabled`, and invoke
+the native namespaced skills:
+
+```bash
+codex plugin list
+```
+
+```text
+$root-setup
+$curator-check
+$tracer-run
+```
+
+Codex does not invoke LegoFlow plugins with Claude Code slash commands. Its
+`$<plugin>-<skill>` wrappers read and follow the same canonical Claude Code
+skill files, so both agents retain the same workflow and safety gates.
+
+## Q2: A check command fails before the run starts
+
+A: That is expected behavior. Claude Code's `/<block>:check` commands and
+Codex's `$<block>-check` skills are designed to fail early before a costly
+collection, rollout, training, or evaluation job starts. Read the failed
+check, fix the corresponding `config.yaml` field or credential, then run the
+same check again.
+
+## Q3: Where should I put secrets?
+
+A: Do not commit real API keys, GitHub tokens, Docker passwords, or Cloudflare
+tokens to `config.yaml`. Use environment variables, ignored `.env` files, or the
+secret mechanism recommended by the block's setup skill.

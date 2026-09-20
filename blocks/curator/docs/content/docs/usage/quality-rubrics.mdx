@@ -1,0 +1,184 @@
+---
+title: Quality Rubrics
+---
+
+Curator does not use one subjective score to decide whether a task is good.
+It applies several complementary rubrics while turning a merged pull request
+into a verified SWE task:
+
+1. **Substantiality** decides whether the PR contains a meaningful behavioral
+   change worth turning into a task.
+2. **Instruction quality** turns the issue and PR context into a solvable
+   problem statement without revealing the reference implementation.
+3. **Completion and validation gates** reject incomplete or non-reproducible
+   tasks.
+4. **Difficulty scoring** assigns a reproducible structural-complexity score
+   for sampling and dataset analysis.
+
+These signals answer different questions. A `hard` task is not automatically a
+higher-quality task, and an `easy` task can still be complete, realistic, and
+valuable.
+
+## Substantiality rubric
+
+Before creating a task, Curator evaluates whether the source PR represents a
+real engineering change. Documentation-only updates, dependency or version
+bumps, formatting fixes, CI-only changes, and cosmetic refactors are skipped.
+
+Curator keeps bug fixes, features, behavioral changes, and non-trivial logic
+changes such as error handling, data transformations, API changes, and new
+control flow. A single-file change can still be substantial when it fixes a
+real bug or adds meaningful edge-case handling.
+
+## Instruction-quality rubric
+
+For a substantial PR, Curator generates a problem statement from linked issues,
+the PR title and description, and the observable behavior encoded by tests. A
+good instruction includes:
+
+- the user-visible problem and relevant context;
+- expected behavior versus actual behavior;
+- relevant function, method, or class names when they are part of the public
+  contract;
+- exact errors, outputs, examples, and edge cases needed to understand the
+  expected result.
+
+The instruction must not reveal the solution. It therefore avoids source-file
+locations, test-file names, references such as "the test shows," prescribed
+implementation techniques, and descriptions of how the original PR fixed the
+bug. The solving agent receives the behavior contract, not the reference patch.
+
+Curator also assigns exactly four metadata tags in the order
+`[language, area, topic, bug_class]`. `bug_class` describes the underlying
+failure mechanism, such as `missing-fallback`, `incomplete-validation`, or
+`wrong-default`, rather than repeating the framework or feature name.
+
+## Completion and validation gates
+
+Rubrics do not replace executable verification. A generated task must contain
+at least:
+
+```text
+environment/Dockerfile
+tests/test.sh
+solution/fix.patch
+```
+
+Curator rejects task skeletons that still contain template placeholders or an
+unfilled test command. It then uses Harbor validation to check both sides of the
+task:
+
+- **NOP validation:** the buggy repository state must fail the task tests.
+- **Oracle validation:** applying `solution/fix.patch` must make the tests pass.
+
+Only tasks that pass the required checks are written to
+`verifiable_tasks.txt`. Downstream blocks should consume that manifest instead
+of scanning every generated task directory.
+
+## Difficulty score
+
+Curator follows the Harbor
+[`scripts/task_analysis`](https://github.com/LegoX/harbor/tree/main/scripts/task_analysis)
+rubric. The score is static and reproducible: no LLM judge is used for the
+difficulty number.
+
+The scorer extracts five signals from the solution patch, tests, and
+instruction. Each raw signal is log-scaled to `1.0-5.0`, combined by weight,
+then mapped to a final `1.0-10.0` score.
+
+| Dimension | Weight | Raw signal | Calibration (`easy` → `hard`) |
+| --- | ---: | --- | ---: |
+| `patch_scope` | 0.30 | `patch_lines + files * 8 + hunks * 3` | `20` → `260` |
+| `logic_complexity` | 0.25 | `new_defs * 10 + control_flow * 4 + patch_lines` | `20` → `220` |
+| `context_breadth` | 0.20 | `directories * 15 + files * 4 + hunks` | `15` → `120` |
+| `test_complexity` | 0.15 | `test_lines + test_files * 10` | `35` → `350` |
+| `instruction_complexity` | 0.10 | Instruction character count | `1500` → `12000` |
+
+`patch_lines` counts additions plus deletions. A hunk is a separate `@@` region
+in a unified diff. New definitions and added control-flow keywords act as
+lightweight proxies for new abstractions and branching, while distinct
+directories approximate how much repository context a solver must understand.
+
+For a raw value between the easy and hard calibration points, Curator uses:
+
+```text
+dimension_score = 1 + log1p(raw - easy) / log1p(hard - easy) * 4
+```
+
+Values at or below the easy point receive `1.0`; values at or above the hard
+point receive `5.0`. Log scaling makes early increases matter more while
+preventing exceptionally large patches from dominating the dataset.
+
+The five dimension scores are combined and mapped to the final scale:
+
+```text
+weighted_sum = sum(dimension_score * dimension_weight)
+difficulty_score = 1 + (weighted_sum - 1) * 2.05
+```
+
+The final value is rounded to one decimal place and clamped to `1.0-10.0`.
+It is then bucketed into a label:
+
+| Label | Score |
+| --- | --- |
+| `easy` | `<= 4.0` |
+| `medium` | `4.1-7.0` |
+| `hard` | `> 7.0` |
+
+### How to interpret the score
+
+The score is best understood as a **structural-complexity proxy for the
+reference task**, not a prediction of agent success. It supports reproducible
+sampling and comparison, but it cannot measure every source of difficulty:
+
+- a large mechanical patch may score higher than its reasoning burden suggests;
+- a small fix requiring specialized domain knowledge may score lower;
+- instruction length does not directly measure ambiguity or missing context;
+- test size measures verification breadth, not assertion quality;
+- keyword-based logic counts do not fully capture program semantics.
+
+Use the score together with language, area, topic, bug class, and validation
+status when designing a balanced training or evaluation set.
+
+## Where scores live
+
+Curator writes scoring metadata back into each task's `task.toml`:
+
+```text
+artifacts/swe_tasks/<lang>-cc/<task_id>/task.toml
+```
+
+The important fields are:
+
+```text
+difficulty_score
+difficulty_label
+difficulty
+category
+tags
+```
+
+Use these fields for dataset sampling and dashboard comparison. For example, a
+small smoke dataset can keep mostly `easy` and `medium` tasks, while a training
+or evaluation dataset may intentionally keep more `hard` cases.
+
+## Regenerating scores
+
+From `blocks/curator/`, regenerate task metadata with:
+
+```bash
+python3 repos/legoflow-curator/tools/tag_task_metadata.py \
+  --tasks-dir artifacts/swe_tasks/py-cc --jobs 64 --retries 3
+```
+
+This command is resumable. It can be re-run after new verified tasks are added.
+
+## Dashboard
+
+The public dashboard compares difficulty and tag composition across curated
+datasets:
+
+Open the dashboard at the URL the publish step prints.
+
+The dashboard is for finished datasets. During task generation, inspect logs,
+`verifiable_tasks.txt`, and `artifacts/index.yaml` instead.

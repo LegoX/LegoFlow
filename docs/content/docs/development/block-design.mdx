@@ -1,0 +1,136 @@
+---
+title: What is a Block
+---
+
+A **block** is the unit of work in LegoFlow. One block owns one stage of a
+pipeline and is packaged so that a person and an agent can operate it the same
+way.
+
+Nothing in this definition is specific to the four blocks that ship with
+LegoFlow, and nothing is specific to the root. A block is a general shape; the
+root block is simply the block at the top of the tree, obeying the same contract
+as everything under it.
+
+## 1. The Shape of a Block
+
+![Anatomy of a LegoFlow block](/figures/block-definition-editable.png)
+
+Three ideas hold the shape together.
+
+**Declaration comes before execution.** `config.yaml` is the declaration layer:
+it names the block, pins the code it runs, states which upstream outputs it
+consumes and which downstream inputs its own outputs feed, and separates the
+values that come from outside from the values the block publishes. Every script,
+skill and check reads that declaration rather than rediscovering the facts.
+
+**A run stays inside the block.** Pinned dependencies live in `repos/`,
+executables in `scripts/`, and everything a run produces in `artifacts/`. You can
+delete a block's `artifacts/` and lose nothing but that block's history.
+
+**The shape nests.** A block may contain child blocks under `blocks/`. A leaf
+block does work; a parent block coordinates children and does no work of its
+own. Because parent and child obey the same contract, a pipeline can grow a level
+without any new concepts.
+
+## 2. What is Inside a Block
+
+| Part | What it means |
+| --- | --- |
+| `config.yaml` | The declaration: identity, where the block runs, pinned repositories, dependency edges, runtime inputs and outputs. |
+| `CLAUDE.md` | The agent contract. What this block is for, what it consumes and publishes, how it is run, and what must not be touched. |
+| `scripts/` | The executable surface: `start.sh` to run, `dryrun.sh` to validate without side effects, `clean.sh` to reclaim space, `stop.sh` to terminate. |
+| `repos/` | Vendored code the block runs but does not own, pinned to a commit. |
+| `artifacts/` | Everything a run produces: outputs, logs, environments, caches, and the archive of each run. |
+| `dashboard/` | Reads `artifacts/` and renders the state of the block. It never mutates anything. |
+| `memory/` | Long-form context for the agent operating the block: decisions, observations, postmortems. |
+| `blocks/` | Child blocks, if this block has any. |
+| `.claude/plugins/` | The block's operational interface, exposed as slash commands. |
+
+The rest of this section explains the parts whose meaning is not obvious from the
+name.
+
+### Inputs are external, outputs are published
+
+`runtime_info.input` holds only values that originate **outside** the block tree:
+API keys, tokens, model names, human decisions. Those are the values you fill in
+by hand. Fill markers are standardized: `human` means the run is blocked until you
+replace it, `""` means the value is derived at runtime or supplied through an
+environment channel, and `null` means an intentional unset.
+
+`runtime_info.output` holds what the block publishes for others to consume. An
+output has a `path` fixed at authoring time, a `value` written back by the run, or
+both. Never copy an upstream block's output into your inputs by hand; declare the
+dependency instead.
+
+### Dependencies are declared from both ends
+
+`meta_info.dependencies` has two keys. The consumer writes `from`: the key is the
+dot-path in its own `runtime_info.input` that receives the value, and the value
+names `<source_block>.output.<key>`. The producer writes the mirror image in
+`to`. The same edge therefore appears in two files, and
+`scripts/validate_config.py` cross-checks them at preflight.
+
+Declaring an edge twice looks redundant until a block is read on its own. Each
+block's file then answers both questions a reader has, where its inputs come from
+and where its outputs go, without opening the rest of the tree.
+
+### The config is one-shot; live state lives elsewhere
+
+`config.yaml` is configuration read at launch, and nothing else. Whether a run is
+in flight, completed or failed is **not** recorded there. That belongs to
+`artifacts/index.yaml`, whose newest entry is the live state, written
+automatically when a run exits.
+
+Keeping the two apart is what makes a config safe to read, diff and archive: it
+describes an intent, not a status.
+
+### Pinned code is read-only
+
+Everything under `repos/` is pinned to a commit, and the operating agent must not
+edit it. The pin is what makes a run reproducible, and it is recorded in each
+archive. A silent local edit breaks that contract without leaving a trace, so a
+fix belongs upstream, or in `scripts/` and `config.yaml`.
+
+### Where a block runs
+
+`meta_info.resources.ip` decides execution location. `local`, `null` or absent
+means the current host. A real address means the operating agent connects to that
+node and runs there, inside a persistent session, using
+`meta_info.resources.directory` as the working directory.
+
+### Every run leaves an archive
+
+A run writes `artifacts/archives/run_NNN/`: the config as it was, the scripts as
+they were, the repository commits, and a `metadata.yaml` with timestamps and exit
+code. This is installed as an exit trap, so an interrupted or failed run is
+archived exactly like a successful one. A timeline with holes in it would be
+worse than no timeline.
+
+## 3. The Block Plugins
+
+Every block ships a Claude Code plugin at `.claude/plugins/<block>-plugin/`,
+and a Codex plugin at `plugins/<block>/`. The Codex skills are thin wrappers
+that read and follow the canonical Claude Code skill files rather than copying
+their workflow logic.
+
+| Lifecycle | Claude Code | Codex | Purpose |
+| --- | --- | --- | --- |
+| Setup | `/<block>:setup` | `$<block>-setup` | Bring the block from a fresh clone to a state where `check` passes: install environments, sync pinned repos, fill in unset inputs. Idempotent. |
+| Check | `/<block>:check` | `$<block>-check` | Read-only preflight: schema, inputs, repo pins, environments, reachability of endpoints and hosts. Reports every failure at once. Mandatory before a run. |
+| Run | `/<block>:run` | `$<block>-run` | Preflight, confirm, then execute. At a leaf block this runs `scripts/start.sh`; at a parent block it dispatches to each child's own `run` skill in dependency order. |
+| Dashboard | `/<block>:dashboard` | `$<block>-dashboard` | Surface the block's state, as a summary and optionally a web board. Read-only. |
+
+The uniformity is the point. Learning one block is most of the work of learning
+the next, and an agent can operate a block it has never seen from the same four
+verbs. A parent block calls its children's skills rather than reaching into their
+scripts, so the recursion happens through the same interface a human would use.
+
+Two deliberate exceptions:
+
+- **Termination is not a skill.** `scripts/stop.sh` does the signal handling
+  directly, because stopping a run should not depend on an agent being available
+  to interpret a request.
+- **Root creation exists only at the root.** Use `/root:create` in Claude Code
+  or `$root-create` in Codex. Creating a block mutates the tree, and that
+  authority is not delegated to blocks inside it. See [Adding New
+  Blocks](/docs/development/adding-new-blocks) for the development workflow.

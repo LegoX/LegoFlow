@@ -1,0 +1,192 @@
+---
+title: Running the Full Pipeline
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+The full pipeline workflow uses the root plugin to run Curator, Tracer, Trainer,
+and Evaluator in dependency order. Use it after running the blocks individually at least once,
+when their inputs, outputs, and approval gates are already familiar.
+
+The workflow has four steps: prepare the pipeline, validate it, collect the
+pull requests Curator will use, then ask the root plugin to run it. Block
+configuration remains authoritative, and undeclared handoffs are never inferred
+automatically.
+
+The examples below show both interfaces. Use the slash command in Claude Code
+or the namespaced `$root-*` skill in Codex; both load the same canonical root
+workflow.
+
+## Step 1: Preparation
+
+### Configure the blocks
+
+Fill each block's `config.yaml` before asking the root plugin to run the
+pipeline. The previous page, [Running Block by Block](/docs/running-blocks/block-by-block),
+links to the Configuration Guide for Curator, Tracer, Trainer, and Evaluator;
+use those guides for field-level examples rather than repeating them here.
+
+Treat every handoff as part of the receiving block's configuration. Root checks
+only dependencies declared on both neighboring blocks and never invents a
+missing path. Curator's local task output and Tracer's raw Harbor jobs can use
+declared dependencies; Trainer's usual `local_lf` input and the
+Trainer-to-Evaluator model endpoint must still be set explicitly.
+
+Keep secrets such as LLM API keys and `GITHUB_TOKENS` in environment variables
+or ignored private files. Non-secret decisions such as model names, languages,
+benchmarks, and endpoint locations belong in the relevant block's
+`runtime_info.input`.
+
+### Run setup
+
+| Claude Code | Codex |
+| --- | --- |
+| `/root:setup` | `$root-setup` |
+
+This checks shared tooling and ensures the root `config.yaml` exists. It can
+offer to invoke each child's setup, but recursion is optional and confirmed one
+block at a time. Setup can create environments, synchronize pinned repositories,
+and fill approved inputs; it does not launch workloads.
+
+## Step 2: Validation
+
+| Claude Code | Codex |
+| --- | --- |
+| `/root:check` | `$root-check` |
+
+This is operationally read-only: it validates configs, both ends of declared
+dependencies, repository pins, environments, per-block dry runs, and live model
+endpoints without launching workloads. It cannot infer a dependency that has
+not been declared, so a missing edge is still a design decision to resolve.
+
+Fix every required failure before continuing. Optional Cloudflare credentials
+only affect dashboard publishing and do not block the pipeline.
+
+## Step 3: Collect Curator input
+
+| Claude Code | Codex |
+| --- | --- |
+| `/curator:collect-prs` | `$curator-collect-prs` |
+
+Root orchestration consumes Curator's existing collection under
+`blocks/curator/artifacts/collected_prs/`. Wait for collection to finish before
+starting the root run.
+
+## Step 4: Run
+
+| Claude Code | Codex |
+| --- | --- |
+| `/root:run ${INSTRUCTION}` | `$root-run ${INSTRUCTION}` |
+
+
+The root skill repeats preflight, presents the resolved configuration, and waits
+for explicit approval before expensive work. Natural-language instructions may
+lead the skills to propose concrete config changes, but those inputs remain
+user-owned and every change requires confirmation. Replace `${INSTRUCTION}`
+with an experiment brief like the one below. It asks the agent to inspect the
+available resources instead of assuming a fixed model, machine, or run size.
+
+
+<Accordions>
+<Accordion title="INSTRUCTION">
+
+````markdown
+You are an AI coding agent responsible for operating LegoFlow. Complete an auditable, reproducible, and as-complete-as-resources-allow end-to-end software engineering data experiment in the current workspace. The goal is for LegoFlow itself to close the loop from GitHub pull requests to verified SWE tasks, from tasks to agent trajectories, from trajectories to training data, and then to model training and evaluation. Merely starting a script does not count.
+
+## Understand the project and inspect the environment
+
+1. Read the repository README, online documentation, root configuration, and the README or CLAUDE.md, `config.yaml`, plugin skills, scripts, dependency declarations, submodule state, and input/output contracts for Curator, Tracer, Trainer, and Evaluator. Understand each block's setup, check, run, archive, and dashboard lifecycle, as well as how root orchestrates child blocks through declared dependencies. Do not treat a report from an earlier experiment as evidence of the current state.
+2. Inspect the current host and container environment, including the operating system, Python and Node runtimes, Docker, CPU, memory, disk, GPU models and count, drivers, network, available endpoints, model services, repository permissions, and dependency versions. Check which GitHub, model, object storage, Hugging Face, and other services the current account can actually access. Do not assume that a particular GPU type or count, teacher model, LLM API base URL, number of endpoints, OpenHands or Harbor version, or any fixed software version is available.
+3. Ask the user to choose a dedicated experiment output directory. If the user does not provide one, choose a directory in the current workspace that will not overwrite another experiment. Record its absolute path in the experiment manifest and refer to it as `EXPERIMENT_DIR`. Store every configuration snapshot, resolved configuration, code and repository version, PR list, task manifest, container build record, raw and converted trajectory, quality statistic, failed attempt, log, checkpoint, per-task evaluation result, dashboard export, and final report in `EXPERIMENT_DIR` or a clearly named child directory. Do not hard-code a path from another machine or scatter evidence across locations that cannot be audited.
+4. Prepare an execution plan before starting. State the stages, inputs and outputs, resource budget, expected scale, quality gates, risks, stop conditions, and acceptance evidence. Ask the user about ambiguities that would change the experiment's goal. You may proceed with read-only inspection, a small pilot, and safe configuration probes. Adjust the plan to a scale the available resources can finish. If a stage cannot run with those resources, explain why and propose a workable reduced scope. Never claim that an unfinished stage succeeded.
+
+## Use plugins and block contracts as the primary interface
+
+Install or load the LegoFlow plugins first. Use `/root:setup`, `/root:check`, `/root:run`, and `/root:dashboard`, along with the corresponding `/curator:*`, `/tracer:*`, `/trainer:*`, and `/evaluator:*` skills. Run setup before check, fix every required check failure, and only then start expensive work. Complete PR collection as documented before starting downstream orchestration. Plugins must not override explicit user configuration or undeclared dependencies. Preserve the diff, reason, and resolved configuration for every configuration change. Edit block configuration or scripts only when the plugins cannot express a required fix and the evidence shows that the fix is necessary. Record why you departed from the standard path. Do not present a shortcut script that launches only a subset of workers as a complete root pipeline run.
+
+Generate or adjust configuration from the current machine and service capacity instead of copying fixed resource settings from an earlier experiment. Inspect the producer and consumer declarations for root and every child block, and make every real handoff explicit. Do not assume root will infer undeclared dependencies. Pass data between stages through manifests with recorded versions, schemas, and content hashes. Avoid ambiguous directory scans and manual copies that could mix runs.
+
+## Data provenance is mandatory
+
+Every PR, SWE task, agent trajectory, and training sample used in the final experiment must be produced by this LegoFlow run.
+
+- Curator must collect candidates from GitHub repositories and pull requests that are accessible during this experiment. Preserve each PR's source, commit revision, and collection evidence. PR lists, verified tasks, rollouts, published datasets, and external training trajectories from earlier experiments may be used only to understand the workflow or for read-only comparison. They must not be used as final input or to supplement this run.
+- Curator must build tasks from the pull requests collected in this run and pass the project's current NOP/Oracle validation or an equivalent check. A task may enter the verified manifest only when the buggy baseline fails, the held-out fix passes, and provenance is complete. Preserve build records, validation results, failures, and deduplication records.
+- Tracer may roll out only tasks in this run's Curator manifest. Use a teacher model or API that is actually available and a scaffold supported by the current project. Begin with a small pilot. Confirm container connectivity, tool-call structure, reasoning fields, reward and verifier results, and task-to-trajectory mapping before scaling up. Adjust concurrency, timeouts, retries, cooldowns, load balancing, and endpoint routing from measured latency, error rate, quota, context length, and trajectory quality. Preserve the evidence behind those decisions.
+- Keep only raw trajectories that belong to this run's tasks and pass reward or verifier checks. Preserve the raw trajectory, model response, tool calls, task ID, environment details, and execution logs. Do not use trajectories from earlier experiments, external trajectory data, or similar-looking answers to reach a target count.
+- During conversion, normalize the tool-call schema and meet the tokenizer and template requirements of the training stack. Remove malformed, unparseable, duplicate, cross-task, reward-failing, shallow-reasoning, and otherwise below-threshold samples. Deduplicate by task or instance, calculate actual measures such as reasoning coverage, depth, and density, and inspect a sample manually. Record the quality thresholds and resulting statistics. A solved-task count alone is not evidence that the data is ready for training.
+- Trainer's final dataset must contain only samples produced by this pipeline run that passed every quality gate. Choose the dataset size from the user's goal and the available resources. If the target cannot be reached, expand this run's Curator task pool or fix Tracer or the converter. Do not lower the quality gates or backfill with old data. Save an ordered manifest, source composition, sample hashes, filtering reasons, and a snapshot of the final dataset so each sample can be audited.
+- Evaluator may use the official test data required by a standard benchmark, but that data must never become training input. Training and tuning must not read test answers or external solution trajectories. Once evaluation conditions are frozen, do not change the agent, dataset, serving stack, verifier, or important sampling parameters to chase a higher score.
+
+## Execute each stage and correct course from evidence
+
+### Curator
+
+Collect pull requests that fit the user's goal and the available resources, build tasks, and validate them. Estimate the validation pass rate and the amount of downstream headroom before choosing the collection size. Preserve an ordered manifest, PR-to-task mapping, build environment, NOP/Oracle results, retry history, and deduplication evidence. Record a reason for every skipped candidate.
+
+### Tracer
+
+Have the teacher agent solve verified tasks in isolated environments and confirm that each trajectory genuinely completes its task. Use a pilot to verify that model responses appear in the final trajectory, tool calls can be parsed downstream, reasoning has substantive content, and the verifier is reliable. Scale only after those checks pass, using measured endpoint health and available quota. Separate model or agent failures, task defects, conversion defects, and infrastructure failures. Do not silently drop failures, count a trajectory twice, or reuse one trajectory across tasks.
+
+### Selection, conversion, and dataset freeze
+
+Convert successful raw trajectories to the format required by the current LegoFlow and training stack. Validate the schema, tokenizer, template, sequence length, and tool calls. Use scripts and recorded statistics, rather than manual impressions, to deduplicate, filter for quality, and compute hashes. After freezing the training manifest, do not replace samples without a record. Create a new attempt for every revision and retain the previous version.
+
+### Trainer
+
+Build a runnable training configuration from the available model, GPUs, CPU, RAM, context length, parallel topology, and block documentation. Run Trainer setup and check to validate data registration, model access, dependencies, and the distributed environment before starting training. Choose a fine-tuning method and batch, accumulation, precision, offload, and checkpoint settings that fit the resources. Record the reason for each choice in the resolved configuration instead of copying fixed settings from another machine. Preserve complete logs, environment versions, repository SHAs, training curves, checkpoints, the data manifest, and interruption or resume history. For OOM, NCCL, shared-memory, dependency, or storage failures, use the logs to identify the smallest responsible change. Rerun only the affected training stage and keep the failed attempt.
+
+### Evaluator
+
+Deploy the checkpoint with a serving stack, agent runtime, benchmark, and verifier configuration that the current project supports and its checks accept. Run a small connectivity test before the requested full evaluation. Freeze important parameters and record the resolved configuration. Infrastructure failures may be resumed or retried under rules declared in advance, but report them separately from genuine task failures, preserve per-task evidence, and state the denominator used for every result. Do not manufacture a better result by switching the model service, changing the benchmark, raising retry counts after seeing results, or deleting failed samples.
+
+Use the same recovery loop in every stage: read the actual logs and artifacts, form an evidence-based hypothesis, change the smallest responsible component, run a focused validation, and rerun only affected downstream stages. Record the evidence, hypothesis, change, and result, and preserve failed versions. A successful attempt must not overwrite evidence from a failed one. Monitor the run through plugin dashboards, block artifacts, manifests, and logs rather than relying on status claims in the conversation.
+
+## Security, audit, and final delivery
+
+Read API keys, GitHub tokens, Hugging Face tokens, registry credentials, and private endpoint details from the relevant `config.yaml` files or environment variables. Never expose a secret in chat, logs, reports, configuration snapshots, or commits. Redact secret values whenever configuration files are copied or archived. Use redacted service identifiers in public reports. Follow the repository's `.gitignore` and data-access rules, and do not accidentally commit large files or sensitive artifacts.
+
+At the end of the experiment, create a report and machine-readable index in `EXPERIMENT_DIR` that match the files on disk. Include the execution plan and deviations from it; resource inspection and resolved configurations; each block's inputs, outputs, versions, runtime, pass rates, and failure recovery; counts and manifest or hash references for the PRs, verified tasks, raw and passed trajectories, converted samples, quality gates, and final training samples produced by this run; the training configuration, checkpoints, and curves; the evaluation configuration, per-task results, infrastructure retries, and final statistics; every incomplete goal and limitation; and the steps another user would need to reproduce the experiment on comparable resources.
+
+Derive the report only from manifests, statistics files, logs, checkpoint metadata, and per-task evaluation artifacts. If the narrative conflicts with the evidence, correct the narrative. State which data was produced by this pipeline and which data was used only for official evaluation. Document any diagnostic runs that used different conditions, and give auditable recommendations for the next iteration. Do not claim success for a stage that did not actually finish.
+````
+
+</Accordion>
+</Accordions>
+
+The same instruction is available as a standalone Markdown file:
+[LegoFlow-new-user-example-prompt.md](/prompts/LegoFlow-new-user-example-prompt.md).
+
+
+What each stage should produce, and what to hold it to:
+
+| Stage | Target | The condition that matters |
+| --- | --- | --- |
+| Curator | Verified SWE tasks | Only tasks that pass NOP and Oracle validation reach the manifest. |
+| Tracer | Solved rollouts | Preserve the raw trajectory and verified reward; adapt concurrency to endpoint health rather than dropping tasks silently. |
+| Selection and conversion | A frozen training set | This is a data-preparation operation, not a registered block. Deduplicate, remove malformed and shallow examples, and freeze an ordered set. |
+| Trainer | One checkpoint | Derive the training configuration from the model and GPU topology; preserve the resolved config, logs, and curves. |
+| Evaluator | One completed benchmark run | Keep one agent, serving, and verifier configuration; resume infrastructure failures without changing evaluation conditions. |
+
+
+For a partial workflow, invoke the relevant child skills individually. Current
+root target resolution treats multiple named blocks as ambiguous rather than
+as a requested slice.
+
+## Monitor and recover
+
+Use each block's dashboard for progress, its logs and outputs for diagnosis, and
+the latest `artifacts/index.yaml` entry for run history. Each leaf run records
+metadata, a config snapshot, its scripts, and repository HEAD SHAs. Generated
+trajectories, checkpoints, and curves remain in the block's artifact directory.
+
+When a failure or quality regression appears, use the same loop throughout:
+read the evidence, form a hypothesis, change the smallest responsible thing,
+rerun only the affected downstream stages, and retain both failed and improved
+attempts.
+
+## Worked example
+
+For a detailed end-to-end example of a full LegoFlow pipeline run, including the
+agent's recovery process and the resulting improvements, read the
+[LegoFlow case study on LegoX](https://legox.pages.dev/blog/legoflow/).

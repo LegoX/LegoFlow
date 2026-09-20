@@ -1,0 +1,33 @@
+meta_info:
+  name: sft_training
+  label: SFT Training
+  description: Trains a language model using supervised fine-tuning (SFT).
+  parent: root
+  blocks: {}
+
+  repos:
+    trl:
+      commit_id: a1b2c3d4
+      role: SFT trainer implementation
+
+  environment:
+    requirements: repos/trl/requirements.txt
+
+  resources:
+    ip: runner.example.com
+    pwd: null
+    apikey: null
+    model: null
+    public_storage: artifacts/shared/sft_training/
+
+runtime_info:
+  # Only external inputs (API keys, human decisions, external paths).
+  # Inter-block values are wired via meta_info.dependencies — not here.
+  input:
+    dataset_path: null    # path to the labeled training dataset
+    learning_rate: null   # float, e.g. 1e-4
+    num_epochs: null      # int, number of training epochs
+
+  output:
+    model_checkpoint: null  # path to saved model checkpoint after training
+

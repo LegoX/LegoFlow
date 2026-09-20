@@ -1,0 +1,76 @@
+# Claude Code local state (machine-specific, never commit)
+.claude/settings.local.json
+
+# Secrets
+*token*.txt
+*token*.json
+*.token
+*.pem
+*.key
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Extra untracked checkouts under block repos/ (submodules are tracked via .gitmodules)
+blocks/*/repos/*
+!blocks/*/repos/.gitkeep
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+docs/out/
+docs/.next/
+docs/.source/
+.wrangler/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Model artifacts and large data files
+*.ckpt
+*.pt
+*.bin
+*.safetensors
+artifacts/files/
+
+# Root artifacts/ is generated state end to end — run indexes, smoke logs,
+# monitor output. Ignore all of it; keep only the .gitkeep that holds the
+# directory in the tree, because scripts/dryrun.sh checks the dir exists and
+# git does not track empty directories.
+artifacts/*
+!artifacts/.gitkeep
+blocks/*/artifacts/index.yaml
+
+# LegoFlow Curator block — generated data and virtual env
+blocks/curator/artifacts/*
+blocks/curator/scripts/jobs/*
+blocks/curator/scripts/.legoflow-curator-*/
+
+# Tracer block — runtime mount + per-run artifacts (kept manifest yamls tracked)
+blocks/tracer/artifacts/*
+
+# Dashboard transient runtime output
+blocks/curator/dashboard/memory/.progress_monitor_all_state.jsonl.*
+blocks/curator/dashboard/dashboard_sync.log
+
+# Local harbor venv + root-level run outputs (machine-specific, never committed)
+.venv-harbor/
+artifacts/prod-run/
+artifacts/root-smoke-monitor/

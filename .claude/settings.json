@@ -1,0 +1,41 @@
+{
+  "extraKnownMarketplaces": {
+    "root-block": {
+      "source": {
+        "source": "directory",
+        "path": ".claude/plugins"
+      }
+    },
+    "curator-block": {
+      "source": {
+        "source": "directory",
+        "path": "blocks/curator/.claude/plugins"
+      }
+    },
+    "tracer": {
+      "source": {
+        "source": "directory",
+        "path": "blocks/tracer/.claude/plugins"
+      }
+    },
+    "trainer-block": {
+      "source": {
+        "source": "directory",
+        "path": "blocks/trainer/.claude/plugins"
+      }
+    },
+    "evaluator-block": {
+      "source": {
+        "source": "directory",
+        "path": "blocks/evaluator/.claude/plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "root@root-block": true,
+    "curator@curator-block": true,
+    "tracer@tracer": true,
+    "trainer@trainer-block": true,
+    "evaluator@evaluator-block": true
+  }
+}

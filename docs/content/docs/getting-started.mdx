@@ -1,0 +1,155 @@
+---
+title: Getting Started
+---
+
+
+## Prerequisites
+
+Before starting, make sure you have the pieces that LegoFlow cannot create
+for you:
+
+- Claude Code or Codex, which operate LegoFlow through plugin skills.
+- LLM endpoints for Curator, Tracer, and Evaluator jobs.
+- GitHub token(s), used by Curator when collecting pull requests.
+- A GPU server if you plan to run training or evaluate self-hosted models.
+- Optional Docker credentials, useful when large runs pull many task images.
+- Optional Cloudflare credentials, only needed if you want to publish dashboards.
+
+## Claude Code plugin installation
+
+The easiest way to use LegoFlow is through plugin skills. Think of these as
+guided commands that know the project layout, check the right files, and ask
+for confirmation before expensive jobs start.
+
+Install all plugins once per machine. From the repository root, first register
+each local plugin directory as a Claude Code marketplace:
+
+```bash
+claude plugin marketplace add ./.claude/plugins
+claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/tracer/.claude/plugins
+claude plugin marketplace add ./blocks/trainer/.claude/plugins
+claude plugin marketplace add ./blocks/evaluator/.claude/plugins
+```
+
+Then install the plugin from each marketplace. The format is
+`<plugin-name>@<marketplace-name>`, as defined by each local
+`marketplace.json`:
+
+```bash
+claude plugin install root@root-block
+claude plugin install curator@curator-block
+claude plugin install tracer@tracer
+claude plugin install trainer@trainer-block
+claude plugin install evaluator@evaluator-block
+```
+
+In any active Claude Code session, run `/reload-plugins` once to pick them up,
+or restart the session. You should then see root and block skills such as
+`/root:setup`, `/root:check`, `/curator:create-tasks`, and `/tracer:dashboard`. These
+skills are the main entry points for LegoFlow: they guide users through setup,
+checks, runs, and inspection without requiring them to memorize the underlying
+scripts.
+
+## Codex plugin installation
+
+LegoFlow also ships Codex plugins in `plugins/`. Register this repository as a
+local marketplace and install the plugins before starting Codex:
+
+```bash
+codex plugin marketplace add .
+codex plugin add root@legoflow
+codex plugin add curator@legoflow
+codex plugin add tracer@legoflow
+codex plugin add trainer@legoflow
+codex plugin add evaluator@legoflow
+```
+
+Restart Codex after installation. Codex does not use the Claude Code
+marketplace commands above. Invoke native skills such as `$curator-check` and
+`$tracer-run`.
+
+```bash
+cd LegoFlow
+codex
+```
+
+The available Codex plugin directories are:
+
+```text
+plugins/root/
+plugins/curator/
+plugins/tracer/
+plugins/trainer/
+plugins/evaluator/
+```
+
+Each directory contains a `.codex-plugin/plugin.json` manifest and skills. The
+Codex skills are thin wrappers that read and follow the corresponding canonical
+Claude Code skill under `.claude/plugins/`; do not maintain a separate Codex
+workflow.
+
+Codex uses the following namespaced native skills:
+
+```text
+$root-check
+$curator-check
+$curator-create-tasks
+$tracer-run
+$trainer-run
+$evaluator-dashboard
+```
+
+Curator's native Codex skills are:
+
+| Workflow | Codex skill |
+| --- | --- |
+| Check | `$curator-check` |
+| Setup | `$curator-setup` |
+| Collect PRs | `$curator-collect-prs` |
+| Create tasks | `$curator-create-tasks` |
+| Run | `$curator-run` |
+| Dashboard | `$curator-dashboard` |
+
+Use `check -> confirm -> run` with either agent. Run the relevant check first,
+review its report, and wait for explicit confirmation before launching
+expensive or stateful work.
+
+For consistency, the rest of this documentation uses Claude Code skill syntax
+for its examples: `/<block>:<skill>`. Codex users can replace each example with
+the equivalent `$<block>-<skill>` form. For example, use `$tracer-run` wherever
+the documentation shows `/tracer:run`; both invoke the same canonical workflow.
+
+
+
+## Project setup
+
+
+The setup flow has two parts.
+
+### 1) Block Setup Skill 
+
+Once the plugins are loaded, use the setup skill for the block you want to run.
+For the full tree, start with `/root:setup`. It checks shared tooling, verifies
+the root `config.yaml`, and can walk into each child block's setup flow. It does
+not launch the pipeline; it only gets the workspace ready for a real check.
+
+
+### 2) Configure the Run
+
+Every block has a `config.yaml`. Think of it as the checklist LegoFlow reads
+before that block runs. The root `config.yaml` mostly holds orchestration
+metadata:
+
+
+<ConfigSnippet title="config.yaml">
+{"runtime_info:\n  input:\n    cloudflare:\n      account_id: \"\"              # Optional: only needed for dashboard publishing\n      api_token: \"\"               # Optional: prefer an env/secret; never commit a real token\n      pages_project_prefix: \"legoflow\"  # Optional: dashboard project prefix\n\n    docker:\n      registry: \"\"                # Optional: leave empty for Docker Hub/default registry\n      username: \"\"                # Optional: needed only for authenticated image pulls\n      password: \"\"                # Optional: prefer an env/secret; never commit a real password\n      mirror: \"\"                  # Optional: use only if your network needs a Docker mirror\n      host: \"\"                    # Optional: leave empty for the default Docker daemon"}
+</ConfigSnippet>
+
+
+Cloudflare settings are mainly used for dashboard publishing. Docker
+credentials are only needed for authenticated image pulls, especially in Tracer
+when pulling SWE task images and in Evaluator when pulling test-case images.
+Each block explains its own `config.yaml` in its Configuration Guide.
+
+Work through one independent run per block before launching the full pipeline from the root. Continue with [Running Block by Block](/docs/running-blocks/block-by-block).

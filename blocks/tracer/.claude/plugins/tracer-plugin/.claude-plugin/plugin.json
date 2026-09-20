@@ -1,0 +1,6 @@
+{
+  "name": "tracer",
+  "description": "Operate the tracer block: prepare repos/env/tasks, preflight, run Harbor trajectory jobs behind a per-job LiteLLM proxy, refresh SFT data/stats, and drive the progress dashboard. Provides /tracer:setup, /tracer:check, /tracer:dashboard, /tracer:run.",
+  "version": "0.1.0",
+  "author": { "name": "LegoX" }
+}
