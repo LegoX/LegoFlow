@@ -12,9 +12,9 @@
   &nbsp;·&nbsp;
   <a href="https://huggingface.co/Lego-X"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
   &nbsp;·&nbsp;
-  <a href="https://legox.pages.dev/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
+  <a href="https://www.legox.net/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
   &nbsp;·&nbsp;
-  <a href="https://legox.pages.dev/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
+  <a href="https://www.legox.net/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
   &nbsp;·&nbsp;
   <a href="LICENSE"><img src="docs/public/figures/icon-license.svg" height="15" alt=""> License</a>
   &nbsp;·&nbsp;
@@ -144,7 +144,7 @@ setup skill 用于准备依赖并填写 `config.yaml`；check 用于校验配置
 
 用户也可以通过运行多个 block 来定制工作流。分步指引见 [Running the Full Pipeline](https://legoflow-docs.legox.net/docs/running-blocks/full-pipeline)。
 
-例如，我们此前一次四个 block 全链路的运行显示：Curator 构建了 4,166 个已验证的 Python 任务，Tracer 成功解决其中 915 个，筛选出 512 条轨迹用于训练，最终微调把 `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上从 **7.6% 提升到 64.4%**。更多细节记录在[博客](https://legox.pages.dev/blog/legoflow/)中。
+例如，我们此前一次四个 block 全链路的运行显示：Curator 构建了 4,166 个已验证的 Python 任务，Tracer 成功解决其中 915 个，筛选出 512 条轨迹用于训练，最终微调把 `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上从 **7.6% 提升到 64.4%**。更多细节记录在[博客](https://www.legox.net/blog/legoflow/)中。
 
 ## 参与贡献
 
@@ -165,7 +165,7 @@ setup skill 用于准备依赖并填写 `config.yaml`；check 用于校验配置
 ## 致谢
 
 LegoFlow 构建在以下项目之上：[Harbor](https://www.harborframework.com/) 提供隔离的任务执行环境，
-[LLaMA-Factory](https://github.com/LegoX/LLaMA-Factory) 与 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 负责训练，
+[LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) 与 [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) 负责训练，
 [LiteLLM](https://github.com/BerriAI/litellm) 负责轨迹采集，
 [vLLM](https://github.com/vllm-project/vllm) 用于本地 checkpoint 推理服务，
 [Claude Code](https://claude.com/claude-code) 与 Claude Agent SDK 负责智能体操作，

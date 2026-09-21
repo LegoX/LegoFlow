@@ -12,9 +12,9 @@
   &nbsp;·&nbsp;
   <a href="https://huggingface.co/Lego-X"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
   &nbsp;·&nbsp;
-  <a href="https://legox.pages.dev/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
+  <a href="https://www.legox.net/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
   &nbsp;·&nbsp;
-  <a href="https://legox.pages.dev/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
+  <a href="https://www.legox.net/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
   &nbsp;·&nbsp;
   <a href="LICENSE"><img src="docs/public/figures/icon-license.svg" height="15" alt=""> License</a>
   &nbsp;·&nbsp;
@@ -144,7 +144,7 @@ The detailed guides to each individual block can be found at [docs](https://lego
 
 Users can also customize the workflow by running multiple blocks. Step-by-step guidance is in [Running the Full Pipeline](https://legoflow-docs.legox.net/docs/running-blocks/full-pipeline).
 
-For example, our previous run with all four blocks shows that Curator built 4,166 verified Python tasks, Tracer solved 915 of them, 512 trajectories were selected for training, and the resulting fine-tune lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified. More details are recorded in the [blog](https://legox.pages.dev/blog/legoflow/).
+For example, our previous run with all four blocks shows that Curator built 4,166 verified Python tasks, Tracer solved 915 of them, 512 trajectories were selected for training, and the resulting fine-tune lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified. More details are recorded in the [blog](https://www.legox.net/blog/legoflow/).
 
 ## Contributing
 
@@ -157,7 +157,7 @@ We welcome all developers to use, improve and contribute to LegoFlow. Issues and
   title  = {LegoFlow: Easy and Interactive Code Data Engineering},
   author = {LegoX Team},
   year   = {2026},
-  url    = {https://legox.net/blog/legoflow/}
+  url    = {https://www.legox.net/blog/legoflow/}
 }
 ```
 
@@ -165,7 +165,7 @@ We welcome all developers to use, improve and contribute to LegoFlow. Issues and
 ## Acknowledgements
 
 LegoFlow builds on [Harbor](https://www.harborframework.com/) for isolated task execution,
-[LLaMA-Factory](https://github.com/LegoX/LLaMA-Factory) and [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) for training,
+[LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) and [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) for training,
 [LiteLLM](https://github.com/BerriAI/litellm) for trajectory capture,
 [vLLM](https://github.com/vllm-project/vllm) for serving local checkpoints,
 [Claude Code](https://claude.com/claude-code) and the Claude Agent SDK for agent operation,
