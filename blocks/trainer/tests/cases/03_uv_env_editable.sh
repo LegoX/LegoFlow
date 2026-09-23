@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CI test 03: the sft uv env exists and the training stack imports.
-# Mirrors install_env.sh's final import block: torch + swe_data_process +
+# Mirrors install_env.sh's final import block: torch + legoflow_trace_crafter +
 # llamafactory must all import inside artifacts/env/lf. CUDA availability is
 # reported but NOT required (the cases job may run on a CPU-only runner).
 
@@ -28,7 +28,7 @@ PY_BIN="$SFT_UV/bin/python"
 
 # Make both src trees importable even if an editable .pth contains the absolute
 # path used by another mount of the shared workspace.
-SWE_DP_SRC="$BLOCK_DIR/repos/swe_data_process/src"
+SWE_DP_SRC="$BLOCK_DIR/repos/LegoFlow-Trace-Crafter/src"
 LLAMA_FACTORY_SRC="$BLOCK_DIR/repos/LLaMA-Factory/src"
 
 uv pip check --python "$PY_BIN"
@@ -36,7 +36,7 @@ uv pip check --python "$PY_BIN"
 PYTHONPATH="$LLAMA_FACTORY_SRC:$SWE_DP_SRC:${PYTHONPATH:-}" "$PY_BIN" - <<'PY'
 import importlib, sys
 from importlib.metadata import version
-mods = ["torch", "swe_data_process", "llamafactory.hparams"]
+mods = ["torch", "legoflow_trace_crafter", "llamafactory.hparams"]
 bad = []
 for m in mods:
     try:

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Create or refresh the uv environment for repos/swe_data_process.
+# Create or refresh the uv environment for repos/LegoFlow-Trace-Crafter.
 # The env lives outside the read-only repo at the path configured in
-# meta_info.environment.swe_data_process_uv (default: artifacts/env/swe-data-process-uv).
+# meta_info.environment.legoflow_trace_crafter_uv (default: artifacts/env/legoflow-trace-crafter-uv).
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -10,11 +10,11 @@ CONFIG="$BLOCK_DIR/config.yaml"
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/setup_swe_data_process_env.sh
-  bash scripts/setup_swe_data_process_env.sh --no-extras
+  bash scripts/setup_legoflow_trace_crafter_env.sh
+  bash scripts/setup_legoflow_trace_crafter_env.sh --no-extras
 
-Runs `uv sync` (with the extras configured in meta_info.environment.swe_data_process_extras)
-into the uv project environment at meta_info.environment.swe_data_process_uv. The repo
+Runs `uv sync` (with the extras configured in meta_info.environment.legoflow_trace_crafter_extras)
+into the uv project environment at meta_info.environment.legoflow_trace_crafter_uv. The repo
 itself stays read-only; uv writes only into the external venv path.
 
 Pass --no-extras to install base dependencies only.
@@ -113,22 +113,22 @@ abspath() {
 command -v uv >/dev/null 2>&1 || { echo "ERROR: uv is required (install via: curl -LsSf https://astral.sh/uv/install.sh | sh)" >&2; exit 1; }
 [[ -f "$CONFIG" ]] || { echo "ERROR: config.yaml not found at $CONFIG" >&2; exit 1; }
 
-SWE_DP_PATH_RAW="$(cfg meta_info.repositories.swe_data_process.path)"
-SWE_DP_UV_RAW="$(cfg meta_info.environment.swe_data_process_uv)"
-SWE_DP_READONLY="$(cfg meta_info.repositories.swe_data_process.readonly)"
+SWE_DP_PATH_RAW="$(cfg meta_info.repositories.legoflow_trace_crafter.path)"
+SWE_DP_UV_RAW="$(cfg meta_info.environment.legoflow_trace_crafter_uv)"
+SWE_DP_READONLY="$(cfg meta_info.repositories.legoflow_trace_crafter.readonly)"
 
-[[ -n "$SWE_DP_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.swe_data_process.path is empty" >&2; exit 1; }
-[[ -n "$SWE_DP_UV_RAW" ]] || { echo "ERROR: meta_info.environment.swe_data_process_uv is empty" >&2; exit 1; }
+[[ -n "$SWE_DP_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.legoflow_trace_crafter.path is empty" >&2; exit 1; }
+[[ -n "$SWE_DP_UV_RAW" ]] || { echo "ERROR: meta_info.environment.legoflow_trace_crafter_uv is empty" >&2; exit 1; }
 
 SWE_DP_DIR="$(abspath "$SWE_DP_PATH_RAW")"
 SWE_DP_UV_ABS="$(abspath "$SWE_DP_UV_RAW")"
 
-[[ -e "$SWE_DP_DIR/.git" ]] || { echo "ERROR: swe_data_process repo missing at $SWE_DP_PATH_RAW; run bash scripts/update_repos.sh --repo swe_data_process" >&2; exit 1; }
+[[ -e "$SWE_DP_DIR/.git" ]] || { echo "ERROR: legoflow_trace_crafter repo missing at $SWE_DP_PATH_RAW; run bash scripts/update_repos.sh --repo legoflow_trace_crafter" >&2; exit 1; }
 
 case "$SWE_DP_UV_ABS" in
   "$SWE_DP_DIR"/*)
     if [[ "$SWE_DP_READONLY" == "true" ]]; then
-      echo "ERROR: swe_data_process_uv ($SWE_DP_UV_RAW) is inside the read-only repo. Set it outside repos/swe_data_process." >&2
+      echo "ERROR: legoflow_trace_crafter_uv ($SWE_DP_UV_RAW) is inside the read-only repo. Set it outside repos/LegoFlow-Trace-Crafter." >&2
       exit 1
     fi
     ;;
@@ -139,7 +139,7 @@ if [[ "$USE_EXTRAS" == "1" ]]; then
   while IFS= read -r extra; do
     [[ -n "$extra" ]] || continue
     EXTRA_ARGS+=("--extra" "$extra")
-  done < <(cfg_list meta_info.environment.swe_data_process_extras)
+  done < <(cfg_list meta_info.environment.legoflow_trace_crafter_extras)
 fi
 
 mkdir -p "$(dirname "$SWE_DP_UV_ABS")"
@@ -162,7 +162,7 @@ if [[ -n "$LOCAL_EXCLUDE" ]]; then
   fi
 fi
 
-echo "=== tracer: setup swe_data_process uv env ==="
+echo "=== tracer: setup legoflow_trace_crafter uv env ==="
 echo "Repo:    $SWE_DP_PATH_RAW"
 echo "Env:     $SWE_DP_UV_RAW"
 if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
@@ -195,15 +195,15 @@ fi
   UV_PROJECT_ENVIRONMENT="$SWE_DP_UV_ABS" uv sync "${EXTRA_ARGS[@]}"
 )
 
-# Patch missing transitive deps that swe_data_process pyproject.toml does not list:
+# Patch missing transitive deps that legoflow_trace_crafter pyproject.toml does not list:
 # - jinja2 is required by transformers.apply_chat_template, used by the LF
-#   conversion step in src/swe_data_process/utils.py:convert_json_to_lf_format.
+#   conversion step in src/legoflow_trace_crafter/utils.py:convert_json_to_lf_format.
 #   Without it, all convert_*_to_im.py scripts fail at lf.json write time.
 uv pip install --python "$SWE_DP_UV_ABS/bin/python" --quiet jinja2
 
-if [[ -x "$SWE_DP_UV_ABS/bin/python" ]] && "$SWE_DP_UV_ABS/bin/python" -c "import swe_data_process, jinja2" >/dev/null 2>&1; then
-  echo "OK: swe_data_process importable from $SWE_DP_UV_ABS/bin/python (jinja2 patched in)"
+if [[ -x "$SWE_DP_UV_ABS/bin/python" ]] && "$SWE_DP_UV_ABS/bin/python" -c "import legoflow_trace_crafter, jinja2" >/dev/null 2>&1; then
+  echo "OK: legoflow_trace_crafter importable from $SWE_DP_UV_ABS/bin/python (jinja2 patched in)"
 else
-  echo "ERROR: swe_data_process / jinja2 not importable from $SWE_DP_UV_ABS/bin/python after uv sync" >&2
+  echo "ERROR: legoflow_trace_crafter / jinja2 not importable from $SWE_DP_UV_ABS/bin/python after uv sync" >&2
   exit 1
 fi

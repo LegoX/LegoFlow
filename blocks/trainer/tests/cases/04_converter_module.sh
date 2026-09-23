@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CI test 04: the trajectory converter for the configured scaffold is importable.
 # Mirrors train.sh's scaffold -> CONVERTER_MODULE mapping, then resolves the
-# module inside the sft uv env (with PYTHONPATH=repos/swe_data_process/src, as
+# module inside the sft uv env (with PYTHONPATH=repos/LegoFlow-Trace-Crafter/src, as
 # train.sh runs it). Catches a scaffold/converter mismatch before STEP 0.
 
 set -euo pipefail
@@ -23,10 +23,10 @@ SCAFFOLD="$(cfg runtime_info.input.source.scaffold)"
 
 # Keep this case statement in lock-step with scripts/train.sh.
 case "$SCAFFOLD" in
-  openhands-sdk) MODULE="swe_data_process.openhands.convert_openhands_sdk_to_im" ;;
-  claude-code)   MODULE="swe_data_process.claudecode_opencode.convert_cc_to_im" ;;
-  open-code)     MODULE="swe_data_process.claudecode_opencode.convert_oc_to_im" ;;
-  terminus2)     MODULE="swe_data_process.terminus2.convert_terminus2_to_im" ;;
+  openhands-sdk) MODULE="legoflow_trace_crafter.openhands.convert_openhands_sdk_to_im" ;;
+  claude-code)   MODULE="legoflow_trace_crafter.claudecode_opencode.convert_cc_to_im" ;;
+  open-code)     MODULE="legoflow_trace_crafter.claudecode_opencode.convert_oc_to_im" ;;
+  terminus2)     MODULE="legoflow_trace_crafter.terminus2.convert_terminus2_to_im" ;;
   *)
     echo "FAIL: unsupported scaffold '$SCAFFOLD' (expected openhands-sdk | claude-code | open-code | terminus2)"
     exit 1
@@ -37,7 +37,7 @@ SFT_UV_REL="$(cfg meta_info.environment.sft_uv)"
 PY_BIN="$BLOCK_DIR/$SFT_UV_REL/bin/python"
 [[ -x "$PY_BIN" ]] || { echo "FAIL: sft uv python missing at $SFT_UV_REL/bin/python — run /trainer:setup"; exit 1; }
 
-SWE_DP_SRC="$BLOCK_DIR/repos/swe_data_process/src"
+SWE_DP_SRC="$BLOCK_DIR/repos/LegoFlow-Trace-Crafter/src"
 
 if PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$PY_BIN" -c "import importlib; importlib.import_module('$MODULE')" >/dev/null 2>&1; then
   echo "INFO: scaffold=$SCAFFOLD -> $MODULE"

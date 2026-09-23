@@ -20,7 +20,7 @@ on the next update, so changes belong upstream.
 | Repository | Path | Role |
 | --- | --- | --- |
 | [LLaMA-Factory](https://github.com/LegoX/LLaMA-Factory) | `repos/LLaMA-Factory` | The training framework, patched for this pipeline. Trainer drives it through `llamafactory.cli train` with DeepSpeed ZeRO-3. |
-| [swe_data_process](https://github.com/LegoX/swe_data_process) | `repos/swe_data_process` | The trajectory converters, shared with Tracer. Trainer only uses them on the `harbor_job` path, when it has to build LF data from raw rollouts itself. |
+| [LegoFlow-Trace-Crafter](https://github.com/LegoX/LegoFlow-Trace-Crafter) | `repos/LegoFlow-Trace-Crafter` | The trajectory converters, shared with Tracer. Trainer only uses them on the `harbor_job` path, when it has to build LF data from raw rollouts itself. |
 
 ## 1. Read the Data Source
 

@@ -37,11 +37,11 @@ meta_info:
       commit: 6e23fa19f485d86d0e5666ce3a9fdfdebb43c050
       path: repos/LLaMA-Factory
       readonly: true
-    swe_data_process:
-      url: https://github.com/LegoX/swe_data_process.git
+    legoflow_trace_crafter:
+      url: https://github.com/LegoX/LegoFlow-Trace-Crafter.git
       branch: main
-      commit: dda92c581a0c0eaba74bb469d92ddda767e5f1b3
-      path: repos/swe_data_process
+      commit: 5e9575a63f59b704c98776399a9502443918e356
+      path: repos/LegoFlow-Trace-Crafter
       readonly: true
 
   environment:
@@ -49,7 +49,7 @@ meta_info:
     python_version: "3.12"
     packages:
       - repos/LLaMA-Factory
-      - repos/swe_data_process
+      - repos/LegoFlow-Trace-Crafter
 
 runtime_info:
   input:

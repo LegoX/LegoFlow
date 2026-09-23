@@ -26,10 +26,10 @@ local_lf ─▶ register an existing local LF JSON ─────────�
 
 | Scaffold | Converter module |
 |---|---|
-| claude-code | `swe_data_process.claudecode_opencode.convert_cc_to_im` |
-| open-code | `swe_data_process.claudecode_opencode.convert_oc_to_im` |
-| openhands-sdk | `swe_data_process.openhands.convert_openhands_sdk_to_im` |
-| terminus2 | `swe_data_process.terminus2.convert_terminus2_to_im` |
+| claude-code | `legoflow_trace_crafter.claudecode_opencode.convert_cc_to_im` |
+| open-code | `legoflow_trace_crafter.claudecode_opencode.convert_oc_to_im` |
+| openhands-sdk | `legoflow_trace_crafter.openhands.convert_openhands_sdk_to_im` |
+| terminus2 | `legoflow_trace_crafter.terminus2.convert_terminus2_to_im` |
 
 ### IM Format
 
@@ -62,7 +62,7 @@ Regenerate with `scripts/generate_excluded_repos.py`.
   (default `artifacts/env/lf`). Use `bash scripts/install_env.sh` to recreate it.
   The installer uses the Tsinghua PyPI mirror for general packages, installs
   PyTorch 2.10.0 / torchvision 0.25.0 / torchaudio 2.10.0 from the CUDA 12.8
-  PyTorch index, installs editable `swe_data_process[llm]` and the patched
+  PyTorch index, installs editable `legoflow-trace-crafter[llm]` and the patched
   LLaMA-Factory plus metrics/DeepSpeed/Liger requirements, builds `flash-attn`,
   installs Qwen3.5's `flash-linear-attention` and `tilelang`, and installs `wandb`.
 - `FORCE_TORCHRUN=1` must be set before `python -m llamafactory.cli train` to enable distributed training.

@@ -59,7 +59,7 @@ uv pip install --python "$PY" \
 # Data processing package with LLM scoring dependencies.
 uv pip install --python "$PY" \
   --index-url "$TUNA_INDEX" \
-  -e "repos/swe_data_process[llm]"
+  -e "repos/LegoFlow-Trace-Crafter[llm]"
 
 # Install the patched LegoX LLaMA-Factory source and its training stack.
 uv pip install --python "$PY" --index-url "$TUNA_INDEX" \
@@ -160,7 +160,7 @@ except Exception:
 
 modules = [
     ("transformers", "transformers"),
-    ("swe_data_process", "swe_data_process"),
+    ("legoflow_trace_crafter", "legoflow_trace_crafter"),
     ("llamafactory", "llamafactory"),
     ("flash_attn", "flash_attn"),
     ("fla (flash-linear-attention)", "fla"),

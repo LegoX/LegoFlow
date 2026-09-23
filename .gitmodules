@@ -2,9 +2,9 @@
 	path = blocks/curator/repos/legoflow-curator
 	url = https://github.com/LegoX/LegoFlow-SWE-Curator.git
 	branch = main
-[submodule "blocks/trainer/repos/swe_data_process"]
-	path = blocks/trainer/repos/swe_data_process
-	url = https://github.com/LegoX/swe_data_process.git
+[submodule "blocks/trainer/repos/LegoFlow-Trace-Crafter"]
+	path = blocks/trainer/repos/LegoFlow-Trace-Crafter
+	url = https://github.com/LegoX/LegoFlow-Trace-Crafter.git
 	branch = main
 [submodule "blocks/tracer/repos/harbor"]
 	path = blocks/tracer/repos/harbor

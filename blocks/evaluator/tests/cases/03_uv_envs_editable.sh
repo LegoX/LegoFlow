@@ -2,7 +2,7 @@
 # CI test 03: the two evaluator envs exist with the expected installs.
 #   harbor uv  -> `import harbor` resolves under repos/harbor (editable)
 #   litellm    -> CLI present AND installed version == the pinned 1.83.14
-# (evaluator has no swe_data_process env — it does not convert trajectories.)
+# (evaluator has no legoflow_trace_crafter env — it does not convert trajectories.)
 
 set -euo pipefail
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

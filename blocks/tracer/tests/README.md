@@ -27,8 +27,8 @@ Per-test exit codes: `0` pass · `77` skip · anything else fail.
 | # | Test | What it asserts | Time |
 |---|---|---|---|
 | 01 | config schema | every required key in `config.yaml` is set and `task_source.provider ∈ {local, huggingface}` | <1 s |
-| 02 | repo pins | `repos/harbor` and `repos/swe_data_process` at their pinned commits, origins match, worktrees clean | <2 s |
-| 03 | uv envs | three envs exist; `harbor` editable from `repos/harbor`, `litellm` importable, `swe_data_process` importable (SKIP when `sft_conversion.enabled=false`) | ~1 min |
+| 02 | repo pins | `repos/harbor` and `repos/LegoFlow-Trace-Crafter` at their pinned commits, origins match, worktrees clean | <2 s |
+| 03 | uv envs | three envs exist; `harbor` editable from `repos/harbor`, `litellm` importable, `legoflow_trace_crafter` importable (SKIP when `sft_conversion.enabled=false`) | ~1 min |
 | 04 | LLM endpoint | a real completion returns **non-empty text**; on failure, reports whether a neighbouring URL/model shape (missing `/v1`, stray `provider/` prefix) is the cause | <30 s |
 | 05 | HF dataset | `huggingface.co/api/datasets/<name>` reachable with the configured token (SKIP for `local` provider) | <1 s |
 | 06 | LiteLLM port | port from `litellm_proxy.port` is free, or held by a process the current uid owns | <1 s |
@@ -92,8 +92,8 @@ Skip this section unless you're debugging a specific case or about to change one
 
 Parses `config.yaml` with PyYAML and asserts every key the tracer runtime
 contract depends on is non-empty: `meta_info.name == "tracer"`,
-`meta_info.repositories.{harbor, swe_data_process}.{url, commit, path, readonly}`,
-`meta_info.environment.{harbor_uv, litellm_uv, swe_data_process_uv}`,
+`meta_info.repositories.{harbor, legoflow_trace_crafter}.{url, commit, path, readonly}`,
+`meta_info.environment.{harbor_uv, litellm_uv, legoflow_trace_crafter_uv}`,
 `runtime_info.input.llm_api.{api_key, api_base_url, model}`,
 `runtime_info.input.litellm_proxy.{port, master_key}`,
 `runtime_info.input.task_source.{provider, dataset_name}`,
@@ -106,7 +106,7 @@ contract depends on is non-empty: `meta_info.name == "tracer"`,
 <details>
 <summary><code>cases/02_repo_pins.sh</code> — pinned commits + clean worktrees</summary>
 
-For each of `repos/harbor` and `repos/swe_data_process`: `.git` exists,
+For each of `repos/harbor` and `repos/LegoFlow-Trace-Crafter`: `.git` exists,
 `git remote get-url origin` matches `meta_info.repositories.<name>.url`,
 `git rev-parse HEAD` matches the pin, and `git status --porcelain` is empty.
 Enforces the "vendored + read-only" contract from `BLOCK_DEFINITION.md §1.5`.
@@ -119,7 +119,7 @@ For each env, dir exists and python is executable; then:
 **harbor uv** runs `scripts/check_harbor_editable.py` with
 `HARBOR_EDITABLE_ROOT` set, pass iff `harbor.__file__` resolves under
 `repos/harbor/src/`. **litellm venv**: `python -c "import litellm"`.
-**swe_data_process uv**: `python -c "import swe_data_process"`, downgraded
+**legoflow_trace_crafter uv**: `python -c "import legoflow_trace_crafter"`, downgraded
 to SKIP when `sft_conversion.enabled=false`. ~1 min, dominated by harbor's
 import time.
 </details>

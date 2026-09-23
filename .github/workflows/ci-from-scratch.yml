@@ -125,7 +125,7 @@ jobs:
           retention-days: 14
 
   # ===========================================================================
-  # tracer — fresh harbor + swe_data_process + litellm envs, pulled image
+  # tracer — fresh harbor + legoflow_trace_crafter + litellm envs, pulled image
   # ===========================================================================
   tracer:
     name: tracer (from-scratch)
@@ -163,7 +163,7 @@ jobs:
             echo "UV_CACHE_DIR=$UV_CACHE_DIR"
             echo "PATH=$CICD_SHARED/uv/bin:$PATH"
           } >> "$GITHUB_ENV"
-      - name: Clone harbor + swe_data_process via config-managed URLs
+      - name: Clone harbor + legoflow_trace_crafter via config-managed URLs
         working-directory: blocks/tracer
         run: |
           set -euo pipefail
@@ -174,17 +174,17 @@ jobs:
           # transport, so cases/02_repo_pins.sh's `git remote get-url origin`
           # equality check would always fail with an origin URL mismatch.
           bash scripts/update_repos.sh --repo harbor
-          bash scripts/update_repos.sh --repo swe_data_process
+          bash scripts/update_repos.sh --repo legoflow_trace_crafter
       - name: Build harbor uv env from scratch
         working-directory: blocks/tracer
         run: |
           rm -rf artifacts/env/harbor-uv
           bash scripts/setup_harbor_env.sh
-      - name: Build swe_data_process uv env from scratch
+      - name: Build legoflow_trace_crafter uv env from scratch
         working-directory: blocks/tracer
         run: |
-          rm -rf artifacts/env/swe-data-process-uv
-          bash scripts/setup_swe_data_process_env.sh
+          rm -rf artifacts/env/legoflow-trace-crafter-uv
+          bash scripts/setup_legoflow_trace_crafter_env.sh
       - name: Build litellm venv from scratch
         working-directory: blocks/tracer
         run: |
@@ -336,7 +336,7 @@ jobs:
           retention-days: 14
 
   # ===========================================================================
-  # trainer — fresh LLaMA-Factory + swe_data_process submodules + uv training env
+  # trainer — fresh LLaMA-Factory + legoflow_trace_crafter submodules + uv training env
   # ===========================================================================
   trainer:
     name: trainer (from-scratch)
@@ -375,10 +375,11 @@ jobs:
             echo "HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-${HF_TOKEN:-}}"
             echo "HF_HOME=${HF_HOME:-}"
           } >> "$GITHUB_ENV"
-      - name: Init submodules (LLaMA-Factory public + swe_data_process private)
-        # The PAT url-rewrite above turns swe_data_process's git@github.com SSH
-        # remote into an https+token URL so the private clone succeeds.
-        run: git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 blocks/trainer/repos/LLaMA-Factory blocks/trainer/repos/swe_data_process
+      - name: Init submodules (LLaMA-Factory + LegoFlow-Trace-Crafter)
+        # The PAT url-rewrite above is still used for other private clones in
+        # this workflow. LegoFlow-Trace-Crafter is public and lives at
+        # blocks/trainer/repos/LegoFlow-Trace-Crafter.
+        run: git -C "$GITHUB_WORKSPACE" submodule update --init --depth 1 blocks/trainer/repos/LLaMA-Factory blocks/trainer/repos/LegoFlow-Trace-Crafter
       - name: Build trainer uv env from scratch
         working-directory: blocks/trainer
         env:
