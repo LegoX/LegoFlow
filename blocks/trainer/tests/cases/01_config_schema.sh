@@ -28,8 +28,8 @@ REQUIRED = [
     "meta_info.environment.sft_uv",
     "meta_info.repositories.llama_factory.path",
     "meta_info.repositories.llama_factory.commit",
-    "meta_info.repositories.swe_data_process.path",
-    "meta_info.repositories.swe_data_process.commit",
+    "meta_info.repositories.legoflow_trace_crafter.path",
+    "meta_info.repositories.legoflow_trace_crafter.commit",
     "runtime_info.input.source.type",
     "runtime_info.input.source.scaffold",
     # `source.job_dir` is validated in cases/05 with source.type-aware logic

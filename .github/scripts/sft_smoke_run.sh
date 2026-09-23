@@ -100,24 +100,24 @@ git -c fetch.recurseSubmodules=false fetch origin "$sha"
 git reset --hard "$sha"
 git submodule sync -- \
   blocks/trainer/repos/LLaMA-Factory \
-  blocks/trainer/repos/swe_data_process
+  blocks/trainer/repos/LegoFlow-Trace-Crafter
 # The managed GPU host authenticates GitHub over SSH. Keep the tracked
 # developer-facing URLs as HTTPS, but use host-local SSH overrides here.
 git config submodule.blocks/trainer/repos/LLaMA-Factory.url \
   git@github.com:LegoX/LLaMA-Factory.git
-git config submodule.blocks/trainer/repos/swe_data_process.url \
-  git@github.com:LegoX/swe_data_process.git
+git config submodule.blocks/trainer/repos/LegoFlow-Trace-Crafter.url \
+  git@github.com:LegoX/LegoFlow-Trace-Crafter.git
 if git -C blocks/trainer/repos/LLaMA-Factory rev-parse --git-dir >/dev/null 2>&1; then
   git -C blocks/trainer/repos/LLaMA-Factory remote set-url origin \
     git@github.com:LegoX/LLaMA-Factory.git
 fi
-if git -C blocks/trainer/repos/swe_data_process rev-parse --git-dir >/dev/null 2>&1; then
-  git -C blocks/trainer/repos/swe_data_process remote set-url origin \
-    git@github.com:LegoX/swe_data_process.git
+if git -C blocks/trainer/repos/LegoFlow-Trace-Crafter rev-parse --git-dir >/dev/null 2>&1; then
+  git -C blocks/trainer/repos/LegoFlow-Trace-Crafter remote set-url origin \
+    git@github.com:LegoX/LegoFlow-Trace-Crafter.git
 fi
 git submodule update --init --recursive --force -- \
   blocks/trainer/repos/LLaMA-Factory \
-  blocks/trainer/repos/swe_data_process
+  blocks/trainer/repos/LegoFlow-Trace-Crafter
 
 cd blocks/trainer
 rm -rf artifacts/env artifacts/data/examples

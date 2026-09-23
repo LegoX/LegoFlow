@@ -60,7 +60,7 @@ local 401/403→FAIL, CF-gated remote 401/403 or app-level 400/404→WARN) lives
 evaluator is the **registry-driven, terminal** block, so the suite drops the local
 task-staging checks and adds eval-specific coverage:
 
-- **No `swe_data_process` env** (case 03 checks 2 envs, not 3) — evaluator does not
+- **No `legoflow_trace_crafter` env** (case 03 checks 2 envs, not 3) — evaluator does not
   convert trajectories.
 - **No HF-dataset / processed-tasks cases** — evaluator stages no tasks locally;
   case 07 (registry resolution) replaces tracer's HF reachability check.

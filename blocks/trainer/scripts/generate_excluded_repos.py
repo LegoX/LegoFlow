@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Extract repository names from the Hugging Face reference datasets.
+Copy the maintained exclusion list from LegoFlow-Trace-Crafter.
 
 The output contains one ``owner/repo`` per line and can be passed directly to
 the conversion scripts through ``--exclude-repos-file``.
@@ -14,25 +14,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sys
+import shutil
 from pathlib import Path
 
 BLOCK_DIR = Path(__file__).resolve().parent.parent
-LOCAL_SRC = BLOCK_DIR / "repos" / "swe_data_process" / "src"
-if LOCAL_SRC.exists():
-    sys.path.insert(0, str(LOCAL_SRC))
-
-from swe_data_process.utils import (
-    DEFAULT_REFERENCE_DATASETS,
-    load_reference_repos_from_hf,
+DEFAULT_SOURCE = (
+    BLOCK_DIR / "repos" / "LegoFlow-Trace-Crafter" / "artifacts" / "excluded_repos.txt"
 )
-
 DEFAULT_OUTPUT = BLOCK_DIR / "scripts" / "excluded_repos.txt"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Extract repositories to exclude from Hugging Face reference datasets"
+        description="Copy repositories to exclude from LegoFlow-Trace-Crafter"
     )
     parser.add_argument(
         "-o", "--output",
@@ -40,31 +34,28 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_OUTPUT,
         help=f"output file (default: {DEFAULT_OUTPUT})",
     )
+    parser.add_argument(
+        "--source",
+        type=Path,
+        default=DEFAULT_SOURCE,
+        help=f"source file (default: {DEFAULT_SOURCE})",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if not args.source.is_file():
+        raise SystemExit(f"ERROR: exclusion list not found: {args.source}")
 
-    print("Loading reference datasets from Hugging Face...")
-    repos = load_reference_repos_from_hf(DEFAULT_REFERENCE_DATASETS)
-
-    if not repos:
-        print("WARNING: no repositories found; check the network and dataset names.")
-        return
-
-    sorted_repos = sorted(repos)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("w", encoding="utf-8") as f:
-        f.write(
-            "# Reference-dataset repositories (generated; do not edit manually)\n"
-            "# Sources: SWE-bench_Verified, SWE-bench_Pro, SWE-bench_Multilingual\n"
-            "# One owner/repo per line; pass this file with --exclude-repos-file\n"
-        )
-        for repo in sorted_repos:
-            f.write(repo + "\n")
-
-    print(f"\nSaved {len(sorted_repos)} repositories to {args.output}")
+    shutil.copyfile(args.source, args.output)
+    n_repos = sum(
+        1
+        for line in args.output.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+    print(f"Copied {n_repos} repositories from {args.source} to {args.output}")
 
 
 if __name__ == "__main__":

@@ -41,7 +41,7 @@ sync_ci_runtime_origins() {
   done < <(python3 - "$BLOCK_DIR/config.yaml" <<'PY'
 import sys, yaml
 config = yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}
-for name in ("harbor", "swe_data_process"):
+for name in ("harbor", "legoflow_trace_crafter"):
     repo = config["meta_info"]["repositories"][name]
     print(f"{name}\t{repo['path']}\t{repo['url']}")
 PY

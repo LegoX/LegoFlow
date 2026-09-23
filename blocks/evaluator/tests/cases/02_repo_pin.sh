@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CI test 02: repos/harbor at the pinned commit, origin matches, worktree clean.
 # Evaluator uses a single managed Harbor submodule; unlike tracer there is no
-# swe_data_process checkout. The Harbor worktree is set read-only after checkout
+# legoflow_trace_crafter checkout. The Harbor worktree is set read-only after checkout
 # (repositories.harbor.readonly: true), which does not affect git status.
 
 set -euo pipefail

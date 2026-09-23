@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Convert Harbor trajectories under artifacts/jobs/<job>/ into IM + LF SFT data
-# using the swe_data_process repo. Output is written under
+# using the legoflow_trace_crafter repo. Output is written under
 # runtime_info.input.sft_conversion.out_dir/<job>/.
 set -euo pipefail
 
@@ -134,7 +134,7 @@ abspath() {
 }
 
 derive_scaffold() {
-  # Map runtime_info.input.agent.name -> swe_data_process scaffold key.
+  # Map runtime_info.input.agent.name -> legoflow_trace_crafter scaffold key.
   local agent_name="$1"
   case "$agent_name" in
     custom-claude-code|claude-code|claude_code)
@@ -157,10 +157,10 @@ derive_scaffold() {
 
 scaffold_module() {
   case "$1" in
-    claude_code)   echo "swe_data_process.claudecode_opencode.convert_cc_to_im" ;;
-    open_code)     echo "swe_data_process.claudecode_opencode.convert_oc_to_im" ;;
-    openhands_sdk) echo "swe_data_process.openhands.convert_openhands_sdk_to_im" ;;
-    terminus2)     echo "swe_data_process.terminus2.convert_terminus2_to_im" ;;
+    claude_code)   echo "legoflow_trace_crafter.claudecode_opencode.convert_cc_to_im" ;;
+    open_code)     echo "legoflow_trace_crafter.claudecode_opencode.convert_oc_to_im" ;;
+    openhands_sdk) echo "legoflow_trace_crafter.openhands.convert_openhands_sdk_to_im" ;;
+    terminus2)     echo "legoflow_trace_crafter.terminus2.convert_terminus2_to_im" ;;
     *)             echo "" ;;
   esac
 }
@@ -174,8 +174,8 @@ supports_reasoning_filter() {
 
 [[ -f "$CONFIG" ]] || { echo "ERROR: config.yaml not found at $CONFIG" >&2; exit 1; }
 
-SWE_DP_PATH_RAW="$(cfg meta_info.repositories.swe_data_process.path)"
-SWE_DP_UV_RAW="$(cfg meta_info.environment.swe_data_process_uv)"
+SWE_DP_PATH_RAW="$(cfg meta_info.repositories.legoflow_trace_crafter.path)"
+SWE_DP_UV_RAW="$(cfg meta_info.environment.legoflow_trace_crafter_uv)"
 HARBOR_JOBS_DIR_RAW="$(cfg runtime_info.input.harbor_job.jobs_dir)"
 AGENT_NAME="$(cfg runtime_info.input.agent.name)"
 SCAFFOLD_CFG="$(cfg runtime_info.input.sft_conversion.scaffold)"
@@ -186,8 +186,8 @@ EXCLUDE_REPOS_CFG="$(cfg runtime_info.input.sft_conversion.exclude_repos_file)"
 REASONING_CHECK_MODE_CFG="$(cfg runtime_info.input.sft_conversion.reasoning_check_mode)"
 REASONING_THRESHOLD_CFG="$(cfg runtime_info.input.sft_conversion.reasoning_content_ratio_threshold)"
 
-[[ -n "$SWE_DP_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.swe_data_process.path is empty" >&2; exit 1; }
-[[ -n "$SWE_DP_UV_RAW" ]] || { echo "ERROR: meta_info.environment.swe_data_process_uv is empty" >&2; exit 1; }
+[[ -n "$SWE_DP_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.legoflow_trace_crafter.path is empty" >&2; exit 1; }
+[[ -n "$SWE_DP_UV_RAW" ]] || { echo "ERROR: meta_info.environment.legoflow_trace_crafter_uv is empty" >&2; exit 1; }
 [[ -n "$HARBOR_JOBS_DIR_RAW" ]] || { echo "ERROR: runtime_info.input.harbor_job.jobs_dir is empty" >&2; exit 1; }
 [[ -n "$AGENT_NAME" ]] || { echo "ERROR: runtime_info.input.agent.name is empty" >&2; exit 1; }
 [[ -n "$SCAFFOLD_CFG" ]] || SCAFFOLD_CFG="auto"
@@ -200,8 +200,8 @@ SWE_DP_DIR="$(abspath "$SWE_DP_PATH_RAW")"
 SWE_DP_UV_ABS="$(abspath "$SWE_DP_UV_RAW")"
 HARBOR_JOBS_DIR="$(abspath "$HARBOR_JOBS_DIR_RAW")"
 
-[[ -e "$SWE_DP_DIR/.git" ]] || { echo "ERROR: swe_data_process repo missing at $SWE_DP_PATH_RAW; run scripts/update_repos.sh --repo swe_data_process" >&2; exit 1; }
-[[ -x "$SWE_DP_UV_ABS/bin/python" ]] || { echo "ERROR: swe_data_process uv env missing or broken at $SWE_DP_UV_ABS; run bash scripts/setup_swe_data_process_env.sh" >&2; exit 1; }
+[[ -e "$SWE_DP_DIR/.git" ]] || { echo "ERROR: legoflow_trace_crafter repo missing at $SWE_DP_PATH_RAW; run scripts/update_repos.sh --repo legoflow_trace_crafter" >&2; exit 1; }
+[[ -x "$SWE_DP_UV_ABS/bin/python" ]] || { echo "ERROR: legoflow_trace_crafter uv env missing or broken at $SWE_DP_UV_ABS; run bash scripts/setup_legoflow_trace_crafter_env.sh" >&2; exit 1; }
 [[ -d "$HARBOR_JOBS_DIR" ]] || { echo "ERROR: Harbor jobs dir not found: $HARBOR_JOBS_DIR" >&2; exit 1; }
 
 if [[ "$JOB_ARG" == "latest" ]]; then

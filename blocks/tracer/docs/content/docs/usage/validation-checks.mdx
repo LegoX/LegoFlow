@@ -31,8 +31,8 @@ are reported but do not fail the suite.
 | Case | What it checks | Pass condition |
 | --- | --- | --- |
 | `01_config_schema.sh` | Tracer `config.yaml` shape and task-source mode. | Required fields are present and `task_source.provider` is either `local` or `huggingface`. |
-| `02_repo_pins.sh` | `repos/harbor` and `repos/swe_data_process`. | Both repos exist, match configured pins, keep expected origins, and have clean worktrees. |
-| `03_uv_envs_editable.sh` | Harbor, LiteLLM, and `swe_data_process` environments. | Expected envs exist; editable/import checks pass. `swe_data_process` may skip when SFT conversion is disabled. |
+| `02_repo_pins.sh` | `repos/harbor` and `repos/LegoFlow-Trace-Crafter`. | Both repos exist, match configured pins, keep expected origins, and have clean worktrees. |
+| `03_uv_envs_editable.sh` | Harbor, LiteLLM, and `legoflow_trace_crafter` environments. | Expected envs exist; editable/import checks pass. `legoflow_trace_crafter` may skip when SFT conversion is disabled. |
 | `04_llm_endpoint.sh` | LLM endpoint and model catalog. | `/models` is reachable and the configured model is present, unless the check is explicitly skipped for external health. |
 | `05_hf_dataset.sh` | Hugging Face task source. | Configured dataset is reachable when the provider is `huggingface`; local providers skip this case. |
 | `06_litellm_port.sh` | LiteLLM proxy port. | The configured port is free or already held by the current user. |

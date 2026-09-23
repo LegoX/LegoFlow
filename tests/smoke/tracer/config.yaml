@@ -37,18 +37,18 @@ meta_info:
       commit: 73fd120e731217b38f31667932ea26a28cdd4fff
       path: repos/harbor
       readonly: true
-    swe_data_process:
-      url: https://github.com/LegoX/swe_data_process.git
+    legoflow_trace_crafter:
+      url: https://github.com/LegoX/LegoFlow-Trace-Crafter.git
       branch: main
-      commit: dda92c581a0c0eaba74bb469d92ddda767e5f1b3
-      path: repos/swe_data_process
+      commit: 5e9575a63f59b704c98776399a9502443918e356
+      path: repos/LegoFlow-Trace-Crafter
       readonly: true
 
   environment:
     harbor_uv: artifacts/env/harbor-uv
     litellm_uv: artifacts/env/litellm-venv
-    swe_data_process_uv: artifacts/env/swe-data-process-uv
-    swe_data_process_extras: [llm]
+    legoflow_trace_crafter_uv: artifacts/env/legoflow-trace-crafter-uv
+    legoflow_trace_crafter_extras: [llm]
     litellm:
       python_version: "3.13"
       litellm_version: "1.83.14"

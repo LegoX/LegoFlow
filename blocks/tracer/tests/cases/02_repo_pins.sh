@@ -71,7 +71,7 @@ check_repo() {
 }
 
 fail=0
-for r in harbor swe_data_process; do
+for r in harbor legoflow_trace_crafter; do
   check_repo "$r" || fail=$((fail+1))
 done
 

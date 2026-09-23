@@ -18,7 +18,7 @@ must be clean before an existing checkout is updated.
 
 Examples:
   bash scripts/update_repos.sh --repo harbor
-  bash scripts/update_repos.sh --repo swe_data_process --ref main
+  bash scripts/update_repos.sh --repo legoflow_trace_crafter --ref main
 EOF
 }
 

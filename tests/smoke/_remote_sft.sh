@@ -127,7 +127,7 @@ if [[ -n "$RUNTIME_DIR" ]]; then
   SSH "set -e
     cd '$REMOTE_SFT'
     mkdir -p repos artifacts
-    for l in artifacts/env repos/LLaMA-Factory repos/swe_data_process artifacts/data/examples; do
+    for l in artifacts/env repos/LLaMA-Factory repos/LegoFlow-Trace-Crafter artifacts/data/examples; do
       src='$RUNTIME_DIR'/\$l
       # actions/checkout-style empty placeholders would swallow the link
       [ -L \"\$l\" ] && rm -f \"\$l\"

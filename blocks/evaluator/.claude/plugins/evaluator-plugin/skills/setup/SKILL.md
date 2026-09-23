@@ -20,7 +20,7 @@ launches Harbor — that's `/evaluator:run`.
 Unlike tracer, evaluator has **no `setup_*_env.sh` helper scripts**; the two
 environments are built with the explicit `uv` commands below (which
 `scripts/dryrun.sh` also prints when an env is missing). Evaluator builds only
-two envs (Harbor uv + LiteLLM venv) — there is no `swe_data_process` env,
+two envs (Harbor uv + LiteLLM venv) — there is no `legoflow_trace_crafter` env,
 because evaluator does not convert trajectories.
 
 ## Where to run

@@ -2,9 +2,9 @@
 name: setup
 description: >
   Bootstrap the tracer block: install `uv` (in a writable location when
-  `~/.local/bin` is root-owned), clone+pin Harbor and swe_data_process,
+  `~/.local/bin` is root-owned), clone+pin Harbor and legoflow_trace_crafter,
   build the three uv/venv environments (harbor uv, LiteLLM venv on Python
-  3.13, swe_data_process uv), fill in `runtime_info.input` only for unset
+  3.13, legoflow_trace_crafter uv), fill in `runtime_info.input` only for unset
   fields, initialise `artifacts/processed_tasks.yaml`, and (when
   `task_source.provider: huggingface`) prompt for a HF token if the
   dataset is gated. Idempotent. Ends by running `scripts/dryrun.sh` so the
@@ -70,9 +70,9 @@ Build only the envs that don't already pass the editable-install check
 |---|---|---|
 | `artifacts/env/harbor-uv/` | `bash scripts/setup_harbor_env.sh` | `python -c "import harbor"` |
 | `artifacts/env/litellm-venv/` | `uv venv ... --python 3.13 && uv pip install 'litellm[proxy]==1.83.14'` then `litellm --version` | DO NOT use `import litellm; litellm.__version__` — litellm raises `AttributeError` on `__version__` by design. |
-| `artifacts/env/swe-data-process-uv/` | `bash scripts/setup_swe_data_process_env.sh` | `python -c "import swe_data_process, jinja2"` |
+| `artifacts/env/legoflow-trace-crafter-uv/` | `bash scripts/setup_legoflow_trace_crafter_env.sh` | `python -c "import legoflow_trace_crafter, jinja2"` |
 
-Both `setup_harbor_env.sh` and `setup_swe_data_process_env.sh` handle
+Both `setup_harbor_env.sh` and `setup_legoflow_trace_crafter_env.sh` handle
 the non-root chmod dance: they temporarily restore write perms on the
 read-only worktree, run `uv sync`, and re-lock on EXIT.
 

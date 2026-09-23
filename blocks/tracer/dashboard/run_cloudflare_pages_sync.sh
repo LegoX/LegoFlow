@@ -64,7 +64,7 @@ wrangler() {
   (cd "$WRANGLER_WORKDIR" && npx --yes "$WRANGLER_PKG" "$@")
 }
 
-# Map a Harbor job name to a swe_data_process scaffold key (same heuristic the
+# Map a Harbor job name to a legoflow_trace_crafter scaffold key (same heuristic the
 # dashboard uses). config.yaml's agent.name may not match the live job, so we
 # derive from the job dir name and pass --scaffold explicitly.
 detect_scaffold() {

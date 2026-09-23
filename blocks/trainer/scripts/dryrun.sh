@@ -5,7 +5,7 @@ set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LF_REPO="$BLOCK_DIR/repos/LLaMA-Factory"
-SWE_DP_REPO="$BLOCK_DIR/repos/swe_data_process"
+SWE_DP_REPO="$BLOCK_DIR/repos/LegoFlow-Trace-Crafter"
 SWE_DP_SRC="$SWE_DP_REPO/src"
 CONFIG="${SFT_CONFIG:-$BLOCK_DIR/config.yaml}"
 CONFIG_PYTHON="${CONFIG_PYTHON:-python3}"
@@ -76,10 +76,10 @@ cfg() {
 
 converter_module_for_scaffold() {
     case "$1" in
-        openhands-sdk) echo "swe_data_process.openhands.convert_openhands_sdk_to_im" ;;
-        claude-code)   echo "swe_data_process.claudecode_opencode.convert_cc_to_im" ;;
-        open-code)     echo "swe_data_process.claudecode_opencode.convert_oc_to_im" ;;
-        terminus2)     echo "swe_data_process.terminus2.convert_terminus2_to_im" ;;
+        openhands-sdk) echo "legoflow_trace_crafter.openhands.convert_openhands_sdk_to_im" ;;
+        claude-code)   echo "legoflow_trace_crafter.claudecode_opencode.convert_cc_to_im" ;;
+        open-code)     echo "legoflow_trace_crafter.claudecode_opencode.convert_oc_to_im" ;;
+        terminus2)     echo "legoflow_trace_crafter.terminus2.convert_terminus2_to_im" ;;
         *)             echo "" ;;
     esac
 }
@@ -182,17 +182,17 @@ else
     fail "repos/LLaMA-Factory/ not found"
 fi
 
-if [[ -f "$SWE_DP_REPO/pyproject.toml" && -d "$SWE_DP_SRC/swe_data_process" ]]; then
-    ok "repos/swe_data_process is an installable src-layout package"
-    check_repo_pin "swe_data_process" "$SWE_DP_REPO" "$(meta_cfg "repositories.swe_data_process.commit")"
+if [[ -f "$SWE_DP_REPO/pyproject.toml" && -d "$SWE_DP_SRC/legoflow_trace_crafter" ]]; then
+    ok "repos/LegoFlow-Trace-Crafter is an installable src-layout package"
+    check_repo_pin "legoflow_trace_crafter" "$SWE_DP_REPO" "$(meta_cfg "repositories.legoflow_trace_crafter.commit")"
 else
-    fail "repos/swe_data_process package files not found"
+    fail "repos/LegoFlow-Trace-Crafter package files not found"
 fi
 
-if [[ -x "$LF_PYTHON" ]] && PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" -c "import swe_data_process" 2>/dev/null; then
-    ok "swe_data_process is importable with local PYTHONPATH"
+if [[ -x "$LF_PYTHON" ]] && PYTHONPATH="$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" -c "import legoflow_trace_crafter" 2>/dev/null; then
+    ok "legoflow_trace_crafter is importable with local PYTHONPATH"
 else
-    warn "skipping or failing swe_data_process import check because SFT uv python is unavailable or import failed"
+    warn "skipping or failing legoflow_trace_crafter import check because SFT uv python is unavailable or import failed"
 fi
 
 if [[ -x "$LF_PYTHON" ]] && PYTHONPATH="$LF_REPO/src:$SWE_DP_SRC:${PYTHONPATH:-}" "$LF_PYTHON" -c "import llamafactory.hparams" 2>/dev/null; then
