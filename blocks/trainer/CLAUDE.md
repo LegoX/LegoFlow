@@ -37,7 +37,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 ## Repos
 
 - `repos/LLaMA-Factory/`: Training framework (LLaMA-Factory + DeepSpeed ZeRO-3)
-- `repos/swe_data_process/`: Installable data processing package. Runtime scripts call `python -m swe_data_process...` with `PYTHONPATH=repos/swe_data_process/src`.
+- `repos/LegoFlow-Trace-Crafter/`: Installable LegoFlow-Trace-Crafter package. Runtime scripts call `python -m legoflow_trace_crafter...` with `PYTHONPATH=repos/LegoFlow-Trace-Crafter/src`.
 
 ## Environment
 
@@ -47,7 +47,7 @@ uv env: `artifacts/env/lf` (Python 3.12 by default, configured at `meta_info.env
 bash scripts/install_env.sh
 ```
 
-`scripts/install_env.sh` recreates the env, installs PyTorch 2.10.0 CUDA 12.8 wheels, the editable `swe_data_process[llm]` and patched LLaMA-Factory repos plus metrics/DeepSpeed/Liger requirements, builds `flash-attn` against that PyTorch, installs Qwen3.5's `flash-linear-attention` and `tilelang` dependencies, then installs `wandb`.
+`scripts/install_env.sh` recreates the env, installs PyTorch 2.10.0 CUDA 12.8 wheels, the editable `legoflow-trace-crafter[llm]` (from `repos/LegoFlow-Trace-Crafter`) and patched LLaMA-Factory repos plus metrics/DeepSpeed/Liger requirements, builds `flash-attn` against that PyTorch, installs Qwen3.5's `flash-linear-attention` and `tilelang` dependencies, then installs `wandb`.
 
 ## How To Run
 

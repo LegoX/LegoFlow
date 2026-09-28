@@ -18,7 +18,7 @@ PY
 
 HARBOR_UV="$BLOCK_DIR/$(cfg meta_info.environment.harbor_uv)"
 LITELLM_UV="$BLOCK_DIR/$(cfg meta_info.environment.litellm_uv)"
-SWE_DP_UV="$BLOCK_DIR/$(cfg meta_info.environment.swe_data_process_uv)"
+SWE_DP_UV="$BLOCK_DIR/$(cfg meta_info.environment.legoflow_trace_crafter_uv)"
 SFT_ENABLED="$(cfg runtime_info.input.sft_conversion.enabled)"
 
 fail=0
@@ -49,8 +49,8 @@ check_env() {
       *)            echo "FAIL: harbor: editable check inconclusive: $out"; fail=$((fail+1)); return ;;
     esac
   elif ! "$py" -c "import $mod" >/dev/null 2>&1; then
-    if [[ "$name" == "swe_data_process" && "$SFT_ENABLED" != "true" ]]; then
-      echo "SKIP: swe_data_process import failed but sft_conversion.enabled=false"
+    if [[ "$name" == "legoflow_trace_crafter" && "$SFT_ENABLED" != "true" ]]; then
+      echo "SKIP: legoflow_trace_crafter import failed but sft_conversion.enabled=false"
       return
     fi
     echo "FAIL: $name: import $mod failed in $py"; fail=$((fail+1)); return
@@ -60,7 +60,7 @@ check_env() {
 
 check_env "harbor"           "$HARBOR_UV"  "harbor"           "harbor"
 check_env "litellm"          "$LITELLM_UV" "litellm"          "litellm"
-check_env "swe_data_process" "$SWE_DP_UV"  "swe_data_process" "swe_data_process"
+check_env "legoflow_trace_crafter" "$SWE_DP_UV"  "legoflow-trace-crafter" "legoflow_trace_crafter"
 
 if [[ "$fail" -gt 0 ]]; then
   echo "FAIL: $fail env(s) unhealthy"

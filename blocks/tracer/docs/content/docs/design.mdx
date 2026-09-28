@@ -18,7 +18,7 @@ changes belong upstream.
 | Repository | Path | Role |
 | --- | --- | --- |
 | [harbor](https://github.com/LegoX/harbor) | `repos/harbor` | The rollout runtime. It builds each task's container, runs the agent inside it, applies the verifier, and writes the trial directory. It also supplies the trajectory logger the LiteLLM proxy loads. |
-| [swe_data_process](https://github.com/LegoX/swe_data_process) | `repos/swe_data_process` | The trajectory converters. One module per scaffold turns raw rollouts into IM records and then LLaMA-Factory LF data, and computes the TQS quality scores. |
+| [LegoFlow-Trace-Crafter](https://github.com/LegoX/LegoFlow-Trace-Crafter) | `repos/LegoFlow-Trace-Crafter` | The trajectory converters. One module per scaffold turns raw rollouts into IM records and then LLaMA-Factory LF data, and computes the TQS quality scores. |
 
 ## 1. Task Intake
 
@@ -192,10 +192,10 @@ explicitly.
 
 | Scaffold | Converter module |
 | --- | --- |
-| `claude_code` | `swe_data_process.claudecode_opencode.convert_cc_to_im` |
-| `open_code` | `swe_data_process.claudecode_opencode.convert_oc_to_im` |
-| `openhands_sdk` | `swe_data_process.openhands.convert_openhands_sdk_to_im` |
-| `terminus2` | `swe_data_process.terminus2.convert_terminus2_to_im` |
+| `claude_code` | `legoflow_trace_crafter.claudecode_opencode.convert_cc_to_im` |
+| `open_code` | `legoflow_trace_crafter.claudecode_opencode.convert_oc_to_im` |
+| `openhands_sdk` | `legoflow_trace_crafter.openhands.convert_openhands_sdk_to_im` |
+| `terminus2` | `legoflow_trace_crafter.terminus2.convert_terminus2_to_im` |
 
 Every converter emits the same IM record, so scaffold-specific handling stops at
 this boundary and one LF writer serves all of them. Two filters run here rather

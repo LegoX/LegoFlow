@@ -54,16 +54,23 @@ and "what the script says" — the YAML is the record.
 **Why:** This keeps block-level configuration and the executed training config aligned, and
 prevents stale YAML files from drifting away from the recorded inputs.
 
-## 2026-05: Use swe_data_process package modules
-**Decision:** Data conversion is invoked with `python -m swe_data_process...` modules and
-local `PYTHONPATH=repos/swe_data_process/src`. Only job-dir converters are wired:
+## 2026-09: Switch converters to LegoFlow-Trace-Crafter
+**Decision:** `repos/LegoFlow-Trace-Crafter` now gitlinks to
+`https://github.com/LegoX/LegoFlow-Trace-Crafter.git`. Conversion is invoked with
+`python -m legoflow_trace_crafter...` modules and local `PYTHONPATH=repos/LegoFlow-Trace-Crafter/src`.
+Only job-dir converters are wired: `claude-code`, `open-code`, `openhands-sdk`, and `terminus2`.
+**Why:** The converter package was renamed and published as LegoFlow-Trace-Crafter.
+
+## 2026-05: Use legoflow_trace_crafter package modules
+**Decision:** Data conversion is invoked with `python -m legoflow_trace_crafter...` modules and
+local `PYTHONPATH=repos/LegoFlow-Trace-Crafter/src`. Only job-dir converters are wired:
 `claude-code`, `open-code`, `openhands-sdk`, and `terminus2`.
-**Why:** The refactored `swe_data_process` repo removed the old source-specific converter scripts.
+**Why:** The refactored `legoflow_trace_crafter` repo removed the old source-specific converter scripts.
 
 ## 2026-05: uv-managed SFT environment
 **Decision:** `scripts/install_env.sh` is the single environment installer for SFT. It
 recreates the environment configured by `meta_info.environment.sft_uv`, installs
-`swe_data_process[llm]`, installs PyTorch 2.8.0 CUDA 12.8 wheels, installs
+`legoflow_trace_crafter[llm]`, installs PyTorch 2.8.0 CUDA 12.8 wheels, installs
 `LLaMA-Factory[torch,metrics,deepspeed,liger-kernel]` with `--no-build-isolation`,
 installs the pinned flash-attn 2.8.3 wheel under `artifacts/wheels/`, and installs `wandb`.
 **Why:** Installing PyTorch and flash-attn in an explicit order avoids slow or incorrect

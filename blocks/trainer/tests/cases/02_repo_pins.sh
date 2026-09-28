@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # CI test 02: repos/ pins.
-# For each managed repo (LLaMA-Factory, swe_data_process):
+# For each managed repo (LLaMA-Factory, legoflow_trace_crafter):
 #   - assert repos/<path>/.git exists (submodule initialised / checked out)
 #   - if commit is non-null, assert git HEAD matches the pin
-# swe_data_process is additionally asserted to be an installable src-layout
+# legoflow_trace_crafter is additionally asserted to be an installable src-layout
 # package (the shape dryrun.sh and install_env.sh depend on).
 
 set -euo pipefail
@@ -74,13 +74,13 @@ check_repo() {
 }
 
 check_repo llama_factory
-check_repo swe_data_process
+check_repo legoflow_trace_crafter
 
-# swe_data_process must be an installable src-layout package.
-SDP_REL="$(cfg meta_info.repositories.swe_data_process.path)"
+# legoflow_trace_crafter must be an installable src-layout package.
+SDP_REL="$(cfg meta_info.repositories.legoflow_trace_crafter.path)"
 SDP_PATH="$BLOCK_DIR/$SDP_REL"
-if [[ ! -f "$SDP_PATH/pyproject.toml" || ! -d "$SDP_PATH/src/swe_data_process" ]]; then
-  echo "FAIL: swe_data_process is not a src-layout package (need pyproject.toml + src/swe_data_process/)"
+if [[ ! -f "$SDP_PATH/pyproject.toml" || ! -d "$SDP_PATH/src/legoflow_trace_crafter" ]]; then
+  echo "FAIL: legoflow_trace_crafter is not a src-layout package (need pyproject.toml + src/legoflow_trace_crafter/)"
   fail=$((fail+1))
 fi
 

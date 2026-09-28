@@ -146,24 +146,24 @@ for target in "${targets[@]}"; do
     all)
       align_one curator legoflow-curator
       align_one tracer harbor
-      align_one tracer swe_data_process blocks/trainer/repos/swe_data_process trainer
+      align_one tracer LegoFlow-Trace-Crafter blocks/trainer/repos/LegoFlow-Trace-Crafter trainer
       align_one evaluator harbor
       align_one trainer LLaMA-Factory
-      align_one trainer swe_data_process
+      align_one trainer LegoFlow-Trace-Crafter
       ;;
     curator)
       align_one curator legoflow-curator
       ;;
     tracer)
       align_one tracer harbor
-      align_one tracer swe_data_process blocks/trainer/repos/swe_data_process trainer
+      align_one tracer LegoFlow-Trace-Crafter blocks/trainer/repos/LegoFlow-Trace-Crafter trainer
       ;;
     evaluator)
       align_one evaluator harbor
       ;;
     trainer)
       align_one trainer LLaMA-Factory
-      align_one trainer swe_data_process
+      align_one trainer LegoFlow-Trace-Crafter
       ;;
     *)
       echo "ERROR: unknown block for submodule alignment: $target" >&2

@@ -3,7 +3,7 @@ name: setup
 description: >
   Bootstrap the trainer block from a fresh clone to "/trainer:check passes":
   preflight tooling (uv, python3 + PyYAML), check out repos/ (LLaMA-Factory,
-  swe_data_process) at their pinned commits via git submodules, build the uv
+  legoflow_trace_crafter) at their pinned commits via git submodules, build the uv
   env at artifacts/env/lf through scripts/install_env.sh (torch 2.10 cu128 +
   editable repos + DeepSpeed/Liger + flash-attn + wandb), then fill in
   runtime_info.input (source fields, conversion.data_name, model path,
@@ -65,44 +65,38 @@ The build scripts and the inline config readers depend on these:
 The two repos under `repos/` are **git submodules** (declared in the repo
 root `.gitmodules`); a fresh clone leaves them empty. For each entry under
 `meta_info.repositories` (`llama_factory` → `repos/LLaMA-Factory`,
-`swe_data_process` → `repos/swe_data_process`):
+`legoflow_trace_crafter` → `repos/LegoFlow-Trace-Crafter`):
 
 1. If `repos/<path>` is empty or missing, initialise the submodule from the
    repo root:
    ```bash
-   git submodule update --init blocks/trainer/repos/LLaMA-Factory blocks/trainer/repos/swe_data_process
+   git submodule update --init blocks/trainer/repos/LLaMA-Factory blocks/trainer/repos/LegoFlow-Trace-Crafter
    ```
-2. **`swe_data_process` may require repository access.** The checked-in
-   submodule URL uses HTTPS. Authenticate with GitHub CLI or a credential
-   helper before initializing it:
-   ```bash
-   gh auth login
-   gh auth setup-git
-   ```
-   Never embed a token in the submodule URL or shell history.
+2. **`legoflow_trace_crafter` is the LegoFlow-Trace-Crafter checkout.** The submodule
+   URL is `https://github.com/LegoX/LegoFlow-Trace-Crafter.git` (public).
    `LLaMA-Factory` uses the public patched LegoX fork
    (`https://github.com/LegoX/LLaMA-Factory.git`) and needs no token.
 3. Verify each checkout matches the pin:
    `git -C repos/<path> rev-parse HEAD` must equal `meta_info.repositories.
-   <name>.commit` (`3e32f8ca…` for LLaMA-Factory, `538d3838…` for
-   swe_data_process). If a present worktree has drifted or has local
+   <name>.commit` (`6e23fa19…` for LLaMA-Factory, `5e9575a6…` for
+   legoflow_trace_crafter / LegoFlow-Trace-Crafter). If a present worktree has drifted or has local
    edits, **report it and ask** — per `BLOCK_DEFINITION.md`, `repos/` is
    pinned, read-only code; `:setup` configures and pins, it does not patch.
 
 After this, `dryrun.sh` section 3 should show `[OK] repos/LLaMA-Factory/`
-and `[OK] repos/swe_data_process is an installable src-layout package`.
+and `[OK] repos/LegoFlow-Trace-Crafter is an installable src-layout package`.
 
 ## Step 3 — Build / verify the uv env
 
 The canonical builder is `scripts/install_env.sh`. It **removes and
 recreates** `$SFT_UV` (it refuses any path outside `artifacts/env/`), then
 installs the full stack: torch 2.10.0 cu128 → editable
-`swe_data_process[llm]` and patched LLaMA-Factory → metrics/DeepSpeed/Liger
+`legoflow-trace-crafter[llm]` (from `repos/LegoFlow-Trace-Crafter`) and patched LLaMA-Factory → metrics/DeepSpeed/Liger
 requirements → source-built `flash-attn` → `flash-linear-attention` +
 `tilelang` → wandb. It ends by
-importing `torch`, `swe_data_process`, `llamafactory` and printing
+importing `torch`, `legoflow_trace_crafter`, `llamafactory` and printing
 `cuda available: <bool>`. **Step 2 must be done first** — it installs
-`-e repos/swe_data_process[llm]`, which fails on an empty submodule.
+`-e repos/LegoFlow-Trace-Crafter[llm]`, which fails on an empty submodule.
 
 Decision:
 
@@ -117,7 +111,7 @@ Decision:
   pulls several GB):
   ```bash
   "$PY" - <<'PY'
-  import torch, swe_data_process, llamafactory
+  import torch, legoflow_trace_crafter, llamafactory
   print("torch", torch.__version__, "cuda", torch.cuda.is_available())
   PY
   ```

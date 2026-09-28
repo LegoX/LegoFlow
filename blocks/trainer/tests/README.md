@@ -26,8 +26,8 @@ Per-test exit codes: `0` pass · `77` skip · anything else fail.
 | # | Test | What it asserts | Time |
 |---|---|---|---|
 | 01 | config schema | every required key in `config.yaml` is set, `meta_info.name == "trainer"`, scaffold + `wandb_mode` are in range | <1 s |
-| 02 | repo pins | `repos/LLaMA-Factory` + `repos/swe_data_process` are checked out at the pinned commits; `swe_data_process` is a src-layout package | <1 s |
-| 03 | uv env | `artifacts/env/lf` imports `torch` + `swe_data_process` + `llamafactory` (CUDA reported, not required) | ~10 s |
+| 02 | repo pins | `repos/LLaMA-Factory` + `repos/LegoFlow-Trace-Crafter` are checked out at the pinned commits; `legoflow_trace_crafter` is a src-layout package | <1 s |
+| 03 | uv env | `artifacts/env/lf` imports `torch` + `legoflow_trace_crafter` + `llamafactory` (CUDA reported, not required) | ~10 s |
 | 04 | converter module | the `source.scaffold` → converter module mapping (mirrors `train.sh`) resolves inside the uv env | ~3 s |
 | 05 | source job_dir | `source.job_dir` holds ≥1 `*/agent/litellm-trajectory.jsonl` (SKIPs if the dir is absent) | <1 s |
 | 06 | model path | `model.model_name_or_path` exists and has `config.json` (SKIPs if absent) | <1 s |
@@ -134,18 +134,18 @@ positive integer. Pure-Python, no I/O.
 <details>
 <summary><code>cases/02_repo_pins.sh</code> — submodule pins</summary>
 
-For `llama_factory` and `swe_data_process`: asserts production config, smoke
+For `llama_factory` and `legoflow_trace_crafter`: asserts production config, smoke
 config, superproject gitlink, and checked-out/shared-runtime HEAD all match. Also
-asserts `swe_data_process` is a src-layout package (`pyproject.toml` +
-`src/swe_data_process/`).
+asserts `legoflow_trace_crafter` is a src-layout package (`pyproject.toml` +
+`src/legoflow_trace_crafter/`).
 </details>
 
 <details>
 <summary><code>cases/03_uv_env_editable.sh</code> — training stack imports</summary>
 
 Resolves `meta_info.environment.sft_uv`, checks pinned package versions, then imports `torch`,
-`swe_data_process`, `llamafactory` inside that env's python (with
-`PYTHONPATH=repos/swe_data_process/src`, as `train.sh` runs it). Reports
+`legoflow_trace_crafter`, `llamafactory` inside that env's python (with
+`PYTHONPATH=repos/LegoFlow-Trace-Crafter/src`, as `train.sh` runs it). Reports
 `torch.cuda.is_available()` but does not require it.
 </details>
 
@@ -153,7 +153,7 @@ Resolves `meta_info.environment.sft_uv`, checks pinned package versions, then im
 <summary><code>cases/04_converter_module.sh</code> — scaffold → converter</summary>
 
 Mirrors `train.sh`'s `case "$SCAFFOLD"` mapping (claude-code →
-`swe_data_process.claudecode_opencode.convert_cc_to_im`, etc.) and asserts the
+`legoflow_trace_crafter.claudecode_opencode.convert_cc_to_im`, etc.) and asserts the
 module imports inside the uv env. Catches a scaffold/converter mismatch before
 STEP 0 of a run.
 </details>

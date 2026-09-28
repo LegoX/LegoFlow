@@ -11,7 +11,7 @@ set -euo pipefail
 # Resolve block root and repo paths
 # ---------------------------------------------------------------------------
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SWE_DP_REPO="$BLOCK_DIR/repos/swe_data_process"
+SWE_DP_REPO="$BLOCK_DIR/repos/LegoFlow-Trace-Crafter"
 SWE_DP_SRC="$SWE_DP_REPO/src"
 CONFIG="$BLOCK_DIR/config.yaml"
 CONFIG_PYTHON="${CONFIG_PYTHON:-python3}"
@@ -38,7 +38,7 @@ if [[ ! -x "$LF_PYTHON" ]]; then
     echo "ERROR: SFT uv Python not found at $LF_PYTHON"
     echo "  Create it with:"
     echo "  uv venv \"$SFT_UV\" --python \"${SFT_PYTHON_VERSION:-3.12}\""
-    echo "  uv pip install --python \"$LF_PYTHON\" -e \"$BLOCK_DIR/repos/LLaMA-Factory\" -e \"$BLOCK_DIR/repos/swe_data_process\""
+    echo "  uv pip install --python \"$LF_PYTHON\" -e \"$BLOCK_DIR/repos/LLaMA-Factory\" -e \"$BLOCK_DIR/repos/LegoFlow-Trace-Crafter\""
     exit 1
 fi
 
@@ -88,7 +88,7 @@ if [[ -z "$DATA_NAME" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Determine converter module and build CLI args. The refactored swe_data_process
+# Determine converter module and build CLI args. The refactored legoflow_trace_crafter
 # package exposes job-dir based converters only.
 # ---------------------------------------------------------------------------
 CONVERT_ARGS=()
@@ -100,16 +100,16 @@ fi
 
 case "${SCAFFOLD}" in
     openhands-sdk)
-        CONVERTER_MODULE="swe_data_process.openhands.convert_openhands_sdk_to_im"
+        CONVERTER_MODULE="legoflow_trace_crafter.openhands.convert_openhands_sdk_to_im"
         ;;
     claude-code)
-        CONVERTER_MODULE="swe_data_process.claudecode_opencode.convert_cc_to_im"
+        CONVERTER_MODULE="legoflow_trace_crafter.claudecode_opencode.convert_cc_to_im"
         ;;
     open-code)
-        CONVERTER_MODULE="swe_data_process.claudecode_opencode.convert_oc_to_im"
+        CONVERTER_MODULE="legoflow_trace_crafter.claudecode_opencode.convert_oc_to_im"
         ;;
     terminus2)
-        CONVERTER_MODULE="swe_data_process.terminus2.convert_terminus2_to_im"
+        CONVERTER_MODULE="legoflow_trace_crafter.terminus2.convert_terminus2_to_im"
         ;;
     *)
         echo "ERROR: Unsupported scaffold for job-dir conversion: '${SCAFFOLD}'"

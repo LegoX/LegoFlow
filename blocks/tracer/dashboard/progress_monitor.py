@@ -8,7 +8,7 @@
 Scans:
   * artifacts/index.yaml                - latest archived run state.
   * artifacts/jobs/<job>/result.json   - Harbor rollout summary.
-  * artifacts/sft_data/<job>/lf.stats.json - swe_data_process LF conversion
+  * artifacts/sft_data/<job>/lf.stats.json - legoflow_trace_crafter LF conversion
     statistics produced by scripts/convert_trajectories.sh.
   * artifacts/sft_data/<job>/im.jsonl or lf.json - bounded sample previews.
 
@@ -132,7 +132,7 @@ DIFFICULTY_SCORES = {
     "medium": 2.0,
     "hard": 3.0,
 }
-# Trajectory quality subscores aligned with swe_data_process rule_score / oh dashboard.
+# Trajectory quality subscores aligned with legoflow_trace_crafter rule_score / oh dashboard.
 SUBSCORE_KEYS = [
     "oec_score",
     "iac_score",
@@ -159,7 +159,7 @@ WEIGHTED_SUBSCORE_KEYS = sorted(
     key=lambda key: (-TQS_WEIGHTS[key], key),
 )
 # Acronym spelled out, then what it measures. Wording follows
-# swe_data_process/rule_score.py, which computes these. Zero-weight entries are
+# legoflow_trace_crafter/rule_score.py, which computes these. Zero-weight entries are
 # diagnostics: shown, but they do not move composite_score.
 SUBSCORE_LABELS = {
     "composite_score": "Trajectory score — weighted sum of the subscores below (Σw = 1.00)",
@@ -215,7 +215,7 @@ def render_rubric_html() -> str:
         f'<div class="method-note">Carried for inspection at weight 0, so they never move the score: '
         f'<code>{html.escape(", ".join(k.removesuffix("_score") for k in diagnostic))}</code>.</div>'
         '<div class="method-note">Scores come from the exported SFT quality facts '
-        "(<code>swe_data_process</code> rule_score); a trajectory with no facts is counted as "
+        "(<code>legoflow_trace_crafter</code> rule_score); a trajectory with no facts is counted as "
         "unscored, never as zero.</div>"
         "</div></section>"
     )

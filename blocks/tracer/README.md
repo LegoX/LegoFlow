@@ -39,7 +39,7 @@ blocks/tracer/
 ├── dashboard/           # progress board: progress_monitor.py + Cloudflare sync + site/
 ├── memory/notes.md      # long-form notes, repo policy, decisions
 ├── scripts/             # update_repos, setup env, prepare_tasks, dryrun, start, convert, clean
-├── repos/               # managed local-only deps (gitignored): harbor, swe_data_process
+├── repos/               # managed local-only deps (gitignored): harbor, legoflow_trace_crafter
 ├── artifacts/           # tasks/, jobs/, sft_data/, env/, index.yaml, processed_tasks.yaml
 └── .claude/             # block-local plugin: /tracer:* operating skills
 ```
@@ -80,7 +80,7 @@ generic lifecycle (`/root:check`, `/root:run`); these are tracer-specific:
 
 | Command | What it does |
 |---|---|
-| `/tracer:setup` | Clone/update `harbor` + `swe_data_process`, build uv envs, initialise ledger if needed, run dryrun |
+| `/tracer:setup` | Clone/update `harbor` + `legoflow_trace_crafter`, build uv envs, initialise ledger if needed, run dryrun |
 | `/tracer:check` | Read-only preflight |
 | `/tracer:run` | LiteLLM proxy + Harbor job + post-run ledger / exclude-list / status bookkeeping |
 | `/tracer:dashboard` | Interactive HTML board (Overview, Jobs, Trajectories), Cloudflare Pages online sync, optional R2 full trajectory loading, or SFT stats refresh |

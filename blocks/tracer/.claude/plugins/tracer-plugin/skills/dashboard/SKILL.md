@@ -196,8 +196,8 @@ redeploys within seconds) and does not affect any running Harbor job.
 
 Use `scripts/convert_trajectories.sh` when a finished Harbor job needs
 LLaMA-Factory SFT data, or when the dashboard's SFT table needs fresh stats.
-Requires the `swe_data_process` repo and its uv env
-(`artifacts/env/swe-data-process-uv`) — provision via `/tracer:setup` if
+Requires the `legoflow_trace_crafter` repo and its uv env
+(`artifacts/env/legoflow-trace-crafter-uv`) — provision via `/tracer:setup` if
 missing.
 
 ```bash

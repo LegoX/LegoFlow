@@ -31,8 +31,8 @@ are reported but do not fail the suite.
 | Case | What it checks | Pass condition |
 | --- | --- | --- |
 | `01_config_schema.sh` | Trainer `config.yaml` shape and supported ranges. | Required fields are present; `meta_info.name` is `trainer`; scaffold, W&B mode, and GPU count are valid. |
-| `02_repo_pins.sh` | `repos/LLaMA-Factory` and `repos/swe_data_process`. | Repos exist at pinned commits; `swe_data_process` keeps the expected source layout. |
-| `03_uv_env_editable.sh` | Training Python environment. | The configured env imports `torch`, `swe_data_process`, and `llamafactory`. CUDA is reported but not required for this cheap case. |
+| `02_repo_pins.sh` | `repos/LLaMA-Factory` and `repos/LegoFlow-Trace-Crafter`. | Repos exist at pinned commits; `legoflow_trace_crafter` keeps the expected source layout. |
+| `03_uv_env_editable.sh` | Training Python environment. | The configured env imports `torch`, `legoflow_trace_crafter`, and `llamafactory`. CUDA is reported but not required for this cheap case. |
 | `04_converter_module.sh` | Scaffold-to-converter mapping. | The converter module selected by `source.scaffold` imports inside the training env. |
 | `05_source_job_dir.sh` | Harbor trajectory source. | For `harbor_job` input, the job directory contains at least one `agent/litellm-trajectory.jsonl`; other sources skip. |
 | `06_model_path.sh` | Local base model path. | A local model path exists and contains `config.json`; Hub model IDs skip the local filesystem check. |

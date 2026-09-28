@@ -65,7 +65,7 @@ echo "=== tracer: setup harbor uv env ==="
 echo "Repo:    $HARBOR_PATH_RAW"
 echo "Env:     $HARBOR_UV_RAW"
 
-# Same chmod dance as swe_data_process: update_repos.sh chmods the worktree
+# Same chmod dance as legoflow_trace_crafter: update_repos.sh chmods the worktree
 # read-only; uv sync needs to write uv.lock and .venv-cache entries during a
 # resolve, so temporarily restore write perms then re-lock on exit.
 HARBOR_OWNED_BY_US=1

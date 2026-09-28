@@ -2,7 +2,7 @@
 name: check
 description: >
   Preflight the tracer block. Validates config.yaml schema; verifies
-  Harbor / swe_data_process pinned commits match (and accepts tracked
+  Harbor / legoflow_trace_crafter pinned commits match (and accepts tracked
   submodule status, not just gitignore); confirms the three uv/venv
   environments exist with the expected editable installs; live-probes
   the configured LLM endpoint with `GET /models`; probes the task source
@@ -51,7 +51,7 @@ inapplicable rows.
 
 | Layer | Check | Status | Detail |
 |-------|-------|:------:|--------|
-| det  | schema · repos/commits · harbor-uv · litellm-venv · swe-data-process-uv | ✓ | ok=<N> |
+| det  | schema · repos/commits · harbor-uv · litellm-venv · legoflow-trace-crafter-uv | ✓ | ok=<N> |
 | det  | <each FAIL/WARN det check> | <✗/⚠> | <verbatim dryrun line> |
 | det  | llm endpoint          | <✓/⚠/✗> | <GET /models 2xx \| CF-gated 401 (WARN) \| unreachable> |
 | det  | hf dataset auth       | <✓/⚠/✗/·> | <reachable \| 401/403 \| skipped (not a huggingface source)> |

@@ -68,10 +68,10 @@ if (
 ):
     raise AssertionError("block smoke Harbor pin does not match production")
 if (
-    smoke_cfg["meta_info"]["repositories"]["swe_data_process"]["commit"]
-    != prod_cfg["meta_info"]["repositories"]["swe_data_process"]["commit"]
+    smoke_cfg["meta_info"]["repositories"]["legoflow_trace_crafter"]["commit"]
+    != prod_cfg["meta_info"]["repositories"]["legoflow_trace_crafter"]["commit"]
 ):
-    raise AssertionError("block smoke swe_data_process pin does not match production")
+    raise AssertionError("block smoke legoflow_trace_crafter pin does not match production")
 
 with tempfile.TemporaryDirectory() as raw_tmp:
     tmp = Path(raw_tmp)

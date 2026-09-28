@@ -27,7 +27,7 @@ import yaml
 
 prod = yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}
 smoke = yaml.safe_load(open(sys.argv[2], encoding="utf-8")) or {}
-for key in ("llama_factory", "swe_data_process"):
+for key in ("llama_factory", "legoflow_trace_crafter"):
     p = prod["meta_info"]["repositories"][key]["commit"]
     s = smoke["meta_info"]["repositories"][key]["commit"]
     assert p == s, f"{key} smoke pin {s} != production pin {p}"

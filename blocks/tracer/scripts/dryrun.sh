@@ -191,14 +191,14 @@ if [[ $FAIL -eq 0 ]]; then
   HARBOR_COMMIT="$(cfg meta_info.repositories.harbor.commit)"
   HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
   READONLY="$(cfg meta_info.repositories.harbor.readonly)"
-  SWE_DP_URL="$(cfg meta_info.repositories.swe_data_process.url)"
-  SWE_DP_BRANCH="$(cfg meta_info.repositories.swe_data_process.branch)"
-  SWE_DP_REF="$(cfg meta_info.repositories.swe_data_process.ref)"
-  SWE_DP_COMMIT="$(cfg meta_info.repositories.swe_data_process.commit)"
-  SWE_DP_PATH_RAW="$(cfg meta_info.repositories.swe_data_process.path)"
-  SWE_DP_READONLY="$(cfg meta_info.repositories.swe_data_process.readonly)"
+  SWE_DP_URL="$(cfg meta_info.repositories.legoflow_trace_crafter.url)"
+  SWE_DP_BRANCH="$(cfg meta_info.repositories.legoflow_trace_crafter.branch)"
+  SWE_DP_REF="$(cfg meta_info.repositories.legoflow_trace_crafter.ref)"
+  SWE_DP_COMMIT="$(cfg meta_info.repositories.legoflow_trace_crafter.commit)"
+  SWE_DP_PATH_RAW="$(cfg meta_info.repositories.legoflow_trace_crafter.path)"
+  SWE_DP_READONLY="$(cfg meta_info.repositories.legoflow_trace_crafter.readonly)"
   UV_PROJECT_ENVIRONMENT_RAW="$(cfg meta_info.environment.harbor_uv)"
-  SWE_DP_UV_RAW="$(cfg meta_info.environment.swe_data_process_uv)"
+  SWE_DP_UV_RAW="$(cfg meta_info.environment.legoflow_trace_crafter_uv)"
   LITELLM_UV_RAW="$(cfg meta_info.environment.litellm_uv)"
   LITELLM_PYTHON_VERSION="$(cfg meta_info.environment.litellm.python_version)"
   LITELLM_VERSION="$(cfg meta_info.environment.litellm.litellm_version)"
@@ -364,7 +364,7 @@ PY
 echo ""
 echo "=== 3+4. Managed repos ==="
 check_managed_repo "harbor" "$HARBOR_URL" "$HARBOR_BRANCH" "$HARBOR_REF" "$HARBOR_COMMIT" "$HARBOR_PATH_RAW" "$READONLY" HARBOR_DIR
-check_managed_repo "swe_data_process" "$SWE_DP_URL" "$SWE_DP_BRANCH" "$SWE_DP_REF" "$SWE_DP_COMMIT" "$SWE_DP_PATH_RAW" "$SWE_DP_READONLY" SWE_DP_DIR
+check_managed_repo "legoflow_trace_crafter" "$SWE_DP_URL" "$SWE_DP_BRANCH" "$SWE_DP_REF" "$SWE_DP_COMMIT" "$SWE_DP_PATH_RAW" "$SWE_DP_READONLY" SWE_DP_DIR
 
 echo ""
 echo "--- 5. Environment ---"
@@ -453,8 +453,8 @@ else
 fi
 
 echo ""
-echo "--- 5b. swe_data_process Environment ---"
-# swe_data_process is only needed for the optional post-Harbor SFT conversion.
+echo "--- 5b. legoflow_trace_crafter Environment ---"
+# legoflow_trace_crafter is only needed for the optional post-Harbor SFT conversion.
 # When sft_conversion.enabled is false, a missing/broken env must not block
 # trajectory generation, so downgrade these checks to warnings in that case.
 SFT_ENABLED_PRECHECK="$(cfg runtime_info.input.sft_conversion.enabled)"
@@ -466,38 +466,38 @@ fi
 if [[ -n "$SWE_DP_UV_RAW" ]]; then
   SWE_DP_UV_ABS="$(abspath "$SWE_DP_UV_RAW")"
   SWE_DP_PYTHON="$SWE_DP_UV_ABS/bin/python"
-  ok "swe_data_process uv environment path = $SWE_DP_UV_RAW"
+  ok "legoflow_trace_crafter uv environment path = $SWE_DP_UV_RAW"
   if [[ -n "${SWE_DP_DIR:-}" && -e "$SWE_DP_DIR/.git" ]]; then
     case "$SWE_DP_UV_ABS" in
       "$SWE_DP_DIR"/*)
         if [[ "$SWE_DP_READONLY" == "true" ]]; then
-          fail "environment.swe_data_process_uv must be outside repos/swe_data_process when the repo is read-only"
+          fail "environment.legoflow_trace_crafter_uv must be outside repos/LegoFlow-Trace-Crafter when the repo is read-only"
         else
-          warn "environment.swe_data_process_uv is inside repos/swe_data_process; this is only safe while repositories.swe_data_process.readonly is false"
+          warn "environment.legoflow_trace_crafter_uv is inside repos/LegoFlow-Trace-Crafter; this is only safe while repositories.legoflow_trace_crafter.readonly is false"
         fi
         ;;
       *)
-        ok "swe_data_process uv environment is outside repos/swe_data_process"
+        ok "legoflow_trace_crafter uv environment is outside repos/LegoFlow-Trace-Crafter"
         ;;
     esac
   fi
   if [[ -d "$SWE_DP_UV_ABS" ]]; then
-    ok "swe_data_process uv environment exists"
+    ok "legoflow_trace_crafter uv environment exists"
     if [[ -x "$SWE_DP_PYTHON" ]]; then
-      ok "swe_data_process python exists: $SWE_DP_PYTHON"
-      if "$SWE_DP_PYTHON" -c "import swe_data_process" >/dev/null 2>&1; then
-        ok "swe_data_process package is importable"
+      ok "legoflow_trace_crafter python exists: $SWE_DP_PYTHON"
+      if "$SWE_DP_PYTHON" -c "import legoflow_trace_crafter" >/dev/null 2>&1; then
+        ok "legoflow_trace_crafter package is importable"
       else
-        swe_dp_problem "swe_data_process package is not importable; from repos/swe_data_process run: UV_PROJECT_ENVIRONMENT=$SWE_DP_UV_ABS uv sync --extra llm  (or use bash scripts/setup_swe_data_process_env.sh)"
+        swe_dp_problem "legoflow_trace_crafter package is not importable; from repos/LegoFlow-Trace-Crafter run: UV_PROJECT_ENVIRONMENT=$SWE_DP_UV_ABS uv sync --extra llm  (or use bash scripts/setup_legoflow_trace_crafter_env.sh)"
       fi
     else
-      swe_dp_problem "swe_data_process python not found: $SWE_DP_PYTHON"
+      swe_dp_problem "legoflow_trace_crafter python not found: $SWE_DP_PYTHON"
     fi
   else
-    swe_dp_problem "swe_data_process uv environment is missing; run bash scripts/setup_swe_data_process_env.sh"
+    swe_dp_problem "legoflow_trace_crafter uv environment is missing; run bash scripts/setup_legoflow_trace_crafter_env.sh"
   fi
 else
-  fail "environment.swe_data_process_uv is required"
+  fail "environment.legoflow_trace_crafter_uv is required"
 fi
 
 echo ""

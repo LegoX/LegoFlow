@@ -19,8 +19,8 @@ This repo is organized as a tree of blocks. The root directory is the root block
 ## Input / Output contract
 
 Read from `config.yaml` before running (details in `docs/content/docs/reference/io.mdx`):
-- `meta_info.repositories.{harbor,swe_data_process}` — Git url/branch/commit/path/readonly for the two managed local-only repos
-- `meta_info.environment` — `harbor_uv`, `litellm_uv`, `swe_data_process_uv`, `swe_data_process_extras`
+- `meta_info.repositories.{harbor,legoflow_trace_crafter}` — Git url/branch/commit/path/readonly for the two managed local-only repos
+- `meta_info.environment` — `harbor_uv`, `litellm_uv`, `legoflow_trace_crafter_uv`, `legoflow_trace_crafter_extras`
 - `runtime_info.input.llm_api` — upstream API used to build the per-job LiteLLM proxy
 - `runtime_info.input.litellm_proxy` — proxy config template, port, master key
 - `runtime_info.input.task_source` — SWE task source (wired from curator via `meta_info.dependencies.from."task_source.dataset_name"`, mirrored by curator's own `dependencies.to`)
@@ -45,7 +45,7 @@ Operating detail for the run + post-run bookkeeping is in the `/tracer:run` skil
 ## Repos
 
 - `repos/harbor/` — trajectory generation runtime (managed local-only dependency, gitignored, read-only after checkout)
-- `repos/swe_data_process/` — trajectory → IM → LF SFT converter (managed local-only; uv env lives outside the repo at `artifacts/env/swe-data-process-uv`)
+- `repos/LegoFlow-Trace-Crafter/` — LegoFlow-Trace-Crafter checkout: trajectory → IM → LF SFT converter (managed local-only; uv env lives outside the repo at `artifacts/env/legoflow-trace-crafter-uv`)
 
 Do not edit repo sources here. Use `scripts/update_repos.sh` to clone/fetch/checkout the pinned ref; it refuses to update a worktree with local modifications.
 
@@ -55,7 +55,7 @@ Generic lifecycle via the repo-wide `root` plugin: `/root:check tracer` to prefl
 
 | Skill | Wraps | Purpose |
 |---|---|---|
-| `/tracer:setup` | `update_repos.sh`, `setup_harbor_env.sh`, `setup_swe_data_process_env.sh`, `dryrun.sh` | Clone/update repos, build uv envs |
+| `/tracer:setup` | `update_repos.sh`, `setup_harbor_env.sh`, `setup_legoflow_trace_crafter_env.sh`, `dryrun.sh` | Clone/update repos, build uv envs |
 | `/tracer:check` | `dryrun.sh` | Read-only preflight |
 | `/tracer:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh`, `convert_trajectories.sh` | Interactive HTML board (Analyze jobs, quality/pass slices, and trajectories) / Cloudflare online sync / SFT stats refresh. Sources are fixed under `artifacts/` (`tasks/`, `jobs/`, optional `sft_data/`, `index.yaml`) — never configured in `config.yaml`; the skill shows them and waits for confirmation before rendering |
 | `/tracer:run` | `dryrun.sh`, `start.sh` | Full pipeline: prepare_tasks → Harbor → optional convert + post-run bookkeeping |
