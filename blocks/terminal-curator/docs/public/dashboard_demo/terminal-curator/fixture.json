@@ -1,0 +1,276 @@
+{
+  "schema_version": 2,
+  "block": "terminal-curator",
+  "demo": true,
+  "run_id": "demo-current-run",
+  "status": "completed",
+  "stage": "completed",
+  "source": "tasks",
+  "updated_at": "2025-01-01T10:02:00+00:00",
+  "started_at": "2025-01-01T10:00:00+00:00",
+  "completed_at": "2025-01-01T10:02:00+00:00",
+  "snapshot_at": "2025-01-01T10:03:00+00:00",
+  "total_candidates": 3,
+  "collected_questions": null,
+  "generation_completed": null,
+  "generation_failed": null,
+  "verified_tasks": [
+    "demo-csv-reconcile",
+    "demo-jsonl-report"
+  ],
+  "rejected_count": 1,
+  "published_task_count": 2,
+  "published_tasks": [
+    "demo-csv-reconcile",
+    "demo-jsonl-report"
+  ],
+  "token_usage": {},
+  "tasks": [
+    {
+      "id": "demo-csv-reconcile",
+      "batch_id": "demo-current-batch",
+      "run_id": "demo-current-run",
+      "status": "published",
+      "source": "tasks",
+      "difficulty": "medium",
+      "tags": [
+        "terminal",
+        "python"
+      ],
+      "question_id": null,
+      "harbor_checksum": null,
+      "block_checksum": null,
+      "oracle": {
+        "status": "passed",
+        "basis": "raw",
+        "expected_reward": 1,
+        "reward": 1,
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "reason": null,
+        "task_checksum": null,
+        "checksum_matches": null
+      },
+      "nop": {
+        "status": "passed",
+        "basis": "raw",
+        "expected_reward": 0,
+        "reward": 0,
+        "tests": 8,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "reason": null,
+        "task_checksum": null,
+        "checksum_matches": null
+      }
+    },
+    {
+      "id": "demo-jsonl-report",
+      "batch_id": "demo-current-batch",
+      "run_id": "demo-current-run",
+      "status": "published",
+      "source": "tasks",
+      "difficulty": "hard",
+      "tags": [
+        "terminal",
+        "python"
+      ],
+      "question_id": null,
+      "harbor_checksum": null,
+      "block_checksum": null,
+      "oracle": {
+        "status": "passed",
+        "basis": "raw",
+        "expected_reward": 1,
+        "reward": 1,
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "reason": null,
+        "task_checksum": null,
+        "checksum_matches": null
+      },
+      "nop": {
+        "status": "passed",
+        "basis": "raw",
+        "expected_reward": 0,
+        "reward": 0,
+        "tests": 8,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "reason": null,
+        "task_checksum": null,
+        "checksum_matches": null
+      }
+    },
+    {
+      "id": "demo-previous-task",
+      "batch_id": "demo-retained-batch",
+      "run_id": "demo-previous-run",
+      "status": "retained",
+      "source": "tasks",
+      "difficulty": "easy",
+      "tags": [
+        "terminal",
+        "python"
+      ],
+      "question_id": null,
+      "harbor_checksum": null,
+      "block_checksum": null,
+      "oracle": {
+        "status": "passed",
+        "basis": "raw",
+        "expected_reward": 1,
+        "reward": 1,
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "reason": null,
+        "task_checksum": null,
+        "checksum_matches": null
+      },
+      "nop": {
+        "status": "passed",
+        "basis": "raw",
+        "expected_reward": 0,
+        "reward": 0,
+        "tests": 8,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "reason": null,
+        "task_checksum": null,
+        "checksum_matches": null
+      }
+    },
+    {
+      "id": "demo-rejected-candidate",
+      "batch_id": null,
+      "run_id": "demo-current-run",
+      "status": "rejected",
+      "source": "tasks",
+      "difficulty": null,
+      "tags": [
+        "terminal",
+        "python"
+      ],
+      "question_id": null,
+      "harbor_checksum": null,
+      "block_checksum": null,
+      "oracle": {
+        "status": "failed",
+        "basis": "raw",
+        "expected_reward": 1,
+        "reward": 0,
+        "tests": 8,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "reason": "reward-mismatch",
+        "task_checksum": null,
+        "checksum_matches": null
+      },
+      "nop": {
+        "status": "pending",
+        "basis": "none",
+        "expected_reward": 0,
+        "reward": null,
+        "tests": null,
+        "failures": null,
+        "errors": null,
+        "skipped": null,
+        "reason": null,
+        "task_checksum": null,
+        "checksum_matches": null
+      }
+    }
+  ],
+  "batches": [
+    {
+      "id": "demo-current-batch",
+      "current": true,
+      "listed_count": 2,
+      "available_count": 2,
+      "shown_count": 2,
+      "run_id": "demo-current-run",
+      "source_counts": {
+        "tasks": 2
+      },
+      "difficulty_counts": {
+        "medium": 1,
+        "hard": 1
+      }
+    },
+    {
+      "id": "demo-retained-batch",
+      "current": false,
+      "listed_count": 1,
+      "available_count": 1,
+      "shown_count": 1,
+      "run_id": "demo-previous-run",
+      "source_counts": {
+        "tasks": 1
+      },
+      "difficulty_counts": {
+        "easy": 1
+      }
+    }
+  ],
+  "history": [
+    {
+      "id": "demo-archive-002",
+      "run_id": "demo-current-run",
+      "status": "completed",
+      "source": "tasks",
+      "started_at": "2025-01-01T10:00:00+00:00",
+      "completed_at": "2025-01-01T10:02:00+00:00",
+      "duration_sec": 120,
+      "candidates": 3,
+      "verified_count": 2,
+      "rejected_count": 1,
+      "exit_code": 0
+    },
+    {
+      "id": "demo-archive-001",
+      "run_id": "demo-failed-run",
+      "status": "failed",
+      "source": "json",
+      "started_at": "2025-01-01T09:00:00+00:00",
+      "completed_at": "2025-01-01T09:00:40+00:00",
+      "duration_sec": 40,
+      "candidates": 1,
+      "verified_count": 0,
+      "rejected_count": 1,
+      "exit_code": 1
+    }
+  ],
+  "validation": {
+    "oracle": {
+      "recorded": 3,
+      "passed": 2,
+      "failed": 1
+    },
+    "nop": {
+      "recorded": 2,
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "archive_count": 2,
+  "batch_count": 2,
+  "availability": {
+    "config": "ok",
+    "state": "ok",
+    "report": "ok",
+    "manifest": "ok",
+    "index": "ok",
+    "ignored_manifest_entries": 0,
+    "limited": false
+  }
+}

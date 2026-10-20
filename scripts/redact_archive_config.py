@@ -52,7 +52,13 @@ def redact(value, key: str = ""):
 
 def main() -> int:
     source, destination = map(Path, sys.argv[1:3])
-    config = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+    try:
+        config = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        print(f"ERROR: invalid YAML in {source}{location}", file=sys.stderr)
+        return 2
     destination.write_text(
         yaml.safe_dump(redact(config), sort_keys=False, allow_unicode=True),
         encoding="utf-8",

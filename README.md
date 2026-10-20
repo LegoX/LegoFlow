@@ -153,6 +153,16 @@ The verified `verifiable_tasks.txt` manifest gates rollout; existing SWE
 workflows keep `local_block: curator` by default. See the
 [terminal configuration guide](blocks/terminal-curator/docs/content/docs/configuration.mdx).
 
+Use `/root:run` (Codex: `$root-run`) for terminal orchestration: the producer
+skill audits instructions, tests, and the reference solution, records corrections,
+and repeats fresh Oracle/NOP checks before hand-off. The legacy
+`bash scripts/start.sh` refuses an implicit terminal-to-Tracer chain. Explicit
+`--terminal-curator-only`, agent audit/revalidation, then `--tracer-only` remain
+available; the SWE helper keeps its Python `create_py.sh` launcher.
+Private complete profiles selected by `TERMINAL_CURATOR_CONFIG`, `TRAJGEN_CONFIG`,
+and `EVAL_CONFIG` are honored throughout root skills; relative profile filenames
+resolve from their block directory.
+
 The publication also exports a native `terminal-curator@1.0` registry for
 Evaluator. Select `registry_path:
 ../terminal-curator/artifacts/tasks/registry.json`, with `no_hack: false` and

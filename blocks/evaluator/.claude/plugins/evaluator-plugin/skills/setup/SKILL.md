@@ -13,6 +13,14 @@ description: >
 
 # /evaluator:setup
 
+
+Use the complete effective profile selected by `EVAL_CONFIG` (relative filenames
+resolve from `blocks/evaluator/`), otherwise this block's `config.yaml`. Retain a
+parent-selected profile throughout checks, setup, launch, and archive. Block-local
+references to `config.yaml` below mean that profile; root shared-credential config
+references keep their existing meaning. Do not reset the selector or copy a
+private profile over the committed config.
+
 Brings the evaluator block from a fresh clone to "`/evaluator:check` passes." The
 skill is idempotent: any step already satisfied is skipped. It never
 launches Harbor — that's `/evaluator:run`.

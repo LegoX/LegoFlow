@@ -7,7 +7,7 @@ description: Responsibility, evidence sources, and next steps for the terminal t
 
 Builds bounded batches of Harbor terminal tasks from Stack Overflow, saved
 questions JSON, or local candidate tasks. It is a sibling of SWE Curator and
-feeds the same Tracer pipeline.
+feeds the same Tracer pipeline plus an optional native Evaluator registry.
 
 ## Operational state
 
@@ -23,14 +23,19 @@ mean the block has not run yet.
 Each published task has a Harbor-valid layout and independent fresh-container
 validation with Oracle reward 1 and NOP reward 0. Generation success, an
 upstream review, or a directory count is not a substitute for this evidence.
-Tracer must then run an actual solving agent to establish successful rollout.
+An agent additionally audits instruction/test/reference agreement and repeats
+fresh validation for any correction. Harbor checksums bind each trial and the
+actual copied publication to the same task bytes. Tracer must then run an
+actual solving agent to establish successful rollout.
 
 ## Operator path
 
 1. Fill the source, finite limits, endpoint/model, and resource host in
    `config.yaml`; use environment variables for credentials.
 2. Use `:setup`, `:check`, then the authorized `:run`.
-3. Open `:dashboard` and inspect candidate failures as well as verified count.
+3. Open `:dashboard`: Overview, Task List, Validation and Runs show current
+   publication, latest progress, safe verifier details and archived attempts.
+   The docs demo is explicitly synthetic, not a live run record.
 4. Select `terminal-curator` in Tracer's `task_source.local_block`, check
    Tracer, and launch its separately authorized rollout.
 

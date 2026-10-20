@@ -496,8 +496,10 @@ PY
     # launched and the stage sat out its whole budget waiting for a job that did
     # not exist. (dryrun.sh used to fail loudly on this; it now only reports
     # staging, so an empty source shows up as a harbor no-op instead.)
-    for _stale in "$TB/$JOBS" "$TB/artifacts/tasks/$(basename "$STAGE_DIR")" \
-                  "${_sft_stale[@]}"; do
+    # Task staging is an owned version pointer now. Preparation refreshes it
+    # from this run's source/manifest; never delete a legacy real dataset or a
+    # version that a different active job may still reference.
+    for _stale in "$TB/$JOBS" "${_sft_stale[@]}"; do
       [[ -e "$_stale" ]] || continue
       if ! rm -rf "$_stale" 2>/dev/null; then
         mv "$_stale" "${_stale}.stale-$(date +%s)" 2>/dev/null \

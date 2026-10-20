@@ -12,6 +12,13 @@ description: >
 
 # /root:setup
 
+
+Read [Effective profiles](../../resources/EFFECTIVE_PROFILES.md) before loading
+child configs. Honor explicit profiles and `TRAJGEN_CONFIG`, `EVAL_CONFIG`, and
+`TERMINAL_CURATOR_CONFIG` with block-relative path resolution. Use that same
+effective profile set for source selection, sibling dependency checks, resource
+selection, and child dispatch; never reset a parent-selected profile.
+
 Per the block plugin guidelines (`resources/BLOCK_DEFINITION.md` → § Plugin
 skills), every block exposes a `:setup` skill that bootstraps everything the
 block needs before `:check` can pass. At the root level this covers:
@@ -42,7 +49,7 @@ block needs before `:check` can pass. At the root level this covers:
 
 ### Active producer selection
 
-Read `blocks/tracer/config.yaml` → `runtime_info.input.task_source` before
+Read the effective Tracer config → `runtime_info.input.task_source` before
 recursing. With `provider: local`, use `local_block: curator` by default or
 `terminal-curator` when selected. An `external` local source or a non-local
 provider selects neither producer for Tracer. If Evaluator is in scope and

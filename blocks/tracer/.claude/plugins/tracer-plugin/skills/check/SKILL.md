@@ -19,6 +19,14 @@ description: >
 
 # /tracer:check
 
+
+Use the complete effective profile selected by `TRAJGEN_CONFIG` (relative filenames
+resolve from `blocks/tracer/`), otherwise this block's `config.yaml`. Retain a
+parent-selected profile throughout checks, setup, launch, and archive. Block-local
+references to `config.yaml` below mean that profile; root shared-credential config
+references keep their existing meaning. Do not reset the selector or copy a
+private profile over the committed config.
+
 Read-only preflight. Wraps `scripts/dryrun.sh` and adds the few
 contextual checks that need conversational nuance (e.g. interpreting CF-
 gating 401s, flagging stale memories, deciding whether a WARN is worth

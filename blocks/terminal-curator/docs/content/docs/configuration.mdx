@@ -4,7 +4,9 @@ description: Source modes, bounded budgets, credentials, resources, and output p
 ---
 
 `config.yaml` follows LegoFlow's `meta_info` / `runtime_info` block schema.
-It configures one run; progress and status are written to artifacts. Paths
+It configures one run; progress and status are written to artifacts. The
+loaded profile and defaults are frozen in a redacted per-run snapshot before
+execution, so editing the source profile later cannot change recorded inputs. Paths
 within the block config resolve from the block directory, including when
 `--config` selects an overlay stored elsewhere.
 
@@ -28,7 +30,7 @@ All fields below live under `runtime_info.input`.
 | `llm_api.api_key` | Leave empty in tracked config; supply `OPENAI_API_KEY`. |
 | `generation.workers` | Concurrent candidate generation workers. |
 | `generation.request_timeout_sec` | Timeout for a generation API request. |
-| `generation.max_retries` | Retry cap for generation requests. |
+| `generation.max_retries` | Extra retries per generation API call; `2` means at most three attempts, `0` means one. |
 | `validation.harbor_bin` | Supported Harbor executable from Tracer's pinned environment. |
 | `validation.n_concurrent` | Concurrent Harbor validation trials. |
 | `validation.timeout_multiplier` | Harbor timeout scaling for validation. |
@@ -119,6 +121,24 @@ the execution host's environment.
 the submodule; generation and checks never modify it. Harbor validation uses
 Tracer's pinned repository and `artifacts/env/harbor-uv` environment rather
 than a new floating runtime. Source tasks must be available on that same host.
+
+## Output safety
+
+All outputs stay inside this block's `artifacts/`. The task pool and report
+cannot overlap, overwrite input source data, use reserved lifecycle/env/run
+paths, or write into an existing `*-versions` publication. These checks also
+follow parent symlinks; a cosmetic relative path cannot redirect writes into
+an immutable batch. The report must name a file.
+
+`runtime_info.output.eval_registry.path` must equal
+`runtime_info.output.harbor_tasks_dir.path` plus `/registry.json`. The registry
+is produced inside the same atomic publication as the manifest, not copied to
+an independently configured location.
+
+Generation request/validation timeouts and the timeout multiplier must be
+positive finite numbers; retries must be a nonnegative integer. Question/page
+limits and worker/concurrency counts must be positive integers. A bad budget
+fails preflight rather than silently creating an unbounded retry/crawl loop.
 
 ## Outputs and Tracer selection
 

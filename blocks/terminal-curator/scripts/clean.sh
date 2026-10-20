@@ -25,12 +25,16 @@ if not p.exists(): raise SystemExit(0)
 if p.is_symlink(): raise SystemExit('ERROR: artifacts must not be a symlink')
 if sys.argv[3]=='1':
     print('Would remove: '+str(p if sys.argv[2]=='1' else p/'runs')); raise SystemExit(0)
-with (p/'run.lock').open('a') as lock:
+with (p/'launch.lock').open('a') as launch_lock, (p/'run.lock').open('a') as lock, (p/'archive.lock').open('a') as archive_lock:
+    try: fcntl.flock(launch_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError: raise SystemExit('ERROR: wait for the active launcher before cleaning')
     try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError: raise SystemExit('ERROR: stop the active run before cleaning')
+    try: fcntl.flock(archive_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError: raise SystemExit('ERROR: wait for the active archive before cleaning')
     if sys.argv[2]=='1':
         for child in p.iterdir():
-            if child.name=='run.lock': continue
+            if child.name in {'launch.lock', 'run.lock', 'archive.lock'}: continue
             if child.is_dir() and not child.is_symlink(): shutil.rmtree(child)
             else: child.unlink()
     else:

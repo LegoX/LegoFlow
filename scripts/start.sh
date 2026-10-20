@@ -4,6 +4,8 @@
 # trainer and evaluator keep their independent execution surfaces.
 # curator retains the legacy Python create_py.sh launcher; use root skills for
 # the full language-aware SWE workflow.
+# Terminal pipeline hand-off requires the semantic audit in /root:run; this
+# shell helper supports explicit --terminal-curator-only and --tracer-only.
 #
 # Usage: bash scripts/start.sh [--curator-only|--terminal-curator-only|--tracer-only]
 #                             [--no-dryrun] [--dry-run] [--no-sync]
@@ -14,8 +16,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TRACER_CONFIG="${TRAJGEN_CONFIG:-$ROOT_DIR/blocks/tracer/config.yaml}"
 TERMINAL_CONFIG="${TERMINAL_CURATOR_CONFIG:-$ROOT_DIR/blocks/terminal-curator/config.yaml}"
+EVALUATOR_CONFIG="${EVAL_CONFIG:-$ROOT_DIR/blocks/evaluator/config.yaml}"
 [[ "$TRACER_CONFIG" = /* ]] || TRACER_CONFIG="$ROOT_DIR/blocks/tracer/$TRACER_CONFIG"
 [[ "$TERMINAL_CONFIG" = /* ]] || TERMINAL_CONFIG="$ROOT_DIR/blocks/terminal-curator/$TERMINAL_CONFIG"
+[[ "$EVALUATOR_CONFIG" = /* ]] || EVALUATOR_CONFIG="$ROOT_DIR/blocks/evaluator/$EVALUATOR_CONFIG"
+export EVAL_CONFIG="$EVALUATOR_CONFIG"
 export TRAJGEN_CONFIG="$TRACER_CONFIG"
 export TERMINAL_CURATOR_CONFIG="$TERMINAL_CONFIG"
 RUN_ARGS=("$@")
@@ -33,7 +38,7 @@ while [[ $# -gt 0 ]]; do
     --no-dryrun) DO_DRYRUN=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --foreground) FOREGROUND=1; shift ;;
-    -h|--help) sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -41,8 +46,14 @@ done
 cfg() {
   python3 - "$1" "$2" <<'PY'
 import sys, yaml
-with open(sys.argv[1], encoding="utf-8") as fh:
-    value = yaml.safe_load(fh) or {}
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        value = yaml.safe_load(fh) or {}
+except yaml.YAMLError as exc:
+    mark = getattr(exc, "problem_mark", None)
+    location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+    print(f"ERROR: invalid YAML in {sys.argv[1]}{location}", file=sys.stderr)
+    raise SystemExit(2)
 for part in sys.argv[2].split("."):
     value = value.get(part) if isinstance(value, dict) else None
 print("" if value is None else value)
@@ -53,18 +64,19 @@ block_config() {
   case "$1" in
     tracer) echo "$TRACER_CONFIG" ;;
     terminal-curator) echo "$TERMINAL_CONFIG" ;;
+    evaluator) echo "$EVALUATOR_CONFIG" ;;
     *) echo "$ROOT_DIR/blocks/$1/config.yaml" ;;
   esac
 }
 
 remote_config_path() {
-  python3 - "$ROOT_DIR/blocks/$1" "$2" "$3" <<'PY'
+  python3 - "$ROOT_DIR/blocks/$1" "$2" "$3" "${4:-$1}" <<'PY'
 import os
 from pathlib import Path
 import posixpath
 import sys
 
-block, profile, remote_directory = sys.argv[1:4]
+block, profile, remote_directory, worker_block = sys.argv[1:5]
 profile = Path(os.path.abspath(profile))
 try:
     relative = profile.relative_to(Path(os.path.abspath(block))).as_posix()
@@ -73,7 +85,12 @@ except ValueError:
 else:
     # The worker enters resources.directory before launching the child. Keep
     # an in-block profile at the same relative location in that checkout.
-    print(posixpath.join(remote_directory, relative) if posixpath.isabs(remote_directory) else relative)
+    source_block = Path(block).name
+    if posixpath.isabs(remote_directory):
+        source_directory = remote_directory if source_block == worker_block else posixpath.join(posixpath.dirname(remote_directory), source_block)
+        print(posixpath.join(source_directory, relative))
+    else:
+        print(relative if source_block == worker_block else posixpath.join("..", source_block, relative))
 PY
 }
 
@@ -87,6 +104,16 @@ else
 fi
 
 echo "LegoFlow execution order: ${BLOCKS[*]}"
+if [[ "$MODE" == pipeline && "${PRODUCER:-}" == terminal-curator ]]; then
+  if [[ "$DRY_RUN" == 1 ]]; then
+    echo "[DRY-RUN] Terminal producer -> Tracer requires the agent semantic audit in /root:run."
+    echo "[DRY-RUN] A real implicit terminal pipeline is refused before generation; use /root:run, or explicit --terminal-curator-only followed by audited --tracer-only."
+  else
+    echo "ERROR: an implicit terminal producer -> Tracer chain requires the agent semantic audit in /root:run." >&2
+    echo "Use /root:run, or --terminal-curator-only, audit instruction/tests/reference solution and revalidate, then --tracer-only." >&2
+    exit 2
+  fi
+fi
 for block in "${BLOCKS[@]}"; do
   entrypoint=start.sh
   [[ "$block" != curator ]] || entrypoint=create_py.sh
@@ -126,7 +153,7 @@ if [[ "$FOREGROUND" != 1 ]]; then
   for variable in PATH OPENAI_API_KEY OPENAI_API_BASE_URL OPENAI_API_BASE OPENAI_BASE_URL OPENAI_MODEL MODEL_NAME \
       ANTHROPIC_API_KEY ANTHROPIC_BASE_URL ANTHROPIC_MODEL CLAUDE_CODE_OAUTH_TOKEN \
       STACKEXCHANGE_API_KEY SO_API_KEY SO_API_BASE_URL TERMINAL_CURATOR_CONFIG TERMINAL_CURATOR_PYTHON \
-      GITHUB_TOKEN GITHUB_TOKENS DOCKER_HOST DOCKER_REGISTRY DOCKER_USERNAME DOCKER_PASSWORD DOCKER_MIRROR; do
+      EVAL_CONFIG GITHUB_TOKEN GITHUB_TOKENS DOCKER_HOST DOCKER_REGISTRY DOCKER_USERNAME DOCKER_PASSWORD DOCKER_MIRROR; do
     [[ ! -v "$variable" ]] || tmux_env+=(-e "$variable=${!variable}")
   done
   tmux new-session "${tmux_env[@]}" -d -s "$session" -x 220 -y 50 "$launch"
@@ -144,7 +171,7 @@ archive_on_exit() {
 trap archive_on_exit EXIT
 
 run_block() {
-  local block="$1" config host user directory command worker channel option remote_command remote_config
+  local block="$1" config host user directory command worker channel option remote_command remote_config source_block variable mapped profiles
   config="$(block_config "$block")"
   host="$(cfg "$config" meta_info.resources.ip)"
   user="$(cfg "$config" meta_info.resources.user)"
@@ -165,12 +192,22 @@ run_block() {
     }
     [[ -z "$user" || "$user" == null ]] || host="$user@$host"
     remote_config="$(remote_config_path "$block" "$config" "$directory")"
+    profiles="export"
+    for source_block in tracer evaluator terminal-curator; do
+      case "$source_block" in
+        tracer) variable=TRAJGEN_CONFIG ;;
+        evaluator) variable=EVAL_CONFIG ;;
+        terminal-curator) variable=TERMINAL_CURATOR_CONFIG ;;
+      esac
+      mapped="$(remote_config_path "$source_block" "$(block_config "$source_block")" "$directory" "$block")"
+      printf -v profiles '%s %q' "$profiles" "$variable=$mapped"
+    done
     case "$block" in
       terminal-curator)
-        printf -v command 'cd %q && bash scripts/start.sh --config %q' "$directory" "$remote_config"
+        printf -v command 'cd %q && %s && bash scripts/start.sh --config %q' "$directory" "$profiles" "$remote_config"
         ;;
       tracer)
-        printf -v command 'cd %q && export TRAJGEN_CONFIG=%q && bash scripts/prepare_tasks.sh && bash scripts/start.sh' "$directory" "$remote_config"
+        printf -v command 'cd %q && %s && bash scripts/prepare_tasks.sh && bash scripts/start.sh' "$directory" "$profiles"
         ;;
       *) printf -v command 'cd %q && bash scripts/create_py.sh' "$directory" ;;
     esac

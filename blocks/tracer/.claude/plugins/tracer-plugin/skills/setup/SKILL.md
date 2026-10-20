@@ -15,6 +15,14 @@ description: >
 
 # /tracer:setup
 
+
+Use the complete effective profile selected by `TRAJGEN_CONFIG` (relative filenames
+resolve from `blocks/tracer/`), otherwise this block's `config.yaml`. Retain a
+parent-selected profile throughout checks, setup, launch, and archive. Block-local
+references to `config.yaml` below mean that profile; root shared-credential config
+references keep their existing meaning. Do not reset the selector or copy a
+private profile over the committed config.
+
 Brings the tracer block from a fresh clone to "`/tracer:check` passes."
 The skill is idempotent: any step that is already satisfied is skipped.
 The skill never launches Harbor — that's `/tracer:run`.
@@ -83,14 +91,16 @@ Walk `runtime_info.input` and prompt only for unset fields (the literal `human` 
 - `llm_api.{api_key, api_base_url, model}` — pick the configured upstream
   (e.g. `https://<an-alternate-provider>/v1` with `openai/deepseek-v4-flash`).
 - `litellm_proxy.{port, master_key}` — defaults are usually fine.
-- `task_source` — either:
-  - `{provider: huggingface, dataset_name, split}` — production default
-    for swerebench-style runs.
-  - `{provider: local, dataset_name: ../curator/artifacts/swe_tasks/<lang>-cc}`
-    — only valid if curator has actually exposed verified tasks at that
-    contract path. curator historically keeps outputs inside
-    `repos/legoflow-curator/artifacts/...`; before picking `local`, verify the
-    path exists or have curator symlink it.
+- `task_source` — select one supported source:
+  - Local SWE Curator (default): `{provider: local, local_block: curator,
+    dataset_name: ../curator/artifacts/merged_swe_tasks}`.
+  - Local terminal tasks: `{provider: local, local_block: terminal-curator,
+    terminal_tasks_dir: ../terminal-curator/artifacts/tasks}`. Require the
+    producer's manifest and completed semantic audit/revalidation before rollout.
+  - External local pool: `{provider: local, local_block: external, dataset_name}`.
+  - HF prebuilt Harbor dataset: `{provider: huggingface, dataset_name, split}`.
+    This preparation path downloads a raw task snapshot; `split` is not a
+    dataset-library split filter.
 - `harbor_job.{n_concurrent, n_tasks, max_retries, timeout_multiplier}`,
   `agent.{name, version, runtime_image, max_turns, temperature}`,
   `sft_conversion.*` — config defaults are sensible for first-time runs.
@@ -141,7 +151,23 @@ zero, point the user at `/tracer:run`. Setup is done.
 
 ### task_source
 
-Production runs use `provider: local` pointing at curator's verified tasks — the dependency is declared in `meta_info.dependencies.from` (`task_source.dataset_name: {from: curator.output.swe_tasks_dir, when: {task_source.provider: local}}`), mirrored by curator's own `dependencies.to.swe_tasks_dir`. `prepare_tasks.sh` filters the source dir through its `verifiable_tasks.txt` manifest before staging into `artifacts/tasks/` — one symlink per task id, not a copy.
+Production runs may select local SWE Curator (default `local_block: curator`),
+Terminal Curator (`local_block: terminal-curator`), or an external pool
+(`local_block: external`). SWE/external use `dataset_name`; terminal uses
+`terminal_tasks_dir` and requires a nonempty `verifiable_tasks.txt`. The SWE
+dependency is `curator.output.merged_tasks_dir`, active for local/curator; the
+independent terminal edge is `terminal-curator.output.harbor_tasks_dir`, active
+for local/terminal-curator. Both are mirrored by their producer's `to` edge.
+Use the effective `TRAJGEN_CONFIG` selected by the parent, resolving relative
+profile paths against this block; do not overwrite it with the default config.
+
+`prepare_tasks.sh` publishes an owned version beneath
+`artifacts/tasks/.legoflow-staging-v1/` and atomically points the public dataset
+path at it. Local versions hold one link per selected task, and HF versions
+materialize copies. Existing real dataset directories or unrelated links are
+refused; choose a new empty `harbor_job.dataset_path` or move old staging after
+checking active jobs. A local pool without a manifest retains the valid Harbor
+directory fallback, except for terminal-curator, where the manifest is required.
 
 
 ### sft_conversion

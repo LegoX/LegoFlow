@@ -19,4 +19,13 @@ so they also work when browsing this folder on GitHub.
 
 Start with [getting started](content/docs/getting-started.mdx), then read
 [configuration](content/docs/configuration.mdx), [workflow](content/docs/workflow.mdx),
-[outputs](content/docs/outputs.mdx), and [dashboard](content/docs/dashboard.mdx).
+[outputs](content/docs/outputs.mdx), [Evaluator hand-off](content/docs/evaluator-handoff.mdx),
+and [dashboard](content/docs/dashboard.mdx).
+
+
+The dashboard page embeds an explicitly synthetic, self-contained demo from
+`public/dashboard_demo/terminal-curator/`. Its small declared JSON fixture and
+`dashboard/build_demo.py` deterministically regenerate the single tracked
+HTML snapshot; never replace it with an actual run. Root `npm run build` and
+`npm run dev` stage ignored copies of all block demos through
+`docs/scripts/stage_dashboard_demos.mjs`, also reused by deployment builds.

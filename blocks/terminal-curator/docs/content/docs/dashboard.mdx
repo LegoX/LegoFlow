@@ -1,48 +1,95 @@
 ---
 title: Dashboard
-description: Inspect actual source, generation, validation, and publication progress.
+description: Curator-style views of actual progress, published batches, validation evidence and run history.
 ---
 
-Use `/terminal-curator:dashboard` in Claude Code or
-`$terminal-curator-dashboard` in Codex. The skill shows live state as JSON
-and can render a local HTML snapshot. It never starts generation, validation,
-Tracer, training, or deployment to populate the view.
+Terminal Curator uses the same visual system and layout as Curator: a compact
+sidebar, metric cards, collapsible sections, per-batch rows, task dialogs and
+light/dark themes. Its views follow the terminal workflow and use recorded
+measurements rather than borrowing SWE collection or scoring metrics.
 
-From `blocks/terminal-curator/`:
+## Try the synthetic demo
+
+Open the <a href="/dashboard_demo/terminal-curator/">full-screen demo</a> or use the
+embedded preview. **All demo IDs, dates, metrics and outcomes are synthetic.**
+This is an interface demonstration, not evidence of real generation,
+validation, semantic review, or a solved trajectory. Actual reviewed-run
+snapshots are shared separately.
+
+<iframe
+  src="/dashboard_demo/terminal-curator/"
+  title="Synthetic Terminal Curator dashboard demonstration"
+  loading="lazy"
+  style={{ width: '100%', height: '760px', border: '1px solid var(--color-fd-border)', borderRadius: '10px' }}
+/>
+
+The demo is deterministically rendered from a small checked-in fixture using
+the current dashboard renderer. It never discovers local artifacts or uses a
+real operator profile. Normal root docs build/dev commands stage the canonical
+block snapshot; there is no second tracked copy in root public assets.
+
+## Views and their scope
+
+| View | What it answers |
+| --- | --- |
+| Overview | What is published now, what is the latest attempt doing, and which phase/counts have actually been recorded? |
+| Task List | Which immutable batches and task IDs exist? Filter by status, source or batch, search IDs/tags, and open verifier details. |
+| Validation | What did the latest Oracle/NOP trials report, which raw reward/JUnit values remain available, and does checksum linkage match? |
+| Runs | Which archived attempts completed, failed or were interrupted, with duration and counts when recorded? |
+
+Current publication and latest attempt are different scopes. A failed new
+attempt can leave an older verified pool available. Generation completion
+includes failed candidates; it is not a count of verified tasks. Imported
+candidates have no collected-question count. Unknown values display as `—`.
+The board does not infer collection totals, numeric difficulty scores,
+semantic approval, or successful Tracer/Evaluator solving.
+
+## Run locally
+
+Use `/terminal-curator:dashboard` in Claude Code or
+`$terminal-curator-dashboard` in Codex. From `blocks/terminal-curator/`:
 
 ```bash
 artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py
 artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py --html
-artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py --html --serve --port 8086
+artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py --serve --port 8086
 ```
 
-Use `--config <file>` for the same full configuration overlay used by the
-run. `--html <path>` chooses a snapshot destination. `--serve` starts a local
-preview bound to `127.0.0.1`; it reads current state on each request and
-refreshes the browser every 10 seconds. Keep it in a separate tmux session
-for ongoing inspection. For a
-remote CPU node, an SSH port forward lets you view the node's local server.
+The default output is an allowlisted JSON snapshot. Add `--config <file>` for
+the full profile used by the run; relative output paths resolve from the
+block. `--html [path]` writes one self-contained page, defaulting to
+`dashboard/site/index.html`. This export is labeled Snapshot and never polls
+a missing live API on static hosting. Regenerate it for new evidence.
 
-The board reads:
+`--serve` binds to loopback by default, serves `/`, `/index.html` and
+`/api/status`, and refreshes live JSON every ten seconds without resetting
+filters or navigation. If refresh fails, the last snapshot remains visible.
+Other paths return 404. An authorized remote run can be inspected through a
+port forward without placing host information in public output.
 
-| Evidence | What it explains |
-| --- | --- |
-| `artifacts/state.json` | Current phase, candidate count, published IDs, rejection count, token usage. |
-| `artifacts/tasks/verifiable_tasks.txt` | Published IDs available to downstream Tracer. |
+## Evidence and privacy
 
+The board reads current state, the configured report only when its run ID
+matches, the manifest and immutable task metadata, archive summaries, and
+contained trial result/JUnit files. It freezes the publication pointer before
+reading its manifest and metadata, so concurrent publication cannot mix two
+batches.
 
-Detailed validation outcomes/reasons are in `artifacts/reports/latest.json`;
-archived run status and history are in `artifacts/index.yaml`. These files
-are for local inspection rather than browser payloads. The page uses an
-allowlisted view of actual state, and missing state is normal before the
-first run. A partial report stays partial; failed
-or absent validation results do not become passing tasks or NOP zeros.
-The tracked `dashboard/overview.mdx` describes the block's responsibilities
-and points to these live sources.
+Task details distinguish actual reward/JUnit evidence from partial evidence
+and report-only verdicts after cleanup. A contradiction is flagged rather
+than silently promoted to passing. The **Harbor task checksum** links a trial
+to the validation report; the **block file digest** is a separate value with a
+different definition. Missing hashes remain unavailable.
 
-An exported HTML file is a snapshot; regenerate it after new results appear.
-The built-in server serves current state dynamically at `/`, `/index.html`,
-and `/api/status` and does not expose arbitrary files. Rendering and
-serving are local operations; publishing to a public service requires a
-separate request and artifact review. The dashboard never displays a secret
-configuration field or forwards an API credential to the browser.
+The browser receives explicit metadata fields. It omits task text, source
+files, solutions, prompts, traces, config values, endpoints, host paths,
+private process identity, archive notes and raw exception/rejection text.
+Task/batch/run IDs, question IDs, tags, checksums and numeric usage are still
+visible; review those before sharing a snapshot. The server is not an
+artifact file server.
+
+Snapshots bound details to 100 batches, 100 archive entries and 3,000 task
+rows, with a notice when limited. Oversized or malformed files are marked
+unavailable. Rendering never starts generation, validation or downstream
+work to fill missing fields. Publishing and long-running dashboard sync are
+separate requested operations; local inspection does not deploy anything.

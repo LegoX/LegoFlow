@@ -16,12 +16,16 @@ containers, or edit config while checking.
 
 Inspect and report all failures together:
 
-- source mode, existing input path, tags/IDs, finite question/page cap;
+- source mode, existing input path, tags/IDs, finite question/page cap,
+  positive finite timeouts/concurrency, and the nonnegative extra-retry budget;
 - Terminal-Lego checkout and pinned SHA, clean vendored state;
 - source-dependent LLM inputs, block environment, Tracer's pinned Harbor
   environment, and Docker daemon reachability;
 - output pool/manifest path and the conditional Tracer producer/consumer
-  edge. Missing output artifacts before the first run are normal;
+  edge. The report may not overwrite input data or lifecycle paths; outputs
+  cannot overlap or write into immutable versions, and `eval_registry.path`
+  must equal the task pool plus `/registry.json`. Missing output artifacts
+  before the first run are normal;
 - an already-running terminal-curator worker or a conflicting batch.
 
 For a requested live service check, run

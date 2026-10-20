@@ -117,7 +117,7 @@ def test_normalize_bootstrap_preserves_effective_final_stage_user(
         final_stage = normalized.rsplit('\nFROM ', 1)[-1]
         users = [line.split(None, 1)[1] for line in final_stage.splitlines()
                  if line.strip().upper().startswith('USER ')]
-        assert users[-1] == (final_user or 'root')
+        assert (users[-1] if users else 'root') == (final_user or 'root')
         assert '1001:1002' not in users, 'build-stage user leaked into the final image'
 
 

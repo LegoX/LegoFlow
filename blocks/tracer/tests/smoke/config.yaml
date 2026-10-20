@@ -73,6 +73,7 @@ runtime_info:
     harbor_job:
       # SMOKE: jobs land under artifacts/jobs/smoke so they don't mix with prod.
       jobs_dir: artifacts/jobs/smoke
+      dataset_path: artifacts/tasks/tracer-smoke-owned-v1  # separate from production/legacy real staging
       n_concurrent: 2                  # SMOKE: was 8
       n_tasks: 10                      # SMOKE: was 40
       max_retries: 0                   # SMOKE: was 2

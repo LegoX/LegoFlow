@@ -12,11 +12,14 @@ import hashlib
 import importlib.util
 import json
 import logging
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shlex
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tomllib
@@ -93,6 +96,40 @@ def task_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def task_tree_fingerprint(path: Path) -> str:
+    """Supplement Harbor's content hash with empty directories and permissions.
+
+    Native Harbor checksums remain the role-binding identity. This independent
+    fingerprint protects filesystem semantics that dirhash intentionally omits.
+    """
+    digest = hashlib.sha256()
+    for entry in [path, *sorted(path.rglob("*"), key=lambda item: os.fsencode(item.relative_to(path)))]:
+        metadata = entry.lstat()
+        relative = entry.relative_to(path).as_posix()
+        if stat.S_ISDIR(metadata.st_mode):
+            kind, content = "directory", ""
+        elif stat.S_ISREG(metadata.st_mode):
+            kind = "file"
+            file_hash = hashlib.sha256()
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+            with os.fdopen(os.open(entry, flags), "rb") as stream:
+                metadata = os.fstat(stream.fileno())
+                if not stat.S_ISREG(metadata.st_mode):
+                    raise ValueError("candidate entry changed its file type while hashing")
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    file_hash.update(chunk)
+            content = file_hash.hexdigest()
+        else:
+            raise ValueError("candidate tree must contain only real directories and regular files")
+        record = [relative, kind, stat.S_IMODE(metadata.st_mode), content]
+        digest.update(json.dumps(record, ensure_ascii=True, separators=(",", ":")).encode() + b"\n")
+    return digest.hexdigest()
+
+
+def task_tree_fingerprints(candidates: Path) -> dict:
+    return {task.name: task_tree_fingerprint(task) for task in sorted(candidates.iterdir()) if task.is_dir()}
+
+
 def load_config(path: Path) -> dict:
     config = yaml.safe_load(path.read_text())
     if not isinstance(config, dict) or set(config) != {"meta_info", "runtime_info"}:
@@ -101,16 +138,63 @@ def load_config(path: Path) -> dict:
     source = inputs["source"]
     if source["type"] not in {"stackoverflow", "json", "tasks"}:
         raise ValueError("source.type must be stackoverflow, json or tasks")
+    validate_source_selection(source)
     for name, value in (("max_questions", source["max_questions"]), ("max_pages", source.get("max_pages", 1)),
                         ("workers", inputs["generation"]["workers"]), ("n_concurrent", inputs["validation"]["n_concurrent"])):
         if not isinstance(value, int) or isinstance(value, bool) or value < 1:
             raise ValueError(f"{name} must be a positive integer")
     if source["type"] != "stackoverflow" and not source.get("path"):
         raise ValueError("source.path is required for json/tasks")
-    for key, entry in config["runtime_info"]["output"].items():
+    declared_pin = config.get("meta_info", {}).get("repos", {}).get("terminal-lego", {}).get("commit_id")
+    if declared_pin != PIN:
+        raise ValueError("terminal-lego config pin differs from the supported adapter pin")
+    for section, key, default in (("generation", "request_timeout_sec", 180),
+                                   ("validation", "timeout_multiplier", 1.0),
+                                   ("validation", "job_timeout_sec", 1800)):
+        value = inputs[section].setdefault(key, default)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+            raise ValueError(f"{section}.{key} must be a positive finite number")
+    retries = inputs["generation"].setdefault("max_retries", 2)
+    if type(retries) is not int or retries < 0:
+        raise ValueError("generation.max_retries must be a nonnegative integer")
+    artifacts = ARTIFACTS.resolve()
+    outputs = config["runtime_info"]["output"]
+    for key, entry in outputs.items():
         p = resolve(entry["path"])
-        if not p.is_relative_to(ARTIFACTS) or p == ARTIFACTS:
+        if not p.is_relative_to(artifacts) or p == artifacts:
             raise ValueError(f"output {key} must stay inside this block's artifacts/")
+    pool = output_location(outputs["harbor_tasks_dir"]["path"])
+    report = output_location(outputs["report"]["path"])
+    registry = output_location(outputs["eval_registry"]["path"])
+    if registry != pool / "registry.json":
+        raise ValueError("eval_registry.path must be harbor_tasks_dir.path/registry.json")
+    if report.is_dir():
+        raise ValueError("report output must name a file, not an existing directory")
+    if source["type"] in {"json", "tasks"}:
+        source_path = resolve(source["path"])
+        if report.resolve() == source_path or source["type"] == "tasks" and report.resolve().is_relative_to(source_path):
+            raise ValueError("report output must not overwrite the source input")
+    reserved = ("state.json", "index.yaml", "run.lock", "launch.lock", "archive.lock", "run.pid", "run.process.json",
+                "runs", "env", "archives")
+    versions = pool.parent / (pool.name + "-versions")
+    for name, target in (("harbor_tasks_dir", pool), ("report", report)):
+        resolved_parent = target.parent.resolve()
+        if not resolved_parent.is_relative_to(artifacts):
+            raise ValueError(f"output {name} parent must stay inside artifacts/")
+        # The public pool may itself be a symlink; its parent and report cannot
+        # point into an already published version, even through another symlink.
+        protected_paths = (target, resolved_parent) if name == "harbor_tasks_dir" else (target, target.resolve())
+        for protected in protected_paths:
+            if any(part.endswith("-versions") for part in protected.relative_to(artifacts).parts):
+                raise ValueError(f"output {name} must not modify immutable published versions")
+            for item in reserved:
+                reserved_path = artifacts / item
+                if protected == reserved_path or protected.is_relative_to(reserved_path):
+                    raise ValueError(f"output {name} overlaps reserved artifacts/{item}")
+    for target in (report, report.resolve()):
+        if (target == pool or target.is_relative_to(pool) or pool.is_relative_to(target)
+                or target == versions or target.is_relative_to(versions)):
+            raise ValueError("report output must not overlap the published task pool or versions")
     return config
 
 
@@ -200,17 +284,45 @@ def so_request(creds: dict, endpoint: str, params: dict) -> dict:
     return data
 
 
+def question_id(value) -> int:
+    if isinstance(value, bool) or not (type(value) is int or isinstance(value, str) and re.fullmatch(r"[0-9]+", value)):
+        raise ValueError("question_id must be a positive integer")
+    result = int(value)
+    if result <= 0:
+        raise ValueError("question_id must be a positive integer")
+    return result
+
+
+def validate_source_selection(source: dict) -> None:
+    """A scalar ID/tag must not turn into an unintended character-wise query."""
+    ids = source.get("question_ids")
+    if ids is not None:
+        if not isinstance(ids, list):
+            raise ValueError("source.question_ids must be an array of positive integer IDs")
+        for value in ids:
+            question_id(value)
+    tags = source.get("tags", [])
+    if not isinstance(tags, list) or any(not isinstance(tag, str) or not tag.strip() for tag in tags):
+        raise ValueError("source.tags must be an array of nonempty strings")
+    if type(source.get("min_score", 0)) is not int:
+        raise ValueError("source.min_score must be an integer")
+
+
 def collect_questions(source: dict, creds: dict) -> list[dict]:
+    validate_source_selection(source)
     limit = source["max_questions"]
     if source["type"] == "json":
         raw = json.loads(resolve(source["path"]).read_text())
         questions = raw.get("questions", []) if isinstance(raw, dict) else raw
+        if not isinstance(questions, list):
+            raise ValueError("JSON source questions must be an array")
     else:
         questions = []
         ids = source.get("question_ids") or []
         if ids:
-            ids = [int(i) for i in ids[:limit]]
-            questions = so_request(creds, "/questions/" + ";".join(map(str, ids)), {})["items"]
+            ids = list(dict.fromkeys(question_id(i) for i in ids))[:limit]
+            for start in range(0, len(ids), 100):
+                questions.extend(so_request(creds, "/questions/" + ";".join(map(str, ids[start:start + 100])), {}).get("items", []))
         else:
             for tag in source.get("tags", []):
                 for page in range(1, source.get("max_pages", 1) + 1):
@@ -223,15 +335,21 @@ def collect_questions(source: dict, creds: dict) -> list[dict]:
                     break
     selected, seen = [], set()
     for question in questions:
-        qid = int(question["question_id"])
+        if not isinstance(question, dict):
+            raise ValueError("each source question must be an object")
+        qid = question_id(question.get("question_id"))
         if qid in seen or int(question.get("score", 0)) < source.get("min_score", 0):
             continue
-        if not question.get("accepted_answer_id") and not question.get("accepted_answer", {}).get("body"):
+        answer = question.get("accepted_answer")
+        answer = answer if isinstance(answer, dict) else {}
+        body = answer.get("body")
+        has_body = isinstance(body, str) and bool(body.strip())
+        if not question.get("accepted_answer_id") and not has_body:
             continue
-        if source["type"] == "json" and not question.get("accepted_answer", {}).get("body"):
+        if source["type"] == "json" and not has_body:
             continue
         seen.add(qid)
-        selected.append(dict(question))
+        selected.append({**question, "question_id": qid})
         if len(selected) == limit:
             break
     if source["type"] == "stackoverflow":
@@ -242,7 +360,8 @@ def collect_questions(source: dict, creds: dict) -> list[dict]:
             answers.update({a["answer_id"]: a for a in data.get("items", [])})
         for q in selected:
             q["accepted_answer"] = answers.get(q["accepted_answer_id"], {})
-    return [q for q in selected if q.get("accepted_answer", {}).get("body")]
+    return [q for q in selected if isinstance((q.get("accepted_answer") or {}).get("body"), str)
+            and q["accepted_answer"]["body"].strip()]
 
 
 def safe_environment(env_data: dict) -> None:
@@ -271,15 +390,22 @@ def generator_class(module):
                 env_file_list=env_file_list, solution=solution, test_code=test_code)
             prompt += "\nCompare every assertion against the written instruction, independently of the reference solution. Return pass=false for unstated log prefixes, exact output text, filenames, or source-code implementation checks. A detail appearing only in solve.sh is not a task requirement.\n"
             prompt += "An issue must identify a concrete defect. Checks explicitly required by the instruction are valid, not issues. If every check is justified and runnable, return pass=true and an empty issues list.\n"
+            prompt += "A pristine task with no learner deliverables must reach test assertions and fail normally, with zero pytest setup/collection errors. Reject fixtures that unconditionally read, copy, stat, or execute a missing learner output. Each such prerequisite belongs in a test-body assertion before use.\n"
+            prompt += 'Return a JSON object with boolean "pass" and "issues" as an array of strings. An approval requires issues=[].\n'
             response = module.call_llm_api(prompt, module.SYSTEM_PROMPT, temperature=0.1,
                 task_name=self.task_name, max_tokens=2048)
             review = {"pass": False, "issues": ["missing or invalid test review"]}
-            if response:
+            if isinstance(response, str) and response:
                 match = re.search(r"```(?:json)?\s*(.*?)```", response, re.DOTALL)
                 try:
                     parsed = json.loads(match.group(1) if match else response)
-                    if isinstance(parsed, dict) and type(parsed.get("pass")) is bool:
-                        review = parsed
+                    if (isinstance(parsed, dict) and type(parsed.get("pass")) is bool
+                            and isinstance(parsed.get("issues"), list)
+                            and all(isinstance(issue, str) for issue in parsed["issues"])):
+                        if parsed["pass"] and parsed["issues"]:
+                            review = {"pass": False, "issues": ["inconsistent approval contains reported defects"]}
+                        else:
+                            review = parsed
                 except (json.JSONDecodeError, TypeError):
                     pass
             if not hasattr(self, "_reviewed_tests"):
@@ -305,7 +431,7 @@ def working_directory(path: Path):
         os.chdir(old)
 
 
-def generate_questions(questions: list[dict], run_dir: Path, inputs: dict, creds: dict) -> tuple[list[Path], dict]:
+def generate_questions(questions: list[dict], run_dir: Path, inputs: dict, creds: dict, progress=None) -> tuple[list[Path], dict]:
     with working_directory(run_dir):
         spec = importlib.util.spec_from_file_location("terminal_lego_generator", REPO / "generator/task_generator.py")
         module = importlib.util.module_from_spec(spec)
@@ -315,11 +441,14 @@ def generate_questions(questions: list[dict], run_dir: Path, inputs: dict, creds
             handler.addFilter(SafeLog())
         module._config.update(api_base=creds["OPENAI_API_BASE"], api_key=creds["OPENAI_API_KEY"], model=creds["MODEL_NAME"])
         module.REQUEST_TIMEOUT = inputs["generation"].get("request_timeout_sec", 180)
-        module.MAX_RETRIES = inputs["generation"].get("max_retries", 2)
-        module.DOCKERFILE_PROMPT_TEMPLATE += "\nUse python:3.12-slim as base, install bash and required CLI tools, and install pytest==8.4.2 at image build time (python3 -m pip install). Runtime tests must work without network. Never COPY tests or solution into the image.\n"
+        # Upstream names its total-attempt count MAX_RETRIES; config counts
+        # retries after the initial request, so zero still makes one attempt.
+        module.MAX_RETRIES = inputs["generation"].get("max_retries", 2) + 1
+        module.INSTRUCTION_PROMPT_TEMPLATE += "\nReturn only the task specification: required behavior, supplied inputs, deliverables, and constraints. Do not include the reference algorithm, a solution walkthrough, chat offers, or invitations to ask follow-up questions.\n"
+        module.DOCKERFILE_PROMPT_TEMPLATE += "\nUse python:3.12-slim as base, install bash and required CLI tools, and install pytest==8.4.2 at image build time (python3 -m pip install). Runtime tests must work without network. Never COPY tests or solution into the image. All generated files begin with ordinary non-executable permissions. After COPY, explicitly chmod any supplied input program that the specification says is executable. Do not require the learner to modify read-only inputs to repair the environment.\n"
         module.ENVIRONMENT_PROMPT_TEMPLATE += "\nAll directories and files must use relative task_file/... paths. Never use absolute paths or .. components.\n"
         module.SOLUTION_PROMPT_TEMPLATE += "\nHarbor executes your reference solution as /solution/solve.sh with NO command-line arguments. It is an installer/action script, separate from any executable requested by the instruction. If the task asks for a program at a path, write the full program to that /app/... path (for example using a quoted heredoc), chmod it executable, and perform any requested final-state actions. Do not return only that program's body as solve.sh. Do not derive task paths from solve.sh's own directory: /solution is separate from /app/task_file. The verifier runs after solve.sh finishes.\n"
-        module.TEST_PROMPT_TEMPLATE += "\nTest only behavior and exact strings explicitly required by the instruction. Never require incidental log prefixes or implementation choices from the reference solution. If a detail is not specified, accept all behavior consistent with the instruction.\n"
+        module.TEST_PROMPT_TEMPLATE += "\nTest only behavior and exact strings explicitly required by the instruction. Never require incidental log prefixes or implementation choices from the reference solution. If a detail is not specified, accept all behavior consistent with the instruction. A pristine task with no learner outputs must fail test-body assertions with zero setup/collection errors: do not unconditionally read, copy, stat, or execute learner outputs inside fixtures. Assert their existence inside the test body before using them. Use bounded subprocess timeouts.\n"
         Generator = generator_class(module)
 
         candidates = run_dir / "candidates"
@@ -327,7 +456,7 @@ def generate_questions(questions: list[dict], run_dir: Path, inputs: dict, creds
 
         def generate(question):
             generator = Generator(module.SOQuestion.from_dict(question), candidates)
-            generator.task_name = f"terminal-so-{int(question['question_id'])}"
+            generator.task_name = f"terminal-so-{question_id(question['question_id'])}"
             generator.task_dir = candidates / generator.task_name
             if generator.generate():
                 write_json(generator.task_dir / "provenance.json", {
@@ -343,11 +472,22 @@ def generate_questions(questions: list[dict], run_dir: Path, inputs: dict, creds
 
         generated = []
         with ThreadPoolExecutor(max_workers=inputs["generation"]["workers"]) as pool:
-            futures = [pool.submit(generate, q) for q in questions]
+            futures = {pool.submit(generate, q): index for index, q in enumerate(questions)}
             for future in as_completed(futures):
-                result = future.result()
+                index = futures[future]
+                task_id = f"terminal-so-{question_id(questions[index]['question_id'])}"
+                reason = ""
+                try:
+                    result = future.result()
+                    if result is None:
+                        reason = "generator returned no complete, approved candidate"
+                except Exception as exc:
+                    result = None
+                    reason = redact(f"generation failed ({type(exc).__name__}): {exc}")
                 if result:
                     generated.append(result)
+                if progress is not None:
+                    progress({"task_id": task_id, "status": "generated" if result else "failed", "reason": reason})
         return sorted(generated), module.token_tracker.get_summary()
 
 
@@ -376,6 +516,40 @@ RUN python3 -m pip install --no-cache-dir --target=/opt/terminal-curator-verifie
 '''
 
 
+def dockerfile_final_user(dockerfile: str) -> str | None:
+    """Resolve explicit USER and inheritance from stages declared in this file.
+
+    None means an external base's USER is unknown. Preserve it rather than
+    silently replacing an inherited nonroot runtime user with root.
+    """
+    stages = {}
+    current_user = None
+    current_stage = None
+    pending = ""
+    for line in dockerfile.splitlines():
+        if not pending and (not line.strip() or line.lstrip().startswith("#")):
+            continue
+        pending += line.strip()
+        if pending.endswith("\\"):
+            pending = pending[:-1] + " "
+            continue
+        instruction, pending = pending, ""
+        if re.match(r"(?i)^FROM\s", instruction):
+            words = shlex.split(instruction)
+            bases = [word for word in words[1:] if not word.startswith("--")]
+            if not bases:
+                continue
+            current_user = stages.get(bases[0].lower())
+            current_stage = bases[2].lower() if len(bases) >= 3 and bases[1].upper() == "AS" else None
+            if current_stage:
+                stages[current_stage] = current_user
+        elif re.match(r"(?i)^USER\s", instruction):
+            current_user = instruction.split(None, 1)[1]
+            if current_stage:
+                stages[current_stage] = current_user
+    return current_user
+
+
 def normalize_task(source: Path, destination: Path, provenance: dict) -> Path:
     import tomli_w
     if source.is_symlink() or any(p.is_symlink() for p in source.rglob("*")):
@@ -392,9 +566,10 @@ def normalize_task(source: Path, destination: Path, provenance: dict) -> Path:
             first = node.body[0]
             if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
                 docstrings.add(id(first.value))
-    if any(isinstance(node, ast.Constant) and isinstance(node.value, str) and "solve.sh" in node.value
+    if any(isinstance(node, ast.Constant) and isinstance(node.value, str)
+           and re.search(r"(?<![\w/.-])/solution(?:/|$|[^\w./-])", node.value)
            and id(node) not in docstrings for node in ast.walk(tree)):
-        raise ValueError("tests must verify state without invoking solve.sh")
+        raise ValueError("tests must verify state without accessing /solution, including the reference solve.sh")
     config = tomllib.loads((source / "task.toml").read_text())
     config.pop("version", None)
     config["schema_version"] = "1.0"
@@ -419,10 +594,10 @@ def normalize_task(source: Path, destination: Path, provenance: dict) -> Path:
     shutil.copytree(source, destination)
     (destination / "task.toml").write_text(tomli_w.dumps(config))
     if "# LegoFlow verifier runtime:" not in dockerfile:
-        final_stage = re.split(r"(?im)^\s*FROM\s+.*$", dockerfile)[-1]
-        users = re.findall(r"(?im)^\s*USER\s+([^\n]+)", final_stage)
-        restore_user = "\nUSER " + users[-1] + "\n" if users else ""
-        (destination / "environment/Dockerfile").write_text(dockerfile.rstrip() + "\n" + VERIFIER_IMAGE_SETUP + restore_user)
+        final_user = dockerfile_final_user(dockerfile)
+        setup = VERIFIER_IMAGE_SETUP if final_user is not None else VERIFIER_IMAGE_SETUP.replace("\nUSER root\n", "\n")
+        restore_user = "\nUSER " + final_user + "\n" if final_user is not None else ""
+        (destination / "environment/Dockerfile").write_text(dockerfile.rstrip() + "\n" + setup + restore_user)
     upstream = destination / "tests/test.sh"
     if upstream.exists() and not upstream.with_name("test.sh.upstream").exists():
         upstream.rename(upstream.with_name("test.sh.upstream"))
@@ -439,7 +614,7 @@ def normalize_task(source: Path, destination: Path, provenance: dict) -> Path:
     return destination
 
 
-def evaluate_trials(job_dir: Path, expected: float) -> dict:
+def evaluate_trials(job_dir: Path, expected: float, expected_checksums: dict | None = None) -> dict:
     results = {}
     for result_path in sorted(job_dir.glob("*/result.json")):
         data = json.loads(result_path.read_text())
@@ -451,7 +626,11 @@ def evaluate_trials(job_dir: Path, expected: float) -> dict:
         if task in results:
             results[task] = {"passed": False, "reason": "duplicate trial results", "trial_path": str(trial)}
             continue
-        if data.get("exception_info"):
+        if expected_checksums is not None and task not in expected_checksums:
+            reason = "unexpected task in Harbor results"
+        elif expected_checksums is not None and data.get("task_checksum") != expected_checksums[task]:
+            reason = "Harbor task checksum differs from the validated candidate"
+        elif data.get("exception_info"):
             reason = "Harbor trial exception"
         elif not isinstance((data.get("verifier_result") or {}).get("rewards", {}).get("reward"), (int, float)) or isinstance((data.get("verifier_result") or {}).get("rewards", {}).get("reward"), bool) or (data.get("verifier_result") or {}).get("rewards", {}).get("reward") != expected:
             reason = f"expected reward {expected}"
@@ -474,7 +653,7 @@ def evaluate_trials(job_dir: Path, expected: float) -> dict:
     return results
 
 
-def publish_tasks(accepted: list[Path], output: Path) -> None:
+def publish_tasks(accepted: list[Path], output: Path, validate_batch=None) -> None:
     if not accepted or len({p.name for p in accepted}) != len(accepted):
         raise ValueError("publication requires distinct verified task IDs")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -494,6 +673,8 @@ def publish_tasks(accepted: list[Path], output: Path) -> None:
             "description": "Terminal tasks verified with Harbor Oracle=1 and NOP=0.",
             "tasks": [{"name": candidate.name, "path": str((batch / candidate.name).resolve())}
                       for candidate in sorted(accepted)]}])
+        if validate_batch is not None:
+            validate_batch(batch)  # Bind the actual copied bytes before switching the public pointer.
         if output.exists() and not output.is_symlink():
             raise ValueError("existing output is not a versioned batch symlink; choose an empty output path")
         staging.symlink_to(batch.relative_to(output.parent), target_is_directory=True)
@@ -504,6 +685,28 @@ def publish_tasks(accepted: list[Path], output: Path) -> None:
             staging.unlink()
         if not published:
             shutil.rmtree(batch)
+
+
+def harbor_task_checksums(config: dict, candidates: Path) -> dict:
+    """Use the same pinned Harbor Task implementation as validation/consumers."""
+    harbor = resolve(config["runtime_info"]["input"]["validation"]["harbor_bin"])
+    script = '''from pathlib import Path
+import json, sys
+from harbor.models.task.task import Task
+root = Path(sys.argv[1])
+tasks = sorted(path for path in root.iterdir() if path.is_dir())
+if not tasks or any(path.is_symlink() or any(p.is_symlink() for p in path.rglob("*")) for path in tasks):
+    raise ValueError("checksum input must contain real, non-symlink candidate directories")
+print(json.dumps({path.name: Task(path).checksum for path in tasks}))
+'''
+    result = subprocess.run([str(harbor.parent / "python"), "-c", script, str(candidates)],
+                            check=True, capture_output=True, text=True,
+                            timeout=config["runtime_info"]["input"]["validation"].get("job_timeout_sec", 1800))
+    checksums = json.loads(result.stdout)
+    if not isinstance(checksums, dict) or not checksums or any(
+            not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value) for value in checksums.values()):
+        raise ValueError("Harbor checksum output is invalid")
+    return checksums
 
 
 def run_harbor(config: dict, candidates: Path, run_dir: Path, agent: str) -> Path:
@@ -535,14 +738,18 @@ def run_harbor(config: dict, candidates: Path, run_dir: Path, agent: str) -> Pat
     return jobs_dir / job_name
 
 
-def run(config: dict) -> dict:
+def run(config: dict, run_id: str | None = None, config_path: Path | None = None) -> dict:
     inputs = config["runtime_info"]["input"]
     creds = credentials(inputs)
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:8]
+    run_id = validate_run_id(run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:8])
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", run_id):
+        raise ValueError("invalid run ID")
     run_dir = ARTIFACTS / "runs" / run_id
     run_dir.mkdir(parents=True)
+    snapshot_run_inputs(config, run_dir, config_path)
     report = {"run_id": run_id, "started_at": now(), "status": "running", "source": inputs["source"]["type"],
-        "total_candidates": 0, "verified_tasks": [], "rejected": {}, "jobs": {}, "validation": {}, "repos": repo_commits()}
+        "total_candidates": 0, "collected_questions": None, "generation_completed": 0, "generation_failed": 0,
+        "candidate_ids": [], "task_progress": {}, "verified_tasks": [], "rejected": {}, "jobs": {}, "validation": {}, "repos": repo_commits()}
 
     def state(stage):
         write_json(ARTIFACTS / "state.json", {**report, "stage": stage, "updated_at": now()})
@@ -561,29 +768,67 @@ def run(config: dict) -> dict:
             write_json(run_dir / "questions.json", {"questions": questions})
             if not questions:
                 raise ValueError("no accepted-answer seeds matched this batch")
+            report["collected_questions"] = len(questions)
+            report["task_progress"] = {f"terminal-so-{question_id(q['question_id'])}": {"stage": "generate", "status": "pending"} for q in questions}
             state("generate")
-            candidates, usage = generate_questions(questions, run_dir, inputs, creds)
+            def generation_progress(event):
+                task_id = event["task_id"]
+                report["generation_completed"] += 1
+                failed = event["status"] == "failed"
+                if failed:
+                    report["generation_failed"] += 1
+                    report["rejected"][task_id] = event["reason"]
+                else:
+                    report["candidate_ids"].append(task_id)
+                    report["total_candidates"] += 1
+                report["task_progress"][task_id] = {"stage": "generate", "status": "failed" if failed else "completed"}
+                state("generate")
+            candidates, usage = generate_questions(questions, run_dir, inputs, creds, progress=generation_progress)
             report["token_usage"] = usage
         report["total_candidates"] = len(candidates)
+        report["candidate_ids"] = sorted(candidate.name for candidate in candidates)
         if not candidates:
             raise ValueError("no task candidates produced")
         state("normalize")
         normalized = run_dir / "normalized"
         normalized.mkdir()
         for candidate in candidates:
+            report["task_progress"][candidate.name] = {"stage": "normalize", "status": "running"}
+            state("normalize")
             try:
                 normalize_task(candidate, normalized / candidate.name, {"run_id": run_id, "terminal_lego_commit": PIN})
+                report["task_progress"][candidate.name]["status"] = "completed"
             except (ValueError, SyntaxError, OSError, tomllib.TOMLDecodeError) as exc:
                 report["rejected"][candidate.name] = redact(str(exc))
+                report["task_progress"][candidate.name]["status"] = "failed"
                 if (normalized / candidate.name).exists():
                     shutil.rmtree(normalized / candidate.name)
+            state("normalize")
         if not list(normalized.iterdir()):
             raise ValueError("no candidates passed normalization")
+        fingerprints = task_tree_fingerprints(normalized)
+        report["tree_fingerprints"] = fingerprints
+        checksums = harbor_task_checksums(config, normalized)
+        report["harbor_task_checksums"] = checksums
         for agent, expected in (("oracle", 1.0), ("nop", 0.0)):
+            if harbor_task_checksums(config, normalized) != checksums:
+                raise ValueError("normalized tasks changed before Harbor validation")
+            if task_tree_fingerprints(normalized) != fingerprints:
+                raise ValueError("normalized task tree changed before Harbor validation")
+            for task in checksums:
+                report["task_progress"][task] = {"stage": "validate-" + agent, "status": "running"}
             state("validate-" + agent)
             job = run_harbor(config, normalized, run_dir, agent)
             report["jobs"][agent] = str(job)
-            report["validation"][agent] = evaluate_trials(job, expected)
+            report["validation"][agent] = evaluate_trials(job, expected, checksums)
+            for task in checksums:
+                verdict = report["validation"][agent].get(task, {})
+                report["task_progress"][task] = {"stage": "validate-" + agent, "status": "completed" if verdict.get("passed") else "failed"}
+            state("validate-" + agent)
+            if harbor_task_checksums(config, normalized) != checksums:
+                raise ValueError("normalized tasks changed during Harbor validation")
+            if task_tree_fingerprints(normalized) != fingerprints:
+                raise ValueError("normalized task tree changed during Harbor validation")
         accepted = []
         for task in sorted(normalized.iterdir()):
             verdicts = [report["validation"][a].get(task.name, {"passed": False, "reason": "missing Harbor trial"}) for a in ("oracle", "nop")]
@@ -591,14 +836,24 @@ def run(config: dict) -> dict:
                 accepted.append(task)
             else:
                 report["rejected"][task.name] = "; ".join(v["reason"] for v in verdicts if not v["passed"])
+                report["task_progress"][task.name]["status"] = "failed"
         if not accepted:
             raise ValueError("no candidates passed Oracle=1 and NOP=0; previous verified output is preserved")
         state("publish")
         pool = output_location(config["runtime_info"]["output"]["harbor_tasks_dir"]["path"])
-        publish_tasks(accepted, pool)
+        accepted_checksums = {task.name: checksums[task.name] for task in accepted}
+        block_digests = {task.name: task_digest(task) for task in accepted}
+        def validate_batch(batch):
+            if harbor_task_checksums(config, batch) != accepted_checksums:
+                raise ValueError("publication bytes differ from the validated candidates")
+            if task_tree_fingerprints(batch) != {task.name: fingerprints[task.name] for task in accepted}:
+                raise ValueError("publication tree differs from the validated candidates")
+        publish_tasks(accepted, pool, validate_batch=validate_batch)
         report["published_batch"] = str(pool.resolve())
         report["verified_tasks"] = [p.name for p in accepted]
-        report["task_checksums"] = {p.name: task_digest(p) for p in accepted}
+        for task in accepted:
+            report["task_progress"][task.name] = {"stage": "publish", "status": "completed"}
+        report["task_checksums"] = block_digests
         report["status"] = "completed"
     except BaseException as exc:
         report["status"] = "interrupted" if isinstance(exc, (KeyboardInterrupt, InterruptedError)) else "failed"
@@ -612,44 +867,125 @@ def run(config: dict) -> dict:
     return report
 
 
-def archive(config_path: Path, config: dict, exit_code: int, started: str) -> None:
+def write_yaml(path: Path, value) -> None:
+    """Readers see either the old complete document or the new one."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+    with os.fdopen(os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as stream:
+        yaml.safe_dump(value, stream, sort_keys=False, allow_unicode=True)
+    temporary.replace(path)
+
+
+def snapshot_config(config: dict, path: Path) -> None:
+    """Freeze the effective in-memory configuration without persisting secrets."""
+    spec = importlib.util.spec_from_file_location("terminal_archive_redactor", ROOT / "scripts/redact_archive_config.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    write_yaml(path, module.redact(config))
+
+
+def snapshot_scripts(source: Path, destination: Path, config_path: Path | None = None) -> None:
+    """Archive code and dependency lists, never private profiles or symlink targets."""
+    destination.mkdir(parents=True, exist_ok=True)
+    excluded = config_path.resolve() if config_path is not None else None
+    if not source.is_dir():
+        return
+    for directory, directories, files in os.walk(source, followlinks=False):
+        current = Path(directory)
+        directories[:] = [name for name in directories if not name.startswith('.')
+                          and name != '__pycache__' and not (current / name).is_symlink()]
+        for name in files:
+            path = current / name
+            allowed = path.suffix in {'.py', '.sh'} or (name.startswith('requirements') and path.suffix == '.txt')
+            if (not allowed or name.startswith('.') or '.local.' in name or path.is_symlink()
+                    or not path.is_file() or path.resolve() == excluded):
+                continue
+            target = destination / path.relative_to(source)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+
+
+def snapshot_run_inputs(config: dict, run_dir: Path, config_path: Path | None = None) -> None:
+    snapshot_config(config, run_dir / 'config.yaml')
+    snapshot_scripts(BLOCK / 'scripts', run_dir / 'scripts', config_path)
+
+
+def process_start(pid: int) -> str | None:
+    try:
+        # comm is parenthesized and may itself contain spaces.
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+    except (FileNotFoundError, IndexError, ProcessLookupError):
+        return None
+
+
+def validate_run_id(run_id: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,100}", run_id):
+        raise ValueError("invalid terminal-curator run ID")
+    return run_id
+
+
+def archive(config_path: Path, config: dict | None, exit_code: int, started: str,
+            run_id: str | None = None) -> None:
+    # A launcher supplies its own ID, so another completed run cannot be adopted
+    # while this EXIT trap waits for the archive lock.
+    if run_id is not None:
+        validate_run_id(run_id)
+    source = ARTIFACTS / "runs" / run_id if run_id else None
     archives = ARTIFACTS / "archives"
-    archives.mkdir(parents=True, exist_ok=True)
-    with (ARTIFACTS / "archive.lock").open("w") as lock:
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
+    with (ARTIFACTS / "archive.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        ids = [int(p.name[4:]) for p in archives.glob("run_*") if p.name[4:].isdigit()]
-        run_id = f"run_{max(ids, default=0) + 1:03d}"
-        dest = archives / run_id
-        dest.mkdir()
-        # Reuse the repository's tested redactor, keeping the exact overlay used by this run.
-        subprocess.run([sys.executable, str(ROOT / "scripts/redact_archive_config.py"), str(config_path), str(dest / "config.yaml")], check=True)
-        shutil.copytree(BLOCK / "scripts", dest / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
-        entry = {"id": run_id, "started_at": started, "completed_at": now(), "exit_code": exit_code,
-            "status": "completed" if exit_code == 0 else ("interrupted" if exit_code in (130, 143) else "failed"),
-            "archive": f"artifacts/archives/{run_id}/", "repos": repo_commits()}
-        (dest / "metadata.yaml").write_text(yaml.safe_dump(entry, sort_keys=False))
-        report = resolve(config["runtime_info"]["output"]["report"]["path"])
-        if report.exists():
-            data = json.loads(report.read_text())
-            if datetime.fromisoformat(data["started_at"].replace("Z", "+00:00")) >= datetime.fromisoformat(started.replace("Z", "+00:00")):
-                shutil.copy2(report, dest / "report.json")
+        archives.mkdir(parents=True, exist_ok=True)
+        report = None
+        if source is not None and (source / "report.json").is_file():
+            candidate = json.loads((source / "report.json").read_text())
+            if isinstance(candidate, dict) and candidate.get("run_id") == run_id:
+                report = candidate
         index_path = ARTIFACTS / "index.yaml"
         index = yaml.safe_load(index_path.read_text()) if index_path.exists() else {"runs": []}
-        index.setdefault("runs", []).append(entry)
-        index_path.write_text(yaml.safe_dump(index, sort_keys=False))
+        if not isinstance(index, dict) or not isinstance(index.get("runs"), list):
+            raise ValueError("invalid run index; preserve and repair it before archiving")
+        ids = [int(p.name[4:]) for p in archives.glob("run_*") if p.name[4:].isdigit()]
+        ids.extend(int(item["id"][4:]) for item in index["runs"]
+                   if isinstance(item, dict) and re.fullmatch(r"run_\d+", str(item.get("id", ""))))
+        archive_id = f"run_{max(ids, default=0) + 1:03d}"
+        dest = archives / archive_id
+        dest.mkdir()
+        frozen = source / "config.yaml" if source is not None else None
+        if frozen is not None and frozen.is_file():
+            shutil.copy2(frozen, dest / "config.yaml")
+        elif config is not None:
+            snapshot_config(config, dest / "config.yaml")
+        frozen_scripts = source / "scripts" if source is not None else None
+        if frozen_scripts is not None and frozen_scripts.is_dir():
+            shutil.copytree(frozen_scripts, dest / "scripts")
+        else:
+            snapshot_scripts(BLOCK / "scripts", dest / "scripts", config_path)
+        entry = {"id": archive_id, "run_id": run_id, "started_at": started, "completed_at": now(), "exit_code": exit_code,
+            "status": "completed" if exit_code == 0 else ("interrupted" if exit_code in (130, 143) else "failed"),
+            "archive": f"artifacts/archives/{archive_id}/", "repos": report.get("repos", {}) if report else repo_commits(),
+            "config_snapshot": "available" if (dest / "config.yaml").exists() else "unavailable",
+            "scripts_snapshot": "run-start" if frozen_scripts is not None and frozen_scripts.is_dir() else "archive-time"}
+        if report is not None:
+            write_json(dest / "report.json", report)
+            entry["verified_count"] = len(report.get("verified_tasks", []))
+            entry["rejected_count"] = len(report.get("rejected", {}))
+        write_yaml(dest / "metadata.yaml", entry)
+        index["runs"].append(entry)
+        write_yaml(index_path, index)
         state_path = ARTIFACTS / "state.json"
-        state = json.loads(state_path.read_text()) if state_path.exists() else {}
         if exit_code:
             with (ARTIFACTS / "run.lock").open("a") as run_lock:
                 try:
                     fcntl.flock(run_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
                     return  # A rejected concurrent start must not overwrite the active run's progress.
+                state = json.loads(state_path.read_text()) if state_path.exists() else {}
                 old_state = not state.get("started_at") or datetime.fromisoformat(state["started_at"].replace("Z", "+00:00")) < datetime.fromisoformat(started.replace("Z", "+00:00"))
                 if old_state:
                     write_json(state_path, {"status": entry["status"], "stage": "preflight", "started_at": started,
-                        "updated_at": now(), "run_id": run_id, "verified_tasks": [], "total_candidates": 0, "rejected": {}})
-                elif state.get("status") == "running":
+                        "updated_at": now(), "run_id": run_id or archive_id, "verified_tasks": [], "total_candidates": 0, "rejected": {}})
+                elif run_id is not None and state.get("run_id") == run_id and state.get("status") == "running":
                     write_json(state_path, {**state, "status": entry["status"], "stage": entry["status"], "updated_at": now()})
 
 
@@ -658,13 +994,24 @@ def main() -> int:
     parser.add_argument("--config", type=Path, default=Path(os.environ.get("TERMINAL_CURATOR_CONFIG", BLOCK / "config.yaml")))
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("check"); p.add_argument("--offline", action="store_true")
-    sub.add_parser("run")
+    p = sub.add_parser("run"); p.add_argument("--run-id")
     sub.add_parser("probe")
     sub.add_parser("dashboard")
-    p = sub.add_parser("archive"); p.add_argument("--exit-code", type=int, default=0); p.add_argument("--started-at", default=now())
+    p = sub.add_parser("archive"); p.add_argument("--exit-code", type=int, default=0); p.add_argument("--started-at", default=now()); p.add_argument("--run-id")
     args = parser.parse_args()
     config_path = resolve(str(args.config))
     try:
+        if args.command == "archive":
+            # A malformed preflight config still needs a failed-run record. Do
+            # not echo YAML parser source excerpts, which can contain credentials.
+            try:
+                config = yaml.safe_load(config_path.read_text())
+                if not isinstance(config, dict):
+                    config = None
+            except (OSError, yaml.YAMLError):
+                config = None
+            archive(config_path, config, args.exit_code, args.started_at, args.run_id)
+            return 0
         config = load_config(config_path)
         if args.command == "check":
             errors = check(config, args.offline)
@@ -675,7 +1022,7 @@ def main() -> int:
             return 1 if errors else 0
         if args.command == "run":
             ARTIFACTS.mkdir(parents=True, exist_ok=True)
-            with (ARTIFACTS / "run.lock").open("w") as lock:
+            with (ARTIFACTS / "run.lock").open("a") as lock:
                 try:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
@@ -683,16 +1030,20 @@ def main() -> int:
                 def interrupt(signum, frame):
                     raise InterruptedError("run interrupted")
                 signal.signal(signal.SIGTERM, interrupt)
+                signal.signal(signal.SIGINT, interrupt)
+                run_id = validate_run_id(args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:8])
                 pid_path = ARTIFACTS / "run.pid"
+                process_path = ARTIFACTS / "run.process.json"
+                write_json(process_path, {"pid": os.getpid(), "start_ticks": process_start(os.getpid()), "run_id": run_id})
                 pid_path.write_text(str(os.getpid()))
                 try:
-                    report = run(config)
+                    report = run(config, run_id=run_id, config_path=config_path)
                 finally:
                     if pid_path.exists() and pid_path.read_text().strip() == str(os.getpid()):
                         pid_path.unlink()
+                    if process_path.exists() and json.loads(process_path.read_text()).get("pid") == os.getpid():
+                        process_path.unlink()
                 print(json.dumps({"run_id": report["run_id"], "verified_tasks": report["verified_tasks"]}))
-        elif args.command == "archive":
-            archive(config_path, config, args.exit_code, args.started_at)
         elif args.command == "dashboard":
             subprocess.run([sys.executable, str(BLOCK / "dashboard/progress_monitor.py"), "--config", str(config_path)], check=True)
         elif args.command == "probe":
@@ -706,7 +1057,8 @@ def main() -> int:
             print("[OK] LLM chat completion returned a choice")
         return 0
     except (Exception, KeyboardInterrupt) as exc:
-        print("[FAIL] " + redact(str(exc)), file=sys.stderr)
+        message = "invalid YAML configuration (source text withheld)" if isinstance(exc, yaml.YAMLError) else redact(str(exc))
+        print("[FAIL] " + message, file=sys.stderr)
         return 130 if isinstance(exc, (KeyboardInterrupt, InterruptedError)) else 1
 
 

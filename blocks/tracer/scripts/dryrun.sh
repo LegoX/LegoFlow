@@ -4,6 +4,8 @@ set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${TRAJGEN_CONFIG:-$BLOCK_DIR/config.yaml}"
+[[ "$CONFIG" = /* ]] || CONFIG="$BLOCK_DIR/$CONFIG"
+export TRAJGEN_CONFIG="$CONFIG"
 
 PASS=0
 FAIL=0
@@ -16,11 +18,13 @@ warn() { echo "  [WARN] $1"; WARN=$((WARN+1)); }
 # --- shared block-contract validation (schema, deps, fill markers) ------------
 REPO_ROOT="$(cd "$BLOCK_DIR/../.." && pwd)"
 if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
-  if VAL_OUT="$(python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" --config "$CONFIG" 2>&1)"; then
+  if VAL_OUT="$(python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" --config "$CONFIG" --effective-profiles 2>&1)"; then
     ok "validate_config: block contract OK"
   else
     echo "$VAL_OUT" | sed 's/^/    /'
     fail "validate_config reported failures (see lines above)"
+    # Do not parse malformed YAML again: parser tracebacks can echo secrets.
+    [[ "$VAL_OUT" != *" schema:parse-error "* ]] || exit 1
   fi
 else
   warn "shared validator not found at <repo_root>/scripts/validate_config.py — skipping contract validation"
@@ -667,7 +671,13 @@ for key in \
   runtime_info.input.agent.name \
   runtime_info.input.agent.version; do
   value="$(cfg "$key")"
-  [[ -n "$value" ]] && ok "$key = $value" || fail "$key is required"
+  if [[ -z "$value" ]]; then
+    fail "$key is required"
+  elif [[ "$key" == runtime_info.input.litellm_proxy.master_key ]]; then
+    ok "$key is set"
+  else
+    ok "$key = $value"
+  fi
 done
 
 LITELLM_TEMPLATE_RAW="$(cfg runtime_info.input.litellm_proxy.config_template)"

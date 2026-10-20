@@ -13,11 +13,14 @@ description: From a finite source batch to verified tasks and actual solving tra
    model. Write candidates and logs under this block's artifacts.
 4. Normalize the candidate to the Harbor schema used by Tracer and check the
    required instruction, environment, solution, and verifier files.
-5. Run Oracle and NOP separately in fresh environments. Require Oracle reward
-   1, NOP reward 0, and valid completed results without trial exceptions.
-6. The script publishes runtime-passing tasks and their IDs in an immutable
-   batch. The operating agent audits the instruction, tests, and reference
-   solution before handing that batch downstream. Preserve rejected candidate
+5. Freeze Harbor task checksums, then run Oracle and NOP separately in fresh
+   environments. Require Oracle reward 1, NOP reward 0, valid completed
+   results without trial exceptions, and the same task checksum in each
+   trial. Recheck candidate bytes before and after both jobs.
+6. The script copies runtime-passing tasks and their IDs into an immutable
+   batch and checks the actual copied Harbor checksums before switching the
+   public pointer. The operating agent audits the instruction, tests and
+   reference solution before handing that batch downstream. Preserve rejected candidate
    reasons and validation jobs for inspection.
 7. Record and repair any contract mismatch in a mutable candidate copy. Run
    both fresh Oracle and NOP trials again for the repaired task, and hand off
@@ -57,6 +60,13 @@ coverage, ambiguity, trivial solutions, and source suitability. The original
 source answer is provenance for generation; it must not be copied into the
 task instruction as a leaked solution.
 
+The verifier cannot invoke or read Harbor's absolute `/solution` reference
+location. The static guard allows a legitimate task artifact named
+`solve.sh`, including `/app/.../solve.sh`; it is not a ban on that filename.
+Comments and docstrings may discuss the reference. This is a heuristic guard
+combined with fresh runtime checks and the semantic audit below, not a proof
+against arbitrary obfuscated verifier code.
+
 ## Review instruction, tests, and reference behavior
 
 The operating agent reviews every runtime-passing task before Tracer or
@@ -74,8 +84,9 @@ reference solution actually installs or writes any required executable and
 performs the specified final-state work when Harbor invokes
 `/solution/solve.sh` without arguments.
 
-Generation requires an explicit boolean `pass: true` in its structured LLM
-test review. Missing or malformed responses, a negative review, and a string
+Generation requires an explicit boolean `pass: true` and an empty string-list
+`issues: []` in its structured LLM test review. Missing or malformed issues,
+a contradictory nonempty issues list, a negative review, and a string
 `"true"` cannot approve the upstream generator's fallback candidate. This
 review is followed by the agent's per-task semantic audit and execution
 checks.
@@ -94,6 +105,20 @@ Record the correction run IDs and use its new manifest/registry only after
 the semantic audit and fresh trials agree. Keep unresolved tasks out of the
 downstream hand-off.
 
+## Generation progress and partial failures
+
+Source selection records the accepted questions actually retained for this
+batch. Each finished generation future increments `generation_completed`;
+`generation_failed` is the failed subset, while `candidate_ids` names only
+successful candidates. Per-task progress uses the actual stage and
+pending/running/completed/failed status. One candidate's generation exception
+is recorded without dropping successful siblings. If every candidate fails,
+the run still fails and preserves the previous verified publication.
+
+Imports use `collected_questions: null` because no question collection was
+performed. The dashboard displays missing measurements as unavailable and
+does not infer a source scan count from a task directory count.
+
 ## Hand the manifest to Tracer
 
 Select `provider: local` and `local_block: terminal-curator` in Tracer, with
@@ -106,6 +131,9 @@ Do not copy raw candidate directories into Tracer, edit the manifest to
 include a failed candidate, or bypass a missing manifest by scanning the
 terminal output directory.
 
+The legacy implicit root shell chain refuses terminal-to-Tracer execution,
+because the semantic audit happens between these stages. Use the canonical
+skills, or explicitly operate terminal-only and tracer-only after that review.
 Then run the separately authorized `/tracer:run` or `$tracer-run`. A rollout
 is successful only when the selected agent actually solves the task and the
 Harbor result contains reward 1. Check the real per-trial result and raw
@@ -113,6 +141,12 @@ trajectory, not just a job launcher exit status. A transcript from executing
 the Oracle solution is validation evidence rather than a solving trajectory.
 
 Tracer's standard trajectory conversion and Trainer inputs remain the same.
+Report solved trials and retained training records separately: a reward-1
+trajectory can still be excluded by the existing role, tool-pair or reasoning
+checks. Inspect conversion statistics and the resulting LF records before
+Trainer data preparation. Keep those quality thresholds in effect; do not
+assume one published task or one successful rollout always produces one
+training record.
 No extra terminal-specific training runtime is needed for Harbor tasks.
 
 ## Hand the registry to Evaluator
@@ -137,6 +171,8 @@ Use `scripts/stop.sh` for the current block's run. Preview cleanup with
 including raw source/candidate/validation-job evidence, while retaining
 immutable published versions, the output symlink, environments, reports/state,
 and archives. Preserve detailed evidence before removing those run trees.
+Cleanup acquires both run and archive locks and refuses to race either
+operation.
 `--all --yes` removes all block artifacts; use it only after the user has
 authorized that full cleanup. `TERMINAL_CURATOR_CLEAN_CONFIRM=terminal-curator`
 is an alternative confirmation channel for the same `--all` operation.

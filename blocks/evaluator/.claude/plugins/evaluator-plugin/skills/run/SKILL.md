@@ -5,7 +5,7 @@ description: >
   passes: generate the per-job LiteLLM config from
   `runtime_info.input.litellm_proxy`, start the LiteLLM proxy on the
   configured port, then run the Harbor job with
-  `--dataset <name>@<version> --registry-path repos/harbor/registry.json` and any
+  the configured dataset/version and registry path, together with any
   `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS`. Long-running.
   Stamps live state into `artifacts/index.yaml` via
   `scripts/archive_run.sh`. Triggers on phrases like "run evaluator",
@@ -14,6 +14,14 @@ description: >
 ---
 
 # /evaluator:run
+
+
+Use the complete effective profile selected by `EVAL_CONFIG` (relative filenames
+resolve from `blocks/evaluator/`), otherwise this block's `config.yaml`. Retain a
+parent-selected profile throughout checks, setup, launch, and archive. Block-local
+references to `config.yaml` below mean that profile; root shared-credential config
+references keep their existing meaning. Do not reset the selector or copy a
+private profile over the committed config.
 
 Preflight-then-execute entry point. Always invoke `/evaluator:check` first;
 require explicit user confirmation before launching. evaluator is a **leaf

@@ -6,6 +6,13 @@ description: >
 
 # /root:check
 
+
+Read [Effective profiles](../../resources/EFFECTIVE_PROFILES.md) before loading
+child configs. Honor explicit profiles and `TRAJGEN_CONFIG`, `EVAL_CONFIG`, and
+`TERMINAL_CURATOR_CONFIG` with block-relative path resolution. Use that same
+effective profile set for source selection, sibling dependency checks, resource
+selection, and child dispatch; never reset a parent-selected profile.
+
 Recursively walk the block tree rooted at the current working directory and validate every block's config, resources, external APIs, and block-specific runtime prerequisites. **Safe to run:** only `scripts/dryrun.sh` (a side-effect-free validation script) is executed — no `scripts/start.sh`, no config edits, no archives written.
 
 **This skill is MANDATORY before `/root:run`.** The agent must:
@@ -93,10 +100,10 @@ Schema, fill-marker, and dependency validation is owned by the shared validator.
 
 ```bash
 # explicitly requested full-tree scope:
-python3 <repo_root>/scripts/validate_config.py --root <repo_root>
+python3 <repo_root>/scripts/validate_config.py --root <repo_root> --effective-profiles
 # default active pipeline: run once per selected block (and root identity);
 # single-block scope uses only that block:
-python3 <repo_root>/scripts/validate_config.py --block <block_path>
+python3 <repo_root>/scripts/validate_config.py --block <block_path> --config <effective-profile> --effective-profiles
 ```
 
 Every `[FAIL] <label> ...` / `[WARN] <label> ...` line becomes one finding row, keyed by its label (`schema:parse-error`, `schema:missing-section`, `schema:legacy-status`, `schema:legacy-evolving`, `schema:unknown-toplevel`, `schema:name-mismatch`, `schema:root-wiring`, `tree:missing-child`, `dep:bad-shape`, `dep:bad-key`, `dep:bad-ref`, `dep:unresolved`, `dep:path-mismatch`, `dep:link-mismatch`, `input:unfilled`, `input:placeholder`, `output:shape`). Include the validator's message verbatim.

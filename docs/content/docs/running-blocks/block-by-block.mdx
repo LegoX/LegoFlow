@@ -41,7 +41,7 @@ and independent fresh-container Oracle/NOP validation.
 | --- | --- | --- | --- |
 | 1 | `/terminal-curator:setup` | `$terminal-curator-setup` | Initialize pinned generation and Harbor environments. |
 | 2 | `/terminal-curator:check` | `$terminal-curator-check` | Check the source, limits, pins, endpoint inputs, and Docker host. |
-| 3 | `/terminal-curator:run` | `$terminal-curator-run` | Generate/import, validate, and publish the verified task manifest. |
+| 3 | `/terminal-curator:run` | `$terminal-curator-run` | Generate/import, inspect instruction/tests/reference-solution semantics, correct with provenance, and repeat fresh validation before hand-off. |
 | * | `/terminal-curator:dashboard` | `$terminal-curator-dashboard` | Inspect source/generation/validation progress and failed candidates. |
 
 Select `task_source.provider: local` and
@@ -49,6 +49,12 @@ Select `task_source.provider: local` and
 `terminal_tasks_dir: ../terminal-curator/artifacts/tasks`. Only manifest-listed
 tasks proceed to rollout. The existing SWE selector remains `curator` by
 default. See [the hand-off contract](/docs/blocks/terminal-curator/workflow).
+
+A manifest or Oracle/NOP pass alone does not replace the producer skill's semantic
+audit. Root orchestration dispatches that skill before downstream inference.
+The legacy root shell helper supports explicit `--terminal-curator-only` and
+`--tracer-only`; it refuses the implicit chain because it cannot perform the
+agent audit between those stages.
 
 ### Step 2: Trajectory Rollout
 

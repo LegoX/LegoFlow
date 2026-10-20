@@ -122,9 +122,14 @@ sources require a nonempty manifest and fail closed if it is absent. The
 legacy generic local-source fallback remains available for sources outside
 that terminal contract.
 
-`blocks/tracer/scripts/prepare_tasks.sh` stages a directory of symlinks for
-manifest-listed IDs, preserving a single source pool. Task IDs already
-processed are tracked in `blocks/tracer/artifacts/processed_tasks.yaml`,
+`blocks/tracer/scripts/prepare_tasks.sh` atomically publishes an owned version
+of the selected task links under a private cache, with source/manifest/settings/
+file-metadata based reuse. `start.sh` pins that version for its own invocation.
+Terminal links resolve into immutable producer batches; ordinary mutable
+SWE/external pools retain linked-content semantics. Existing unowned real
+staging directories are refused, even with --overwrite; select a fresh path or
+move old staging after checking active jobs. Task IDs already
+processed are recorded by the `/tracer:run` agent in `blocks/tracer/artifacts/processed_tasks.yaml`,
 which together with `blocks/tracer/excluded_tasks.txt` is what
 `HARBOR_EXCLUDE_TASKS` resolves. Each consumer declares its upstream in its
 own `meta_info.dependencies.from`, mirrored by the producer's
@@ -140,6 +145,18 @@ per-task rewards remain a separate operation from curation.
 
 ## How To Run
 
+Root skills honor complete private profiles selected by `TRAJGEN_CONFIG`,
+`EVAL_CONFIG`, and `TERMINAL_CURATOR_CONFIG` (relative filenames resolve from
+that block), using the same profile set for selection, dependencies, resources,
+and child dispatch. See the canonical root plugin's
+[profile contract](.claude/plugins/root-plugin/resources/EFFECTIVE_PROFILES.md).
+For terminal orchestration, use `/root:run` / `$root-run` so the producer skill
+performs instruction/tests/reference-solution semantic audit, records corrections,
+and repeats fresh Oracle/NOP checks before downstream rollout. The root shell
+helper cannot perform that agent step and rejects an implicit terminal chain
+before generation. Explicit terminal-only then audited tracer-only operations
+remain available; this adds no new user approval gate.
+
 **Mandatory workflow: check → confirm → run.** Agents must never skip the confirmation step.
 
 1. **Check**: Run `/root:check` (or `bash scripts/dryrun.sh` for a single block). This validates config, inputs, paths, GPUs, Docker/K8s connectivity, credentials, and model compatibility — all in one pass, with no side effects.
@@ -148,7 +165,7 @@ per-task rewards remain a separate operation from curation.
 
 ```bash
 scripts/dryrun.sh   # validate config, inputs, and required paths (no side effects)
-scripts/start.sh    # launch the selected producer then tracer; SWE PR collection is separate
+scripts/start.sh    # legacy SWE Python launcher -> tracer; terminal implicit chain is refused
 scripts/clean.sh    # remove a run's temporary output in every block (keeps envs,
                     # run records, and anything expensive to regenerate)
 scripts/clean.sh --all   # wipe every block's artifacts/ except git-tracked files

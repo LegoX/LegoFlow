@@ -88,7 +88,9 @@ and perform the run there in tmux.
 
 ## Inspect and hand off
 
-Read the report and `artifacts/tasks/verifiable_tasks.txt`. A task appears
+Read the exact per-run report, its archive runtime `run_id`, and
+`artifacts/tasks/verifiable_tasks.txt`. The run archive uses the redacted
+configuration frozen at launch, not a profile edited afterward. A task appears
 there only after Oracle=1 and NOP=0 in independent fresh environments. A run
 that yields no verified tasks fails rather than handing an empty pool to
 Tracer. Inspect each rejection reason before selecting another source or

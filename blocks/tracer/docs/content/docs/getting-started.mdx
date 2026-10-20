@@ -49,7 +49,7 @@ Never commit real API keys or private endpoints to `config.yaml`.
 For the full LegoFlow path, Tracer reads Curator's merged verified tasks:
 
 <ConfigSnippet title="blocks/tracer/config.yaml">
-{"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:\n        from: curator.output.merged_tasks_dir\n        when: {task_source.provider: local}\n\nruntime_info:\n  input:\n    task_source:\n      provider: local                                # receive Curator output from the local filesystem\n      dataset_name: ../curator/artifacts/merged_swe_tasks # Curator's merged verified task directory\n      split: train"}
+{"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:\n        from: curator.output.merged_tasks_dir\n        when: {task_source.provider: local, task_source.local_block: curator}\n\nruntime_info:\n  input:\n    task_source:\n      provider: local                                # receive Curator output from the local filesystem\n      dataset_name: ../curator/artifacts/merged_swe_tasks # Curator's merged verified task directory\n      split: train"}
 </ConfigSnippet>
 
 The `runtime_info.input.task_source.dataset_name` field is the path Tracer
@@ -61,6 +61,22 @@ During `/tracer:run`, Tracer stages this source into its own
 `artifacts/tasks/<dataset>/` area before Harbor starts, by symlinking one entry
 per task rather than copying. If `verifiable_tasks.txt` exists, only those
 verified task IDs are staged.
+
+### Receive terminal tasks
+
+Keep `provider: local`, select `local_block: terminal-curator`, and set
+`terminal_tasks_dir: ../terminal-curator/artifacts/tasks`. Tracer then requires
+the producer's nonempty verified manifest; it does not use the SWE dataset_name.
+Use the producer run skill to audit instruction/tests/reference-solution
+semantics, record corrections, and repeat fresh Oracle/NOP verification before
+running Tracer. The manifest and runtime checks alone do not prove that audit.
+
+Preparation publishes a fixed owned version behind the public staging pointer.
+If an old real staging directory already exists, select a fresh dataset_path or
+move it yourself after checking active jobs; --overwrite never removes unowned
+data. Local versions contain task links and HF versions contain copied files.
+See [Configuration Guide](/docs/usage/configuration) for source selection,
+immutable terminal batches, and mutable SWE/external content semantics.
 
 ### Rollout config
 

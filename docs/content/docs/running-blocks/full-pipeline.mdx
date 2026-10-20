@@ -17,6 +17,20 @@ downstream Tracer, Trainer, and Evaluator workflow stays the same. The PR
 collection step below applies to the SWE route; the terminal route collects
 its configured bounded question batch inside `terminal-curator:run`.
 
+The terminal producer skill also audits each instruction against its tests and
+reference solution, records corrections and provenance, and repeats fresh
+Oracle/NOP validation before Tracer or Evaluator runs. Runtime verifier success
+alone does not establish task quality. Use `/root:run` / `$root-run` for this
+orchestration. The legacy root `scripts/start.sh` refuses an implicit terminal
+to Tracer chain before generation; explicit terminal-only, the agent audit,
+then tracer-only remain available. The SWE shell helper keeps `create_py.sh`.
+
+Root skills retain complete profiles selected by `TERMINAL_CURATOR_CONFIG`,
+`TRAJGEN_CONFIG`, and `EVAL_CONFIG`. Resolve relative profile filenames from
+the corresponding block directory and use the same effective profiles for
+source selection, dependency validation, resource selection, and execution.
+No private profile is copied over committed config.yaml.
+
 The workflow has four steps: prepare the pipeline, validate it, collect the
 pull requests Curator will use, then ask the root plugin to run it. Block
 configuration remains authoritative, and undeclared handoffs are never inferred

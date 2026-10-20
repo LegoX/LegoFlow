@@ -18,6 +18,14 @@ description: >
 
 # /evaluator:check
 
+
+Use the complete effective profile selected by `EVAL_CONFIG` (relative filenames
+resolve from `blocks/evaluator/`), otherwise this block's `config.yaml`. Retain a
+parent-selected profile throughout checks, setup, launch, and archive. Block-local
+references to `config.yaml` below mean that profile; root shared-credential config
+references keep their existing meaning. Do not reset the selector or copy a
+private profile over the committed config.
+
 Read-only preflight. Wraps `scripts/dryrun.sh` — the single source of
 truth for what "evaluator is ready" means — and adds the few live, contextual
 checks a static script cannot make: an LLM-endpoint reachability probe,

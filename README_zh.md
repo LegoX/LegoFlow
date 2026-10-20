@@ -155,6 +155,14 @@ Codex 中使用对应的 `$terminal-curator-<skill>`。密钥通过环境变量�
 `local_block: curator`。详见
 [terminal 配置说明](blocks/terminal-curator/docs/content/docs/configuration.mdx)。
 
+终端编排请使用 `/root:run`（Codex 为 `$root-run`）：producer skill 会逐项核对
+题面、tests 和参考解，记录修正依据，再重新执行独立 Oracle/NOP 验证后交给下游。
+旧的 `bash scripts/start.sh` 会在生成前拒绝隐式 terminal→Tracer 串联；可显式执行
+`--terminal-curator-only`，由 agent 完成语义审查和重验证后再用 `--tracer-only`。
+SWE shell helper 保留原有 Python `create_py.sh` 启动方式。root skills 全程沿用
+`TERMINAL_CURATOR_CONFIG`、`TRAJGEN_CONFIG`、`EVAL_CONFIG` 选择的完整私有配置；
+相对配置文件名以对应 block 目录为基准。
+
 发布结果还包含原生 `terminal-curator@1.0` registry，可交给 Evaluator。
 将 `registry_path` 设为 `../terminal-curator/artifacts/tasks/registry.json`，
 并设置 `no_hack: false`、`job_analysis.enabled: false`。完整配置见

@@ -4,9 +4,9 @@ description: >
   Launch the tracer pipeline via `scripts/start.sh` after preflight passes,
   and do the tracer-specific post-run accounting: prepare/filter tasks, start
   the per-job LiteLLM proxy, run Harbor trajectories, clean up the proxy,
-  inspect artifacts/jobs/<job>/, update processed_tasks.yaml (the single
+  inspect the job artifacts, update processed_tasks.yaml (the single
   exclusion source), and optionally produce LF-format SFT data under
-  artifacts/sft_data/<job>/lf.json. Long-running. Triggers on phrases like
+  the per-job artifacts/sft_data folder. Long-running. Triggers on phrases like
   "run tracer", "run a tracer job", "launch tracer", "generate
   trajectories", "kick off the harbor jobs", "start the tracer pipeline",
   or "launch harbor for tracer".
@@ -25,6 +25,14 @@ tracer-specific layer that `start.sh` orchestrates, plus the manual post-run
 steps that keep the task-consumption contract correct.
 
 ## Step 1 — Preflight
+
+Read `TRAJGEN_CONFIG` when set (relative paths are resolved from this block),
+otherwise `config.yaml`. Keep that same effective profile throughout preflight,
+preparation, launch, and archive; do not reset a parent-selected profile.
+For `local_block: terminal-curator`, require the producer skill's completed
+instruction/tests/reference-solution semantic audit and fresh Oracle/NOP
+revalidation after corrections before starting downstream rollout. A manifest
+or Oracle/NOP result by itself does not prove that audit occurred.
 
 ```bash
 scripts/dryrun.sh
@@ -63,9 +71,13 @@ scripts/start.sh --update-repos  # refresh Harbor first (or TRAJGEN_UPDATE_REPOS
 
 `start.sh` performs, in order:
 
-1. dryrun preflight;
-2. `scripts/prepare_tasks.sh`, which stages the task pool (set
-   `TRAJGEN_PREPARE_TASKS=0` to skip when it is already staged);
+1. `scripts/prepare_tasks.sh`, which publishes an owned version of the selected
+   task pool and returns the fixed dataset path for this invocation. Source,
+   manifest, settings, and metadata determine reuse. It refuses an unowned
+   existing real directory or symlink even with `--overwrite`; choose a fresh
+   `harbor_job.dataset_path` or move old staging after checking active jobs;
+2. dryrun preflight. `TRAJGEN_PREPARE_TASKS=0` skips preparation and resolves
+   existing staging once; do not use it to bypass source/manifest validation;
 3. generate the per-job LiteLLM config from `runtime_info.input.llm_api` +
    `litellm_proxy` and **start the proxy** on `runtime_info.input.litellm_proxy.port`;
 4. build and run the Harbor command from `config.yaml`, adding one
@@ -94,8 +106,13 @@ outcome and reward.
 
 ## Step 6 — Bookkeeping
 
-Tracer **only** runs tasks listed in curator's `verifiable_tasks.txt`, and must
-never re-run a task it already processed. After every job:
+Terminal Curator requires `verifiable_tasks.txt`; other local sources filter by
+it when present and preserve the valid-directory fallback when absent. Local
+staging holds task links; terminal publication paths are immutable, while
+ordinary SWE/external contents remain mutable links. HF staging copies files.
+
+The launcher excludes ledger entries but does not write outcomes itself. After
+every job, maintain the ledger to avoid accidental repeated work:
 
 1. Append to `artifacts/processed_tasks.yaml` — **one flat entry per task**
    under `runs:`, with `task_id`, `status` (`pending | running | done | failed |

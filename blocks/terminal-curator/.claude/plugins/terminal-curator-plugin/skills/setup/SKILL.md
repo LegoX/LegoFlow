@@ -17,7 +17,10 @@ Honor an explicit `--config` overlay and use it for every following command.
 2. Preserve inputs the user already supplied. Ask only for information needed
    by the chosen source: `json` needs a questions JSON path, `tasks` needs a
    candidate pool, and generation modes need an endpoint/model and an
-   environment-supplied LLM key. Never write a secret into tracked config.
+   environment-supplied LLM key. Keep all outputs inside artifacts, keep the
+   registry at `<task-pool>/registry.json`, and separate reports from source,
+   lifecycle state and immutable publications. Never write a secret into
+   tracked config.
 3. Execute `bash scripts/setup.sh` (plus `--config <file>` when selected).
    This initializes the pinned Terminal-Lego submodule and creates the
    block environment outside `repos/`. It also prepares Harbor through

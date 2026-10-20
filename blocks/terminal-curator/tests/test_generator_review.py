@@ -63,6 +63,12 @@ def review_generator(adapter, responses, codes=None):
     "false",
     '[{"pass": true}]',
     '```json\n{"pass": "true"}\n```',
+    '{"pass": true}',
+    '{"pass": true, "issues": "invalid schema"}',
+    '{"pass": true, "issues": [null]}',
+    '{"pass": true, "issues": ["a concrete defect"]}',
+    True,
+    {"pass": True, "issues": []},
 ])
 def test_unapproved_reviews_cannot_use_the_upstream_fallback(adapter, response):
     generator, calls = review_generator(adapter, [response] * 3)
@@ -92,7 +98,7 @@ def test_a_later_candidate_needs_its_own_positive_review(adapter):
     first = "def test_first():\n    assert True\n"
     approved = "def test_second():\n    assert True\n"
     generator, calls = review_generator(
-        adapter, ['{"pass": false}', '{"pass": true}'], [first, approved],
+        adapter, ['{"pass": false, "issues": ["defect"]}', '{"pass": true, "issues": []}'], [first, approved],
     )
 
     result = generator._generate_tests("Write the required output.", {}, "reference")
@@ -104,11 +110,11 @@ def test_a_later_candidate_needs_its_own_positive_review(adapter):
 
 def test_failed_reviews_replace_an_earlier_approval_for_the_same_code(adapter):
     generator, calls = review_generator(adapter, [
-        '{"pass": true}',
-        '{"pass": false}',
+        '{"pass": true, "issues": []}',
+        '{"pass": false, "issues": ["defect"]}',
         None,
         '{"pass": "true"}',
-        '```json\n{"pass": true}\n```',
+        '```json\n{"pass": true, "issues": []}\n```',
     ])
 
     assert generator._generate_tests("Original instruction.", {}, "reference") is not None

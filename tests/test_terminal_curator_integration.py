@@ -54,6 +54,8 @@ def test_huggingface_does_not_select_a_local_producer():
 @pytest.mark.parametrize("source", [
     {"provider": "unknown", "dataset_name": "tasks"},
     {"provider": "local", "local_block": "unknown", "dataset_name": "tasks"},
+    *({"provider": "local", "local_block": value, "dataset_name": "tasks"}
+      for value in (False, True, None, "", 0, [], {})),
     {"provider": "local", "local_block": "terminal-curator", "dataset_name": "old-swe"},
 ])
 def test_invalid_selection_fails_instead_of_using_swe(source):
@@ -75,7 +77,7 @@ def staging(tmp_path):
     block = tmp_path / "blocks/tracer"
     scripts = block / "scripts"
     scripts.mkdir(parents=True)
-    for name in ("prepare_tasks.sh", "task_source.py"):
+    for name in ("prepare_tasks.sh", "task_source.py", "stage_tasks.py"):
         shutil.copy2(TRACER_SCRIPTS / name, scripts / name)
     (block / "repos/harbor/.git").mkdir(parents=True)
     python = block / "artifacts/env/harbor/bin/python"
@@ -97,9 +99,9 @@ def staging(tmp_path):
     config_path = block / "config.yaml"
     config_path.write_text(yaml.safe_dump(config))
 
-    def prepare():
+    def prepare(*args):
         return subprocess.run(
-            ["bash", str(scripts / "prepare_tasks.sh")],
+            ["bash", str(scripts / "prepare_tasks.sh"), *args],
             cwd=block, text=True, capture_output=True, timeout=30,
         )
 
@@ -199,6 +201,7 @@ def root_runner(tmp_path):
         env = {**os.environ, "TEST_EVENTS": str(events)}
         env.pop("TRAJGEN_CONFIG", None)
         env.pop("TERMINAL_CURATOR_CONFIG", None)
+        env.pop("EVAL_CONFIG", None)
         env.update(overrides or {})
         return subprocess.run(
             ["bash", str(tmp_path / "scripts/start.sh"), *(["--foreground"] if foreground else []), "--no-dryrun", *args],
@@ -208,9 +211,20 @@ def root_runner(tmp_path):
     return tmp_path, events, run
 
 
-def test_root_runner_waits_for_the_selected_producer(root_runner):
+def test_root_runner_requires_semantic_audit_between_terminal_and_tracer(root_runner):
     _, events, run = root_runner
     result = run()
+    assert result.returncode == 2
+    assert "/root:run" in result.stderr
+    assert "semantic audit" in result.stderr
+    assert not events.exists()
+
+
+def test_root_runner_allows_explicit_terminal_then_audited_tracer(root_runner):
+    _, events, run = root_runner
+    result = run("--terminal-curator-only")
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = run("--tracer-only")
     assert result.returncode == 0, result.stdout + result.stderr
     assert events.read_text().splitlines() == ["terminal-curator", "prepare", "tracer"]
 
@@ -218,7 +232,18 @@ def test_root_runner_waits_for_the_selected_producer(root_runner):
 def test_root_runner_stops_before_tracer_if_the_producer_fails(root_runner):
     root, events, run = root_runner
     (root / "blocks/terminal-curator/scripts/start.sh").write_text("#!/bin/bash\nexit 23\n")
-    assert run().returncode == 23
+    assert run("--terminal-curator-only").returncode == 23
+    assert not events.exists()
+
+
+def test_root_explicit_terminal_mode_does_not_echo_invalid_yaml_secret_lines(root_runner):
+    root, events, run = root_runner
+    marker = "SENTINEL_PRIVATE_ROOT_RESOURCE_FIELD"
+    (root / "blocks/terminal-curator/config.yaml").write_text(f'meta_info: {{resources: {{pwd: "{marker}\n')
+    result = run("--terminal-curator-only")
+    assert result.returncode != 0
+    assert marker not in result.stdout + result.stderr
+    assert "invalid YAML" in result.stderr
     assert not events.exists()
 
 
@@ -227,6 +252,7 @@ def test_root_runner_dry_run_is_read_only(root_runner):
     result = run("--dry-run")
     assert result.returncode == 0
     assert "execution order: terminal-curator tracer" in result.stdout
+    assert "real implicit terminal pipeline is refused" in result.stdout
     assert not events.exists()
 
 
@@ -253,7 +279,7 @@ def test_root_tmux_launcher_preserves_terminal_provider_overrides(root_runner):
     )
     binary.chmod(0o755)
     captured = root / "tmux-args"
-    result = run(foreground=False, overrides={
+    result = run("--terminal-curator-only", foreground=False, overrides={
         "PATH": str(binary.parent) + os.pathsep + os.environ["PATH"],
         "TEST_TMUX_ARGS": str(captured),
         "MODEL_NAME": "fake-terminal-model",
@@ -304,12 +330,16 @@ def test_remote_worker_forwards_the_selected_profile_as_a_quoted_path(root_runne
     worker = list(lexer)
     assert worker[:3] == ["cd", remote_directory, "&&"]
     expected = str(profile) if external else str(Path(remote_directory) / profile.relative_to(block_dir))
+    assert worker[3] == "export"
+    export_end = worker.index("&&", 3)
+    exports = worker[4:export_end]
+    assert variable + "=" + expected in exports
+    child = worker[export_end + 1:]
     if block == "terminal-curator":
-        assert worker[3:7] == ["bash", "scripts/start.sh", "--config", expected]
+        assert child[:4] == ["bash", "scripts/start.sh", "--config", expected]
     else:
-        assert worker[3:5] == ["export", "TRAJGEN_CONFIG=" + expected]
-        assert worker[6:8] == ["bash", "scripts/prepare_tasks.sh"]
-        assert worker[9:11] == ["bash", "scripts/start.sh"]
+        assert child[:2] == ["bash", "scripts/prepare_tasks.sh"]
+        assert child[3:5] == ["bash", "scripts/start.sh"]
     assert not events.exists()
     assert not (root / "NEVER_CREATED").exists()
 

@@ -4,7 +4,9 @@ set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${TRAJGEN_CONFIG:-$BLOCK_DIR/config.yaml}"
+[[ "$CONFIG" = /* ]] || CONFIG="$BLOCK_DIR/$CONFIG"
 OVERWRITE=0
+RESULT_FILE=""
 
 usage() {
   cat <<'EOF'
@@ -20,8 +22,12 @@ one link per task id, so a verifiable_tasks.txt manifest still filters what is
 staged, and nothing is duplicated on disk. A huggingface source is copied out of
 its downloaded snapshot.
 
-Existing valid task directories are reused. Existing invalid directories require
---overwrite before they are replaced.
+Publishes an atomic pointer to an owned version directory. The selected source,
+manifest, settings, and file metadata determine cache reuse. Existing real dataset
+directories or unrelated symlinks are never replaced, including with --overwrite.
+Choose a new empty dataset_path or move old staging yourself after checking jobs.
+--overwrite forces a new Hugging Face download; local sources are always checked.
+--result-file PATH records the fixed dataset path for this invocation.
 EOF
 }
 
@@ -34,6 +40,11 @@ while [[ $# -gt 0 ]]; do
       else
         CONFIG="$BLOCK_DIR/$2"
       fi
+      shift 2
+      ;;
+    --result-file)
+      [[ $# -ge 2 ]] || { echo "ERROR: --result-file requires a value" >&2; exit 2; }
+      RESULT_FILE="$2"
       shift 2
       ;;
     --overwrite)
@@ -89,125 +100,6 @@ abspath() {
   else
     echo "$BLOCK_DIR/$p"
   fi
-}
-
-validate_tasks() {
-  local root="$1"
-  python3 - "$root" <<'PY'
-from pathlib import Path
-import sys
-
-root = Path(sys.argv[1])
-if not root.is_dir():
-    print("missing")
-    raise SystemExit(1)
-
-required_files = ["task.toml", "instruction.md"]
-required_dirs = ["environment", "tests"]
-
-valid = []
-for child in sorted(p for p in root.iterdir() if p.is_dir()):
-    if all((child / name).is_file() for name in required_files) and all(
-        (child / name).is_dir() for name in required_dirs
-    ):
-        valid.append(child.name)
-
-if not valid:
-    print("invalid")
-    raise SystemExit(1)
-
-print(f"valid:{len(valid)}")
-PY
-}
-
-copy_harbor_tasks() {
-  local src="$1"
-  local dst="$2"
-  python3 - "$src" "$dst" <<'PY'
-from pathlib import Path
-import shutil
-import sys
-
-src = Path(sys.argv[1])
-dst = Path(sys.argv[2])
-dst.parent.mkdir(parents=True, exist_ok=True)
-if dst.exists():
-    shutil.rmtree(dst)
-shutil.copytree(src, dst, symlinks=True)
-PY
-}
-
-# Stage a local task pool by linking, not copying. Harbor reads each task dir
-# through the link, so the staged tree costs nothing and never drifts from the
-# pool curator keeps writing to. The directory itself is real: one symlink per
-# task is what lets the manifest filter still apply, which a single link to the
-# whole pool could not do.
-link_harbor_tasks() {
-  local src="$1"
-  local dst="$2"
-  local manifest="${3:-}"
-  local strict="${4:-false}"
-  python3 - "$src" "$dst" "$manifest" "$strict" <<'PY'
-from pathlib import Path
-import shutil
-import sys
-
-src = Path(sys.argv[1]).resolve()
-dst = Path(sys.argv[2])
-manifest = Path(sys.argv[3]) if sys.argv[3] else None
-strict = sys.argv[4] == "true"
-
-if manifest is not None:
-    with manifest.open(encoding="utf-8") as fh:
-        allowed = sorted({
-            line.strip() for line in fh
-            if line.strip() and not line.startswith("#")
-        })
-    if not allowed:
-        print(f"ERROR: manifest is empty: {manifest}", file=sys.stderr)
-        sys.exit(1)
-else:
-    allowed = sorted(p.name for p in src.iterdir() if p.is_dir())
-
-if strict:
-    if src == dst.resolve() or src in dst.resolve().parents or dst.resolve() in src.parents:
-        raise SystemExit("ERROR: task source and staging directory must not overlap")
-    for task_id in allowed:
-        if task_id in {".", ".."} or "/" in task_id or "\\" in task_id:
-            raise SystemExit("ERROR: manifest task IDs must be direct directory names")
-        task = src / task_id
-        if task.is_symlink() or not task.is_dir() or task.resolve().parent != src:
-            raise SystemExit(f"ERROR: manifest task is missing or outside the source: {task_id}")
-        if not all((task / name).is_file() for name in ("task.toml", "instruction.md")) or not all(
-            (task / name).is_dir() for name in ("environment", "tests")
-        ):
-            raise SystemExit(f"ERROR: manifest task has an invalid Harbor layout: {task_id}")
-
-dst.parent.mkdir(parents=True, exist_ok=True)
-if dst.is_symlink() or dst.is_file():
-    dst.unlink()
-elif dst.exists():
-    shutil.rmtree(dst)
-dst.mkdir(parents=True)
-
-linked = 0
-missing = []
-for task_id in allowed:
-    src_task = src / task_id
-    if not src_task.is_dir():
-        missing.append(task_id)
-        continue
-    # Absolute target: the staged dir is read from several working directories
-    # (Harbor, the dashboard, dryrun), and a relative link would only resolve
-    # from one of them.
-    (dst / task_id).symlink_to(src_task, target_is_directory=True)
-    linked += 1
-
-for task_id in missing:
-    print(f"WARN: manifest entry missing from source: {task_id}", file=sys.stderr)
-scope = f"manifest={manifest.name}" if manifest is not None else "no manifest — every task dir"
-print(f"linked:{linked}/{len(allowed)} ({scope})")
-PY
 }
 
 find_valid_task_root() {
@@ -338,7 +230,6 @@ PY
 
 PROVIDER="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field provider)"
 DATASET_NAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_name)"
-MANIFEST_REQUIRED="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field manifest_required)"
 SPLIT="$(cfg runtime_info.input.task_source.split)"
 HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
 HARBOR_UV_RAW="$(cfg meta_info.environment.harbor_uv)"
@@ -349,7 +240,10 @@ TARGET_RAW="$(cfg runtime_info.input.harbor_job.dataset_path)"
 [[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.harbor.path is empty" >&2; exit 1; }
 [[ -n "$HARBOR_UV_RAW" ]] || { echo "ERROR: meta_info.environment.harbor_uv is empty" >&2; exit 1; }
 
-DATASET_BASENAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_id)"
+DATASET_BASENAME="$(cfg runtime_info.input.harbor_job.dataset)"
+if [[ -z "$DATASET_BASENAME" ]]; then
+  DATASET_BASENAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_id)"
+fi
 if [[ -z "$TARGET_RAW" ]]; then
   TARGET_RAW="artifacts/tasks/$DATASET_BASENAME"
 fi
@@ -358,8 +252,8 @@ TARGET_DIR="$(abspath "$TARGET_RAW")"
 HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
 HARBOR_UV_DIR="$(abspath "$HARBOR_UV_RAW")"
 HARBOR_PYTHON="$HARBOR_UV_DIR/bin/python"
-CACHE_DIR="$BLOCK_DIR/artifacts/tasks/.cache/$DATASET_BASENAME"
-EXTRACT_DIR="$BLOCK_DIR/artifacts/tasks/.cache/${DATASET_BASENAME}_extracted"
+STAGE_ARGS=(--block-dir "$BLOCK_DIR" --config "$CONFIG" --target "$TARGET_DIR")
+[[ -z "$RESULT_FILE" ]] || STAGE_ARGS+=(--result-file "$RESULT_FILE")
 
 echo "=== tracer prepare tasks ==="
 echo "Config:   $CONFIG"
@@ -367,24 +261,6 @@ echo "Provider: $PROVIDER"
 echo "Dataset:  $DATASET_NAME"
 [[ -n "$SPLIT" ]] && echo "Split:    $SPLIT"
 echo "Target:   $TARGET_RAW"
-
-if [[ -d "$TARGET_DIR" ]]; then
-  if validate_tasks "$TARGET_DIR" >/tmp/tracer_prepare_validate.$$ 2>/dev/null; then
-    STATUS="$(cat /tmp/tracer_prepare_validate.$$)"
-    rm -f /tmp/tracer_prepare_validate.$$
-    if [[ "$MANIFEST_REQUIRED" != "true" ]]; then
-      echo "Target already contains Harbor task directories ($STATUS)."
-      exit 0
-    fi
-    echo "Refreshing terminal task staging from the current verified manifest ($STATUS)."
-  elif [[ "$OVERWRITE" != "1" ]]; then
-    rm -f /tmp/tracer_prepare_validate.$$
-    echo "ERROR: target exists but does not look like Harbor task directories: $TARGET_RAW" >&2
-    echo "Re-run with --overwrite to replace it." >&2
-    exit 1
-  fi
-  rm -f /tmp/tracer_prepare_validate.$$
-fi
 
 [[ -e "$HARBOR_DIR/.git" ]] || { echo "ERROR: Harbor repo missing at $HARBOR_PATH_RAW; run scripts/update_repos.sh first" >&2; exit 1; }
 [[ -x "$HARBOR_PYTHON" ]] || { echo "ERROR: Harbor Python env missing at $HARBOR_PYTHON; install environment first" >&2; exit 1; }
@@ -399,22 +275,26 @@ case "$PROVIDER" in
       echo "Expected child task dirs with task.toml, instruction.md, environment/, and tests/." >&2
       exit 1
     fi
-    MANIFEST="$VALID_ROOT/verifiable_tasks.txt"
-    if [[ -f "$MANIFEST" ]]; then
-      echo "Manifest found: $MANIFEST — linking only listed tasks."
-      link_harbor_tasks "$VALID_ROOT" "$TARGET_DIR" "$MANIFEST" "$MANIFEST_REQUIRED"
-    elif [[ "$MANIFEST_REQUIRED" == "true" ]]; then
-      echo "ERROR: terminal-curator source requires verifiable_tasks.txt: $VALID_ROOT" >&2
-      exit 1
-    else
-      echo "No verifiable_tasks.txt in source — linking all task dirs."
-      link_harbor_tasks "$VALID_ROOT" "$TARGET_DIR" ""
-    fi
+    python3 "$BLOCK_DIR/scripts/stage_tasks.py" "${STAGE_ARGS[@]}" --source "$VALID_ROOT"
     ;;
   huggingface)
-    mkdir -p "$(dirname "$CACHE_DIR")"
-    rm -rf "$CACHE_DIR"
-    echo "Downloading Hugging Face dataset snapshot to artifacts/tasks/.cache/$DATASET_BASENAME ..."
+    python3 "$BLOCK_DIR/scripts/stage_tasks.py" "${STAGE_ARGS[@]}" --check-target
+    if [[ "$OVERWRITE" != 1 ]]; then
+      if python3 "$BLOCK_DIR/scripts/stage_tasks.py" "${STAGE_ARGS[@]}" --reuse-copy; then
+        exit 0
+      else
+        status=$?
+        [[ "$status" == 1 ]] || exit "$status"
+      fi
+    fi
+    # Download only into a newly allocated directory. Never remove a user's old
+    # dataset/cache based on its basename or an untrusted target configuration.
+    mkdir -p "$BLOCK_DIR/artifacts/tasks/.downloads"
+    DOWNLOAD_DIR="$(mktemp -d "$BLOCK_DIR/artifacts/tasks/.downloads/snapshot-XXXXXXXX")"
+    trap 'rm -rf -- "$DOWNLOAD_DIR"' EXIT
+    CACHE_DIR="$DOWNLOAD_DIR/snapshot"
+    EXTRACT_DIR="$DOWNLOAD_DIR/extracted"
+    echo "Downloading Hugging Face dataset snapshot to a private temporary directory ..."
     if ! "$HARBOR_PYTHON" - "$DATASET_NAME" "$CACHE_DIR" <<'PY'
 import sys
 from huggingface_hub import snapshot_download
@@ -446,14 +326,14 @@ PY
       done
       if [[ -z "$VALID_ROOT" ]]; then
         echo "ERROR: downloaded dataset is not a prebuilt Harbor task directory." >&2
-        echo "Checked both raw snapshot and extracted archives under artifacts/tasks/.cache/." >&2
+        echo "Checked both the raw snapshot and its safely extracted archives." >&2
         echo "Expected child task dirs with task.toml, instruction.md, environment/, and tests/." >&2
         echo "If this dataset needs conversion, add an explicit adapter flow to config and prepare_tasks.sh." >&2
         exit 1
       fi
     fi
 
-    copy_harbor_tasks "$VALID_ROOT" "$TARGET_DIR"
+    python3 "$BLOCK_DIR/scripts/stage_tasks.py" "${STAGE_ARGS[@]}" --source "$VALID_ROOT" --copy
     ;;
   *)
     echo "ERROR: unsupported task_source.provider: $PROVIDER" >&2
@@ -462,7 +342,4 @@ PY
     ;;
 esac
 
-validate_tasks "$TARGET_DIR" >/tmp/tracer_prepare_validate.$$
-STATUS="$(cat /tmp/tracer_prepare_validate.$$)"
-rm -f /tmp/tracer_prepare_validate.$$
-echo "Prepared Harbor tasks at $TARGET_RAW ($STATUS)."
+echo "Prepared Harbor tasks at $TARGET_RAW."

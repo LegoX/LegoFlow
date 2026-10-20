@@ -25,7 +25,9 @@ changes belong upstream.
 Tracer starts from a verified task source. In `config.yaml`, this is controlled
 by `runtime_info.input.task_source`:
 
-- `local`: read Curator output, usually `../curator/artifacts/merged_swe_tasks`.
+- `local`, `local_block: curator` (default when omitted): read SWE Curator output, usually `../curator/artifacts/merged_swe_tasks`.
+- `local`, `local_block: terminal-curator`: read `terminal_tasks_dir`, normally `../terminal-curator/artifacts/tasks`.
+- `local`, `local_block: external`: read another local Harbor pool through `dataset_name`.
 - `huggingface`: download a compatible task dataset snapshot.
 
 The intake logic lives in `scripts/prepare_tasks.sh`. It stages Harbor task
@@ -35,18 +37,27 @@ directories under:
 artifacts/tasks/<dataset>/
 ```
 
-For local Curator output, Tracer looks for `verifiable_tasks.txt`. If the
-manifest exists, only listed task IDs are staged. If it is missing, Tracer
-stages every valid Harbor task directory. This is the manifest gate in the
-diagram: verified Curator tasks get through; unfinished or failed task
-candidates stay out.
+When `verifiable_tasks.txt` exists, only listed IDs are staged. Terminal Curator
+requires a nonempty manifest and rejects missing, invalid, or escaping task IDs.
+Other sources preserve the fallback to valid Harbor child directories. The
+terminal producer's run skill must also audit the instructions, tests, and
+reference solution, correct discrepancies, and repeat fresh Oracle/NOP checks
+before hand-off. A manifest alone does not certify that semantic review.
 
-A local source is staged by **linking, not copying**: the dataset directory is
-real, and holds one symlink per task id pointing back at Curator's pool. Nothing
-is duplicated on disk, and a staged batch never drifts from the pool Curator
-keeps writing to. Linking per task rather than linking the pool as a whole is
-what lets the manifest gate above still apply. A Hugging Face source is copied
-out of its downloaded snapshot instead.
+`prepare_tasks.sh` atomically updates the public dataset path to a version
+under `artifacts/tasks/.legoflow-staging-v1/`. Version selection includes the
+resolved source, manifest, settings, and file metadata. Local versions hold one
+symlink per selected task; Hugging Face versions materialize copies before the
+temporary download is removed. `start.sh` uses the fixed version returned by
+its own prepare invocation, so concurrent preparation cannot change the selected
+batch by moving the public pointer. Terminal task links resolve into immutable
+producer batches. Mutable SWE/external content retains link semantics and can
+change in place; it is not a byte snapshot.
+
+Preparation refuses an existing real dataset directory or an unrelated symlink,
+including with `--overwrite`. Choose a fresh `harbor_job.dataset_path`, or move
+old staging yourself after checking active jobs. Version caches are retained
+until explicit cleanup; keep versions referenced by active jobs.
 
 Tracer also keeps a consumption ledger:
 
@@ -56,8 +67,10 @@ artifacts/processed_tasks.yaml
 
 Before a new run, `scripts/start.sh` calls `scripts/resolve_exclude_tasks.py` to
 turn this ledger, plus `HARBOR_EXCLUDE_TASKS`, into Harbor
-`--exclude-task-name` flags. That gives Tracer exactly-once behavior for normal
-runs: completed or retired tasks are not rolled out again by accident.
+`--exclude-task-name` flags. The run skill's agent must update this ledger from
+actual results; the launcher does not write outcomes automatically. This avoids
+repeats when bookkeeping is maintained, rather than guaranteeing exactly-once
+execution. Task IDs share one exclusion namespace across sources.
 
 ## 2. Model Proxy
 

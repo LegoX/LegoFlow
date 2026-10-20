@@ -3,7 +3,7 @@ title: Evaluator Hand-off
 description: Evaluate the published terminal task pool through Harbor's native local registry.
 ---
 
-Each verified publication includes `artifacts/tasks/registry.json`, a native
+After the agent's semantic audit, each verified publication includes `artifacts/tasks/registry.json`, a native
 Harbor registry for `terminal-curator@1.0`. Evaluator can consume it through
 its existing `harbor_registry` provider. The checked-in SWE benchmark remains
 the default until you choose this registry in an evaluation run profile.
@@ -42,6 +42,10 @@ expects metadata that these terminal verifiers do not provide, so leave
 `job_analysis.enabled: false`. Harbor still records per-task rewards,
 exceptions, and agent trajectories for the Evaluator dashboard.
 
+Evaluator freezes the configured public registry pointer to the physical
+immutable registry before constructing its job command. A concurrent new
+publication therefore cannot change which batch that job loads.
+
 Run `/evaluator:check` or `$evaluator-check`, then the authorized
 `/evaluator:run` or `$evaluator-run`. The registry and its referenced task
 paths must be readable on the configured Docker host. This workflow uses
@@ -51,7 +55,10 @@ curation batch.
 ## What the registry contains
 
 The block writes the registry inside the new immutable publication before
-switching the `artifacts/tasks` symlink. Its shape is:
+switching the `artifacts/tasks` symlink. Configuration requires the registry
+output to be exactly the pool's `registry.json`, so it cannot drift to a
+different batch. Harbor checksums bind the copied task bytes to both fresh
+validation jobs before publication. Its shape is:
 
 ```json
 [

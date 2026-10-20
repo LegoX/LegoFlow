@@ -13,11 +13,15 @@ import yaml
 
 def resolve(config: dict) -> dict:
     source = ((config.get("runtime_info") or {}).get("input") or {}).get("task_source") or {}
+    if not isinstance(source, dict):
+        raise ValueError("runtime_info.input.task_source must be a mapping")
     provider = source.get("provider", "local")
-    if provider not in {"local", "huggingface"}:
+    if not isinstance(provider, str) or provider not in {"local", "huggingface"}:
         raise ValueError(f"unsupported task_source.provider: {provider!r}")
-    local_block = source.get("local_block") or "curator"
-    if provider == "local" and local_block not in {"curator", "terminal-curator", "external"}:
+    local_block = source.get("local_block", "curator")
+    if provider == "local" and (
+        not isinstance(local_block, str) or local_block not in {"curator", "terminal-curator", "external"}
+    ):
         raise ValueError(f"unsupported task_source.local_block: {local_block!r}")
     terminal = provider == "local" and local_block == "terminal-curator"
     key = "terminal_tasks_dir" if terminal else "dataset_name"
@@ -47,7 +51,12 @@ def main() -> int:
     try:
         data = yaml.safe_load(args.config.read_text(encoding="utf-8")) or {}
         result = resolve(data)
-    except (OSError, ValueError, yaml.YAMLError) as exc:
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        print(f"ERROR: invalid YAML in {args.config}{location}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     if args.field:

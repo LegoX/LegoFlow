@@ -287,8 +287,11 @@ def test_run_pid_is_owned_during_work_and_removed_after_exit(
                                     str(local_block.config_path), 'run'])
     monkeypatch.setattr(adapter.signal, 'signal', lambda *args: None)
 
-    def fake_run(config):
+    def fake_run(config, run_id=None, config_path=None):
         assert (local_block.artifacts / 'run.pid').read_text() == str(os.getpid())
+        process = json.loads((local_block.artifacts / 'run.process.json').read_text())
+        assert process['run_id'] == run_id and process['pid'] == os.getpid()
+        assert config_path == local_block.config_path
         if fail:
             raise ValueError('injected early run failure')
         return {'run_id': 'fixture-run', 'verified_tasks': ['fixture-task']}
@@ -296,6 +299,7 @@ def test_run_pid_is_owned_during_work_and_removed_after_exit(
     monkeypatch.setattr(adapter, 'run', fake_run)
     assert adapter.main() == (1 if fail else 0)
     assert not (local_block.artifacts / 'run.pid').exists()
+    assert not (local_block.artifacts / 'run.process.json').exists()
 
 
 def test_archive_preserves_effective_overlay_and_redacts_credentials(
@@ -342,7 +346,7 @@ def test_empty_uninitialized_repo_directories_do_not_record_the_parent_head(
 
 @pytest.mark.parametrize('report_started,expected_copy', [
     ('2020-01-01T00:00:00+00:00', False),
-    ('2026-10-20T12:00:01+00:00', True),
+    ('2026-10-20T12:00:01+00:00', False),
 ])
 def test_preflight_failure_archive_does_not_adopt_old_report(
         adapter, local_block, report_started, expected_copy):
@@ -390,7 +394,7 @@ def test_archive_finalizes_orphaned_running_state(adapter, local_block, exit_cod
         'updated_at': '2026-10-20T12:00:02+00:00',
     }))
     adapter.archive(local_block.config_path, local_block.config, exit_code,
-                    '2026-10-20T12:00:00+00:00')
+                    '2026-10-20T12:00:00+00:00', run_id='terminated-worker-run')
     state = json.loads(state_path.read_text())
     assert state['status'] == status and state['stage'] == status
     assert state['run_id'] == 'terminated-worker-run'
@@ -460,8 +464,9 @@ def test_stop_refuses_a_pid_owned_by_an_unrelated_local_process(local_block, mon
         unrelated.wait(timeout=5)
 
 
+@pytest.mark.parametrize('later_run_starts,already_exited', [(False, False), (True, False), (False, True)])
 def test_stop_removes_only_current_run_compose_containers_and_networks(
-        local_block, tmp_path, monkeypatch):
+        local_block, tmp_path, monkeypatch, later_run_starts, already_exited):
     scripts = local_block.block / 'scripts'
     for name in ['common.sh', 'stop.sh']:
         shutil.copy2(BLOCK / 'scripts' / name, scripts / name)
@@ -509,7 +514,13 @@ else:
 
     ready = tmp_path / 'owned-run-ready'
     runner = scripts / 'terminal_curator.py'
-    runner.write_text('import sys, time\nfrom pathlib import Path\n'
+    changed_state = str(local_block.artifacts / 'state.json')
+    handler = ('import signal, json\n'
+               'def stopped(*args):\n'
+               f'    Path({changed_state!r}).write_text(json.dumps({{"run_id":"previous-run","status":"running"}}))\n'
+               '    raise SystemExit(0)\n'
+               'signal.signal(signal.SIGTERM,stopped)\n') if later_run_starts else ''
+    runner.write_text('import sys, time\nfrom pathlib import Path\n' + handler +
                       'Path(sys.argv[2]).write_text("ready")\n'
                       'while True: time.sleep(1)\n')
     owned = subprocess.Popen([sys.executable, str(runner), 'run', str(ready)])
@@ -521,6 +532,13 @@ else:
             time.sleep(0.01)
         assert ready.exists(), 'isolated owned run did not start'
         (local_block.artifacts / 'run.pid').write_text(str(owned.pid))
+        ticks = Path(f'/proc/{owned.pid}/stat').read_text().rsplit(')', 1)[1].split()[19]
+        (local_block.artifacts / 'run.process.json').write_text(json.dumps(
+            {'pid': owned.pid, 'start_ticks': ticks, 'run_id': run_id}))
+        if already_exited:
+            owned.terminate()
+            reaper.join(timeout=5)
+            assert owned.poll() is not None
         result = subprocess.run(['bash', str(scripts / 'stop.sh')],
                                 text=True, capture_output=True, timeout=25)
         assert result.returncode == 0, result.stderr

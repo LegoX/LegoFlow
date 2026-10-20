@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>LegoFlow-Terminal Curator</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('curator-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}</script>
+<style>/* Shared Curator layout and tokens, adapted from ../curator/dashboard/progress_monitor_multi.py.
+   Keep the common chrome aligned with the existing Curator dashboard. */
+
+/* Palette: .claude/plugins/root-plugin/resources/DASHBOARD_PALETTE.md.
+   Light is the default and dark is opt-in via :root[data-theme="dark"], matching
+   the tracer dashboard's theme model (and the docs site's own light-first look). */
+:root {
+  color-scheme: light;
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --c-bg: #fafaf7; --c-bg-2: #ffffff; --c-panel: #ffffff; --c-border: #e6e3da;
+  --c-fg: #111111; --c-fg-dim: #4a453e; --c-fg-mute: #6b6b66; --c-fg-faint: #8c8c85;
+  --c-accent: #b3431f; --c-accent-soft: #b3431f1f; --c-accent-border: #b3431f80;
+  --c-good: #3f8f2f; --c-bad: #d03b3b; --c-warn: #c8860d; --c-violet: #4a3aa7;
+  --c-track: #e6e3da;
+  /* bar fills carry no text and repeat dozens of times per page, so they use a
+     softened tint of the accent; the brand colour itself is unchanged */
+  --c-accent-fill: #c96a45;
+  --c-method-bg: #b3431f14; --c-method-head: #b3431f;
+  font-size: 15px;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --c-bg: #14110e; --c-bg-2: #1a171480; --c-panel: #1a1714; --c-border: #302a2499;
+  --c-fg: #f0ede7; --c-fg-dim: #c9c2b6; --c-fg-mute: #a9a297; --c-fg-faint: #8a847a;
+  --c-accent: #efa07c; --c-accent-soft: #efa07c33; --c-accent-border: #efa07c80;
+  --c-good: #4a9440; --c-bad: #d03b3b; --c-warn: #fab219; --c-violet: #9085e9;
+  --c-track: #302a24;
+  --c-accent-fill: #c9805f;
+  --c-method-bg: #efa07c1f; --c-method-head: #f5c9b4;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--c-bg); color: var(--c-fg);
+  font-family: var(--font-sans); -webkit-font-smoothing: antialiased; height: 100vh; }
+code, pre, .mono { font-family: var(--font-mono); }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--c-fg-faint); border-radius: 3px; }
+.layout { display: flex; height: 100vh; overflow: hidden; }
+.sidebar { width: 240px; flex-shrink: 0; border-right: 1px solid var(--c-border);
+  background: var(--c-panel); display: flex; flex-direction: column; overflow: hidden; }
+:root[data-theme="dark"] .sidebar { background: linear-gradient(180deg, #12100d 0%, var(--c-bg) 100%); }
+.sidebar-logo { padding: 14px 16px; border-bottom: 1px solid var(--c-border); display: flex; align-items: center; gap: 10px; }
+.logo-mark { width: 32px; height: 28px; border-radius: 7px; background: var(--c-accent);
+  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 13px; }
+.logo-title { font-size: 15px; font-weight: 650; line-height: 1.25; }
+
+.nav { padding: 8px; border-bottom: 1px solid var(--c-border); display: flex; flex-direction: column; gap: 2px; }
+.nav-item { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
+  background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
+  padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.nav-item:hover { background: var(--c-accent-soft); color: var(--c-fg); }
+.nav-item.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); color: var(--c-accent); }
+.nav-icon { flex: 0 0 auto; width: 18px; text-align: center; opacity: .85; }
+.nav-count { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--c-fg-mute); }
+.sidebar-section { padding: 10px 8px; flex: 1; overflow: auto; }
+.section-label { text-transform: uppercase; font-size: 11px; letter-spacing: .06em; color: var(--c-fg-mute); padding: 0 8px 6px; font-weight: 700; }
+.sidebar-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 5px 8px; font-size: 13px; }
+.sidebar-stat .l { color: var(--c-fg-mute); }
+.sidebar-stat .v { font-weight: 650; font-family: var(--font-mono); }
+
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { padding: 10px 24px; border-bottom: 1px solid var(--c-border); display: flex;
+  align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; }
+.topbar h1 { font-size: 17px; margin: 0; font-weight: 650; }
+.topbar .sub { font-size: 13px; color: var(--c-fg-mute); margin-top: 2px; }
+.topbar-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center;
+  justify-content: center; flex: 0 0 36px; background: var(--c-bg-2); border: 1px solid var(--c-border);
+  color: var(--c-fg-dim); border-radius: 8px; cursor: pointer; }
+.icon-btn:hover { color: var(--c-fg); border-color: var(--c-accent-border); }
+.icon { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme-toggle .theme-sun { display: none; }
+.theme-toggle .theme-moon { display: block; }
+:root[data-theme="dark"] .theme-toggle .theme-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .theme-moon { display: none; }
+
+.content { flex: 1; overflow: auto; padding: 18px 24px 32px; }
+/* Modal — a centred dialog over a dimmed page. Generous gutters, a quiet header
+   rule, and one clear column of content: the dialog should read like a page, not
+   a tooltip that grew. */
+.modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center;
+  justify-content: center; padding: 32px 24px; background: rgba(17, 17, 17, .32); }
+:root[data-theme="dark"] .modal { background: rgba(0, 0, 0, .5); }
+.modal[hidden] { display: none; }
+.modal-box { width: min(920px, 94vw); max-height: min(80vh, 780px); display: flex;
+  flex-direction: column; background: var(--c-panel); border: 1px solid var(--c-border);
+  border-radius: 16px; box-shadow: 0 24px 64px rgba(0, 0, 0, .18); overflow: hidden; }
+:root[data-theme="dark"] .modal-box { box-shadow: 0 24px 64px rgba(0, 0, 0, .6); }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 20px; padding: 22px 28px 18px; border-bottom: 1px solid var(--c-border); }
+.modal-head h3 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.01em;
+  line-height: 1.3; }
+.modal-head .sub { color: var(--c-fg-mute); font-size: 12.5px; margin-top: 5px;
+  line-height: 1.5; }
+.modal-close { background: transparent; border: 1px solid transparent; color: var(--c-fg-mute);
+  border-radius: 9px; width: 30px; height: 30px; cursor: pointer; font-size: 19px;
+  line-height: 1; flex: 0 0 30px; }
+.modal-close:hover { color: var(--c-fg); border-color: var(--c-border);
+  background: var(--c-bg-2); }
+.modal-body { padding: 22px 28px 26px; overflow: auto; }
+
+/* Definition rows read better than a bordered grid for a handful of settings. */
+.modal-body table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.modal-body td { padding: 8px 0; border-bottom: 1px solid var(--c-border);
+  vertical-align: top; text-align: left; line-height: 1.5; }
+.modal-body tr:last-child td { border-bottom: 0; }
+.modal-body td:first-child { color: var(--c-fg-mute); width: 27%; padding-right: 20px;
+  white-space: nowrap; }
+.modal-body td.mono { font-family: var(--font-mono); font-size: 11.5px; word-break: break-all;
+  color: var(--c-fg); }
+.modal-body .sub { color: var(--c-fg-faint); font-size: 11px; margin: 22px 0 6px;
+  text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+.modal-body .sub:first-child { margin-top: 0; }
+.modal-body .mini { margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--c-border); line-height: 1.6; }
+.modal-body .method-card { background: transparent; border: 0; padding: 0; }
+.modal-body .method-card h3 { display: none; }
+.modal-body .method-body { font-size: 13px; line-height: 1.75; }
+.modal-body .method-body .mh { margin: 14px 0 4px; }
+.section-head { font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--c-fg-mute); margin: 22px 0 10px; }
+.section-head:first-child { margin-top: 4px; }
+
+/* Collapsible sections. Statistics stays open — it is the reason to open the page;
+   everything denser is one click away, via native details/summary so it works
+   without JS. */
+.fold { margin: 18px 0 0; }
+.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
+  gap: 8px; padding: 9px 12px; border: 1px solid var(--c-border); border-radius: 10px;
+  background: var(--c-panel); font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--c-fg-mute); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary:hover { color: var(--c-fg); border-color: var(--c-accent-border); }
+.fold > summary .caret { transition: transform .15s ease; flex: 0 0 auto; }
+.fold[open] > summary .caret { transform: rotate(90deg); }
+.fold[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  color: var(--c-fg); }
+.fold > summary .hint { margin-left: auto; text-transform: none; letter-spacing: 0;
+  font-weight: 500; font-size: 11.5px; color: var(--c-fg-faint); }
+.fold-body { border: 1px solid var(--c-border); border-top: 0;
+  border-radius: 0 0 10px 10px; padding: 14px; }
+.page { display: none; }
+.page.active { display: block; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; }
+.card .k { font-size: 12px; color: var(--c-fg-mute); line-height: 1.35; }
+.card .v { font-size: 22px; font-weight: 700; font-family: var(--font-mono);
+  margin-top: 4px; line-height: 1.15; }
+.card .v small { display: block; font-size: 11px; color: var(--c-fg-mute);
+  font-weight: 500; margin-top: 3px; letter-spacing: .01em; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.panel { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.panel h2 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
+.panel h2 span { color: var(--c-fg-mute); font-weight: 400; font-size: 13px; margin-left: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--c-border); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--c-fg-mute); font-weight: 650; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.stacked { display: flex; height: 9px; border-radius: 5px; overflow: hidden; background: var(--c-track); min-width: 110px; }
+.stacked.empty { color: var(--c-fg-mute); font-size: 12px; background: transparent; }
+.seg { opacity: .82; }
+.seg.easy { background: var(--c-good); } .seg.medium { background: var(--c-warn); } .seg.hard { background: var(--c-bad); }
+/* Label bar and its legend on one line, order statistics beside them: the two
+   tables this replaces spent a full row each on seven short numbers. */
+.diff-split { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.4fr);
+  gap: 10px 28px; align-items: center; }
+.diff-bar .stacked { height: 11px; }
+.diff-bar .mini { display: none; }
+.diff-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px;
+  font-size: 11.5px; color: var(--c-fg-mute); }
+.diff-legend b { color: var(--c-fg); font-family: var(--font-mono); font-weight: 650;
+  margin-left: 3px; }
+.diff-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+  margin-right: 5px; vertical-align: -1px; opacity: .82; }
+.diff-legend .dot.easy { background: var(--c-good); }
+.diff-legend .dot.medium { background: var(--c-warn); }
+.diff-legend .dot.hard { background: var(--c-bad); }
+.diff-stats th, .diff-stats td { padding: 5px 8px; }
+@media (max-width: 820px) { .diff-split { grid-template-columns: 1fr; } }
+.mini { font-size: 12px; color: var(--c-fg-mute); margin-top: 2px; font-family: var(--font-mono); }
+
+/* Distribution bars. The old layout was a flex row with a fixed 230px label and a
+   fixed 150px count, which left a wide dead gutter on short labels; and every list
+   ran as one tall single column. Now each row is a 3-column grid sized to content,
+   and the list itself flows into as many columns as the card is wide. */
+/* Wide gutters between column groups, tight ones inside a row: the label should
+   read as attached to its own bar, not float between two of them. */
+.tag-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 2px 44px; align-content: start; }
+.tag-row { display: grid; grid-template-columns: minmax(64px, 118px) minmax(80px, 1fr) 74px;
+  column-gap: 7px; align-items: center; padding: 2px 0; font-size: 12.5px; }
+.tag-row .tag-count { padding-left: 4px; }
+.tag-name { font-family: var(--font-mono); font-size: 12px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-track { height: 7px; background: var(--c-track); border-radius: 4px; overflow: hidden; }
+.tag-fill { display: block; height: 100%; background: var(--c-accent-fill); }
+.tag-count { text-align: right; color: var(--c-fg-mute); font-family: var(--font-mono); font-size: 11.5px; }
+.tag-card { background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px; padding: 12px 14px; }
+.tag-card h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
+.tag-card h3 { display: flex; align-items: center; gap: 6px; }
+.tag-card h3 span { color: var(--c-fg-mute); font-weight: 400; font-size: 12px; }
+.help-btn { margin-left: auto; flex: 0 0 auto; width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--c-border); border-radius: 999px;
+  color: var(--c-fg-mute); cursor: pointer; }
+.help-btn:hover { color: var(--c-accent); border-color: var(--c-accent-border); }
+.help-btn .icon { width: 13px; height: 13px; }
+.muted { color: var(--c-fg-dim); font-size: 13px; }
+
+/* Task List: one row per dataset, tracer's Jobs list shape. */
+.ds-list { display: flex; flex-direction: column; gap: 8px; }
+.ds-line { display: flex; align-items: stretch; gap: 8px; }
+.ds-line .ds-row { flex: 1; min-width: 0; }
+.samples-btn { flex: 0 0 auto; align-self: stretch; background: var(--c-bg-2);
+  border: 1px solid var(--c-border); color: var(--c-fg-dim); border-radius: 10px;
+  padding: 0 14px; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 650;
+  white-space: nowrap; }
+.samples-btn:hover:not(:disabled) { color: var(--c-accent); border-color: var(--c-accent-border); }
+.samples-btn:disabled { opacity: .45; cursor: default; }
+.samples-btn .n { color: var(--c-fg-mute); font-weight: 500; margin-left: 5px; }
+.modal-wide { width: min(1040px, 100%); max-height: min(86vh, 900px); }
+/* Metric columns are sized to their own labels rather than sharing one fraction,
+   so "Easy / medium / hard" cannot squeeze "Mean diff." into two lines. */
+.ds-row { display: grid;
+  grid-template-columns: minmax(200px, 2fr) repeat(5, max-content) minmax(150px, 1fr);
+  gap: 10px 18px; align-items: center; width: 100%; text-align: left; cursor: pointer;
+  background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
+  padding: 12px 14px; color: var(--c-fg); font: inherit; font-size: 13px; }
+.ds-row:hover { border-color: var(--c-accent-border); }
+.ds-row.active { border-color: var(--c-accent-border); background: var(--c-accent-soft); }
+/* Each cell stacks a label over a value. The inner spans are not themselves grid
+   items, so they must be blockified explicitly — left inline they sit side by side,
+   margin-top does nothing, and ellipsis never engages, so a long path overflows
+   into the next column. min-width:0 lets a grid item shrink below its content. */
+.ds-row > span { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.ds-row .name, .ds-row .desc, .ds-row .k, .ds-row .v { display: block; }
+.ds-row .name { font-weight: 650; font-size: 14px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.ds-row .desc { color: var(--c-fg-mute); font-size: 11.5px; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.ds-row .k { color: var(--c-fg-mute); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .04em; white-space: nowrap; line-height: 1.3; }
+.ds-row .v { font-family: var(--font-mono); font-weight: 650; font-size: 14px;
+  margin-top: 3px; line-height: 1.2; white-space: nowrap; }
+@media (max-width: 1100px) {
+  .ds-row { grid-template-columns: minmax(160px, 1.6fr) repeat(auto-fit, minmax(84px, max-content)); }
+  .ds-line { flex-wrap: wrap; }
+}
+.ds-detail { margin-top: 14px; }
+.ds-panel { display: none; }
+.ds-panel.active { display: block; }
+.back-link { background: transparent; border: 0; color: var(--c-accent); cursor: pointer;
+  font: inherit; font-size: 13px; padding: 0 0 8px; }
+
+/* Sample task viewer — a fixed-size two-pane dialog: the ten samples on the left,
+   the selected task's files on the right. Fixed rather than content-sized so the
+   dialog does not jump between a 600-byte instruction and a 24 KB patch. */
+.samples-box { width: min(1160px, 95vw); height: min(760px, 88vh); max-height: none; }
+.samples-body { padding: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 0; flex: 1; overflow: hidden; }
+.samples-side { border-right: 1px solid var(--c-border); overflow-y: auto;
+  padding: 12px; background: var(--c-bg-2); min-height: 0; }
+.samples-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+.sample-list { display: flex; flex-direction: column; gap: 5px; }
+.sample-row { display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  background: transparent; border: 1px solid transparent; border-radius: 8px;
+  padding: 8px 10px; cursor: pointer; font: inherit; font-size: 12px; color: var(--c-fg);
+  text-align: left; width: 100%; min-width: 0; }
+.sample-row:hover { border-color: var(--c-border); background: var(--c-panel); }
+.sample-row.active { background: var(--c-accent-soft); border-color: var(--c-accent-border); }
+.sample-row .sid { font-family: var(--font-mono); font-size: 11.5px; width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sample-row .smeta { color: var(--c-fg-mute); font-size: 10.5px; }
+
+.sample-head { padding: 14px 20px 12px; border-bottom: 1px solid var(--c-border); }
+.sample-head .t { font-family: var(--font-mono); font-size: 13px; font-weight: 650;
+  word-break: break-all; line-height: 1.4; }
+.sample-head .m { color: var(--c-fg-mute); font-size: 11.5px; margin-top: 4px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 20px 0; }
+.tab { background: transparent; border: 1px solid transparent; color: var(--c-fg-dim);
+  border-radius: 8px 8px 0 0; padding: 6px 12px; cursor: pointer; font: inherit;
+  font-size: 12px; white-space: nowrap; }
+.tab:hover { color: var(--c-fg); }
+.tab.active { background: var(--code-bg); border-color: var(--code-border);
+  border-bottom-color: var(--code-bg); color: var(--code-fg); font-weight: 650; }
+.tab .sz { color: var(--c-fg-faint); font-size: 10.5px; margin-left: 6px; }
+
+/* The file pane is an editor, not a page: its own dark surface in both themes,
+   a line-number gutter, and syntax colour. */
+:root { --code-bg: #1b1815; --code-border: #2b2621; --code-fg: #e8e2d8;
+  --code-gutter: #6a6058; --code-comment: #8a7f72; --code-str: #c9a26a;
+  --code-kw: #e0a06f; --code-var: #9ec7c2; --code-meta: #b48ead; }
+.sample-body { flex: 1; min-height: 0; margin: 0 20px 20px; border: 1px solid var(--code-border);
+  border-radius: 0 10px 10px 10px; background: var(--code-bg); overflow: hidden;
+  display: flex; }
+.sample-pre { margin: 0; padding: 14px 16px 14px 0; overflow: auto; flex: 1;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--code-fg);
+  white-space: pre; tab-size: 4; }
+.sample-pre code { display: block; min-width: max-content; }
+.sample-pre .ln { display: inline-block; width: 3.2em; padding-right: 1em; margin-right: .9em;
+  text-align: right; color: var(--code-gutter); border-right: 1px solid var(--code-border);
+  user-select: none; }
+.sample-pre .cm { color: var(--code-comment); font-style: italic; }
+.sample-pre .st { color: var(--code-str); }
+.sample-pre .kw { color: var(--code-kw); font-weight: 600; }
+.sample-pre .va { color: var(--code-var); }
+.sample-pre .mt { color: var(--code-meta); }
+.sample-pre .add { color: #86b87a; }
+.sample-pre .del { color: #d98080; }
+.sample-pre .hunk { color: #7fa6c9; }
+.method-card { grid-column: 1 / -1; background: var(--c-method-bg);
+  border: 1px solid var(--c-accent-border); border-radius: 10px; padding: 14px 18px; }
+.method-card h3 { font-size: 15px; margin: 0 0 10px; font-weight: 700; color: var(--c-method-head); }
+.method-card h3 span { color: var(--c-accent); font-weight: 500; font-size: 13px; margin-left: 6px; }
+.method-body { font-size: 13px; line-height: 1.7; color: var(--c-fg); }
+.method-body strong { color: var(--c-fg); font-weight: 700; }
+.method-body .mh { display: inline-block; color: var(--c-method-head); font-weight: 800; font-size: 13.5px; margin: 3px 0 1px; }
+.method-body .dim { color: var(--c-violet); font-weight: 700; }
+.method-body code { color: var(--c-accent); background: var(--c-accent-soft); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.wide-card { grid-column: 1 / -1; }
+
+/* Terminal workflow surfaces. Common sidebar/topbar/cards/rows above match Curator. */
+[hidden] { display: none !important; }
+button, input, select { font-family: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; }
+.sidebar-foot { padding: 14px 16px; border-top: 1px solid var(--c-border); font-size: 11px; color: var(--c-fg-mute); line-height: 1.6; }
+.content { scroll-behavior: smooth; }
+.card .v small { text-transform: none; }
+.card .v.status-value { font-size: 18px; text-transform: capitalize; }
+.status { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.status.good { color: var(--c-good); }.status.bad { color: var(--c-bad); }.status.warn { color: var(--c-warn); }.status.quiet { color: var(--c-fg-mute); }
+.run-heading { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+.run-heading .mono { font-size: 12px; overflow-wrap: anywhere; }
+.run-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 10px 0 14px; color: var(--c-fg-mute); font-size: 12px; }
+.stage-flow { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin: 14px 0; }
+.stage-step { border: 1px solid var(--c-border); border-radius: 8px; padding: 9px 10px; color: var(--c-fg-mute); font-size: 11.5px; }
+.stage-step .step-no { display: block; font-family: var(--font-mono); font-size: 10px; opacity: .8; margin-bottom: 4px; }
+.stage-step.current { color: var(--c-accent); border-color: var(--c-accent-border); background: var(--c-accent-soft); font-weight: 650; }
+.stage-step.done { color: var(--c-good); }.stage-step.skipped { opacity: .6; }
+.notice { background: var(--c-panel); border: 1px solid var(--c-border); border-left: 3px solid var(--c-warn); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; color: var(--c-fg-dim); font-size: 12.5px; line-height: 1.6; }
+.notice.neutral { border-left-color: var(--c-accent); }
+.empty-state { padding: 28px 18px; border: 1px dashed var(--c-border); border-radius: 10px; background: var(--c-panel); color: var(--c-fg-mute); font-size: 13px; line-height: 1.8; text-align: center; }
+.empty-state strong { display: block; color: var(--c-fg); font-size: 14px; margin-bottom: 4px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+.toolbar label { display: flex; align-items: center; gap: 6px; color: var(--c-fg-mute); font-size: 12px; }
+.toolbar input, .toolbar select { border: 1px solid var(--c-border); border-radius: 8px; padding: 8px 10px; background: var(--c-panel); color: var(--c-fg); font-size: 12px; min-height: 35px; }
+.toolbar input { width: min(300px, 100%); }.search-label { flex: 1; min-width: 180px; }
+.toolbar .result-count { margin-left: auto; color: var(--c-fg-mute); font: 11.5px var(--font-mono); }
+.batch-row { grid-template-columns: minmax(180px, 2fr) repeat(4, minmax(70px, max-content)) minmax(120px, 1fr); }
+.batch-row .desc { direction: ltr; }.ds-row .v.wrap { white-space: normal; }
+.batch-detail { margin-top: 16px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-panel); }
+.table-wrap table { min-width: 650px; }
+.table-wrap th, .table-wrap td { padding: 10px 12px; }
+.table-wrap tr:last-child td { border-bottom: 0; }
+.table-wrap td { font-size: 12px; }
+.table-wrap .task-name { text-align: left; }
+.table-wrap .task-name button { color: var(--c-fg); background: transparent; border: 0; padding: 0; font: 12px var(--font-mono); text-align: left; cursor: pointer; }
+.table-wrap .task-name button:hover { color: var(--c-accent); text-decoration: underline; }
+.table-wrap .left { text-align: left; }
+.chip { display: inline-block; padding: 3px 6px; border: 1px solid var(--c-border); border-radius: 5px; color: var(--c-fg-mute); font-size: 10.5px; margin: 2px 4px 2px 0; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+.detail-grid .panel { margin-bottom: 0; }
+.evidence-table { margin-top: 12px; }
+.evidence-table td:first-child { width: 44%; }
+.modal-body .explanation { color: var(--c-fg-mute); font-size: 12px; line-height: 1.7; margin-top: 16px; }
+.footer-note { color: var(--c-fg-mute); font-size: 11.5px; line-height: 1.7; margin-top: 16px; }
+.noscript { margin: 16px 24px; font-size: 13px; }
+@media (max-width: 1100px) { .stage-flow { grid-template-columns: repeat(4, minmax(0, 1fr)); }.batch-row { grid-template-columns: minmax(160px, 2fr) repeat(2, 1fr); }.batch-row > span:nth-child(n+5) { display:none; } }
+@media (max-width: 700px) {
+ html, body { height: auto; min-height: 100%; }.layout { height: auto; min-height: 100vh; display: block; overflow: visible; }
+ .sidebar { width: 100%; border-right: 0; border-bottom: 1px solid var(--c-border); }.sidebar-logo { padding: 11px 16px; }
+ .nav { flex-direction: row; overflow: auto; padding: 6px 8px; gap: 4px; }.nav .section-label, .sidebar-section, .sidebar-foot { display: none; }
+ .nav-item { width: auto; flex: 0 0 auto; padding: 8px; font-size: 12px; gap: 6px; }.nav-count { margin-left: 2px; }
+ .main { overflow: visible; }.topbar { padding: 11px 16px; gap: 8px; }.topbar h1 { font-size: 16px; }.topbar .sub { font-size: 11px; line-height: 1.5; }
+ .topbar-actions { gap: 5px; }.icon-btn { width: 31px; height: 31px; flex-basis: 31px; }.content { padding: 16px; overflow: visible; }
+ .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.card { padding: 12px; }.card .v { font-size: 20px; }
+ .stage-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }.grid2, .detail-grid { grid-template-columns: 1fr; }
+ .batch-row { grid-template-columns: minmax(130px, 2fr) 1fr 1fr; gap: 8px; padding: 12px; }.samples-btn { padding: 0 9px; }
+ .fold > summary .hint { display: none; }.modal { padding: 12px; }.modal-box { width: 100%; max-height: 90vh; }.modal-head, .modal-body { padding: 16px; }
+ .toolbar { align-items: stretch; }.toolbar label { flex-wrap: wrap; }.search-label { min-width: 100%; }.toolbar input { width: 100%; }.toolbar select { max-width: 165px; }
+ .modal-head h3 { font-size: 15px; overflow-wrap: anywhere; }
+}
+
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+</style>
+</head>
+<body data-live="false">
+<div role="note" style="padding:11px 16px;background:var(--c-accent);color:white;text-align:center;font-size:13px;line-height:1.5"><strong>Synthetic demo only.</strong> All tasks, runs, dates and metrics are illustrative fixtures. This is not a real curation, validation or solving result.</div><div class="layout">
+  <aside class="sidebar" aria-label="Dashboard navigation">
+    <div class="sidebar-logo"><div class="logo-mark">LF</div><div class="logo-title">Terminal Curator</div></div>
+    <nav class="nav" aria-label="Views">
+      <div class="section-label">Views</div>
+      <button class="nav-item active" data-page="overview" aria-controls="page-overview"><span class="nav-icon" aria-hidden="true">◧</span><span class="nav-label">Overview</span></button>
+      <button class="nav-item" data-page="tasks" aria-controls="page-tasks"><span class="nav-icon" aria-hidden="true">☰</span><span class="nav-label">Task List</span><span class="nav-count" id="nav-tasks">—</span></button>
+      <button class="nav-item" data-page="validation" aria-controls="page-validation"><span class="nav-icon" aria-hidden="true">✓</span><span class="nav-label">Validation</span></button>
+      <button class="nav-item" data-page="runs" aria-controls="page-runs"><span class="nav-icon" aria-hidden="true">◷</span><span class="nav-label">Runs</span><span class="nav-count" id="nav-runs">—</span></button>
+    </nav>
+    <div class="sidebar-section"><div class="section-label">Global</div><div id="global-stats"></div></div>
+    <div class="sidebar-foot">Verified terminal tasks<br>Oracle = 1 · NOP = 0<br><span id="snapshot-label">Reading snapshot…</span></div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div><h1 id="page-title">Overview</h1><div class="sub" id="page-sub">Terminal task curation and verification</div></div>
+      <div class="topbar-actions">
+        <button id="refreshToggle" class="icon-btn" aria-label="Refresh dashboard" title="Refresh dashboard"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg></button>
+        <button id="infoToggle" class="icon-btn" aria-label="Dashboard info" title="Data sources and verification rules"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button>
+        <button id="themeToggle" class="icon-btn theme-toggle" aria-label="Toggle theme" title="Toggle light and dark"><svg class="icon theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13A8 8 0 0 1 11 4a8 8 0 1 0 9 9Z"/></svg><svg class="icon theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1 1M18 18l1 1M5 19l1-1M18 6l1-1"/></svg></button>
+      </div>
+    </header>
+    <main class="content" id="main-content">
+      <div id="notices" aria-live="polite"></div>
+      <section class="page active" id="page-overview" aria-label="Overview"><div id="overview-content"></div></section>
+      <section class="page" id="page-tasks" aria-label="Task list">
+        <div class="section-head">Published batches</div><div class="ds-list" id="batch-list"></div>
+        <div class="section-head">Tasks</div>
+        <div class="toolbar">
+          <label class="search-label"><span class="sr-only">Search tasks</span><input id="task-search" type="search" placeholder="Search task ID or tag" aria-label="Search tasks"></label>
+          <label>Status<select id="status-filter" aria-label="Filter task status"><option value="">All statuses</option><option value="published">Current publication</option><option value="retained">Retained version</option><option value="validated">Validated, unpublished</option><option value="rejected">Rejected</option><option value="pending">Pending</option><option value="running">Running</option><option value="missing">Unavailable</option></select></label>
+          <label>Source<select id="source-filter" aria-label="Filter task source"><option value="">All sources</option><option value="stackoverflow">Stack Overflow</option><option value="json">Questions JSON</option><option value="tasks">Local candidates</option><option value="unknown">Not recorded</option></select></label>
+          <label>Batch<select id="batch-filter" aria-label="Filter task batch"><option value="">All batches</option></select></label>
+          <span class="result-count" id="task-count" role="status"></span>
+        </div>
+        <div id="task-table"></div>
+        <p class="footer-note">Current publication is the manifest-listed pool for new downstream jobs. Retained versions preserve earlier inputs. Validation results shown here are runtime evidence; semantic audits and solved agent trajectories are separate checks.</p>
+      </section>
+      <section class="page" id="page-validation" aria-label="Validation"><div id="validation-content"></div></section>
+      <section class="page" id="page-runs" aria-label="Run history"><div id="runs-content"></div></section>
+      <noscript><p class="noscript">Run demo-current-run · completed. Enable JavaScript for navigation, filters, and validation details. The JSON status output remains available through the local CLI.</p></noscript>
+    </main>
+  </div>
+</div>
+<div class="modal" id="infoPanel" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+ <div class="modal-box"><div class="modal-head"><div><h3 id="info-title">What this board is reading</h3><div class="sub">Measured artifacts · shared Curator visual system</div></div><button class="modal-close" data-close aria-label="Close dialog">×</button></div>
+ <div class="modal-body">
+  <table><tr><td>Current run</td><td>Live state, plus the completed report only when its run ID matches.</td></tr><tr><td>Published batches</td><td>Verified manifest and immutable versions; metadata comes from each task.</td></tr><tr><td>Validation</td><td>Oracle/NOP report verdicts. Available local trial results and JUnit supply actual rewards and test counts.</td></tr><tr><td>Run history</td><td>Run index and matching archived reports. Missing measurements appear as —.</td></tr><tr><td>Privacy</td><td>No task text, source files, solutions, prompts, traces, config, endpoints, host paths, or raw exception text are included.</td></tr></table>
+  <p class="explanation">Oracle must receive reward 1 and NOP reward 0 in separate fresh environments, with meaningful assertions and no trial exception. A reported pass with unavailable raw evidence is labeled “report only.” Semantic requirement/test review and successful Tracer/Evaluator solving require their own evidence.</p>
+  <p class="explanation">Counts describe different scopes: the latest attempt may fail while a previous publication remains available. This board does not invent collection totals, difficulty scores, or semantic approvals. Source, task IDs, run IDs, tags, and numeric usage remain visible; review them before sharing a snapshot.</p>
+ </div></div>
+</div>
+<div class="modal" id="taskPanel" role="dialog" aria-modal="true" aria-labelledby="task-title" hidden>
+ <div class="modal-box modal-wide"><div class="modal-head"><div><h3 id="task-title">Task details</h3><div class="sub" id="task-sub"></div></div><button class="modal-close" data-close aria-label="Close dialog">×</button></div><div class="modal-body" id="task-detail"></div></div>
+</div>
+<script id="dashboard-data" type="application/json">{"schema_version": 2, "block": "terminal-curator", "demo": true, "run_id": "demo-current-run", "status": "completed", "stage": "completed", "source": "tasks", "updated_at": "2025-01-01T10:02:00+00:00", "started_at": "2025-01-01T10:00:00+00:00", "completed_at": "2025-01-01T10:02:00+00:00", "snapshot_at": "2025-01-01T10:03:00+00:00", "total_candidates": 3, "collected_questions": null, "generation_completed": null, "generation_failed": null, "verified_tasks": ["demo-csv-reconcile", "demo-jsonl-report"], "rejected_count": 1, "published_task_count": 2, "published_tasks": ["demo-csv-reconcile", "demo-jsonl-report"], "token_usage": {}, "tasks": [{"id": "demo-csv-reconcile", "batch_id": "demo-current-batch", "run_id": "demo-current-run", "status": "published", "source": "tasks", "difficulty": "medium", "tags": ["terminal", "python"], "question_id": null, "harbor_checksum": null, "block_checksum": null, "oracle": {"status": "passed", "basis": "raw", "expected_reward": 1, "reward": 1, "tests": 8, "failures": 0, "errors": 0, "skipped": 0, "reason": null, "task_checksum": null, "checksum_matches": null}, "nop": {"status": "passed", "basis": "raw", "expected_reward": 0, "reward": 0, "tests": 8, "failures": 3, "errors": 0, "skipped": 0, "reason": null, "task_checksum": null, "checksum_matches": null}}, {"id": "demo-jsonl-report", "batch_id": "demo-current-batch", "run_id": "demo-current-run", "status": "published", "source": "tasks", "difficulty": "hard", "tags": ["terminal", "python"], "question_id": null, "harbor_checksum": null, "block_checksum": null, "oracle": {"status": "passed", "basis": "raw", "expected_reward": 1, "reward": 1, "tests": 8, "failures": 0, "errors": 0, "skipped": 0, "reason": null, "task_checksum": null, "checksum_matches": null}, "nop": {"status": "passed", "basis": "raw", "expected_reward": 0, "reward": 0, "tests": 8, "failures": 3, "errors": 0, "skipped": 0, "reason": null, "task_checksum": null, "checksum_matches": null}}, {"id": "demo-previous-task", "batch_id": "demo-retained-batch", "run_id": "demo-previous-run", "status": "retained", "source": "tasks", "difficulty": "easy", "tags": ["terminal", "python"], "question_id": null, "harbor_checksum": null, "block_checksum": null, "oracle": {"status": "passed", "basis": "raw", "expected_reward": 1, "reward": 1, "tests": 8, "failures": 0, "errors": 0, "skipped": 0, "reason": null, "task_checksum": null, "checksum_matches": null}, "nop": {"status": "passed", "basis": "raw", "expected_reward": 0, "reward": 0, "tests": 8, "failures": 3, "errors": 0, "skipped": 0, "reason": null, "task_checksum": null, "checksum_matches": null}}, {"id": "demo-rejected-candidate", "batch_id": null, "run_id": "demo-current-run", "status": "rejected", "source": "tasks", "difficulty": null, "tags": ["terminal", "python"], "question_id": null, "harbor_checksum": null, "block_checksum": null, "oracle": {"status": "failed", "basis": "raw", "expected_reward": 1, "reward": 0, "tests": 8, "failures": 3, "errors": 0, "skipped": 0, "reason": "reward-mismatch", "task_checksum": null, "checksum_matches": null}, "nop": {"status": "pending", "basis": "none", "expected_reward": 0, "reward": null, "tests": null, "failures": null, "errors": null, "skipped": null, "reason": null, "task_checksum": null, "checksum_matches": null}}], "batches": [{"id": "demo-current-batch", "current": true, "listed_count": 2, "available_count": 2, "shown_count": 2, "run_id": "demo-current-run", "source_counts": {"tasks": 2}, "difficulty_counts": {"medium": 1, "hard": 1}}, {"id": "demo-retained-batch", "current": false, "listed_count": 1, "available_count": 1, "shown_count": 1, "run_id": "demo-previous-run", "source_counts": {"tasks": 1}, "difficulty_counts": {"easy": 1}}], "history": [{"id": "demo-archive-002", "run_id": "demo-current-run", "status": "completed", "source": "tasks", "started_at": "2025-01-01T10:00:00+00:00", "completed_at": "2025-01-01T10:02:00+00:00", "duration_sec": 120, "candidates": 3, "verified_count": 2, "rejected_count": 1, "exit_code": 0}, {"id": "demo-archive-001", "run_id": "demo-failed-run", "status": "failed", "source": "json", "started_at": "2025-01-01T09:00:00+00:00", "completed_at": "2025-01-01T09:00:40+00:00", "duration_sec": 40, "candidates": 1, "verified_count": 0, "rejected_count": 1, "exit_code": 1}], "validation": {"oracle": {"recorded": 3, "passed": 2, "failed": 1}, "nop": {"recorded": 2, "passed": 2, "failed": 0}}, "archive_count": 2, "batch_count": 2, "availability": {"config": "ok", "state": "ok", "report": "ok", "manifest": "ok", "index": "ok", "ignored_manifest_entries": 0, "limited": false}}</script>
+<script>/* Curator's sidebar, metric cards, batch rows and dialogs, for terminal evidence. */
+'use strict';
+let data = JSON.parse(document.getElementById('dashboard-data').textContent);
+const LIVE = document.body.dataset.live === 'true';
+const $ = id => document.getElementById(id);
+const esc = value => String(value == null ? '—' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const number = value => typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('en-US') : '—';
+const sourceName = value => ({stackoverflow:'Stack Overflow',json:'Questions JSON',tasks:'Local candidates'})[value] || 'Not recorded';
+const stageName = value => ({idle:'Idle',preflight:'Preflight',check:'Check',collect:'Collect / import',generate:'Generate',normalize:'Normalize','validate-oracle':'Validate Oracle','validate-nop':'Validate NOP',publish:'Publish',completed:'Completed',failed:'Failed',interrupted:'Interrupted'})[value] || 'Not recorded';
+const taskStatus = value => ({published:'Current publication',retained:'Retained version',validated:'Validated',rejected:'Rejected',pending:'Pending',running:'Running',missing:'Unavailable'})[value] || 'Not recorded';
+const gateName = gate => gate && ({passed:'Passed',failed:'Failed',pending:'Not recorded',conflict:'Evidence conflict'})[gate.status] || 'Not recorded';
+const cls = value => ['completed','passed','published','validated'].includes(value) ? 'good' : ['failed','rejected','missing','conflict'].includes(value) ? 'bad' : ['running','pending','interrupted'].includes(value) ? 'warn' : 'quiet';
+const badge = (value,label) => `<span class="status ${cls(value)}">${esc(label || value || 'Not recorded')}</span>`;
+const empty = (title,detail) => `<div class="empty-state"><strong>${esc(title)}</strong>${esc(detail)}</div>`;
+const metric = (label,value,detail='') => `<div class="card"><div class="k">${esc(label)}</div><div class="v">${esc(value)}${detail ? `<small>${esc(detail)}</small>`:''}</div></div>`;
+const time = value => {if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?'—':d.toLocaleString('en-GB',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});};
+const duration = value => value == null ? '—' : value < 60 ? `${Math.round(value)}s` : value < 3600 ? `${Math.floor(value/60)}m ${Math.round(value%60)}s` : `${Math.floor(value/3600)}h ${Math.floor(value%3600/60)}m`;
+const short = value => value && value.length > 22 ? value.slice(0,12)+'…'+value.slice(-6) : value || '—';
+const tasks = () => Array.isArray(data.tasks) ? data.tasks : [];
+const batches = () => Array.isArray(data.batches) ? data.batches : [];
+const historyRows = () => Array.isArray(data.history) ? data.history : [];
+const key = row => [row.batch_id || 'latest',row.run_id || '',row.id].join('::');
+let page = ['overview','tasks','validation','runs'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'overview';
+let selectedTask = null;
+let modalOpener = null;
+const openFolds = new Set();
+
+function showPage(name) {
+  if(!['overview','tasks','validation','runs'].includes(name))name='overview';
+  page=name;
+  document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+name));
+  document.querySelectorAll('.nav-item').forEach(el=>{const active=el.dataset.page===name;el.classList.toggle('active',active);if(active)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});
+  $('page-title').textContent=({overview:'Overview',tasks:'Task List',validation:'Validation',runs:'Runs'})[name];
+  $('page-sub').textContent=({overview:`${number(data.batch_count)} published ${data.batch_count===1?'batch':'batches'} · ${number(data.published_task_count)} current tasks · ${data.status || 'never-run'}`,tasks:'Per-batch breakdown and task-level evidence — select a batch or filter the list',validation:'Fresh Oracle = 1 and NOP = 0 · latest run evidence',runs:'Archived attempts — successes, failures and interrupted runs'})[name];
+  if(location.hash!=='#'+name)window.history.replaceState(null,'','#'+name);
+}
+
+function renderOverview(){
+  const v=data.validation || {}, o=v.oracle || {}, n=v.nop || {};
+  const latestVerified=Array.isArray(data.verified_tasks)?data.verified_tasks.length:null;
+  const rate=data.total_candidates>0 && ['completed','failed','interrupted'].includes(data.status) ? (100*(latestVerified||0)/data.total_candidates).toFixed(1)+'%' : '—';
+  const status=data.status || 'never-run';
+  let body=`<div class="section-head">Statistics</div><div class="cards">`+
+    metric('Published tasks',number(data.published_task_count),'current manifest')+
+    metric('Published batches',number(data.batch_count),'current + retained')+
+    metric('Candidates',number(data.total_candidates),'latest attempt')+
+    (data.source && data.source!=='tasks' ? metric('Questions collected',number(data.collected_questions),'latest selected seeds')+metric('Generation completed',number(data.generation_completed),'includes failed candidates'):'')+
+    metric('Oracle passes',o.recorded ? number(o.passed):'—','latest recorded trials')+
+    metric('NOP passes',n.recorded ? number(n.passed):'—','latest recorded trials')+
+    metric('Rejected',data.run_id ? number(data.rejected_count):'—','latest attempt')+
+    metric('Verified yield',rate,'latest verified / candidates')+
+    metric('Archived runs',number(data.archive_count),'all recorded attempts')+`</div>`;
+  if(status==='never-run')body+=empty('No curation run yet','Set up and check a finite batch, then run Terminal Curator. No tasks or validation results are inferred from an empty workspace.');
+  else {
+    body+=`<div class="section-head">Current run</div><div class="panel"><div class="run-heading"><h2>${badge(status,status.replace('-',' '))}</h2><span class="mono">${esc(data.run_id)}</span></div><div class="run-meta"><span>Source: ${esc(sourceName(data.source))}</span><span>Stage: ${esc(stageName(data.stage))}</span>${data.source!=='tasks'&&data.generation_completed!=null?`<span>Generation: ${number(data.generation_completed)} / ${number(data.collected_questions)} completed · ${number(data.generation_failed)} failed</span>`:''}<span>Started: ${esc(time(data.started_at))}</span><span>Updated: ${esc(time(data.updated_at || data.completed_at))}</span></div>`;
+    const phases=['check','collect','generate','normalize','validate-oracle','validate-nop','publish'];
+    const index=phases.indexOf(data.stage);
+    body+=`<div class="stage-flow">`+phases.map((stage,i)=>{const skipped=data.source==='tasks'&&stage==='generate';const state=skipped?'skipped':data.status==='completed' || (data.status==='running' && index>i)?'done':data.status==='running'&&index===i?'current':'';return `<div class="stage-step ${state}"><span class="step-no">${skipped?'SKIPPED':String(i+1).padStart(2,'0')}</span>${esc(stageName(stage))}</div>`;}).join('')+`</div>`;
+    if(['failed','interrupted','unavailable'].includes(status))body+=`<div class="mini">This attempt ${esc(status)}. Any previously published batch is retained; detailed failure text stays in local run evidence.</div>`;
+    body+=`</div>`;
+  }
+  body+=`<details class="fold" data-fold="pipeline"><summary>› Pipeline funnel<span class="hint">measured stages in the latest attempt</span></summary><div class="fold-body"><table><thead><tr><th>Stage</th><th>Count</th><th>Scope</th></tr></thead><tbody><tr><td>Questions selected</td><td>${esc(number(data.collected_questions))}</td><td>${data.source==='tasks'?'not used for imports':'latest run'}</td></tr><tr><td>Candidates attempted</td><td>${esc(number(data.total_candidates))}</td><td>latest run</td></tr><tr><td>Oracle trials recorded</td><td>${o.recorded ? number(o.recorded):'—'}</td><td>latest run</td></tr><tr><td>NOP trials recorded</td><td>${n.recorded ? number(n.recorded):'—'}</td><td>latest run</td></tr><tr><td>Runtime verified</td><td>${data.run_id ? number(latestVerified):'—'}</td><td>latest run</td></tr><tr><td>Published tasks</td><td>${number(data.published_task_count)}</td><td>current publication</td></tr></tbody></table><p class="mini">Source scan totals and semantic approval rates are not recorded, so they are not estimated.</p></div></details>`;
+  const sources={};batches().filter(b=>b.current).forEach(b=>Object.entries(b.source_counts||{}).forEach(([s,c])=>sources[s]=(sources[s]||0)+c));
+  body+=`<details class="fold" data-fold="composition"><summary>› Task composition<span class="hint">metadata from the current publication</span></summary><div class="fold-body"><div class="grid2"><section class="tag-card"><h3>Sources</h3>${distribution(sources,sourceName)}</section><section class="tag-card"><h3>Difficulty labels <span>when recorded</span></h3>${distribution(batches().find(b=>b.current)?.difficulty_counts||{},s=>s==='unknown'?'Not recorded':s)}</section></div></div></details>`;
+  if(Object.keys(data.token_usage||{}).length)body+=`<details class="fold" data-fold="usage"><summary>› Generation usage<span class="hint">reported numeric usage, no billing estimate</span></summary><div class="fold-body"><div class="cards">`+Object.entries(data.token_usage).map(([k,v])=>metric(k.replaceAll('_',' '),number(v))).join('')+`</div></div></details>`;
+  $('overview-content').innerHTML=body;
+}
+function distribution(values,label){
+  const rows=Object.entries(values),total=rows.reduce((sum,[,n])=>sum+n,0);
+  if(!total)return '<p class="muted">No published metadata available.</p>';
+  return '<div class="tag-rows">'+rows.map(([name,count])=>`<div class="tag-row"><span class="tag-name">${esc(label(name))}</span><span class="tag-track"><span class="tag-fill" style="width:${Math.max(0,Math.min(100,100*count/total))}%"></span></span><span class="tag-count">${number(count)} (${(100*count/total).toFixed(0)}%)</span></div>`).join('')+'</div>';
+}
+function renderBatches(){
+  $('batch-list').innerHTML=batches().map(b=>`<div class="ds-line"><button class="ds-row batch-row" data-batch="${esc(b.id)}"><span><span class="name">${b.current?'Current publication':'Retained batch'}</span><span class="desc mono">${esc(short(b.id))}</span></span><span><span class="k">Listed</span><span class="v">${number(b.listed_count)}</span></span><span><span class="k">Available</span><span class="v">${number(b.available_count)}</span></span><span><span class="k">Source</span><span class="v wrap">${esc(Object.keys(b.source_counts||{}).length===1?sourceName(Object.keys(b.source_counts)[0]):'Mixed')}</span></span><span><span class="k">State</span><span class="v">${b.current?'Current':'Retained'}</span></span><span><span class="k">Run</span><span class="desc mono">${esc(short(b.run_id))}</span></span></button><button class="samples-btn" data-batch="${esc(b.id)}">Tasks <span class="n">${number(b.shown_count)}</span></button></div>`).join('') || empty('No published batches','Only a verified manifest creates a publication. In-progress and rejected candidates stay separate.');
+  const select=$('batch-filter'),value=select.value;
+  let options='<option value="">All batches</option><option value="latest">Latest, unpublished</option>'+batches().map(b=>`<option value="${esc(b.id)}">${b.current?'Current':'Retained'} · ${esc(short(b.id))}</option>`).join('');
+  if(value&&value!=='latest'&&!batches().some(b=>b.id===value))options+=`<option value="${esc(value)}">Unavailable · ${esc(short(value))}</option>`;
+  if(select.innerHTML!==options)select.innerHTML=options;
+  select.value=value;
+}
+function taskTable(rows){
+  if(!rows.length)return empty('No matching tasks','Try another status, source, batch or search. An empty list never implies a successful validation.');
+  return `<div class="table-wrap" tabindex="0" aria-label="Task evidence table"><table><thead><tr><th>Task</th><th>Status</th><th>Source</th><th>Oracle</th><th>NOP</th><th>Difficulty</th></tr></thead><tbody>`+rows.map(row=>`<tr><td class="task-name"><button data-task="${esc(key(row))}">${esc(row.id)}</button>${row.tags?.length?`<div>${row.tags.slice(0,3).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div>`:''}</td><td>${badge(row.status,taskStatus(row.status))}${row.phase?`<div class="mini">${esc(stageName(row.phase))}</div>`:''}</td><td>${esc(sourceName(row.source))}</td><td>${badge(row.oracle?.status,gateName(row.oracle))}</td><td>${badge(row.nop?.status,gateName(row.nop))}</td><td>${esc(row.difficulty||'—')}</td></tr>`).join('')+`</tbody></table></div>`;
+}
+function renderTasks(){
+  const query=$('task-search').value.trim().toLowerCase(),status=$('status-filter').value,source=$('source-filter').value,batch=$('batch-filter').value;
+  const rows=tasks().filter(row=>(!query||[row.id,...row.tags||[]].join(' ').toLowerCase().includes(query))&&(!status||row.status===status)&&(!source||(row.source||'unknown')===source)&&(!batch||(row.batch_id||'latest')===batch));
+  $('task-table').innerHTML=taskTable(rows);$('task-count').textContent=`${rows.length} / ${tasks().length} shown`;
+  document.querySelectorAll('[data-batch]').forEach(el=>el.classList.toggle('active',!!batch&&el.dataset.batch===batch));
+}
+function renderValidation(){
+  const summary=data.validation||{};
+  let body='<div class="section-head">Latest validation</div><div class="cards">';
+  ['oracle','nop'].forEach(agent=>{const s=summary[agent]||{};body+=metric(agent==='oracle'?'Oracle passes':'NOP passes',s.recorded?number(s.passed):'—',s.recorded?`${number(s.passed)} / ${number(s.recorded)} recorded`:'no trials recorded');});
+  body+=metric('Candidates',number(data.total_candidates),'latest run')+metric('Rejected',data.run_id?number(data.rejected_count):'—','includes normalization rejects')+'</div>';
+  const rows=tasks().filter(t=>data.run_id&&t.run_id===data.run_id);
+  body+=rows.length?taskTable(rows):empty('No validation evidence for this run','Trials appear when the adapter records an Oracle or NOP outcome. Missing results are not counted as NOP reward zero.');
+  body+=`<details class="fold" data-fold="acceptance"><summary>› Acceptance rules<span class="hint">runtime gate and evidence scope</span></summary><div class="fold-body"><div class="method-body"><p><strong>Oracle:</strong> reference solution succeeds, reward equals 1, no Harbor exception, and meaningful pytest assertions pass.</p><p><strong>NOP:</strong> a separate fresh environment receives reward 0 because assertions fail, with no collection/runtime errors.</p><p><strong>Evidence:</strong> task details distinguish raw reward/JUnit from report-only verdicts when old validation files have been cleaned. Conflicting evidence is flagged.</p><p><strong>Hand-off:</strong> an agent still reviews the requirement/test/reference agreement. This dashboard does not infer semantic approval or a solved Tracer trajectory from runtime validation.</p></div></div></details>`;
+  $('validation-content').innerHTML=body;
+}
+function renderRuns(){
+  const rows=historyRows();
+  $('runs-content').innerHTML='<div class="section-head">Run history</div>'+ (rows.length?`<div class="table-wrap" tabindex="0" aria-label="Archived run history"><table><thead><tr><th>Run</th><th>Status</th><th>Source</th><th>Started</th><th>Duration</th><th>Candidates</th><th>Verified</th></tr></thead><tbody>`+rows.map(row=>`<tr><td class="left"><span class="mono">${esc(row.id)}</span><div class="mini">${esc(short(row.run_id))}</div></td><td>${badge(row.status,row.status)}</td><td>${esc(sourceName(row.source))}</td><td>${esc(time(row.started_at))}</td><td class="mono">${esc(duration(row.duration_sec))}</td><td>${number(row.candidates)}</td><td>${number(row.verified_count)}</td></tr>`).join('')+'</tbody></table></div>':empty('No archived runs','The first start.sh execution creates an archive on exit, including failed or interrupted attempts.'))+'<p class="footer-note">Newest archives first. A launcher archive and a batch run have different IDs; both are shown when their matching report exists. Missing measurements are left blank, rather than replaced with zeros.</p>';
+}
+function reasonName(reason){return ({'reward-mismatch':'Reward does not match the gate','trial-exception':'Harbor trial exception','duplicate-trial':'Duplicate trial results','missing-trial':'Missing trial result','verifier-evidence':'Missing or invalid assertion evidence','validation-rejected':'Validation rejected; inspect local evidence','evidence-conflict':'Report and raw evidence disagree','checksum-mismatch':'Harbor task checksum does not match the validation report'})[reason]||'—';}
+function trialDetail(title,trial){
+  trial=trial||{};
+  const rows=[['Verdict',gateName(trial)],['Evidence',({raw:'Reward + JUnit recorded',partial:'Reward recorded; JUnit unavailable',report:'Report only; raw files unavailable',none:'Not recorded'})[trial.basis]||'Not recorded'],['Task linkage',trial.checksum_matches===true?'Harbor checksum matches':trial.checksum_matches===false?'Harbor checksum mismatch':'Not recorded'],['Expected reward',trial.expected_reward],['Actual reward',trial.reward],['Tests',trial.tests],['Assertion failures',trial.failures],['Verifier errors',trial.errors],['Skipped tests',trial.skipped],['Outcome',reasonName(trial.reason)]];
+  return `<div class="panel"><h2>${esc(title)} <span>${badge(trial.status,gateName(trial))}</span></h2><table class="evidence-table">`+rows.map(([label,value])=>`<tr><td>${esc(label)}</td><td class="mono">${esc(value)}</td></tr>`).join('')+'</table></div>';
+}
+function activeTaskButton(taskKey){
+  return [...document.querySelectorAll('.page.active [data-task]')].find(el=>el.dataset.task===taskKey);
+}
+function updateTaskDetail(){
+  const row=tasks().find(t=>key(t)===selectedTask);
+  if(!row){
+    $('task-sub').textContent='Not included in the current snapshot';
+    $('task-detail').innerHTML=empty('Task unavailable in this snapshot','Previously displayed verifier outcomes have been cleared. Close this dialog and select a task from the current list.');
+    return;
+  }
+  $('task-title').textContent=row.id;$('task-sub').textContent=`${taskStatus(row.status)} · ${sourceName(row.source)}`;
+  $('task-detail').innerHTML=`<div class="detail-grid">${trialDetail('Oracle',row.oracle)}${trialDetail('NOP',row.nop)}</div><div class="sub">Recorded metadata</div><table><tr><td>Batch</td><td class="mono">${esc(row.batch_id)}</td></tr><tr><td>Run</td><td class="mono">${esc(row.run_id)}</td></tr><tr><td>Harbor task checksum</td><td class="mono">${esc(row.harbor_checksum)}</td></tr><tr><td>Block file digest</td><td class="mono">${esc(row.block_checksum)}</td></tr><tr><td>Difficulty</td><td>${esc(row.difficulty)}</td></tr><tr><td>Question ID</td><td class="mono">${esc(row.question_id)}</td></tr><tr><td>Tags</td><td>${(row.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')||'—'}</td></tr></table><p class="explanation">Task text, source files, solutions, prompts and host paths are intentionally not part of this view. Runtime gate results do not certify semantic review or a successful solving trajectory.</p>`;
+}
+function openModal(id,opener){closeModals(false);modalOpener=opener;$(id).hidden=false;$(id).querySelector('[data-close]').focus();}
+function closeModals(restore=true){
+  const panels=[...document.querySelectorAll('.modal')],wasOpen=panels.some(el=>!el.hidden);
+  panels.forEach(el=>el.hidden=true);
+  if(!restore||!wasOpen)return;
+  const target=modalOpener?.isConnected&&modalOpener.getClientRects().length
+    ?modalOpener:activeTaskButton(selectedTask)||document.querySelector('.nav-item.active');
+  target?.focus({preventScroll:true});
+}
+function renderAll(){
+  document.querySelectorAll('.page .fold').forEach(el=>{
+    const id=el.closest('.page').id+':'+el.dataset.fold;
+    if(el.open)openFolds.add(id);else openFolds.delete(id);
+  });
+  const scroll=$('main-content').scrollTop, windowScroll=window.scrollY;
+  const detailScroll=$('task-detail').scrollTop;
+  const focused=document.activeElement;
+  const focusedTask=focused?.dataset?.task,focusedBatch=focused?.dataset?.batch;
+  const sampleButton=focused?.classList?.contains('samples-btn');
+  const focusedFold=focused?.closest?.('.fold');
+  const foldFocus=focused?.tagName==='SUMMARY'&&focusedFold?focusedFold.closest('.page').id+':'+focusedFold.dataset.fold:null;
+  $('global-stats').innerHTML=[['Batches',data.batch_count],['Published tasks',data.published_task_count],['Latest candidates',data.total_candidates],['Archived runs',data.archive_count]].map(([label,value])=>`<div class="sidebar-stat"><span class="l">${esc(label)}</span><span class="v">${number(value)}</span></div>`).join('');
+  $('nav-tasks').textContent=number(data.published_task_count);$('nav-runs').textContent=number(data.archive_count);
+  $('snapshot-label').textContent=(LIVE?'Live · ':'Snapshot · ')+time(data.snapshot_at);
+  const a=data.availability||{},notices=[];
+  if(['config','state','report','index','manifest'].some(k=>a[k]==='unavailable'))notices.push('Some local evidence could not be read. Available values are shown; unavailable measurements remain blank.');
+  if(a.ignored_manifest_entries)notices.push('Invalid or duplicate manifest entries were ignored. Inspect the local publication before handing it downstream.');
+  if(tasks().some(t=>t.status==='missing'))notices.push('A manifest references unavailable task files. The listed count is not proof that every task can be loaded.');
+  if(a.limited)notices.push('This snapshot is bounded. Older batches, runs, or task rows may be omitted from the detail tables.');
+  $('notices').innerHTML=notices.map(text=>`<div class="notice">${esc(text)}</div>`).join('');
+  renderOverview();renderBatches();renderTasks();renderValidation();renderRuns();showPage(page);
+  document.querySelectorAll('.page .fold').forEach(el=>el.open=openFolds.has(el.closest('.page').id+':'+el.dataset.fold));
+  if(!$('taskPanel').hidden){updateTaskDetail();$('task-detail').scrollTop=detailScroll;}
+  else if(focusedTask)activeTaskButton(focusedTask)?.focus({preventScroll:true});
+  else if(foldFocus){
+    [...document.querySelectorAll('.page.active .fold')].find(el=>el.closest('.page').id+':'+el.dataset.fold===foldFocus)?.querySelector('summary').focus({preventScroll:true});
+  }
+  else if(focusedBatch){
+    [...document.querySelectorAll('.page.active [data-batch]')].find(el=>el.dataset.batch===focusedBatch&&el.classList.contains('samples-btn')===sampleButton)?.focus({preventScroll:true});
+  }
+  $('main-content').scrollTop=scroll;
+  if(window.scrollY!==windowScroll)window.scrollTo(0,windowScroll);
+}
+async function refresh(){
+  if(!LIVE){location.reload();return;}
+  try{const response=await fetch('/api/status',{cache:'no-store'});if(!response.ok)throw new Error();const next=await response.json();if(next.block!=='terminal-curator')throw new Error();data=next;renderAll();}catch(e){$('snapshot-label').textContent='Refresh unavailable · last snapshot retained';}
+}
+document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>showPage(el.dataset.page)));
+['task-search','status-filter','source-filter','batch-filter'].forEach(id=>$(id).addEventListener(id==='task-search'?'input':'change',renderTasks));
+document.addEventListener('click',event=>{const task=event.target.closest('[data-task]');if(task){selectedTask=task.dataset.task;updateTaskDetail();openModal('taskPanel',task);}const batch=event.target.closest('[data-batch]');if(batch){$('batch-filter').value=batch.dataset.batch;renderTasks();$('task-search').scrollIntoView({block:'nearest'});}if(event.target.matches('.modal,[data-close]'))closeModals();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')closeModals();if(event.key==='Tab'){const modal=[...document.querySelectorAll('.modal')].find(el=>!el.hidden);if(!modal)return;const items=[...modal.querySelectorAll('button,[href],input,select,[tabindex="0"]')].filter(el=>!el.disabled),first=items[0],last=items.at(-1);if(event.shiftKey&&document.activeElement===first){last.focus();event.preventDefault();}else if(!event.shiftKey&&document.activeElement===last){first.focus();event.preventDefault();}}});
+$('infoToggle').addEventListener('click',event=>openModal('infoPanel',event.currentTarget));
+$('themeToggle').addEventListener('click',()=>{const value=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=value;try{localStorage.setItem('curator-theme',value);}catch(e){}});
+$('refreshToggle').addEventListener('click',refresh);
+window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)));
+renderAll();
+if(LIVE)setInterval(refresh,10000);
+</script>
+</body>
+</html>

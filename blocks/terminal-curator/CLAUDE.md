@@ -39,6 +39,8 @@ agent trajectory and a verifier reward in Tracer.
 ## Configuration and credentials
 
 `config.yaml` has only `meta_info` and `runtime_info`. It is read once per run.
+The loaded configuration is frozen as a redacted snapshot at run start; later
+profile edits do not rewrite that run's recorded configuration.
 The user supplies the source, finite limits, LLM endpoint/model, and resource
 host in `runtime_info.input` / `meta_info.resources`; progress belongs in
 `artifacts/state.json`, `artifacts/reports/latest.json`, and `artifacts/index.yaml`.
@@ -110,20 +112,26 @@ resolve code synchronization before launch unless already authorized.
 
 Published batches are immutable copies under `artifacts/tasks-versions/<id>/`.
 `artifacts/tasks` is an atomically updated symlink to the newest passing
-batch, containing its manifest and `registry.json`. Tracer resolves that version before staging,
+batch, containing its manifest and `registry.json`. Tracer resolves that
+version before staging,
 so a later publication does not retarget an existing rollout's task links.
 Keep old versions while downstream runs refer to them.
 
 `start.sh` runs a finite batch and archives on EXIT. It must fail if the batch
-produces no verified tasks. Inspect the latest report, the manifest, and the
+produces no verified tasks. Each trial is linked by Harbor's task checksum;
+the same normalized bytes are checked before and after both jobs and in the
+actual copied publication. `harbor_task_checksums` records this identity.
+`task_checksums` is a separate block file digest and cannot substitute for it.
+Inspect the exact per-run report, the manifest, and the
 Oracle/NOP job results before reporting success. Preserve the failed candidate
 and its evidence; fix the block adapter or source, then rerun only the affected
 batch. Do not relax the verifier, publish a failed task, or count a missing
 result as a zero reward.
 
 An LLM test review must return a JSON object with a real boolean `pass: true`
-before its generated tests can be accepted. Missing, malformed, negative,
-or string-valued approval does not approve the upstream fallback candidate.
+and `issues: []` before its generated tests can be accepted. Missing issues,
+a non-list, non-string entries, contradictory reported issues, malformed or
+negative review, and string-valued approval all reject the fallback candidate.
 Complete the agent's own per-requirement semantic audit after the runtime
 checks. If a repair is needed, copy the affected task out of the immutable
 batch, keep its source provenance, and record the instruction/test mapping,
@@ -137,17 +145,60 @@ temporary `artifacts/runs/` trees while retaining published versions, the
 output symlink, environments, reports/state, and archives. Preview with
 `--dry-run`; deleting run trees also removes detailed source/candidate/job
 evidence, so retain any material needed for diagnosis before cleanup.
-`--all --yes` requires an explicitly authorized full cleanup.
-`scripts/archive_run.sh` records the effective redacted config,
-script snapshot, repository SHAs, exit status, and an `artifacts/index.yaml`
-entry. A fresh checkout has no run index; this is a normal state.
+`--all --yes` requires an explicitly authorized full cleanup. Normal cleanup
+also removes the per-run frozen-config copies; matching run archives retain
+their copied evidence.
+The worker writes a redacted loaded-config snapshot to
+`artifacts/runs/<runtime-id>/config.yaml`. The launcher passes that exact
+runtime ID to archival; `artifacts/index.yaml` distinguishes its sequential
+`id: run_NNN` from `run_id`, and copies only the matching per-run report.
+It does not adopt whichever report is newest after waiting for a lock.
+Archival failure is surfaced as a run failure. For a manual archive with a
+specific report, pass its explicit `--run-id`; without one, an archive does
+not claim an existing run report. A fresh checkout has no run index.
+
+Stop verifies both PID and process start identity using private
+`run.process.json`, captures the owning run before termination, and cleans
+only its Compose resources. This process metadata is not dashboard data.
+Cleanup checks launcher, run and archive locks so it cannot remove evidence
+between worker exit and the EXIT archive. The launcher holds `launch.lock`
+through preflight, execution and archival. Script code and the effective
+redacted configuration are frozen at run start; private profiles, hidden
+files and symlink targets are excluded from the code snapshot. After a
+worker is forcibly killed, stop can still recover its exact recorded
+Compose sidecars from `run.process.json` without adopting a later run.
 
 Treat `repos/terminal-lego` and Tracer's `repos/harbor` as read-only pinned
 dependencies. Put compatibility code in `scripts/`. Any proposed vendored-code
 change follows the explicit warning and confirmation procedure in the block
 definition; never hide a dirty submodule behind a successful run.
 
+## Progress and dashboard
+
+Generation records `collected_questions`, `generation_completed` (including
+failed attempts), `generation_failed`, successful `candidate_ids`, and bounded
+per-task stage/status updates after each completed future. A single failed
+candidate is recorded and does not discard successful siblings. Imported
+candidates have `collected_questions: null`, not zero collected questions.
+The generation retry budget means **extra retries**: `max_retries: 2` allows
+at most three API attempts per call.
+
+The Curator-style board has Overview, Task List, Validation and Runs views.
+It reads only allowlisted metadata from live state, matching reports,
+immutable batches, archived run summaries and contained trial/JUnit files.
+Static exports are snapshots and never poll a live API; the local server
+refreshes data without resetting the selected view or filters. Unavailable
+metadata remains unavailable. Runtime pass, semantic review and successful
+solving are distinct claims. See `dashboard/README.md` for the exact scopes.
+The docs demonstration is declared synthetic and is never populated from a
+real local run.
+
 ## Downstream contract
+
+Use the canonical plugin workflow for generation and semantic audit before
+starting a separate Tracer run. The legacy root shell refuses implicit
+terminal-to-Tracer execution so it cannot skip this audit; explicit
+terminal-only and tracer-only commands remain separate operator actions.
 
 Tracer selects this producer with:
 
