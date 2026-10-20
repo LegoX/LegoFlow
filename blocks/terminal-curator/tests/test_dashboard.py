@@ -104,11 +104,11 @@ def test_metadata_tags_are_labels_not_filesystem_identifiers(board):
     batch = publish(board, ids=['terminal-jsonl-summary'])
     path = batch / 'terminal-jsonl-summary/task.toml'
     original = path.read_text()
-    tags = 'tags = ["c++", ".net", "file paths", "文件处理"]'
+    tags = 'tags = ["c++", ".net", "file paths", "\u6587\u4ef6\u5904\u7406"]'
     path.write_text('\n'.join(tags if line.startswith('tags = ') else line
                               for line in original.splitlines()) + '\n')
     row = board.module.snapshot(board.config_path)['tasks'][0]
-    assert row['tags'] == ['c++', '.net', 'file paths', '文件处理']
+    assert row['tags'] == ['c++', '.net', 'file paths', '\u6587\u4ef6\u5904\u7406']
 
 
 def test_runtime_evidence_and_batch_metadata_are_measured(board):
@@ -215,7 +215,7 @@ def test_partial_files_and_invalid_manifests_do_not_crash_or_leak(board):
 
 
 def test_public_projection_rejects_untrusted_shapes_and_config_secret_smuggling(board, monkeypatch):
-    secret = 'fixture-opaque-key-value'
+    secret = 'fake-opaque-key-value'
     board.config['runtime_info']['input']['llm_api']['api_key'] = secret
     board.config_path.write_text(yaml.safe_dump(board.config))
     write_json(board.artifacts / 'state.json', {
@@ -359,10 +359,10 @@ def test_concurrent_publication_cannot_mix_one_manifest_with_another_batch(board
 def test_private_process_metadata_is_never_a_dashboard_input(board):
     write_json(board.artifacts / 'run.process.json', {
         'pid': 99999, 'host': 'private-node.invalid', 'config': '/private/profile',
-        'api_key': 'private-process-key'})
+        'api_key': 'fake-process-key'})
     data = board.module.snapshot(board.config_path)
     assert data['status'] == 'never-run'
-    for private in ['99999', 'private-node', '/private/profile', 'private-process-key', 'pid']:
+    for private in ['99999', 'private-node', '/private/profile', 'fake-process-key', 'pid']:
         assert private not in json.dumps(data)
 
 

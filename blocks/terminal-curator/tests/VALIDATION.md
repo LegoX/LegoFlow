@@ -144,6 +144,10 @@ historical trajectories.
   staging and native terminal registry binding. Existing unowned staging is
   refused, including under overwrite. Isolated smoke profiles use new owned
   paths; the existing SWE root smoke's stage sequence is preserved.
+- Existing consumer schema, completion-probe, launch/smoke contracts and
+  Tracer dashboard regression cases passed. Two empty-table render fragments
+  were moved out of f-string expressions to honor Tracer's declared Python
+  3.11 minimum without changing the HTML.
 - Actual HTTP/API browser checks covered four views, automatic polling,
   filters, task dialogs, keyboard focus, fold/scroll persistence, stale detail
   removal, unknown/failed states, Unicode/C++ tags, themes and mobile widths.

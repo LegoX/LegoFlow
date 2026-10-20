@@ -3048,12 +3048,13 @@ def render_job_row(job: dict[str, Any]) -> str:
             f"<td>{html.escape(exc_text)}</td>"
             "</tr>"
         )
+    eval_body = "".join(eval_rows) or '<tr><td colspan="7" class="muted">No eval details</td></tr>'
     eval_table = (
         "<details><summary>Eval breakdown</summary>"
         '<div class="eval-table"><table><thead><tr><th>Eval</th><th class="num">Trials</th>'
         '<th class="num">Errors</th><th class="num">Mean</th><th class="num">Reward=1</th>'
         '<th class="num">Reward=0</th><th>Exceptions</th></tr></thead>'
-        f"<tbody>{''.join(eval_rows) or '<tr><td colspan=\"7\" class=\"muted\">No eval details</td></tr>'}</tbody></table></div>"
+        f"<tbody>{eval_body}</tbody></table></div>"
         "</details>"
     )
     search_text = f"{job.get('job')} {job.get('scaffold')} {job.get('id')} {job.get('path')}"
@@ -3289,6 +3290,7 @@ def render_html(
         for name in job_segment_names
     )
     difficulty_title = html.escape("easy=1, medium=2, hard=3; unknown is excluded from the score and shown as a warning.")
+    job_segment_body = job_segment_rows or '<tr><td colspan="11" class="empty">No job segments available.</td></tr>'
     job_segment_panel = (
         '<section class="panel segment-panel">'
         '<div class="panel-head"><div><h2>Job</h2>'
@@ -3300,7 +3302,7 @@ def render_html(
         f"<th class='num sortable'>Pass Rate</th><th class='num sortable' title='{difficulty_title}'>Task Difficulty</th>"
         "<th class='num sortable'>Valid Trajectories</th><th class='num sortable'>Tokens</th>"
         "</tr></thead>"
-        f"<tbody>{job_segment_rows or '<tr><td colspan=\"11\" class=\"empty\">No job segments available.</td></tr>'}</tbody>"
+        f"<tbody>{job_segment_body}</tbody>"
         "</table></div></section>"
     )
     segment_header = (
