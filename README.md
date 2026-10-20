@@ -43,12 +43,13 @@ Coding is the core capability of modern LLMs, yet producing high-quality coding 
 
 ![LegoFlow block tree](docs/public/figures/my-version-coding-repos-expandable.png)
 
-LegoFlow follows the tree structure of **blocks**. The root orchestrates four children:
+LegoFlow follows the tree structure of **blocks**. The root orchestrates five children, with SWE and terminal task producers feeding the same downstream pipeline:
 
 
 | Block | Role |
 | ----- | ---- |
-| [`curator`](https://legoflow-docs.legox.net/docs/blocks/curator/getting-started) | Curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums |
+| [`curator`](https://legoflow-docs.legox.net/docs/blocks/curator/getting-started) | Curates verified SWE tasks from GitHub pull requests |
+| [`terminal-curator`](blocks/terminal-curator/README.md) | Builds bounded Harbor terminal-task batches from Stack Overflow, questions JSON, or local candidates; requires Oracle=1 and NOP=0 before Tracer or Evaluator hand-off |
 | [`tracer`](https://legoflow-docs.legox.net/docs/blocks/tracer/getting-started) | Collects high-quality trajectories with verified rewards, across multiple coding scaffolds |
 | [`trainer`](https://legoflow-docs.legox.net/docs/blocks/trainer/getting-started) | Converts rollout traces into training-ready formats and launches end-to-end training |
 | [`evaluator`](https://legoflow-docs.legox.net/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis |
@@ -93,12 +94,14 @@ cd LegoFlow
 ```bash
 claude plugin marketplace add ./.claude/plugins
 claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/terminal-curator/.claude/plugins
 claude plugin marketplace add ./blocks/tracer/.claude/plugins
 claude plugin marketplace add ./blocks/trainer/.claude/plugins
 claude plugin marketplace add ./blocks/evaluator/.claude/plugins
 
 claude plugin install root@root-block
 claude plugin install curator@curator-block
+claude plugin install terminal-curator@terminal-curator-block
 claude plugin install tracer@tracer
 claude plugin install trainer@trainer-block
 claude plugin install evaluator@evaluator-block
@@ -114,6 +117,7 @@ LegoFlow also provides Codex plugins under `plugins/`, which wrap the Claude Cod
 codex plugin marketplace add .
 codex plugin add root@legoflow
 codex plugin add curator@legoflow
+codex plugin add terminal-curator@legoflow
 codex plugin add tracer@legoflow
 codex plugin add trainer@legoflow
 codex plugin add evaluator@legoflow
@@ -139,6 +143,22 @@ Every block has clear roles and functions. Users can easily trigger these blocks
 The setup skill prepares dependencies and fills in `config.yaml`; check validates the configuration and performs a preflight; run does the work and archives intermediate output to `artifacts/`; and dashboard helps monitor progress and status.
 
 The detailed guides to each individual block can be found at [docs](https://legoflow-docs.legox.net/docs/running-blocks/block-by-block).
+
+For terminal tasks, fill `blocks/terminal-curator/config.yaml` and use
+`/terminal-curator:{setup,check,run,dashboard}` in Claude Code or the matching
+`$terminal-curator-<skill>` in Codex. Supply API keys through environment
+variables. Set Tracer's `task_source.local_block: terminal-curator` with
+`provider: local` and `terminal_tasks_dir: ../terminal-curator/artifacts/tasks`.
+The verified `verifiable_tasks.txt` manifest gates rollout; existing SWE
+workflows keep `local_block: curator` by default. See the
+[terminal configuration guide](blocks/terminal-curator/docs/content/docs/configuration.mdx).
+
+The publication also exports a native `terminal-curator@1.0` registry for
+Evaluator. Select `registry_path:
+../terminal-curator/artifacts/tasks/registry.json`, with `no_hack: false` and
+`job_analysis.enabled: false`. See the
+[Evaluator hand-off](blocks/terminal-curator/docs/content/docs/evaluator-handoff.mdx)
+for the complete task-source snippet.
 
 #### Running Multiple Blocks
 
@@ -173,7 +193,7 @@ and [Fumadocs](https://fumadocs.dev/) for the documentation site.
 
 ## Roadmap
 
-- [ ] **TerminalBench**: Migrate and upgrade [Terminal-Lego](https://www.legox.net/blog/terminal-lego/) workflows in LegoFlow for [Terminal-Bench 3.0](https://www.tbench.ai/news/terminal-bench-3-0) and [Terminal-Bench 4.0](https://www.tbench.ai/news/terminal-bench-4-0).
+- [ ] **TerminalBench**: Extend the `terminal-curator` integration of [Terminal-Lego](https://www.legox.net/blog/terminal-lego/) with broader task sources and coverage for [Terminal-Bench 3.0](https://www.tbench.ai/news/terminal-bench-3-0) and [Terminal-Bench 4.0](https://www.tbench.ai/news/terminal-bench-4-0).
 - [ ] **ProgramBench and NL2Repo**: Mine more complex, long-horizon software-engineering tasks that begin with either an executable program or a natural-language requirement.
 - [ ] **Recursive self-improvement**: Use block execution feedback to support more general, long-running self-improving systems.
 

@@ -146,7 +146,8 @@ link_harbor_tasks() {
   local src="$1"
   local dst="$2"
   local manifest="${3:-}"
-  python3 - "$src" "$dst" "$manifest" <<'PY'
+  local strict="${4:-false}"
+  python3 - "$src" "$dst" "$manifest" "$strict" <<'PY'
 from pathlib import Path
 import shutil
 import sys
@@ -154,6 +155,7 @@ import sys
 src = Path(sys.argv[1]).resolve()
 dst = Path(sys.argv[2])
 manifest = Path(sys.argv[3]) if sys.argv[3] else None
+strict = sys.argv[4] == "true"
 
 if manifest is not None:
     with manifest.open(encoding="utf-8") as fh:
@@ -166,6 +168,20 @@ if manifest is not None:
         sys.exit(1)
 else:
     allowed = sorted(p.name for p in src.iterdir() if p.is_dir())
+
+if strict:
+    if src == dst.resolve() or src in dst.resolve().parents or dst.resolve() in src.parents:
+        raise SystemExit("ERROR: task source and staging directory must not overlap")
+    for task_id in allowed:
+        if task_id in {".", ".."} or "/" in task_id or "\\" in task_id:
+            raise SystemExit("ERROR: manifest task IDs must be direct directory names")
+        task = src / task_id
+        if task.is_symlink() or not task.is_dir() or task.resolve().parent != src:
+            raise SystemExit(f"ERROR: manifest task is missing or outside the source: {task_id}")
+        if not all((task / name).is_file() for name in ("task.toml", "instruction.md")) or not all(
+            (task / name).is_dir() for name in ("environment", "tests")
+        ):
+            raise SystemExit(f"ERROR: manifest task has an invalid Harbor layout: {task_id}")
 
 dst.parent.mkdir(parents=True, exist_ok=True)
 if dst.is_symlink() or dst.is_file():
@@ -201,7 +217,9 @@ find_valid_task_root() {
 from pathlib import Path
 import sys
 
-root = Path(sys.argv[1])
+# Freeze a producer's published pointer before reading its manifest. A later
+# publication must not combine one batch's IDs with another batch's task dirs.
+root = Path(sys.argv[1]).resolve()
 dataset_name = sys.argv[2].split("/")[-1]
 required_files = ["task.toml", "instruction.md"]
 required_dirs = ["environment", "tests"]
@@ -318,19 +336,20 @@ PY
 
 [[ -f "$CONFIG" ]] || { echo "ERROR: config not found: $CONFIG" >&2; exit 1; }
 
-PROVIDER="$(cfg runtime_info.input.task_source.provider)"
-DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
+PROVIDER="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field provider)"
+DATASET_NAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_name)"
+MANIFEST_REQUIRED="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field manifest_required)"
 SPLIT="$(cfg runtime_info.input.task_source.split)"
 HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
 HARBOR_UV_RAW="$(cfg meta_info.environment.harbor_uv)"
 TARGET_RAW="$(cfg runtime_info.input.harbor_job.dataset_path)"
 
 [[ -n "$PROVIDER" ]] || { echo "ERROR: runtime_info.input.task_source.provider is empty" >&2; exit 1; }
-[[ -n "$DATASET_NAME" ]] || { echo "ERROR: runtime_info.input.task_source.dataset_name is empty" >&2; exit 1; }
+[[ -n "$DATASET_NAME" ]] || { echo "ERROR: selected task source is empty" >&2; exit 1; }
 [[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.harbor.path is empty" >&2; exit 1; }
 [[ -n "$HARBOR_UV_RAW" ]] || { echo "ERROR: meta_info.environment.harbor_uv is empty" >&2; exit 1; }
 
-DATASET_BASENAME="$(basename "$DATASET_NAME")"
+DATASET_BASENAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_id)"
 if [[ -z "$TARGET_RAW" ]]; then
   TARGET_RAW="artifacts/tasks/$DATASET_BASENAME"
 fi
@@ -353,16 +372,18 @@ if [[ -d "$TARGET_DIR" ]]; then
   if validate_tasks "$TARGET_DIR" >/tmp/tracer_prepare_validate.$$ 2>/dev/null; then
     STATUS="$(cat /tmp/tracer_prepare_validate.$$)"
     rm -f /tmp/tracer_prepare_validate.$$
-    echo "Target already contains Harbor task directories ($STATUS)."
-    exit 0
-  fi
-  rm -f /tmp/tracer_prepare_validate.$$
-  if [[ "$OVERWRITE" != "1" ]]; then
+    if [[ "$MANIFEST_REQUIRED" != "true" ]]; then
+      echo "Target already contains Harbor task directories ($STATUS)."
+      exit 0
+    fi
+    echo "Refreshing terminal task staging from the current verified manifest ($STATUS)."
+  elif [[ "$OVERWRITE" != "1" ]]; then
+    rm -f /tmp/tracer_prepare_validate.$$
     echo "ERROR: target exists but does not look like Harbor task directories: $TARGET_RAW" >&2
     echo "Re-run with --overwrite to replace it." >&2
     exit 1
   fi
-  rm -rf "$TARGET_DIR"
+  rm -f /tmp/tracer_prepare_validate.$$
 fi
 
 [[ -e "$HARBOR_DIR/.git" ]] || { echo "ERROR: Harbor repo missing at $HARBOR_PATH_RAW; run scripts/update_repos.sh first" >&2; exit 1; }
@@ -381,7 +402,10 @@ case "$PROVIDER" in
     MANIFEST="$VALID_ROOT/verifiable_tasks.txt"
     if [[ -f "$MANIFEST" ]]; then
       echo "Manifest found: $MANIFEST — linking only listed tasks."
-      link_harbor_tasks "$VALID_ROOT" "$TARGET_DIR" "$MANIFEST"
+      link_harbor_tasks "$VALID_ROOT" "$TARGET_DIR" "$MANIFEST" "$MANIFEST_REQUIRED"
+    elif [[ "$MANIFEST_REQUIRED" == "true" ]]; then
+      echo "ERROR: terminal-curator source requires verifiable_tasks.txt: $VALID_ROOT" >&2
+      exit 1
     else
       echo "No verifiable_tasks.txt in source — linking all task dirs."
       link_harbor_tasks "$VALID_ROOT" "$TARGET_DIR" ""

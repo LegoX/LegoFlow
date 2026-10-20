@@ -1,0 +1,149 @@
+---
+title: Configuration
+description: Source modes, bounded budgets, credentials, resources, and output paths.
+---
+
+`config.yaml` follows LegoFlow's `meta_info` / `runtime_info` block schema.
+It configures one run; progress and status are written to artifacts. Paths
+within the block config resolve from the block directory, including when
+`--config` selects an overlay stored elsewhere.
+
+## Inputs
+
+All fields below live under `runtime_info.input`.
+
+| Field | Meaning |
+| --- | --- |
+| `source.type` | `stackoverflow`, `json`, or `tasks`. |
+| `source.path` | Questions JSON file or local candidate pool; needed for `json` / `tasks`. |
+| `source.tags` | Stack Overflow tags used by bounded collection. |
+| `source.question_ids` | Optional explicit question IDs for live Stack Overflow collection. |
+| `source.max_questions` | Finite task/question cap for this run. |
+| `source.min_score` | Minimum source question score. |
+| `source.max_pages` | Maximum pages requested during live collection. |
+| `stackoverflow.api_base_url` | Stack Exchange API base; default `https://api.stackexchange.com/2.3`. |
+| `stackoverflow.api_key` | Keep empty in tracked config; optional `SO_API_KEY` environment value. |
+| `llm_api.api_base_url` | OpenAI-compatible generation endpoint. |
+| `llm_api.model` | Generation model available on that endpoint. |
+| `llm_api.api_key` | Leave empty in tracked config; supply `OPENAI_API_KEY`. |
+| `generation.workers` | Concurrent candidate generation workers. |
+| `generation.request_timeout_sec` | Timeout for a generation API request. |
+| `generation.max_retries` | Retry cap for generation requests. |
+| `validation.harbor_bin` | Supported Harbor executable from Tracer's pinned environment. |
+| `validation.n_concurrent` | Concurrent Harbor validation trials. |
+| `validation.timeout_multiplier` | Harbor timeout scaling for validation. |
+| `validation.job_timeout_sec` | Maximum wall time for one validation Harbor job. |
+
+The checked-in configuration is the exact field reference, including runtime
+paths and defaults. Do not change the upstream scripts to configure a run.
+Use `--config <file>` with block commands for a local overlay; it is a full
+block configuration with the same schema, not a partial YAML patch.
+
+## Source modes
+
+`stackoverflow` collects questions and accepted answers through the Stack
+Exchange API, then generates candidates. Set tags or question IDs and keep
+`max_questions` / `max_pages` small for a first run. An invalid API key or
+exhausted quota is a source failure; the block does not silently switch to
+another source or crawl indefinitely.
+
+`json` reuses saved Terminal-Lego input. The file has a top-level `questions`
+array. Each item contains a question and accepted-answer body:
+
+```json
+{
+  "questions": [{
+    "question_id": 123456,
+    "title": "A concrete shell task",
+    "body": "<p>The source problem.</p>",
+    "tags": ["bash"],
+    "score": 10,
+    "link": "https://stackoverflow.com/questions/123456",
+    "accepted_answer_id": 123457,
+    "accepted_answer": {
+      "answer_id": 123457,
+      "body": "<p>The accepted source answer.</p>",
+      "score": 12
+    }
+  }]
+}
+```
+
+This is a format example, not a real source to collect. Use actual question
+provenance in runs. The pinned repository's `examples/sample_input.json`
+illustrates the same shape. JSON generation still needs an LLM, then the
+same Harbor acceptance gate as live collection.
+
+`tasks` imports local Terminal-Lego-style task candidates. Set `source.path`
+to their pool. Each candidate needs `instruction.md`, `environment/Dockerfile`,
+`solution/solve.sh`, `task.toml`, and `tests/test_outputs.py` containing pytest
+tests. Candidate directories and their contents must not be symlinks. The
+adapter installs a canonical `tests/test.sh` that runs the pytest checks and
+writes a JUnit report and Harbor reward; an existing entrypoint is preserved
+as `tests/test.sh.upstream`. Arbitrary verifier frameworks are not supported
+by this import mode. Imported tasks are normalized and validated;
+an incoming manifest or previous upstream validator result is not trusted as
+this block's fresh Oracle/NOP evidence. No generation LLM key is required.
+
+## Credentials
+
+Environment values override their corresponding configured fields:
+
+| Variable | Use |
+| --- | --- |
+| `OPENAI_API_KEY` | Generation secret. |
+| `OPENAI_API_BASE_URL` / `OPENAI_API_BASE` | Endpoint override. |
+| `MODEL_NAME` | Generation model override. |
+| `SO_API_KEY` | Optional Stack Exchange key. |
+| `SO_API_BASE_URL` | Stack Exchange API base override. |
+
+Use your shell or secret manager to supply values. Do not paste credentials
+into commands that will be archived, commit a populated key field, or put a
+secret in a source JSON file. Reports and dashboards must contain no keys.
+Archived configuration is redacted, including when an overlay is used.
+
+## Resources and dependencies
+
+`meta_info.resources.ip: local` runs on the current host. A remote host means
+SSH and tmux on that host, with `directory` naming the synchronized checkout's
+block directory. The normal default is local; choose a Docker-capable node
+when the orchestration node lacks Docker.
+
+The legacy root launcher maps an in-block profile to the same relative
+location under the remote `resources.directory`; a profile outside the block
+keeps its explicit absolute path. Prepare that profile at the mapped path
+with the authorized code/input synchronization, and supply credentials in
+the execution host's environment.
+
+`repos/terminal-lego` is pinned under `meta_info.repos`. Setup may initialize
+the submodule; generation and checks never modify it. Harbor validation uses
+Tracer's pinned repository and `artifacts/env/harbor-uv` environment rather
+than a new floating runtime. Source tasks must be available on that same host.
+
+## Outputs and Tracer selection
+
+`runtime_info.output.harbor_tasks_dir.path` identifies the published pool,
+normally `artifacts/tasks`. The report output is
+`artifacts/reports/latest.json`. The verified manifest inside the pool is the
+authoritative downstream allowlist.
+
+In `blocks/tracer/config.yaml`:
+
+```yaml
+task_source:
+  provider: local
+  local_block: terminal-curator
+  terminal_tasks_dir: ../terminal-curator/artifacts/tasks
+```
+
+The `task_source` snippet belongs under `runtime_info.input`. Retain Tracer's
+existing SWE `dataset_name` value; the source resolver chooses the terminal
+path when `local_block` selects it. `curator` remains the default local
+producer, so installing this plugin does not require terminal credentials
+for an existing SWE run.
+
+The same publication also exports `runtime_info.output.eval_registry.path`,
+normally `artifacts/tasks/registry.json`, for Evaluator's existing
+`harbor_registry` provider. Select `terminal-curator@1.0`, point
+`task_source.registry_path` at that file, and set `task_source.no_hack: false`.
+See the full [Evaluator example](./evaluator-handoff.mdx).

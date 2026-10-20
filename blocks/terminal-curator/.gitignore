@@ -1,0 +1,11 @@
+artifacts/
+.env
+.env.*
+!.env.example
+config.local*.yaml
+config.*.local.yaml
+__pycache__/
+.pytest_cache/
+*.pyc
+*.log
+dashboard/site/

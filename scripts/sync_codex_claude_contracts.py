@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BLOCKS = ("curator", "tracer", "trainer", "evaluator")
+BLOCKS = ("curator", "terminal-curator", "tracer", "trainer", "evaluator")
 
 
 def write_codex_skill(codex_path: Path, claude_path: Path, description: str) -> None:

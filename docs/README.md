@@ -10,6 +10,9 @@ The prose lives in `content/docs/`; everything else is the minimal app shell
 needed to render and deploy it. This site documents the *root* block (pipeline,
 block system, getting started). Each block has its own docs site, e.g.
 tracer's `legoflow-tracer-docs` project (`blocks/tracer/docs/`).
+Terminal Curator keeps its prose in `blocks/terminal-curator/docs/content/docs/`
+and mounts it directly in this root site at `/docs/blocks/terminal-curator`;
+it does not duplicate the web application shell.
 
 ## Requirements
 
@@ -62,6 +65,7 @@ docs/
 │   ├── block-design.mdx
 │   ├── blocks/         #   per-block portals (each links to that block's full docs)
 │   │   ├── curator.mdx
+│   │   ├── terminal-curator/  # mounted from the block content source
 │   │   ├── tracer.mdx
 │   │   ├── trainer.mdx
 │   └── reference/         #   config-schema, artifacts

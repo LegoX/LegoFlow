@@ -18,7 +18,7 @@ function rewriteBlockDocsHref(currentUrl: string, href?: string) {
     return href;
   }
 
-  const [, block] = currentUrl.slice(blockDocsPrefix.length).split('/');
+  const [block] = currentUrl.slice(blockDocsPrefix.length).split('/');
   if (currentUrl.startsWith(blockDocsPrefix) && block !== 'evaluator') {
     return `${blockDocsPrefix}${block}${href.slice('/docs'.length)}`;
   }

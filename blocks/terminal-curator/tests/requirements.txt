@@ -1,0 +1,2 @@
+-r ../scripts/requirements.txt
+pytest==8.4.2

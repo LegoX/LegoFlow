@@ -205,7 +205,9 @@ litellm_settings.update({
 })
 data["litellm_settings"] = litellm_settings
 
-with open(output_path, "w", encoding="utf-8") as fh:
+fd = os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+os.chmod(output_path, 0o600)
+with os.fdopen(fd, "w", encoding="utf-8") as fh:
     yaml.safe_dump(data, fh, sort_keys=False)
 PY
 }
@@ -264,9 +266,9 @@ LITELLM_UV_RAW="$(cfg meta_info.environment.litellm_uv)"
 HARBOR_DATASET_PATH_RAW="$(cfg runtime_info.input.harbor_job.dataset_path)"
 HARBOR_JOBS_DIR_RAW="$(cfg runtime_info.input.harbor_job.jobs_dir)"
 HARBOR_DATASET="$(cfg runtime_info.input.harbor_job.dataset)"
-TASK_SOURCE_DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
+TASK_SOURCE_DATASET_NAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_name)"
 if [[ -z "$HARBOR_DATASET" && -n "$TASK_SOURCE_DATASET_NAME" ]]; then
-  HARBOR_DATASET="$(basename "$TASK_SOURCE_DATASET_NAME")"
+  HARBOR_DATASET="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_id)"
 fi
 if [[ -z "$HARBOR_DATASET_PATH_RAW" && -n "$HARBOR_DATASET" ]]; then
   HARBOR_DATASET_PATH_RAW="artifacts/tasks/$HARBOR_DATASET"
@@ -626,7 +628,7 @@ echo "Config:     $JOB_DIR_RAW/config.yaml" | tee -a "$LOG_FILE"
 echo "Command:    $RUN_COMMAND" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
-(cd "$HARBOR_DIR" && bash -lc "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
+(cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
 
 SFT_CONVERT_ENABLED="$(cfg runtime_info.input.sft_conversion.enabled)"
 if [[ "$SFT_CONVERT_ENABLED" == "true" ]]; then

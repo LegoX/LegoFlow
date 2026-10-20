@@ -16,6 +16,7 @@ root = Path(sys.argv[1])
 plugins = {
     "root": root / "plugins/root",
     "curator": root / "plugins/curator",
+    "terminal-curator": root / "plugins/terminal-curator",
     "tracer": root / "plugins/tracer",
     "trainer": root / "plugins/trainer",
     "evaluator": root / "plugins/evaluator",
@@ -24,6 +25,7 @@ plugins = {
 claude_plugin_dirs = {
     "root": root / ".claude/plugins/root-plugin",
     "curator": root / "blocks/curator/.claude/plugins/curator-plugin",
+    "terminal-curator": root / "blocks/terminal-curator/.claude/plugins/terminal-curator-plugin",
     "tracer": root / "blocks/tracer/.claude/plugins/tracer-plugin",
     "trainer": root / "blocks/trainer/.claude/plugins/trainer-plugin",
     "evaluator": root / "blocks/evaluator/.claude/plugins/evaluator-plugin",
@@ -76,7 +78,7 @@ for entry in marketplace["plugins"]:
 agent_refs = {root / "AGENTS.md": root / "CLAUDE.md"}
 agent_refs.update(
     {root / "blocks" / block / "AGENTS.md": root / "blocks" / block / "CLAUDE.md"
-     for block in ("curator", "tracer", "trainer", "evaluator")}
+     for block in ("curator", "terminal-curator", "tracer", "trainer", "evaluator")}
 )
 for agents, claude in agent_refs.items():
     text = agents.read_text(encoding="utf-8")

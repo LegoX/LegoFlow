@@ -1,0 +1,143 @@
+---
+title: Workflow and Tracer Hand-off
+description: From a finite source batch to verified tasks and actual solving trajectories.
+---
+
+## One configured batch
+
+1. Read the selected configuration and validate limits, source, dependencies,
+   and execution host. Keep the pinned submodule clean.
+2. Collect a bounded Stack Overflow batch, read saved question JSON, or import
+   local task candidates. Preserve source provenance.
+3. For questions, call Terminal-Lego generation with configured workers and
+   model. Write candidates and logs under this block's artifacts.
+4. Normalize the candidate to the Harbor schema used by Tracer and check the
+   required instruction, environment, solution, and verifier files.
+5. Run Oracle and NOP separately in fresh environments. Require Oracle reward
+   1, NOP reward 0, and valid completed results without trial exceptions.
+6. The script publishes runtime-passing tasks and their IDs in an immutable
+   batch. The operating agent audits the instruction, tests, and reference
+   solution before handing that batch downstream. Preserve rejected candidate
+   reasons and validation jobs for inspection.
+7. Record and repair any contract mismatch in a mutable candidate copy. Run
+   both fresh Oracle and NOP trials again for the repaired task, and hand off
+   only its corrected passing version.
+8. Inspect the reports and EXIT archives for the original and correction
+   runs, including redacted configs, scripts, exit status, and repository
+   SHAs. Retain the semantic-review record with that evidence.
+
+This is a finite batch, not the upstream `run_pipeline.sh` loop. Generation
+completion alone does not mean a task passed validation. An empty verified
+batch is reported as a failed run.
+
+## Why two independent trials
+
+Oracle executes the reference solution and must receive reward 1. NOP makes
+no solving change and must receive reward 0. Both start from a fresh task
+environment so the Oracle solution cannot leave files that change NOP's
+result. A crash, timeout, missing reward, or Harbor exception is a failed
+validation, not evidence of a correctly failing NOP baseline.
+
+Normalization installs Python and pip when needed and adds an isolated
+`pytest==8.4.2` runtime during image build. Debian/Ubuntu, Alpine, and
+dnf/yum based images are supported; pytest requires Python 3.9 or newer.
+The final Dockerfile user is preserved. Grading uses the baked runtime
+without downloading packages, so a shell-only generated image cannot be
+published with a missing verifier interpreter.
+
+The verifier must execute real pytest assertions in `tests/test_outputs.py`
+and provide valid JUnit evidence. Oracle must pass; NOP must fail assertions
+without a collection/runtime error. A missing or empty suite cannot satisfy
+either gate. See [configuration](./configuration.mdx) for local candidate
+layout requirements.
+
+This gate catches broken reference solutions and verifiers that already pass
+on the initial environment. It still needs human or agent review for test
+coverage, ambiguity, trivial solutions, and source suitability. The original
+source answer is provenance for generation; it must not be copied into the
+task instruction as a leaked solution.
+
+## Review instruction, tests, and reference behavior
+
+The operating agent reviews every runtime-passing task before Tracer or
+Evaluator consumes it. Map each test expectation to a written requirement,
+and check that the tests exercise the required outputs, flags, errors, and
+state changes. An exact output string, log prefix, filename, or implementation
+choice needs a stated requirement. A detail found only in the reference
+solution does not establish that requirement.
+
+Execute the requested program with representative valid and invalid inputs.
+Check stdout, stderr, exit status, created files, and any input-preservation
+rules the instruction specifies. A search for words such as a flag name or
+shell option in source code cannot replace a behavioral test. Check that the
+reference solution actually installs or writes any required executable and
+performs the specified final-state work when Harbor invokes
+`/solution/solve.sh` without arguments.
+
+Generation requires an explicit boolean `pass: true` in its structured LLM
+test review. Missing or malformed responses, a negative review, and a string
+`"true"` cannot approve the upstream generator's fallback candidate. This
+review is followed by the agent's per-task semantic audit and execution
+checks.
+
+If the audit finds a mismatch, copy the task into a mutable candidate
+directory under `artifacts/`. Align the assertions and reference solution
+with the intended written behavior, preserving required checks. Keep the
+original source attribution and record the requirement/test mapping,
+findings, changed files and reasons, behavioral commands/results, and
+reviewer in `provenance.json` and local run notes. Leave immutable published
+versions and vendored code untouched.
+
+Re-import the corrected candidate with `source.type: tasks` and run Oracle
+and NOP in new fresh environments. Both must pass the acceptance gate again.
+Record the correction run IDs and use its new manifest/registry only after
+the semantic audit and fresh trials agree. Keep unresolved tasks out of the
+downstream hand-off.
+
+## Hand the manifest to Tracer
+
+Select `provider: local` and `local_block: terminal-curator` in Tracer, with
+`terminal_tasks_dir: ../terminal-curator/artifacts/tasks`. The conditional
+producer/consumer edge in each block config resolves to the same pool.
+
+Run `/tracer:check` or `$tracer-check` on the Docker host. Tracer's task
+preparation reads `verifiable_tasks.txt` and stages symlinks for those IDs.
+Do not copy raw candidate directories into Tracer, edit the manifest to
+include a failed candidate, or bypass a missing manifest by scanning the
+terminal output directory.
+
+Then run the separately authorized `/tracer:run` or `$tracer-run`. A rollout
+is successful only when the selected agent actually solves the task and the
+Harbor result contains reward 1. Check the real per-trial result and raw
+trajectory, not just a job launcher exit status. A transcript from executing
+the Oracle solution is validation evidence rather than a solving trajectory.
+
+Tracer's standard trajectory conversion and Trainer inputs remain the same.
+No extra terminal-specific training runtime is needed for Harbor tasks.
+
+## Hand the registry to Evaluator
+
+Each passing publication includes `registry.json` with a
+`terminal-curator@1.0` dataset. It lists exactly the verified task IDs using
+their immutable local paths. Select that registry in Evaluator, set
+`no_hack: false`, and run its normal check/run workflow with the model being
+measured. Curation does not start evaluation automatically. See the
+[Evaluator configuration example](./evaluator-handoff.mdx).
+
+## Recovery and evidence
+
+Read the report, candidate files, validation job results, and run archive.
+Record the reason before changing the source or adapter. Keep failed trials
+and rerun only the affected batch. If the pinned generator has a bug, prefer
+an adapter fix under `scripts/`; a vendored-code edit requires the explicit
+warning/confirmation procedure in the repository block definition.
+
+Use `scripts/stop.sh` for the current block's run. Preview cleanup with
+`scripts/clean.sh --dry-run`. Normal cleanup removes temporary run trees,
+including raw source/candidate/validation-job evidence, while retaining
+immutable published versions, the output symlink, environments, reports/state,
+and archives. Preserve detailed evidence before removing those run trees.
+`--all --yes` removes all block artifacts; use it only after the user has
+authorized that full cleanup. `TERMINAL_CURATOR_CLEAN_CONFIRM=terminal-curator`
+is an alternative confirmation channel for the same `--all` operation.
+Do not delete a rejected batch merely to make a pass rate look higher.

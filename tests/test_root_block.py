@@ -18,7 +18,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BLOCKS_DIR = REPO_ROOT / "blocks"
 SMOKE_DIR = REPO_ROOT / "tests" / "smoke"
-EXPECTED_BLOCKS = ["curator", "tracer", "trainer", "evaluator"]
+EXPECTED_BLOCKS = ["curator", "terminal-curator", "tracer", "trainer", "evaluator"]
 # The four blocks the root end-to-end smoke chains.
 PIPELINE_BLOCKS = ["curator", "tracer", "trainer", "evaluator"]
 UNIFORM_SCRIPTS = ["start.sh", "dryrun.sh", "clean.sh", "archive_run.sh"]

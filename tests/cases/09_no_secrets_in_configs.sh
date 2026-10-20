@@ -35,7 +35,7 @@ except ImportError:
 root = Path(sys.argv[1])
 # Ask git directly: piping into this heredoc would fight it for stdin.
 out = subprocess.run(
-    ["git", "-C", str(root), "ls-files", "-z", "--", "*config.yaml", "*config.yml"],
+    ["git", "-C", str(root), "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "*config.yaml", "*config.yml"],
     capture_output=True, text=True, check=True,
 ).stdout
 paths = [p for p in out.split("\0") if p]
@@ -59,6 +59,11 @@ SECRET_KEYS = {
 }
 # Only these keys are host/URL-shaped; the model names are checked for keys only.
 URL_KEYS = {"api_base_url", "anthropic_base_url"}
+# Public collection APIs are task inputs, not operator-specific LLM gateways.
+# Limit exceptions to the exact field AND URL so custom endpoints stay private.
+PUBLIC_ENDPOINTS = {
+    "runtime_info.input.stackoverflow.api_base_url": {"https://api.stackexchange.com/2.3"},
+}
 HOST_KEYS = {"ip"}
 # Opaque credentials: no format to pattern-match against, so ANY non-placeholder
 # value fails. Without this, a key that is in SECRET_KEYS but is neither URL- nor
@@ -191,6 +196,8 @@ for rel in paths:
                        f"credentials must be supplied via the environment, not committed")
             continue
         if leaf in URL_KEYS:
+            if v in PUBLIC_ENDPOINTS.get(dotted, set()):
+                continue
             if not is_local_url(v):
                 bad.append(f"{rel}: {dotted} = {v!r} is a non-local endpoint")
             continue
@@ -216,6 +223,6 @@ if bad:
     print("       field as \"\" — scripts/inject_smoke_secrets.py fills it at run time.", file=sys.stderr)
     sys.exit(1)
 
-print(f"PASS: no credential/host values in {len(paths) - len(skipped)} tracked configs"
+print(f"PASS: no credential/host values in {len(paths) - len(skipped)} repository configs"
       + (f" ({len(skipped)} skipped: smoke in progress)" if skipped else ""))
 PY

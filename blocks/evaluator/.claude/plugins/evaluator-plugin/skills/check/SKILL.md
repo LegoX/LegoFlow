@@ -8,7 +8,7 @@ description: >
   `bash scripts/probe_llm_completion.sh` (a minimal real chat
   completion); confirm the configured
   `(task_source.dataset_name, version)` resolves in
-  `repos/harbor/registry.json`; confirm the LiteLLM proxy port is free
+  the configured registry (`repos/harbor/registry.json` by default); confirm the LiteLLM proxy port is free
   or held by the current job. Read-only. Reports all failures in one
   consolidated message with a run-configuration summary.
   **Mandatory before `:run`.** Triggers on phrases like "check evaluator",
@@ -79,6 +79,14 @@ the other end does not actually provide. The one exception is when
 smoke, not real drift, and must not be reported as such.
 
 ## Contextual checks the skill adds
+
+For `dataset_name: terminal-curator`, resolve the conditional
+`terminal-curator.output.eval_registry` dependency and inspect the exported
+registry's local task paths on the configured execution host. They must point
+to an available immutable publication. Require `no_hack: false` and use
+`job_analysis.enabled: false`; SWE gold-dataset analysis does not describe
+these tasks. Do not substitute the default benchmark registry or launch
+another curation batch as part of this check.
 
 `dryrun.sh` is static. Add these live checks and fold them into the
 report:

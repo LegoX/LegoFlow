@@ -181,7 +181,9 @@ litellm_settings.update({
 })
 data["litellm_settings"] = litellm_settings
 
-with open(output_path, "w", encoding="utf-8") as fh:
+fd = os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+os.chmod(output_path, 0o600)
+with os.fdopen(fd, "w", encoding="utf-8") as fh:
     yaml.safe_dump(data, fh, sort_keys=False)
 PY
 }
@@ -667,7 +669,7 @@ echo "Command:    $RUN_COMMAND" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
 set +e
-(cd "$HARBOR_DIR" && bash -lc "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
+(cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
 PIPE_STATUS=("${PIPESTATUS[@]}")
 set -e
 HARBOR_RC="${PIPE_STATUS[0]:-1}"

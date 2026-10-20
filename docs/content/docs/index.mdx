@@ -23,9 +23,10 @@ Coding is a core capability of modern LLMs, yet producing high-quality coding da
 
 ![LegoFlow pipeline introduction](/figures/my-version-coding-repos-expandable.png)
 
-The overall data pipeline is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. The **root** block orchestrates four child blocks:
+The overall data pipeline is organized as a tree of **blocks**. A block is a contract for agentic workflows and one runnable unit in the pipeline. Each block owns its config, scripts, plugin skills, artifacts, dashboard, and pinned repository dependencies. The **root** block orchestrates five child blocks, choosing one task producer for the shared downstream pipeline:
 
-- **Curator**: curates high-quality SWE and coding tasks from GitHub PRs, issues, and online forums.
+- **Curator**: curates verified SWE tasks from GitHub pull requests.
+- **Terminal Curator**: creates verified Harbor terminal tasks from bounded Stack Overflow, questions JSON, or local candidate batches.
 - **Tracer**: collects high-quality trajectories with verified rewards, supporting rollouts across multiple coding scaffolds such as Claude Code, OpenCode, OpenHands, and Terminus.
 - **Trainer**: converts rollout traces into training-ready formats and launches end-to-end training workflows.
 - **Evaluator**: measures checkpoints on coding benchmarks, with rubric- and tag-level analysis.
@@ -44,6 +45,7 @@ Blocks make the pipeline easier to use and easier to change. Because every stage
 | Understand why this exists at all | [Motivation](/docs/motivation) |
 | Install it and run something | [Getting Started](/docs/getting-started) |
 | Build verified SWE tasks from GitHub | [Curator](/docs/blocks/curator) |
+| Build verified terminal tasks | [Terminal Curator](/docs/blocks/terminal-curator) |
 | Collect agent trajectories on tasks I already have | [Tracer](/docs/blocks/tracer) |
 | Fine-tune a model on trajectories | [Trainer](/docs/blocks/trainer) |
 | Benchmark a model or a checkpoint | [Evaluator](/docs/blocks/evaluator) |

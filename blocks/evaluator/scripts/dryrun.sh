@@ -101,7 +101,7 @@ run_in_harbor_env() {
       export UV_PROJECT_ENVIRONMENT="$UV_PROJECT_ENVIRONMENT_ABS"
     fi
     export HARBOR_EDITABLE_ROOT="$HARBOR_DIR"
-    bash -lc "$command"
+    bash -c "$command"
   )
 }
 

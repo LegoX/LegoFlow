@@ -3,6 +3,8 @@
 Runs registered evaluation benchmarks (SWE-bench Verified, SWE-bench Multilingual,
 SWE-bench Pro, Terminal-Bench 2.0, plus 100-task subsets and a handful of
 general coding benchmarks) through Harbor against a configurable upstream LLM.
+It also accepts Terminal Curator's generated local registry through the same
+benchmark interface.
 
 This repo is organized as a tree of blocks. The root directory is the root block; every directory under `blocks/` is a child block. Each block is operated by a dedicated agent that reads its own `CLAUDE.md`, and follows the principles in `<repo_root>/.claude/plugins/root-plugin/resources/BLOCK_DEFINITION.md` (resolve from the repo root, not from this block's directory). Every agent with this repo SHOULD READ that file before any actions.
 
@@ -52,8 +54,40 @@ by editing two fields in `config.yaml → runtime_info.input.task_source`:
 | `humanevalfix` | `1.0` | 164 | bug fixing on HumanEval programs |
 | `bigcodebench-hard-complete` | `1.0.0` | 145 | function-level code completion (hard split) |
 
-Harbor resolves `(dataset_name, version)` against `repos/harbor/registry.json` and
-fetches the underlying task data automatically. No `artifacts/tasks/` staging is required.
+Harbor resolves `(dataset_name, version)` against the configured `registry_path`.
+The default is `repos/harbor/registry.json`; remote entries fetch their task data
+automatically. A local registry can reference existing task directories without
+an upload or a task-staging step.
+
+### Terminal Curator's verified task pool
+
+After Terminal Curator publishes a passing batch, select these fields under
+`runtime_info.input` in Evaluator's full config or private `EVAL_CONFIG` profile:
+
+```yaml
+task_source:
+  provider: harbor_registry
+  dataset_name: terminal-curator
+  version: "1.0"
+  registry_path: ../terminal-curator/artifacts/tasks/registry.json
+  no_hack: false
+job_analysis:
+  enabled: false
+```
+
+`terminal-curator.output.eval_registry` and this block's
+`dependencies.from.task_source.registry_path` declare the mirrored conditional
+hand-off, active for `dataset_name: terminal-curator`. The generated registry
+lists only manifest-verified tasks with absolute immutable-batch paths. Ensure
+those paths are readable on this block's execution host; a later publication
+does not change the task paths already loaded by a job.
+
+`no_hack` must be false for this dataset: its remap applies only to SWE-bench
+Verified. Set `job_analysis.enabled: false` because the SWE gold-data analysis
+does not describe terminal pytest verifiers. Raw rewards, trial exceptions,
+and trajectories remain available. Use the ordinary evaluator check/run
+workflow with its configured model/agent; evaluating this registry does not
+automatically run Terminal Curator.
 
 Set `task_source.no_hack: true` to run the hardened SWE-Bench Verified variant
 (`swebench-verified-nohack`): `start.sh` calls `scripts/prepare_nohack.sh` to
@@ -149,7 +183,7 @@ Steps:
 ## How To Run
 
 - `scripts/update_repos.sh`: clone or update repos/harbor at the pinned commit.
-- `scripts/dryrun.sh`: validate config, Harbor repo state, environments, model API, and confirm the configured `(dataset_name, version)` exists in `registry.json` (also validates `no_hack` when enabled).
+- `scripts/dryrun.sh`: validate config, Harbor repo state, environments, model API, and confirm the configured `(dataset_name, version)` exists in the configured `registry_path` (also validates `no_hack` when enabled).
 - `scripts/start.sh`: run dryrun + real-completion preflight → generate LiteLLM config → start proxy on `runtime_info.input.litellm_proxy.port` → run Harbor job with `--dataset <name>@<version> --registry-path …` and any `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS` → **post-eval job analysis** (unless disabled). When `task_source.no_hack: true`, also prepares the local nohack registry and passes `--agent-extra-allowed-host`.
 - `scripts/prepare_nohack.sh`: generate the local `swebench-verified-nohack` dataset + registry (called by `start.sh` when `no_hack` is true; `NOHACK_REFRESH=1` forces regenerate).
 - `scripts/analyze_job.sh [<job_dir>]`: run the Harbor `job_analysis` pipeline on a completed job and write results into `<job_dir>/analysis/` (the layout the dashboard reads). No arg → newest job under `jobs_dir`. Safe to re-run and to run on old jobs. `start.sh` calls this automatically after each eval (non-fatal). If the gold dataset is missing it auto-invokes `prepare_dataset.sh` first (disable with `JOB_ANALYSIS_PREPARE_DATASET=0`).

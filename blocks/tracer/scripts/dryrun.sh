@@ -108,7 +108,7 @@ run_in_harbor_env() {
       export UV_PROJECT_ENVIRONMENT="$UV_PROJECT_ENVIRONMENT_ABS"
     fi
     export HARBOR_EDITABLE_ROOT="$HARBOR_DIR"
-    bash -lc "$command"
+    bash -c "$command"
   )
 }
 
@@ -660,7 +660,6 @@ for key in \
   runtime_info.input.litellm_proxy.port \
   runtime_info.input.litellm_proxy.master_key \
   runtime_info.input.task_source.provider \
-  runtime_info.input.task_source.dataset_name \
   runtime_info.input.harbor_job.jobs_dir \
   runtime_info.input.harbor_job.n_concurrent \
   runtime_info.input.harbor_job.max_retries \
@@ -694,10 +693,11 @@ fi
 
 HARBOR_JOBS_DIR="$(cfg runtime_info.input.harbor_job.jobs_dir)"
 HARBOR_DATASET_PATH="$(cfg runtime_info.input.harbor_job.dataset_path)"
-TASK_SOURCE_DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
+TASK_SOURCE_DATASET_NAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_name)"
+ok "selected task source = $TASK_SOURCE_DATASET_NAME"
 HARBOR_DATASET="$(cfg runtime_info.input.harbor_job.dataset)"
 if [[ -z "$HARBOR_DATASET" && -n "$TASK_SOURCE_DATASET_NAME" ]]; then
-  HARBOR_DATASET="$(basename "$TASK_SOURCE_DATASET_NAME")"
+  HARBOR_DATASET="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_id)"
 fi
 if [[ -z "$HARBOR_DATASET_PATH" && -n "$HARBOR_DATASET" ]]; then
   HARBOR_DATASET_PATH="artifacts/tasks/$HARBOR_DATASET"
@@ -733,14 +733,18 @@ else
 fi
 
 # What is worth checking here is the *source*, which staging cannot conjure.
-TASK_PROVIDER="$(cfg runtime_info.input.task_source.provider)"
+TASK_PROVIDER="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field provider)"
+MANIFEST_REQUIRED="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field manifest_required)"
 case "$TASK_PROVIDER" in
   local)
     TASK_SOURCE_ABS="$(abspath "$TASK_SOURCE_DATASET_NAME")"
     if [[ -d "$TASK_SOURCE_ABS" ]]; then
       ok "local task source exists: $TASK_SOURCE_DATASET_NAME"
+      if [[ "$MANIFEST_REQUIRED" == "true" && ! -s "$TASK_SOURCE_ABS/verifiable_tasks.txt" ]]; then
+        fail "terminal-curator task source requires a non-empty verifiable_tasks.txt"
+      fi
     else
-      warn "local task source not found: $TASK_SOURCE_DATASET_NAME (upstream curator may not have produced it yet)"
+      warn "local task source not found: $TASK_SOURCE_DATASET_NAME (the selected upstream may not have produced it yet)"
     fi
     ;;
   huggingface)

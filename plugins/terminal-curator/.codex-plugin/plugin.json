@@ -1,0 +1,19 @@
+{
+  "name": "terminal-curator",
+  "version": "0.1.0",
+  "description": "Create verified Harbor terminal tasks from bounded Stack Overflow, JSON, or local candidate batches in LegoFlow.",
+  "author": { "name": "LegoX", "url": "https://github.com/LegoX" },
+  "repository": "https://github.com/LegoX/LegoFlow",
+  "license": "Apache-2.0",
+  "keywords": ["legoflow", "terminal", "harbor", "task-curation"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "LegoFlow Terminal Curator",
+    "shortDescription": "Curate verified terminal tasks",
+    "longDescription": "Generate or import a finite terminal-task batch, validate Oracle and NOP in Harbor, and hand the verified manifest to Tracer.",
+    "developerName": "LegoX",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Write"],
+    "defaultPrompt": ["Check Terminal Curator configuration and source inputs.", "Create and verify the configured finite terminal-task batch.", "Show Terminal Curator progress."]
+  }
+}

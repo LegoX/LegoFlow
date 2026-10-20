@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "terminal-curator-block": {
+      "source": { "source": "directory", "path": ".claude/plugins" }
+    }
+  },
+  "enabledPlugins": {
+    "terminal-curator@terminal-curator-block": true
+  }
+}

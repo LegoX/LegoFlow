@@ -1,0 +1,39 @@
+---
+title: Terminal Curator
+description: Create verified Harbor terminal tasks through Claude Code or Codex.
+---
+
+Terminal Curator is LegoFlow's terminal-task producer. It is parallel to the
+SWE Curator block: choose the producer appropriate to your data, then use
+Tracer to collect trajectories, Trainer to train, and Evaluator to measure
+the resulting model.
+
+The block turns a finite Stack Overflow batch, a saved questions JSON file,
+or existing candidate task directories into a verified Harbor task pool.
+Pinned Terminal-Lego code provides the generation logic; the block adds
+configuration, bounded execution, source provenance, fresh-container
+Oracle/NOP validation, reports, archiving, and an agent plugin interface.
+
+The human supplies inputs and resources in `config.yaml`. Claude Code or
+Codex then operates `setup`, `check`, `run`, and `dashboard`. The plugin
+does not require a person to alternate between upstream scraping,
+generation, and validator commands.
+
+```text
+Stack Overflow / questions JSON / candidate tasks
+  → finite batch → generation or import → Harbor normalization
+  → fresh Oracle=1 and fresh NOP=0
+  → artifacts/tasks/verifiable_tasks.txt
+  → Tracer rollout → training data → Trainer / Evaluator
+
+Published registry → Evaluator terminal-task inference
+```
+
+Start with [getting started](./getting-started.mdx). Use
+[configuration](./configuration.mdx) to choose your source and limits, and
+[workflow](./workflow.mdx) to inspect the acceptance gate and Tracer hand-off.
+The [dashboard](./dashboard.mdx) shows actual run evidence; it does not start
+another generation batch.
+
+[Evaluator hand-off](./evaluator-handoff.mdx) explains how the generated local
+registry lets Evaluator run these same verified terminal tasks.

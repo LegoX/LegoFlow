@@ -1,0 +1,48 @@
+---
+title: Dashboard
+description: Inspect actual source, generation, validation, and publication progress.
+---
+
+Use `/terminal-curator:dashboard` in Claude Code or
+`$terminal-curator-dashboard` in Codex. The skill shows live state as JSON
+and can render a local HTML snapshot. It never starts generation, validation,
+Tracer, training, or deployment to populate the view.
+
+From `blocks/terminal-curator/`:
+
+```bash
+artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py
+artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py --html
+artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py --html --serve --port 8086
+```
+
+Use `--config <file>` for the same full configuration overlay used by the
+run. `--html <path>` chooses a snapshot destination. `--serve` starts a local
+preview bound to `127.0.0.1`; it reads current state on each request and
+refreshes the browser every 10 seconds. Keep it in a separate tmux session
+for ongoing inspection. For a
+remote CPU node, an SSH port forward lets you view the node's local server.
+
+The board reads:
+
+| Evidence | What it explains |
+| --- | --- |
+| `artifacts/state.json` | Current phase, candidate count, published IDs, rejection count, token usage. |
+| `artifacts/tasks/verifiable_tasks.txt` | Published IDs available to downstream Tracer. |
+
+
+Detailed validation outcomes/reasons are in `artifacts/reports/latest.json`;
+archived run status and history are in `artifacts/index.yaml`. These files
+are for local inspection rather than browser payloads. The page uses an
+allowlisted view of actual state, and missing state is normal before the
+first run. A partial report stays partial; failed
+or absent validation results do not become passing tasks or NOP zeros.
+The tracked `dashboard/overview.mdx` describes the block's responsibilities
+and points to these live sources.
+
+An exported HTML file is a snapshot; regenerate it after new results appear.
+The built-in server serves current state dynamically at `/`, `/index.html`,
+and `/api/status` and does not expose arbitrary files. Rendering and
+serving are local operations; publishing to a public service requires a
+separate request and artifact review. The dashboard never displays a secret
+configuration field or forwards an API credential to the browser.

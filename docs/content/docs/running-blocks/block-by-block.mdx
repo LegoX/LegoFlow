@@ -31,6 +31,25 @@ tasks. Start from [Curator Getting Started](/docs/blocks/curator/getting-started
 
 Details: [Configuration Guide](/docs/blocks/curator/usage/configuration).
 
+For terminal tasks, use the parallel
+[Terminal Curator block](/docs/blocks/terminal-curator/getting-started).
+Configure a finite Stack Overflow, questions JSON, or local candidate batch
+in its `config.yaml`; the agent operates the pinned Terminal-Lego generator
+and independent fresh-container Oracle/NOP validation.
+
+|  | Claude Code | Codex | Purpose |
+| --- | --- | --- | --- |
+| 1 | `/terminal-curator:setup` | `$terminal-curator-setup` | Initialize pinned generation and Harbor environments. |
+| 2 | `/terminal-curator:check` | `$terminal-curator-check` | Check the source, limits, pins, endpoint inputs, and Docker host. |
+| 3 | `/terminal-curator:run` | `$terminal-curator-run` | Generate/import, validate, and publish the verified task manifest. |
+| * | `/terminal-curator:dashboard` | `$terminal-curator-dashboard` | Inspect source/generation/validation progress and failed candidates. |
+
+Select `task_source.provider: local` and
+`task_source.local_block: terminal-curator` in Tracer, with
+`terminal_tasks_dir: ../terminal-curator/artifacts/tasks`. Only manifest-listed
+tasks proceed to rollout. The existing SWE selector remains `curator` by
+default. See [the hand-off contract](/docs/blocks/terminal-curator/workflow).
+
 ### Step 2: Trajectory Rollout
 
 Tracer takes curated tasks and rolls out coding agents in isolated environments.

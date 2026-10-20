@@ -1,0 +1,94 @@
+---
+title: Outputs and Evidence
+description: The published Harbor pool, verified manifest, reports, and redacted archives.
+---
+
+The output directory is declared by
+`runtime_info.output.harbor_tasks_dir.path`, normally `artifacts/tasks/`.
+
+That path is a symlink to the newest immutable publication under
+`artifacts/tasks-versions/<batch-id>/`. A passing batch is copied into a new
+version, then the output symlink switches atomically. Tracer resolves the
+version path when staging; later publications leave its existing inputs
+unchanged. Retain versions still referenced by downstream jobs.
+
+```text
+artifacts/tasks/
+├── verifiable_tasks.txt
+├── registry.json
+└── <task-id>/
+    ├── instruction.md
+    ├── task.toml
+    ├── environment/Dockerfile
+    ├── solution/solve.sh
+    ├── tests/test.sh
+    └── tests/test_outputs.py
+```
+
+The manifest is a newline-delimited list of task IDs that passed this block's
+fresh Oracle/NOP gate. It is an allowlist, not a progress log. Only those IDs
+may be staged into Tracer. A generated candidate that has not passed both
+trials is never eligible for downstream inference.
+
+`runtime_info.output.eval_registry.path` names the generated `registry.json`.
+Its `terminal-curator@1.0` entry lists the same accepted IDs with absolute
+paths into this immutable batch. Evaluator loads those local paths through
+its standard Harbor registry flow; no task upload or registry service is
+needed. The registry and manifest switch together with the publication
+symlink. Keep referenced versions available on the evaluation host.
+See [Evaluator hand-off](./evaluator-handoff.mdx) for configuration.
+
+Each task describes a terminal problem, its reproducible environment, the
+reference solution, and a verifier that writes a Harbor reward. Schema
+normalization targets Tracer's pinned Harbor version. The adapter preserves
+task provenance and validation evidence without putting API credentials in
+task metadata or instructions.
+
+The canonical verifier runs `tests/test_outputs.py` through pytest and
+records JUnit evidence. Validation rejects zero collected assertions,
+collection/runtime errors, all-skipped suites, a failing Oracle, and a NOP
+that passes. The local candidate import mode therefore expects
+Terminal-Lego's pytest layout rather than an arbitrary Harbor verifier.
+
+Runtime acceptance is followed by the operating agent's semantic audit of
+the instruction, assertions, and reference behavior before downstream use.
+Keep its requirement/test mapping and correction provenance with the task.
+Any repaired candidate needs both new fresh Oracle/NOP trials; see the
+[workflow](./workflow.mdx) for the audit and correction procedure.
+
+## Progress and failures
+
+`artifacts/state.json` is the live phase/count snapshot. At run completion or
+failure, `artifacts/reports/latest.json` contains the machine-readable report.
+The report records counts, per-candidate outcomes, and links to validation
+evidence. The dashboard reads an allowlisted view of live state and the
+published manifest. Inspect the actual JSON rather than assuming all discovered
+directories passed.
+
+Intermediate source data, generated candidates, and Harbor validation jobs
+remain under `artifacts/` outside the published task pool. These are useful
+for diagnosing rejected tasks and service failures. They are local runtime
+materials and are ignored by Git.
+
+## Run archives
+
+`start.sh` installs an EXIT trap so success, errors, and interruption produce
+an archive and an entry in `artifacts/index.yaml`:
+
+```text
+artifacts/archives/run_NNN/
+├── metadata.yaml
+├── config.yaml
+└── scripts/
+```
+
+The archive records the effective configuration, with secrets redacted,
+including an overlay passed through `--config`. Metadata records exit state
+and repository SHAs. It does not copy entire vendored repository trees.
+A fresh checkout has no index; the first archived run creates it.
+
+An archive entry does not establish a successful task or rollout by itself.
+Use its report, manifest, Oracle/NOP results, and separately generated Tracer
+trajectory to make those claims. Review artifacts before sharing them and
+keep raw credentials, private infrastructure details, and generated datasets
+out of a code PR.

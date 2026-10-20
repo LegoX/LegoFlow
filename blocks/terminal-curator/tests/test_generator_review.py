@@ -1,0 +1,132 @@
+"""Reject the upstream candidate fallback unless its own review approved it."""
+
+from types import SimpleNamespace
+
+import pytest
+
+
+def review_generator(adapter, responses, codes=None):
+    """Use no upstream imports or HTTP calls; preserve its unsafe fallback."""
+    responses = iter(responses)
+    calls = []
+
+    class FallbackParent:
+        def __init__(self):
+            self.task_name = "terminal-review-fixture"
+            self.candidates = [
+                {
+                    "test_outputs_py": code,
+                    "test_sh": "#!/bin/bash\npython3 -m pytest /tests/test_outputs.py\n",
+                    "metadata": "preserve the reviewed candidate",
+                }
+                for code in codes or ["def test_result():\n    assert 1 == 1\n"] * 3
+            ]
+
+        def _generate_tests(self, instruction, env_data, solution):
+            for candidate in self.candidates:
+                review = self._review_tests(
+                    instruction, "task_file/input.txt", solution,
+                    candidate["test_outputs_py"],
+                )
+                if review.get("pass"):
+                    return candidate
+            # The real upstream returns its first candidate after failed reviews.
+            return self.candidates[0] if self.candidates else None
+
+    def fake_completion(prompt, system, **kwargs):
+        calls.append(prompt)
+        return next(responses)
+
+    module = SimpleNamespace(
+        TaskGenerator=FallbackParent,
+        TEST_REVIEW_PROMPT_TEMPLATE=(
+            "Instruction: {instruction}\nFiles: {env_file_list}\n"
+            "Solution: {solution}\nTests: {test_code}"
+        ),
+        SYSTEM_PROMPT="Review only this offline fixture.",
+        call_llm_api=fake_completion,
+    )
+    return adapter.generator_class(module)(), calls
+
+
+@pytest.mark.parametrize("response", [
+    None,
+    False,
+    "",
+    "not valid JSON",
+    'Review result: "pass": true',
+    '{"pass": false, "issues": ["unstated output requirement"]}',
+    '{"pass": "true", "issues": []}',
+    '{"pass": 1}',
+    '{"issues": []}',
+    "true",
+    "false",
+    '[{"pass": true}]',
+    '```json\n{"pass": "true"}\n```',
+])
+def test_unapproved_reviews_cannot_use_the_upstream_fallback(adapter, response):
+    generator, calls = review_generator(adapter, [response] * 3)
+
+    result = generator._generate_tests("Write the required output.", {}, "reference")
+
+    assert len(calls) == 3, "The parent must reach its failed-review fallback"
+    assert result is None
+
+
+@pytest.mark.parametrize("response", [
+    '{"pass": true, "issues": []}',
+    '```json\n{"pass": true, "issues": []}\n```',
+    '```\n{"pass": true, "issues": []}\n```',
+])
+def test_boolean_true_review_keeps_the_original_candidate(adapter, response):
+    generator, calls = review_generator(adapter, [response])
+
+    result = generator._generate_tests("Write the required output.", {}, "reference")
+
+    assert len(calls) == 1
+    assert result is generator.candidates[0]
+    assert result["metadata"] == "preserve the reviewed candidate"
+
+
+def test_a_later_candidate_needs_its_own_positive_review(adapter):
+    first = "def test_first():\n    assert True\n"
+    approved = "def test_second():\n    assert True\n"
+    generator, calls = review_generator(
+        adapter, ['{"pass": false}', '{"pass": true}'], [first, approved],
+    )
+
+    result = generator._generate_tests("Write the required output.", {}, "reference")
+
+    assert len(calls) == 2
+    assert result is generator.candidates[1]
+    assert result["test_outputs_py"] == approved
+
+
+def test_failed_reviews_replace_an_earlier_approval_for_the_same_code(adapter):
+    generator, calls = review_generator(adapter, [
+        '{"pass": true}',
+        '{"pass": false}',
+        None,
+        '{"pass": "true"}',
+        '```json\n{"pass": true}\n```',
+    ])
+
+    assert generator._generate_tests("Original instruction.", {}, "reference") is not None
+    assert generator._generate_tests("Revised instruction.", {}, "reference") is None
+    assert generator._generate_tests("Reviewed instruction.", {}, "reference") is not None
+    assert len(calls) == 5
+
+
+def test_an_unreviewed_parent_candidate_is_rejected(adapter):
+    class UnreviewedParent:
+        def _generate_tests(self, instruction, env_data, solution):
+            return {"test_outputs_py": "def test_result():\n    assert True\n"}
+
+    def unexpected_completion(*args, **kwargs):
+        raise AssertionError("This fake parent never requested a review")
+
+    generator = adapter.generator_class(SimpleNamespace(
+        TaskGenerator=UnreviewedParent,
+        call_llm_api=unexpected_completion,
+    ))()
+    assert generator._generate_tests("instruction", {}, "reference") is None

@@ -1,4 +1,4 @@
-import { curatorDocs, docs, evaluatorDocs, tracerDocs, trainerDocs } from '@/.source/server';
+import { curatorDocs, docs, evaluatorDocs, terminalCuratorDocs, tracerDocs, trainerDocs } from '@/.source/server';
 import { loader } from 'fumadocs-core/source';
 import { lucideIconsPlugin } from 'fumadocs-core/source/lucide-icons';
 
@@ -15,6 +15,11 @@ const blockSources = {
   curator: loader({
     baseUrl: '/docs/blocks/curator',
     source: curatorDocs.toFumadocsSource(),
+    plugins,
+  }),
+  'terminal-curator': loader({
+    baseUrl: '/docs/blocks/terminal-curator',
+    source: terminalCuratorDocs.toFumadocsSource(),
     plugins,
   }),
   tracer: loader({
@@ -38,6 +43,7 @@ type BlockName = keyof typeof blockSources;
 
 const blockLabels: Record<BlockName, string> = {
   curator: 'Curator',
+  'terminal-curator': 'Terminal Curator',
   tracer: 'Tracer',
   trainer: 'Trainer',
   evaluator: 'Evaluator',
@@ -46,6 +52,7 @@ const blockLabels: Record<BlockName, string> = {
 function isBlockName(value: string | undefined): value is BlockName {
   return (
     value === 'curator' ||
+    value === 'terminal-curator' ||
     value === 'tracer' ||
     value === 'trainer' ||
     value === 'evaluator'
@@ -113,6 +120,7 @@ function mergedPageTree() {
         children: [
           ...(node.children ?? []),
           blockFolder('curator'),
+          blockFolder('terminal-curator'),
           blockFolder('tracer'),
           blockFolder('trainer'),
           blockFolder('evaluator'),
@@ -179,6 +187,10 @@ export const source = {
   },
 
   resolveHref(href: string, parent: any) {
+    if (parent.url?.startsWith('/docs/blocks/terminal-curator')) {
+      return resolveBlockHref('terminal-curator', href, parent);
+    }
+
     if (parent.url?.startsWith('/docs/blocks/curator')) {
       return resolveBlockHref('curator', href, parent);
     }
@@ -199,6 +211,13 @@ export const source = {
   },
 
   getPageByHref(href: string, options?: any) {
+    if (href.startsWith('/docs/blocks/terminal-curator')) {
+      return blockSources['terminal-curator'].getPageByHref(
+        href.replace('/docs/blocks/terminal-curator', '/docs'),
+        options,
+      );
+    }
+
     if (href.startsWith('/docs/blocks/curator')) {
       return blockSources.curator.getPageByHref(
         href.replace('/docs/blocks/curator', '/docs'),

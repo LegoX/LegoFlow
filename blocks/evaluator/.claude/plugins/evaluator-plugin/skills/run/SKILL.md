@@ -92,12 +92,16 @@ the confirm step.
 ## Conventions to honour
 
 - **Benchmark selection lives in `config.yaml`, not flags.** To change
-  benchmark, edit `runtime_info.input.task_source.{dataset_name,version,no_hack}`
+  benchmark, edit `runtime_info.input.task_source.{dataset_name,version,registry_path,no_hack}`
   and re-run `/evaluator:check`. Refuse to override these via free-form args —
   launching a different benchmark than the one `:check` validated is
   never correct. `no_hack: true` only applies to `swebench-verified` — the
   `-100` subset is rejected (cap with `harbor_job.n_tasks` instead); start.sh
   remaps to the local hardened registry + agent allowlist.
+  Terminal Curator's `terminal-curator@1.0` uses its exported local registry
+  with `no_hack: false` and `job_analysis.enabled: false`; retain that registry
+  path through preflight and launch. Keep the referenced immutable batch
+  available, and do not start a curation run as an evaluation side effect.
 - **Agent selection lives in `config.yaml`, not flags.** Switch agents by
   editing `agent.{name, version, runtime_image, runtime_host_path}`
   together and re-running `/evaluator:check` (so the runtime-extraction check

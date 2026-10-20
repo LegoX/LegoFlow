@@ -1,0 +1,107 @@
+---
+title: Getting Started
+description: Configure a finite terminal-task batch and let an agent operate it.
+---
+
+## Requirements
+
+- A checkout of LegoFlow with the pinned `repos/terminal-lego` submodule.
+- Python 3.12 and `uv`; setup creates isolated environments under `artifacts/`.
+- A Docker-capable CPU host for validation and later Tracer rollout.
+- For generation, an OpenAI-compatible LLM endpoint, model, and API key.
+- For live collection, access to the Stack Exchange API; an API key is optional.
+
+Local candidate validation needs Docker and Harbor but no LLM credential.
+The upstream submodule remains read-only; task files, logs, and environments
+are created outside it.
+
+## Install the agent plugin
+
+From the repository root, for Claude Code:
+
+```bash
+claude plugin marketplace add ./blocks/terminal-curator/.claude/plugins
+claude plugin install terminal-curator@terminal-curator-block
+```
+
+Run `/reload-plugins` or restart the Claude Code session. For Codex:
+
+```bash
+codex plugin marketplace add .
+codex plugin add terminal-curator@legoflow
+```
+
+Restart Codex after installation. Claude Code and Codex share the canonical
+workflow; Codex uses `$terminal-curator-...` native skill names.
+
+## Fill the configuration
+
+Edit `blocks/terminal-curator/config.yaml` to select `source.type` and finite
+limits. Use `stackoverflow` for live questions, `json` for Terminal-Lego's
+`{"questions": [...]}` input format, or `tasks` for a local Harbor candidate
+pool. Fill `source.path` for the latter two modes. Supply your endpoint and
+model under `llm_api`; leave its tracked `api_key` empty and supply the secret
+as `OPENAI_API_KEY` in the execution environment.
+
+For a small first generation run, set `source.max_questions: 1`,
+`generation.workers: 1`, and `validation.n_concurrent: 1`. A finite limit is
+part of the run configuration, including when `question_ids` are specified.
+See [the configuration reference](./configuration.mdx) for the complete inputs.
+
+## Check and run
+
+In Claude Code:
+
+```text
+/terminal-curator:setup
+/terminal-curator:check
+/terminal-curator:run
+/terminal-curator:dashboard
+```
+
+In Codex:
+
+```text
+$terminal-curator-setup
+$terminal-curator-check
+$terminal-curator-run
+$terminal-curator-dashboard
+```
+
+The agent prepares dependencies, reports preflight results and the resolved
+source/model/host/limits, then performs the authorized finite run. If the
+scope has not already been authorized, it asks before starting. The script
+equivalents, from `blocks/terminal-curator/`, are:
+
+```bash
+bash scripts/setup.sh
+bash scripts/dryrun.sh
+bash scripts/start.sh
+artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py --html
+```
+
+Use `--config /path/to/local-config.yaml` with setup, dryrun, start, and the monitor when keeping
+machine-specific settings in an ignored overlay. Checks must run on the
+Docker host that will execute the task containers. If this machine has no
+Docker, select a permitted CPU node, synchronize the checkout and input files,
+and perform the run there in tmux.
+
+## Inspect and hand off
+
+Read the report and `artifacts/tasks/verifiable_tasks.txt`. A task appears
+there only after Oracle=1 and NOP=0 in independent fresh environments. A run
+that yields no verified tasks fails rather than handing an empty pool to
+Tracer. Inspect each rejection reason before selecting another source or
+changing generation settings.
+
+Before handing off, the agent maps each test expectation to the instruction
+and executes the requested behavior. Correct unstated output checks or an
+inaccurate reference solution in a candidate copy, record the changes in
+provenance, and rerun both fresh Oracle and NOP trials. Use the corrected
+passing publication. The [workflow](./workflow.mdx) describes this semantic
+audit; source-text checks alone cannot establish the required behavior.
+
+Set Tracer's `task_source.local_block: terminal-curator` and
+`task_source.terminal_tasks_dir: ../terminal-curator/artifacts/tasks`, keeping
+`provider: local`. Then run Tracer's own check and authorized rollout. See
+[workflow](./workflow.mdx) for how to verify the resulting trajectory.

@@ -1,0 +1,9 @@
+email,name,updated_epoch,status
+ Alice@Example.COM , Alice old ,9,active
+bob@example.com,Bob stale,100,active
+gone@example.com,Gone old,110,active
+carol@example.com,Carol before,120,active
+tie@example.com,Tie source a,130,active
+invalid@example.com,Invalid timestamp,nope,active
+   ,Missing email,999,active
+negative@example.com,Negative timestamp,-1,active

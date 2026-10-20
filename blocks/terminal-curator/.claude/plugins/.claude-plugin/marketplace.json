@@ -1,0 +1,12 @@
+{
+  "name": "terminal-curator-block",
+  "metadata": { "description": "LegoFlow terminal task curation and verification workflows." },
+  "owner": { "name": "LegoX" },
+  "plugins": [
+    {
+      "name": "terminal-curator",
+      "source": "./terminal-curator-plugin",
+      "description": "Bounded terminal task curation: setup, check, run, and progress dashboard."
+    }
+  ]
+}
