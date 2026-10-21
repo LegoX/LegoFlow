@@ -259,11 +259,15 @@ historical trajectories.
   publishable source and generated website bytes; no matches were found.
 
 The root CI rule `tests/cases/15_curator_submodule_latest.sh` separately
-requires SWE Curator's pin to equal upstream `main`. The base branch and this
-PR both pin `53faa328fcfc000c258e0d4b47dd609a887fc23a`, while the observed upstream
-was `217b6e65a38598c7cef288a200d0716d2b4b6c3a`. An authenticated CI run therefore
-fails that existing rule. This change does not upgrade the SWE vendor or
-weaken the rule. A network skip is not proof of satisfying that policy.
+requires SWE Curator's pin to equal upstream `main`. Earlier heads failed
+because the base pinned `53faa328fcfc000c258e0d4b47dd609a887fc23a`, while upstream
+was `217b6e65a38598c7cef288a200d0716d2b4b6c3a`. Comparing the commits confirmed
+exactly one README-only commit, changing three lines and no runtime code.
+The gitlink and matching Curator config pin were synchronized to that commit
+to fix CI without weakening the policy. A local network skip is not proof
+of satisfying it; the updated head's actual CI result is reported in the PR.
+Four other block jobs require an available `self-hosted, legoflow-ci` runner;
+independent CPU-node testing does not turn queued Actions jobs into passes.
 
 ## Reproduction and scope
 
