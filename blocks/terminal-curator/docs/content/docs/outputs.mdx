@@ -29,6 +29,26 @@ as its allowlist. `registry.json` describes the same IDs as
 Evaluator. Both switch together; keep versions referenced by existing jobs.
 See [Downstream Handoff](./usage/downstream-handoff.mdx) for consumer configuration.
 
+## Verified, rejected and unfinished tasks
+
+Both Curator and Terminal Curator use `verifiable_tasks.txt` as the authoritative
+list of runtime-verified tasks. Directory existence alone never proves acceptance.
+Their raw layouts differ: Curator's per-language pool can also contain candidates;
+Terminal Curator's `artifacts/tasks/` contains only published tasks, like Curator's
+verified `artifacts/merged_swe_tasks/` export.
+
+| Location | Meaning |
+| --- | --- |
+| `artifacts/tasks/<task-id>/` plus its manifest entry | Published after fresh Oracle=1 and NOP=0; `validation.json` binds its identity. |
+| `artifacts/runs/<run-id>/candidates/` | Generated candidates, including partial or rejected attempts when files exist. |
+| `artifacts/runs/<run-id>/normalized/` | Candidates that passed normalization; Oracle/NOP may still fail or be unfinished. |
+| `artifacts/runs/<run-id>/report.json` | `verified_tasks`, `rejected` reasons, `task_progress` and per-role `validation` results. |
+
+There is no separate `failed/` pool. Imported originals stay at `source.path`;
+failed generation may leave only a report entry. If no task passes, the previous
+publication stays available. Match run IDs before comparing its manifest with
+the latest report; Dashboard's **retained** batches are historical publications.
+
 Newly generated candidates also retain `generation-test-review.json`: the
 structured approval and hashes of the instruction, reference and tests before
 normalization. Preserve it as generation history when auditing a corrected copy.

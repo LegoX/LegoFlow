@@ -295,4 +295,9 @@ not presented as this terminal CPU integration test.
 
 Raw candidates, reports, provenance, control JUnit, consumer trajectories,
 LF samples and detailed review notes are retained in ignored artifacts or
-private local files. They are excluded from the PR and public previews.
+private local files and excluded from the Git tree. At the user's request,
+the two final passing task trees and projected measured results are shared
+as separate review attachments linked from the PR. They preserve the original
+task identities and are not part of the master merge. Private profiles,
+host-local registries, raw logs and trajectories remain excluded; the normal
+Dashboard preview still exposes metadata and verifier evidence only.
