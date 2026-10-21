@@ -752,6 +752,12 @@ case "$TASK_PROVIDER" in
       ok "local task source exists: $TASK_SOURCE_DATASET_NAME"
       if [[ "$MANIFEST_REQUIRED" == "true" && ! -s "$TASK_SOURCE_ABS/verifiable_tasks.txt" ]]; then
         fail "terminal-curator task source requires a non-empty verifiable_tasks.txt"
+      elif [[ "$MANIFEST_REQUIRED" == "true" ]]; then
+        if python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --pool "$TASK_SOURCE_ABS" >/dev/null 2>&1; then
+          ok "terminal-curator publication integrity matches accepted Oracle/NOP evidence"
+        else
+          fail "terminal-curator publication changed or lacks validation.json; re-import and revalidate"
+        fi
       fi
     else
       warn "local task source not found: $TASK_SOURCE_DATASET_NAME (the selected upstream may not have produced it yet)"

@@ -7,6 +7,7 @@ import argparse
 import errno
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -154,6 +155,12 @@ def selected_tasks(source: Path, strict: bool):
         tasks[name] = task.resolve()
     if not tasks:
         raise ValueError("source contains no selected Harbor tasks")
+    if strict:
+        script = Path(__file__).resolve().parents[2] / "terminal-curator/scripts/publication.py"
+        spec = importlib.util.spec_from_file_location("terminal_publication", script)
+        publication = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(publication)
+        publication.verify_publication(source)
     return tasks, manifest_hash
 
 

@@ -39,10 +39,10 @@ See [Configuration](./usage/configuration.mdx) for all source and profile option
 
 | Action | Claude Code | Codex |
 | --- | --- | --- |
-| Prepare | `/terminal-curator:setup` | `$terminal-curator-setup` |
-| Preflight | `/terminal-curator:check` | `$terminal-curator-check` |
-| Run | `/terminal-curator:run` | `$terminal-curator-run` |
-| Monitor | `/terminal-curator:dashboard` | `$terminal-curator-dashboard` |
+| Prepare | `/terminal-curator:setup` | `$terminal-curator:setup` |
+| Preflight | `/terminal-curator:check` | `$terminal-curator:check` |
+| Run | `/terminal-curator:run` | `$terminal-curator:run` |
+| Monitor | `/terminal-curator:dashboard` | `$terminal-curator:dashboard` |
 
 The agent reports the resolved source, host, model and budget, then performs
 an authorized run. Script equivalents, from `blocks/terminal-curator/`:
@@ -57,6 +57,9 @@ artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py --html
 Pass the same `--config <file>` to each command when using a private full
 profile. Run checks and containers on the selected Docker host; synchronize
 code, inputs and profiles before remote execution through SSH and tmux.
+Carry resource variables into the actual execution window: new tmux windows
+inherit the session/server environment, which may differ from the current shell.
+Use session-scoped settings or a private environment file for credentials.
 
 ## Inspect the result
 

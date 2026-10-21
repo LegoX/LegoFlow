@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shlex
@@ -19,6 +20,22 @@ TRACER_SCRIPTS = ROOT / "blocks/tracer/scripts"
 spec = importlib.util.spec_from_file_location("tracer_task_source", TRACER_SCRIPTS / "task_source.py")
 task_source = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(task_source)
+spec = importlib.util.spec_from_file_location("terminal_publication_fixture", ROOT / "blocks/terminal-curator/scripts/publication.py")
+publication = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(publication)
+
+
+def attest_fixture(pool):
+    """Synthetic producer attestation for filesystem tests; no Harbor claim."""
+    ids = (pool / 'verifiable_tasks.txt').read_text().splitlines()
+    (pool / 'registry.json').write_text(json.dumps([{'name': 'terminal-curator', 'version': '1.0',
+        'tasks': [{'name': name, 'path': str(pool / name)} for name in ids]}]))
+    (pool / 'validation.json').write_text(json.dumps({
+        'schema_version': 1, 'run_id': 'synthetic-unit-fixture', 'verified_tasks': ids,
+        'harbor_task_checksums': {name: 'a' * 64 for name in ids},
+        'tree_fingerprints': {name: publication.task_tree_fingerprint(pool / name) for name in ids},
+        'validation': {'oracle': {'passed': True, 'reward': 1}, 'nop': {'passed': True, 'reward': 0}},
+    }))
 
 
 def config_source(**values):
@@ -79,6 +96,9 @@ def staging(tmp_path):
     scripts.mkdir(parents=True)
     for name in ("prepare_tasks.sh", "task_source.py", "stage_tasks.py"):
         shutil.copy2(TRACER_SCRIPTS / name, scripts / name)
+    verifier = block.parent / 'terminal-curator/scripts/publication.py'
+    verifier.parent.mkdir(parents=True)
+    shutil.copy2(ROOT / 'blocks/terminal-curator/scripts/publication.py', verifier)
     (block / "repos/harbor/.git").mkdir(parents=True)
     python = block / "artifacts/env/harbor/bin/python"
     python.parent.mkdir(parents=True)
@@ -88,6 +108,7 @@ def staging(tmp_path):
     make_task(source, "tc-verified")
     make_task(source, "tc-unverified")
     (source / "verifiable_tasks.txt").write_text("tc-verified\n")
+    attest_fixture(source)
     config = config_source(
         provider="local", local_block="terminal-curator", dataset_name="unselected-swe",
         terminal_tasks_dir=str(source),
@@ -108,8 +129,8 @@ def staging(tmp_path):
     return block, source, config_path, prepare
 
 
-def test_terminal_staging_filters_and_refreshes_the_verified_manifest(staging):
-    block, source, _, prepare = staging
+def test_terminal_staging_filters_and_rejects_unvalidated_manifest_changes(staging):
+    block, source, config_path, prepare = staging
     result = prepare()
     assert result.returncode == 0, result.stdout + result.stderr
     target = block / "artifacts/tasks/terminal-curator"
@@ -117,6 +138,16 @@ def test_terminal_staging_filters_and_refreshes_the_verified_manifest(staging):
     assert (target / "tc-verified").is_symlink()
     assert (target / "tc-verified").resolve() == source / "tc-verified"
     (source / "verifiable_tasks.txt").write_text("tc-unverified\n")
+    result = prepare()
+    assert result.returncode != 0
+    assert sorted(path.name for path in target.iterdir()) == ["tc-verified"]
+    replacement = source.parent / 'new-validated-batch'
+    make_task(replacement, 'tc-unverified')
+    (replacement / 'verifiable_tasks.txt').write_text('tc-unverified\n')
+    attest_fixture(replacement)
+    config = yaml.safe_load(config_path.read_text())
+    config['runtime_info']['input']['task_source']['terminal_tasks_dir'] = str(replacement)
+    config_path.write_text(yaml.safe_dump(config))
     result = prepare()
     assert result.returncode == 0, result.stdout + result.stderr
     assert sorted(path.name for path in target.iterdir()) == ["tc-unverified"]

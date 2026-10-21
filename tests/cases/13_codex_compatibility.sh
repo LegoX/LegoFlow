@@ -57,7 +57,7 @@ for name, plugin in plugins.items():
         text = skill.read_text(encoding="utf-8")
         if not text.startswith("---\n") or "description:" not in text:
             raise SystemExit(f"FAIL: malformed Codex skill: {skill.relative_to(root)}")
-        codex_command = f"${name}-{skill.parent.name}"
+        codex_command = f"${name}:{skill.parent.name}"
         if codex_command not in text:
             raise SystemExit(f"FAIL: Codex skill does not document native invocation: {codex_command}")
         claude_skill = claude_plugin_dirs[name] / "skills" / skill.parent.name / "SKILL.md"

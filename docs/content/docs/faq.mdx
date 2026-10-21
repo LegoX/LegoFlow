@@ -61,9 +61,9 @@ codex plugin list
 ```
 
 ```text
-$root-setup
-$curator-check
-$tracer-run
+$root:setup
+$curator:check
+$tracer:run
 ```
 
 Codex does not invoke LegoFlow plugins with Claude Code slash commands. Its
@@ -73,7 +73,7 @@ skill files, so both agents retain the same workflow and safety gates.
 ## Q2: A check command fails before the run starts
 
 A: That is expected behavior. Claude Code's `/<block>:check` commands and
-Codex's `$<block>-check` skills are designed to fail early before a costly
+Codex's `$<block>:check` skills are designed to fail early before a costly
 collection, rollout, training, or evaluation job starts. Read the failed
 check, fix the corresponding `config.yaml` field or credential, then run the
 same check again.

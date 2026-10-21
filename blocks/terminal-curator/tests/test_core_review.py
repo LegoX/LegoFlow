@@ -266,6 +266,42 @@ def test_pipeline_uses_supplied_run_id_and_checksum_bound_results(adapter, core_
     assert (core_case.block / 'artifacts/runs/unit-batch/config.yaml').is_file()
     assert report['harbor_task_checksums'] == fake_checksum_rpc({}, core_case.pool)
     assert report['tree_fingerprints'] == adapter.task_tree_fingerprints(core_case.pool)
+    proof = adapter._publication.verify_publication(core_case.pool)
+    assert proof['run_id'] == report['run_id']
+    assert proof['harbor_task_checksums'] == report['harbor_task_checksums']
+
+
+def test_one_publication_binds_multiple_verified_task_ids(adapter, core_case, monkeypatch):
+    install_fake_runtime(adapter, monkeypatch)
+    second = core_case.source.with_name('second-task')
+    shutil.copytree(core_case.source, second)
+    core_case.config['runtime_info']['input']['source']['max_questions'] = 2
+    report = adapter.run(core_case.load())
+    proof = adapter._publication.verify_publication(core_case.pool)
+    assert proof['verified_tasks'] == sorted([core_case.source.name, second.name])
+    assert proof['harbor_task_checksums'] == report['harbor_task_checksums']
+    assert len(proof['tree_fingerprints']) == 2
+
+
+@pytest.mark.parametrize('change', ['instruction', 'provenance', 'permissions', 'empty-directory', 'manifest', 'registry', 'proof'])
+def test_consumers_reject_a_publication_changed_after_validation(adapter, core_case, monkeypatch, change):
+    install_fake_runtime(adapter, monkeypatch)
+    report = adapter.run(core_case.load())
+    task = core_case.pool / report['verified_tasks'][0]
+    if change in ('instruction', 'provenance'):
+        (task / ('instruction.md' if change == 'instruction' else 'provenance.json')).write_text('changed')
+    elif change == 'permissions':
+        (task / 'instruction.md').chmod(0o600)
+    elif change == 'empty-directory':
+        (task / 'new-empty-directory').mkdir()
+    elif change == 'manifest':
+        (core_case.pool / 'verifiable_tasks.txt').write_text('another-task\n')
+    elif change == 'registry':
+        (core_case.pool / 'registry.json').write_text('[]')
+    else:
+        (core_case.pool / 'validation.json').unlink()
+    with pytest.raises(ValueError):
+        adapter._publication.verify_publication(core_case.pool)
 
 
 @pytest.mark.parametrize('mismatch,mutate', [(True, False), (False, True)])

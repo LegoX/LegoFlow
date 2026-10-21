@@ -351,6 +351,7 @@ import sys
 print(Path(sys.argv[1]).resolve(strict=True))
 PY
 )"
+  python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --registry "$REGISTRY_ABS"
 fi
 
 JOB_NAME_PREFIX="$(cfg runtime_info.input.harbor_job.job_name_prefix)"
@@ -688,6 +689,9 @@ echo "Config:     $JOB_DIR_RAW/config.yaml" | tee -a "$LOG_FILE"
 echo "Command:    $RUN_COMMAND" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
+if [[ "$DATASET_NAME" == terminal-curator ]]; then
+  python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --registry "$REGISTRY_ABS"
+fi
 set +e
 (cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
 PIPE_STATUS=("${PIPESTATUS[@]}")

@@ -127,7 +127,7 @@ Now run setup:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/tracer:setup` | `$tracer-setup` |
+| `/tracer:setup` | `$tracer:setup` |
 
 This prepares the pinned `repos/harbor` and `repos/LegoFlow-Trace-Crafter` checkouts,
 builds the Harbor/LiteLLM/conversion environments, and checks the local runtime
@@ -139,7 +139,7 @@ Before launching containers or spending model tokens, run:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/tracer:check` | `$tracer-check` |
+| `/tracer:check` | `$tracer:check` |
 
 This is read-only. It checks config, repo pins, environments, task source,
 model endpoint, proxy port, Docker, agent runtime, and conversion settings. For
@@ -155,7 +155,7 @@ Launch the rollout job:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/tracer:run` | `$tracer-run` |
+| `/tracer:run` | `$tracer:run` |
 
 Tracer starts the per-job LiteLLM proxy, builds the Harbor command from
 `config.yaml`, stages tasks under `artifacts/tasks/<dataset>/`, excludes
@@ -234,7 +234,7 @@ After a job starts or finishes, open the dashboard:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/tracer:dashboard` | `$tracer-dashboard` |
+| `/tracer:dashboard` | `$tracer:dashboard` |
 
 The dashboard helps inspect job progress, per-task trajectories, rewards,
 failure patterns, and converted SFT data. It reads `artifacts/` directly; if a

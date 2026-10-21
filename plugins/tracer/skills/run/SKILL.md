@@ -9,4 +9,4 @@ Read and follow `blocks/tracer/.claude/plugins/tracer-plugin/skills/run/SKILL.md
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$tracer-run`.
+Invoke this Codex skill as `$tracer:run`.

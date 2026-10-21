@@ -668,6 +668,9 @@ echo "Config:     $JOB_DIR_RAW/config.yaml" | tee -a "$LOG_FILE"
 echo "Command:    $RUN_COMMAND" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
+if [[ "$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field producer)" == terminal-curator ]]; then
+  python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --staging "$HARBOR_DATASET_PATH"
+fi
 (cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
 
 SFT_CONVERT_ENABLED="$(cfg runtime_info.input.sft_conversion.enabled)"

@@ -16,12 +16,12 @@ Claude Code exposes the following slash commands:
 /root:create
 ```
 
-Codex invokes the corresponding native skills as `$root-check`, `$root-setup`,
-`$root-run`, `$root-dashboard`, and `$root-create`.
+Codex invokes the corresponding native skills as `$root:check`, `$root:setup`,
+`$root:run`, `$root:dashboard`, and `$root:create`.
 
 For a root pipeline run, Tracer's `task_source.local_block` selects the local
 producer: SWE `curator` by default or `terminal-curator`. An `external` local
 source or non-local provider selects neither. Root setup/run skip the unused
 producer, while the dashboard still shows all registered blocks. Native
-terminal skills are `$terminal-curator-setup`, `$terminal-curator-check`,
-`$terminal-curator-run`, and `$terminal-curator-dashboard`.
+terminal skills are `$terminal-curator:setup`, `$terminal-curator:check`,
+`$terminal-curator:run`, and `$terminal-curator:dashboard`.

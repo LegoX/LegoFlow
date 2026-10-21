@@ -9,4 +9,4 @@ Read and follow `blocks/trainer/.claude/plugins/trainer-plugin/skills/run/SKILL.
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$trainer-run`.
+Invoke this Codex skill as `$trainer:run`.

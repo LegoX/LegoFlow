@@ -74,10 +74,10 @@ those files.
 
 | Workflow | Claude Code | Codex | Script |
 | --- | --- | --- | --- |
-| Bootstrap | `/terminal-curator:setup` | `$terminal-curator-setup` | `bash scripts/setup.sh` |
-| Preflight | `/terminal-curator:check` | `$terminal-curator-check` | `bash scripts/dryrun.sh` |
-| Bounded run | `/terminal-curator:run` | `$terminal-curator-run` | `bash scripts/start.sh` |
-| Progress | `/terminal-curator:dashboard` | `$terminal-curator-dashboard` | `artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py` |
+| Bootstrap | `/terminal-curator:setup` | `$terminal-curator:setup` | `bash scripts/setup.sh` |
+| Preflight | `/terminal-curator:check` | `$terminal-curator:check` | `bash scripts/dryrun.sh` |
+| Bounded run | `/terminal-curator:run` | `$terminal-curator:run` | `bash scripts/start.sh` |
+| Progress | `/terminal-curator:dashboard` | `$terminal-curator:dashboard` | `artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py` |
 
 From this block directory:
 
@@ -112,10 +112,13 @@ resolve code synchronization before launch unless already authorized.
 
 Published batches are immutable copies under `artifacts/tasks-versions/<id>/`.
 `artifacts/tasks` is an atomically updated symlink to the newest passing
-batch, containing its manifest and `registry.json`. Tracer resolves that
+batch, containing its manifest, `registry.json` and `validation.json`. Tracer resolves that
 version before staging,
 so a later publication does not retarget an existing rollout's task links.
 Keep old versions while downstream runs refer to them.
+Consumers verify accepted file-tree fingerprints and manifest/registry identity
+before launch. Older batches without `validation.json` need fresh import and
+Oracle/NOP validation; do not invent their evidence.
 
 `start.sh` runs a finite batch and archives on EXIT. It must fail if the batch
 produces no verified tasks. Each trial is linked by Harbor's task checksum;
@@ -139,6 +142,9 @@ findings, edits, behavioral checks, and reviewer in the candidate's
 `provenance.json` and run notes. Import that copy through `source.type: tasks`
 and require both new fresh-container trials to pass. Record their run IDs
 before using the final manifest or registry downstream.
+Write later run IDs and review results to separate local notes, never back into
+a published task's provenance. Verify the final batch with
+`python3 scripts/publication.py --pool <effective-output-pool>` before handoff.
 
 `scripts/stop.sh` stops this block's recorded run. `scripts/clean.sh` cleans
 temporary `artifacts/runs/` trees while retaining published versions, the

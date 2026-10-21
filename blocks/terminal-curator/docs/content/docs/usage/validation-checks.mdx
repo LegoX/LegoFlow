@@ -5,7 +5,7 @@ description: Preflight, task acceptance, semantic review and recovery.
 
 ## Check before running
 
-Use `/terminal-curator:check` or `$terminal-curator-check` on the execution
+Use `/terminal-curator:check` or `$terminal-curator:check` on the execution
 host. It checks configuration, source inputs, budgets, repository pins,
 Harbor and Docker. The script equivalent, from the block directory, is:
 
@@ -20,7 +20,7 @@ establish working generation.
 
 ## Task acceptance
 
-`/terminal-curator:run` / `$terminal-curator-run` operates one finite batch.
+`/terminal-curator:run` / `$terminal-curator:run` operates one finite batch.
 The runtime gate requires:
 
 | Check | Required result |
@@ -49,6 +49,10 @@ The operating agent must also check instruction, tests and reference behavior:
 The generator's structured test review requires boolean `pass: true` and
 `issues: []`; it does not replace this audit. Keep unresolved tasks out of
 Tracer/Evaluator and leave published batches unchanged.
+
+Consumers require the publication's `validation.json` integrity record.
+Re-import older batches without it and run fresh Oracle/NOP; do not fabricate
+an approval record or update published provenance to add later review results.
 
 ## Failures and recovery
 

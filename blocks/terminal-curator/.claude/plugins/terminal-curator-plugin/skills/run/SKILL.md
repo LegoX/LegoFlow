@@ -8,6 +8,18 @@ description: Generate or import one finite terminal-task batch, validate fresh O
 Read `blocks/terminal-curator/CLAUDE.md` and the selected config. Execute
 from this block's directory on its configured host, in a named tmux session
 for a long run. Carry `--config <file>` through check, launch, and dashboard.
+After inspecting a candidate in another directory, use an absolute script path
+or explicitly return to the block directory before calling its scripts.
+Use the profile's paths and the report's exact run/trial directories; avoid
+recursive searches through the entire `artifacts/` tree, including environments.
+Additional tmux windows inherit the session/server environment, which can
+differ from the current tool shell. Carry the selected profile and required
+resource environment (including a selected `DOCKER_CONFIG`/Buildx builder)
+into the target window. Use session-scoped settings or a private environment
+file; keep credential values out of commands and logs.
+Diagnose host registry/network failures in that execution environment. Do not
+replace a generated task's declared base with a host-local image tag merely
+to bypass those failures; retain a buildable task specification.
 
 1. Run `/terminal-curator:check`. Resolve blocking failures before launching.
 2. Show the resolved source/path/tags/IDs, finite caps, host, model, generation
@@ -35,6 +47,18 @@ for a long run. Carry `--config <file>` through check, launch, and dashboard.
    the requested program or command with representative inputs and check its
    outputs, exit status, and state changes. Source-text searches or the
    presence of an implementation token do not establish that behavior.
+   Treat constraints such as preserving supplied inputs as required behavior;
+   an uncovered constraint is not a minor finding to waive. Cover explicit
+   edge cases (for example quoted shell-special characters) with behavioral
+   assertions. Input-preservation checks must compare the supplied contents
+   and tree against a pristine baseline; checking that paths still exist is
+   insufficient. A path named `input` does not by itself establish a read-only
+   contract: state preservation requirements explicitly in the instruction.
+   The baseline must precede learner execution; a snapshot taken only after
+   the learner finished cannot detect its initial changes. Where practical, run an intentionally incorrect implementation
+   to confirm that the tests reject that violation.
+   Confirm each control actually installed and executed its intended program;
+   a missing executable, failed mount or broken setup is not a valid control.
    Inspect the reference solution too: it must perform the requested work
    when Harbor runs `/solution/solve.sh` without arguments, including creating
    any executable the task asks the agent to provide.
@@ -45,13 +69,26 @@ for a long run. Carry `--config <file>` through check, launch, and dashboard.
    in candidate `provenance.json` and local run notes. Do not edit an immutable
    published batch or either pinned repository. Re-import the corrected copy
    with `source.type: tasks` and run **both fresh Oracle and NOP trials again**.
+   Derive a complete import profile from the selected one, changing the source
+   type/path while retaining budgets, model, output paths and required sections;
+   do not hand-write a partial profile or overwrite committed configuration.
    A correction is eligible for hand-off only after the semantic audit and
    those new trials pass; retain their actual run IDs and evidence. Keep the
    existing authorized batch scope and resource limits.
+   Link the final run IDs and checksums in local review notes outside the
+   immutable publication; never amend a published provenance file afterward.
 7. Inspect the final manifest, semantic-review record, and each task's fresh
-   validation evidence. Structured test approval requires actual boolean
+   validation evidence. Run `python3 scripts/publication.py --pool <effective-output-pool>`
+   and require success before handoff; changed task bytes or metadata require
+   another mutable-copy repair and fresh validation. Structured test approval requires actual boolean
    `pass: true` and `issues: []`; a nonempty, missing or malformed issues list
-   does not approve a candidate. The `/solution` reference-path guard allows
+   does not approve a candidate. Newly generated candidates retain this
+   approval in `generation-test-review.json`, with hashes of the reviewed
+   instruction, reference and tests before normalization. It records the
+   generation review, not the later independent semantic audit; preserve it
+   when correcting a copy and record new file hashes in that copy's semantic
+   review. Older imported tasks may lack this generation record; never invent
+   a historical approval. The `/solution` reference-path guard allows
    legitimate task artifacts named solve.sh and is only a heuristic alongside
    behavioral review. A batch with no verified tasks must fail. Preserve
    rejected candidates/reasons; do not remove contract-required assertions,

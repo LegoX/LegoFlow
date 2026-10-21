@@ -9,4 +9,4 @@ Read and follow `blocks/trainer/.claude/plugins/trainer-plugin/skills/setup/SKIL
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$trainer-setup`.
+Invoke this Codex skill as `$trainer:setup`.

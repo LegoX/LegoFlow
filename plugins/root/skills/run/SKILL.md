@@ -9,4 +9,4 @@ Read and follow `.claude/plugins/root-plugin/skills/run/SKILL.md` in full. It is
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$root-run`.
+Invoke this Codex skill as `$root:run`.

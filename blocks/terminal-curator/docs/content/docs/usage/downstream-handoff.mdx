@@ -20,10 +20,10 @@ task_source:
 
 Keep the other required Tracer settings, including its existing SWE
 `dataset_name`; the producer selector chooses the terminal pool. Run
-`/tracer:check` then the authorized `/tracer:run` (Codex: `$tracer-check`,
-`$tracer-run`). Tracer stages only manifest-listed IDs and locks that batch.
+`/tracer:check` then the authorized `/tracer:run` (Codex: `$tracer:check`,
+`$tracer:run`). Tracer stages only manifest-listed IDs and locks that batch.
 
-For root orchestration, use `/root:run` / `$root-run`, which includes the
+For root orchestration, use `/root:run` / `$root:run`, which includes the
 producer's semantic audit. The legacy shell helper refuses an implicit
 terminal-to-Tracer chain; explicit terminal-only, audit/revalidation, then
 tracer-only operations remain available.
@@ -64,8 +64,8 @@ Retain the remaining endpoint/model/agent settings; supply credentials through
 the environment. `n_tasks: 2` is a small starting run; `null` selects the whole
 batch. SWE-specific `no_hack` remapping and gold-data analysis stay disabled.
 
-Run `/evaluator:check` then `/evaluator:run` (Codex: `$evaluator-check`,
-`$evaluator-run`) and inspect real per-task results. Evaluator locks the physical
+Run `/evaluator:check` then `/evaluator:run` (Codex: `$evaluator:check`,
+`$evaluator:run`) and inspect real per-task results. Evaluator locks the physical
 registry version before launch. Its absolute task paths must remain readable
 on the Docker host; using another node requires making that batch available
 there. See [Evaluator Getting Started](/docs/blocks/evaluator/getting-started).

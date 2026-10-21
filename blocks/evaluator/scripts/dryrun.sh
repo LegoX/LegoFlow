@@ -603,6 +603,13 @@ if [[ -n "$REGISTRY_RAW" ]]; then
         fail "registry inspection failed: $REGISTRY_CHECK"
         ;;
     esac
+    if [[ "$DATASET_NAME" == terminal-curator ]]; then
+      if python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --registry "$REGISTRY_ABS" >/dev/null 2>&1; then
+        ok "terminal-curator publication integrity matches accepted Oracle/NOP evidence"
+      else
+        fail "terminal-curator publication changed or lacks validation.json; re-import and revalidate"
+      fi
+    fi
   else
     warn "registry.json not yet present at $REGISTRY_RAW (run scripts/update_repos.sh)"
   fi

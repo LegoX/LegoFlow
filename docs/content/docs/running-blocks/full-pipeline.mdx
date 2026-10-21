@@ -20,7 +20,7 @@ its configured bounded question batch inside `terminal-curator:run`.
 The terminal producer skill also audits each instruction against its tests and
 reference solution, records corrections and provenance, and repeats fresh
 Oracle/NOP validation before Tracer or Evaluator runs. Runtime verifier success
-alone does not establish task quality. Use `/root:run` / `$root-run` for this
+alone does not establish task quality. Use `/root:run` / `$root:run` for this
 orchestration. The legacy root `scripts/start.sh` refuses an implicit terminal
 to Tracer chain before generation; explicit terminal-only, the agent audit,
 then tracer-only remain available. The SWE shell helper keeps `create_py.sh`.
@@ -64,7 +64,7 @@ benchmarks, and endpoint locations belong in the relevant block's
 
 | Claude Code | Codex |
 | --- | --- |
-| `/root:setup` | `$root-setup` |
+| `/root:setup` | `$root:setup` |
 
 This checks shared tooling and ensures the root `config.yaml` exists. It can
 offer to invoke each child's setup, but recursion is optional and confirmed one
@@ -75,7 +75,7 @@ and fill approved inputs; it does not launch workloads.
 
 | Claude Code | Codex |
 | --- | --- |
-| `/root:check` | `$root-check` |
+| `/root:check` | `$root:check` |
 
 This is operationally read-only: it validates configs, both ends of declared
 dependencies, repository pins, environments, per-block dry runs, and live model
@@ -89,7 +89,7 @@ only affect dashboard publishing and do not block the pipeline.
 
 | Claude Code | Codex |
 | --- | --- |
-| `/curator:collect-prs` | `$curator-collect-prs` |
+| `/curator:collect-prs` | `$curator:collect-prs` |
 
 Root orchestration consumes Curator's existing collection under
 `blocks/curator/artifacts/collected_prs/`. Wait for collection to finish before
@@ -99,7 +99,7 @@ starting the root run.
 
 | Claude Code | Codex |
 | --- | --- |
-| `/root:run ${INSTRUCTION}` | `$root-run ${INSTRUCTION}` |
+| `/root:run ${INSTRUCTION}` | `$root:run ${INSTRUCTION}` |
 
 
 The root skill repeats preflight, presents the resolved configuration, and waits

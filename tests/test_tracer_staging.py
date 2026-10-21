@@ -13,7 +13,7 @@ import sys
 import pytest
 import yaml
 
-from test_terminal_curator_integration import TRACER_SCRIPTS, make_task, staging, task_source
+from test_terminal_curator_integration import ROOT, TRACER_SCRIPTS, attest_fixture, make_task, staging, task_source
 
 
 @pytest.fixture
@@ -71,8 +71,11 @@ def test_shared_custom_target_and_dataset_label_are_honored(staging):
     assert target.resolve().name == "shared-label"
 
 
-def test_source_metadata_changes_create_a_new_version_and_local_content_remains_linked(staging):
-    block, source, _, prepare = staging
+def test_external_source_metadata_changes_create_a_new_version_and_content_remains_linked(staging):
+    block, source, config_path, prepare = staging
+    config = edit_source(config_path, provider='local', local_block='external', dataset_name=str(source))
+    config['runtime_info']['input']['harbor_job'] = {'dataset': 'terminal-curator'}
+    config_path.write_text(yaml.safe_dump(config))
     assert prepare().returncode == 0
     target = block / "artifacts/tasks/terminal-curator"
     previous = target.resolve()
@@ -84,6 +87,28 @@ def test_source_metadata_changes_create_a_new_version_and_local_content_remains_
     assert target.resolve() != previous
     # Ordinary local pools retain link semantics; this is not a byte snapshot.
     assert (previous / "tc-verified/instruction.md").read_text() == instruction.read_text()
+
+
+@pytest.mark.parametrize('change', ['instruction', 'provenance', 'permissions', 'empty-directory'])
+def test_terminal_preparation_and_existing_staging_reject_changed_publications(staging, change):
+    block, source, _, prepare = staging
+    assert prepare().returncode == 0
+    target = block / 'artifacts/tasks/terminal-curator'
+    previous = target.resolve()
+    task = source / 'tc-verified'
+    if change in ('instruction', 'provenance'):
+        (task / ('instruction.md' if change == 'instruction' else 'provenance.json')).write_text('changed')
+    elif change == 'permissions':
+        (task / 'instruction.md').chmod(0o600)
+    else:
+        (task / 'empty').mkdir()
+    result = prepare()
+    assert result.returncode != 0
+    assert target.resolve() == previous
+    check = subprocess.run([sys.executable, str(ROOT / 'blocks/terminal-curator/scripts/publication.py'),
+                            '--staging', str(target)], capture_output=True, text=True)
+    assert check.returncode != 0
+    assert 'integrity check failed' in check.stderr
 
 
 @pytest.mark.parametrize("overwrite", [False, True])
@@ -196,13 +221,19 @@ def test_hf_prepare_uses_the_matching_owned_cache_and_redownloads_changed_source
 
 
 def test_result_file_pins_a_version_when_later_preparation_advances_the_pointer(staging):
-    block, source, _, prepare = staging
+    block, source, config_path, prepare = staging
     result_file = source.parent / "prepared.json"
     result = prepare("--result-file", str(result_file))
     assert result.returncode == 0, result.stdout + result.stderr
     fixed = Path(json.loads(result_file.read_text())["dataset_path"])
     assert fixed.is_absolute()
-    (source / "verifiable_tasks.txt").write_text("tc-unverified\n")
+    replacement = source.parent / 'next-validated-batch'
+    shutil.copytree(source, replacement)
+    (replacement / "verifiable_tasks.txt").write_text("tc-unverified\n")
+    attest_fixture(replacement)
+    config = yaml.safe_load(config_path.read_text())
+    config['runtime_info']['input']['task_source']['terminal_tasks_dir'] = str(replacement)
+    config_path.write_text(yaml.safe_dump(config))
     assert prepare().returncode == 0
     assert (block / "artifacts/tasks/terminal-curator").resolve() != fixed
     assert {p.name for p in fixed.iterdir()} == {"tc-verified"}

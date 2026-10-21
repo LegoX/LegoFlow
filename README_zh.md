@@ -123,7 +123,7 @@ codex plugin add trainer@legoflow
 codex plugin add evaluator@legoflow
 ```
 
-安装完成后重启 Codex。Codex 使用 `$<block>-<skill>` 形式的原生 skills，例如 `$curator-check`。
+安装完成后重启 Codex。Codex 使用 `$<block>:<skill>` 形式的原生 skills，例如 `$curator:check`。
 
 ### 使用示例
 
@@ -135,10 +135,10 @@ codex plugin add evaluator@legoflow
 
 | 工作流 | Claude Code | Codex |
 | --- | --- | --- |
-| 准备 | `/<block>:setup` | `$<block>-setup` |
-| 检查 | `/<block>:check` | `$<block>-check` |
-| 运行 | `/<block>:run` | `$<block>-run` |
-| 看板 | `/<block>:dashboard` | `$<block>-dashboard` |
+| 准备 | `/<block>:setup` | `$<block>:setup` |
+| 检查 | `/<block>:check` | `$<block>:check` |
+| 运行 | `/<block>:run` | `$<block>:run` |
+| 看板 | `/<block>:dashboard` | `$<block>:dashboard` |
 
 setup skill 用于准备依赖并填写 `config.yaml`；check 用于校验配置并执行预检；run 用于执行任务并把中间产物归档到 `artifacts/`；dashboard 用于监控运行进度与状态。
 
@@ -146,7 +146,7 @@ setup skill 用于准备依赖并填写 `config.yaml`；check 用于校验配置
 
 构建 terminal 任务时，填写 `blocks/terminal-curator/config.yaml`，然后在
 Claude Code 中使用 `/terminal-curator:{setup,check,run,dashboard}`，或在
-Codex 中使用对应的 `$terminal-curator-<skill>`。密钥通过环境变量提供。
+Codex 中使用对应的 `$terminal-curator:<skill>`。密钥通过环境变量提供。
 将 Tracer 配置为 `task_source.provider: local`、
 `task_source.local_block: terminal-curator`，并设置
 `terminal_tasks_dir: ../terminal-curator/artifacts/tasks`。
@@ -155,7 +155,7 @@ Codex 中使用对应的 `$terminal-curator-<skill>`。密钥通过环境变量�
 `local_block: curator`。详见
 [terminal 配置说明](blocks/terminal-curator/docs/content/docs/usage/configuration.mdx)。
 
-终端编排请使用 `/root:run`（Codex 为 `$root-run`）：producer skill 会逐项核对
+终端编排请使用 `/root:run`（Codex 为 `$root:run`）：producer skill 会逐项核对
 题面、tests 和参考解，记录修正依据，再重新执行独立 Oracle/NOP 验证后交给下游。
 旧的 `bash scripts/start.sh` 会在生成前拒绝隐式 terminal→Tracer 串联；可显式执行
 `--terminal-curator-only`，由 agent 完成语义审查和重验证后再用 `--tracer-only`。

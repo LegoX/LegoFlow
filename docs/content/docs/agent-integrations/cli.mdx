@@ -38,32 +38,32 @@ syntax as its plugin invocation mechanism.
 
 | LegoFlow workflow | Codex skill |
 | --- | --- |
-| Root check | `$root-check` |
-| Curator check | `$curator-check` |
-| Curator setup | `$curator-setup` |
-| Curator PR collection | `$curator-collect-prs` |
-| Curator task creation | `$curator-create-tasks` |
-| Curator run | `$curator-run` |
-| Curator dashboard | `$curator-dashboard` |
-| Terminal Curator setup | `$terminal-curator-setup` |
-| Terminal Curator check | `$terminal-curator-check` |
-| Terminal Curator run | `$terminal-curator-run` |
-| Terminal Curator dashboard | `$terminal-curator-dashboard` |
-| Tracer check | `$tracer-check` |
-| Tracer run | `$tracer-run` |
-| Trainer run | `$trainer-run` |
-| Evaluator run | `$evaluator-run` |
+| Root check | `$root:check` |
+| Curator check | `$curator:check` |
+| Curator setup | `$curator:setup` |
+| Curator PR collection | `$curator:collect-prs` |
+| Curator task creation | `$curator:create-tasks` |
+| Curator run | `$curator:run` |
+| Curator dashboard | `$curator:dashboard` |
+| Terminal Curator setup | `$terminal-curator:setup` |
+| Terminal Curator check | `$terminal-curator:check` |
+| Terminal Curator run | `$terminal-curator:run` |
+| Terminal Curator dashboard | `$terminal-curator:dashboard` |
+| Tracer check | `$tracer:check` |
+| Tracer run | `$tracer:run` |
+| Trainer run | `$trainer:run` |
+| Evaluator run | `$evaluator:run` |
 
 For example, in a Codex session use:
 
 ```text
-$curator-check
+$curator:check
 ```
 
 Or provide a scoped natural-language request:
 
 ```text
-Use $curator-check to validate the Curator configuration and dependencies only.
+Use $curator:check to validate the Curator configuration and dependencies only.
 Do not collect pull requests or create tasks.
 ```
 
@@ -77,7 +77,7 @@ workflow implementation.
 The standard sequence is:
 
 ```text
-$curator-check -> user confirmation -> $curator-run
+$curator:check -> user confirmation -> $curator:run
 ```
 
 Do not start expensive or stateful jobs before the relevant check succeeds and
@@ -97,7 +97,7 @@ codex
 Then invoke:
 
 ```text
-$curator-check
+$curator:check
 ```
 
 The skill reads the canonical workflow from:

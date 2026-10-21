@@ -9,4 +9,4 @@ Read and follow `blocks/terminal-curator/.claude/plugins/terminal-curator-plugin
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$terminal-curator-dashboard`.
+Invoke this Codex skill as `$terminal-curator:dashboard`.

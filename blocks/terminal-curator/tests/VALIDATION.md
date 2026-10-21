@@ -1,9 +1,106 @@
 # Terminal Curator integration validation
 
-This record covers the reviewed implementation and a new two-question run,
-independent of the first implementation's trials. Docker work used one CPU
+This record includes the native plugin tests below and the earlier independent
+two-question implementation review. Docker work used one CPU
 execution node. Source, configuration, plugin and browser checks also ran on
 the development host. No GPU training was performed.
+
+## Native plugin validation — 2026-10-21
+
+Both native clients installed and discovered all **six LegoFlow plugins and
+27 skills** in isolated homes. This catalog check does not claim execution of
+the other blocks' workflows. Terminal Curator's four operations were actually
+executed separately in both clients:
+
+| Native client | setup | check | run | dashboard |
+| --- | --- | --- | --- | --- |
+| Claude Code 2.1.118 | Passed | Passed | Passed | Passed |
+| Codex 0.163.0 | Passed | Passed | Passed | Passed |
+
+The eight operation receipts contain actual script/tool calls and normal CLI
+completion. Both dashboard calls exported HTML, served a loopback preview,
+checked `/` and `/api/status`, and stopped that preview. Setup was an actual
+idempotent run on the prepared pinned environments, rather than a cold-node
+bootstrap. Codex's controller used `gpt-5.4` through the supplied Responses
+endpoint; generation and real solving used `claude-opus-5-5`.
+
+Each client generated its own variant of Stack Overflow question 59838 in an
+isolated profile. The shared task ID must not be merged into one pool. The
+final audited publications passed new Oracle/NOP trials and real Tracer solves:
+
+| Producer controller | Final producer run | Oracle | Fresh NOP | Tracer solved |
+| --- | --- | --- | --- | --- |
+| claude-code | `20261021T052249Z-82fe76a5` | 16 passed / reward 1 | 15 test failures, 0 errors / reward 0 | 1 |
+| codex | `20261021T065659Z-431c2f19` | 10 passed / reward 1 | 9 test failures, 0 errors / reward 0 | 1 |
+
+| Producer controller | Final Harbor task checksum |
+| --- | --- |
+| claude-code | `acd863c8c7dc8156712efeb84bbba684146bee44bbbf7eed421323b46bc7ab81` |
+| codex | `c6621dbec5a04751299c27a577fccff4b7ebfff3462f8fdcd72b01bf37d8c894` |
+
+Both Tracer jobs produced nonempty valid raw trajectories, matching producer
+checksums, normal native `end_turn` completion and no Harbor exception. All
+verifier cases passed. Default SFT filtering was unchanged; the retained LF
+counts were 1 (Claude-produced batch) and 1 (Codex-produced batch).
+Evaluator independently solved the Claude-produced final variant with all
+16 verifier cases passing and the same checksum, also ending normally.
+
+The native tests exposed and fixed three integration issues:
+
+- Actual Codex discovery returns `$plugin:skill` identifiers. The shared
+  generator, 27 entry wrappers, compatibility check and invocation docs now
+  use that form.
+- Generated test approvals existed only in memory. New candidates retain
+  `generation-test-review.json`, bound to the exact reviewed instruction,
+  reference and tests; changed inputs cannot reuse an approval. A real
+  Codex generation's three hashes and boolean/empty-issues approval matched.
+- The first native audit appended results to already published provenance,
+  changing its validated identity. That attempt was rejected and retained.
+  New publications include `validation.json`; Tracer and Evaluator verify the
+  accepted tree, IDs and registry before consumption, including a final
+  launch check. Evaluator's final check runs before error suppression for
+  Harbor result collection; a changed task during proxy warmup must stop
+  launch. A pristine copy of a real accepted batch passed; appending
+  one newline to its copied provenance was rejected for the pool, existing
+  staging and Evaluator registry. The original remained unchanged.
+
+Semantic review strengthened input-preservation assertions from path presence
+to pristine contents/tree/modes, and exercised shell-special names. A real
+wrong implementation that rewrites an input file passed the earlier 14 tests
+but failed the strengthened integrity assertion; the reference passed all
+16. A previous missing-mount control was invalid and was replaced by controls
+that record the installed program's hash and actual invocation. Review notes
+after publication are separate files, preserving immutable task provenance.
+The Codex variant additionally gained an explicit read-only/literal-path
+contract, a pre-learner input baseline, safe file-kind hashing and Bash syntax
+checks. Its reference no longer trims literal trailing spaces. In four fresh
+Docker controls, the fixed reference passed 10/10; the old reference failed
+the trailing-space case; an initial-only input mutation passed the old seven
+tests and was rejected by the new baseline. The final version was revalidated
+and solved again; its earlier seven-test trajectory is retained separately.
+
+Timeouts and interrupted trials remain recorded separately. Codex generation
+eventually completed seven successful responses after read-timeout retries;
+its retained candidate was resumed through import/QA instead of regenerating
+it. No interrupted trial was treated as an accepted NOP result. The private
+upload harness also briefly cleared source execution bits; its mode handling
+was corrected and source permissions restored. That was a test-environment
+issue, not a repository script-permission defect. Additional tmux windows also
+needed explicit session-scoped Docker resources; default registry failures and
+a rejected host-local-image workaround were preserved. The original public
+Dockerfile was restored and independently built before fresh validation.
+
+Current regressions: **292 Terminal tests + 141 root pytest tests = 433 passed**
+on the execution node. A clean source export passed **291 Terminal tests** and
+explicitly skipped the unavailable native Harbor check. The root runner also
+passed 13 shell cases, with its existing upstream-network check skipped after
+a bounded stalled probe. This does not satisfy the separate latest-upstream
+pin policy described below. Docs built 62 pages; all eight Terminal routes,
+navigation, search, synthetic demo and mobile behavior passed local and live
+browser checks. Supplied private values were absent from publishable source,
+website bytes and the existing PR commit history.
+
+## Earlier two-question review — 2026-10-20
 
 ## Runtime and pins
 

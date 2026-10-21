@@ -9,4 +9,4 @@ Read and follow `.claude/plugins/root-plugin/skills/setup/SKILL.md` in full. It 
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$root-setup`.
+Invoke this Codex skill as `$root:setup`.

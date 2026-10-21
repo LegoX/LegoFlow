@@ -1,6 +1,8 @@
 """Reject the upstream candidate fallback unless its own review approved it."""
 
 from types import SimpleNamespace
+import hashlib
+import json
 
 import pytest
 
@@ -32,6 +34,13 @@ def review_generator(adapter, responses, codes=None):
                     return candidate
             # The real upstream returns its first candidate after failed reviews.
             return self.candidates[0] if self.candidates else None
+
+        def _write_files(self, instruction, env_data, test_data, solution, dockerfile, difficulty):
+            for name, content in [("instruction.md", instruction), ("solution/solve.sh", solution),
+                                  ("tests/test_outputs.py", test_data["test_outputs_py"])]:
+                path = self.task_dir / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
 
     def fake_completion(prompt, system, **kwargs):
         calls.append(prompt)
@@ -136,3 +145,50 @@ def test_an_unreviewed_parent_candidate_is_rejected(adapter):
         call_llm_api=unexpected_completion,
     ))()
     assert generator._generate_tests("instruction", {}, "reference") is None
+
+
+def test_generation_preserves_the_approval_bound_to_its_actual_files(adapter, tmp_path):
+    generator, _ = review_generator(adapter, ['{"pass": true, "issues": []}'])
+    instruction, solution = "Write the required output.\n", "#!/bin/bash\nprintf done\\n\n"
+    data = generator._generate_tests(instruction, {}, solution)
+    generator.task_dir = tmp_path / 'candidate'
+    generator._write_files(instruction, {}, data, solution, 'FROM scratch')
+
+    record = json.loads((generator.task_dir / 'generation-test-review.json').read_text())
+    assert record['stage'] == 'generation-before-normalization'
+    assert record['pass'] is True and record['issues'] == []
+    assert record['sha256'] == {
+        name: hashlib.sha256((generator.task_dir / name).read_bytes()).hexdigest()
+        for name in ('instruction.md', 'solution/solve.sh', 'tests/test_outputs.py')
+    }
+
+
+@pytest.mark.parametrize('change', ['instruction', 'solution', 'tests'])
+def test_changed_review_inputs_cannot_be_written_as_approved(adapter, tmp_path, change):
+    generator, _ = review_generator(adapter, ['{"pass": true, "issues": []}'])
+    instruction, solution = 'Required behavior.', 'reference'
+    data = generator._generate_tests(instruction, {}, solution)
+    generator.task_dir = tmp_path / 'must-not-be-written'
+    if change == 'instruction':
+        instruction += ' New requirement.'
+    elif change == 'solution':
+        solution += ' changed'
+    else:
+        data = {**data, 'test_outputs_py': data['test_outputs_py'] + '# changed\n'}
+    with pytest.raises(ValueError, match='do not match an approved test review'):
+        generator._write_files(instruction, {}, data, solution, 'FROM scratch')
+    assert not generator.task_dir.exists()
+
+
+@pytest.mark.parametrize('change', ['instruction', 'solution'])
+def test_same_code_approval_does_not_cover_changed_inputs(adapter, monkeypatch, change):
+    generator, _ = review_generator(adapter, ['{"pass": true, "issues": []}'])
+    instruction, solution = 'Required behavior.', 'reference'
+    data = generator._generate_tests(instruction, {}, solution)
+    parent = type(generator).__mro__[1]
+    monkeypatch.setattr(parent, '_generate_tests', lambda *args: data)
+    if change == 'instruction':
+        instruction += ' New requirement.'
+    else:
+        solution += ' changed'
+    assert generator._generate_tests(instruction, {}, solution) is None

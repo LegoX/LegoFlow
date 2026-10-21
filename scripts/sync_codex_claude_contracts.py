@@ -24,7 +24,7 @@ def write_codex_skill(codex_path: Path, claude_path: Path, description: str) -> 
         "reinterpret its safety gates, reporting requirements, or runtime "
         "procedure here.\n\n"
         "## Native Codex Invocation\n\n"
-        f"Invoke this Codex skill as `${codex_path.parent.parent.parent.name}-{codex_path.parent.name}`.\n",
+        f"Invoke this Codex skill as `${codex_path.parent.parent.parent.name}:{codex_path.parent.name}`.\n",
         encoding="utf-8",
     )
 

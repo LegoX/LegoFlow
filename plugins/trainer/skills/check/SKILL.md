@@ -9,4 +9,4 @@ Read and follow `blocks/trainer/.claude/plugins/trainer-plugin/skills/check/SKIL
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$trainer-check`.
+Invoke this Codex skill as `$trainer:check`.

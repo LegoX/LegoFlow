@@ -150,7 +150,7 @@ Root skills honor complete private profiles selected by `TRAJGEN_CONFIG`,
 that block), using the same profile set for selection, dependencies, resources,
 and child dispatch. See the canonical root plugin's
 [profile contract](.claude/plugins/root-plugin/resources/EFFECTIVE_PROFILES.md).
-For terminal orchestration, use `/root:run` / `$root-run` so the producer skill
+For terminal orchestration, use `/root:run` / `$root:run` so the producer skill
 performs instruction/tests/reference-solution semantic audit, records corrections,
 and repeats fresh Oracle/NOP checks before downstream rollout. The root shell
 helper cannot perform that agent step and rejects an implicit terminal chain

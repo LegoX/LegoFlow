@@ -9,4 +9,4 @@ Read and follow `blocks/evaluator/.claude/plugins/evaluator-plugin/skills/dashbo
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$evaluator-dashboard`.
+Invoke this Codex skill as `$evaluator:dashboard`.

@@ -9,4 +9,4 @@ Read and follow `blocks/evaluator/.claude/plugins/evaluator-plugin/skills/check/
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$evaluator-check`.
+Invoke this Codex skill as `$evaluator:check`.

@@ -71,8 +71,8 @@ codex plugin add evaluator@legoflow
 ```
 
 Restart Codex after installation. Codex does not use the Claude Code
-marketplace commands above. Invoke native skills such as `$curator-check` and
-`$tracer-run`.
+marketplace commands above. Invoke native skills such as `$curator:check` and
+`$tracer:run`.
 
 ```bash
 cd LegoFlow
@@ -98,35 +98,35 @@ workflow.
 Codex uses the following namespaced native skills:
 
 ```text
-$root-check
-$curator-check
-$curator-create-tasks
-$terminal-curator-check
-$tracer-run
-$trainer-run
-$evaluator-dashboard
+$root:check
+$curator:check
+$curator:create-tasks
+$terminal-curator:check
+$tracer:run
+$trainer:run
+$evaluator:dashboard
 ```
 
 Curator's native Codex skills are:
 
 | Workflow | Codex skill |
 | --- | --- |
-| Check | `$curator-check` |
-| Setup | `$curator-setup` |
-| Collect PRs | `$curator-collect-prs` |
-| Create tasks | `$curator-create-tasks` |
-| Run | `$curator-run` |
-| Dashboard | `$curator-dashboard` |
+| Check | `$curator:check` |
+| Setup | `$curator:setup` |
+| Collect PRs | `$curator:collect-prs` |
+| Create tasks | `$curator:create-tasks` |
+| Run | `$curator:run` |
+| Dashboard | `$curator:dashboard` |
 
 For terminal tasks, use the sibling
 [Terminal Curator block](/docs/blocks/terminal-curator/getting-started):
 
 | Workflow | Claude Code | Codex |
 | --- | --- | --- |
-| Setup | `/terminal-curator:setup` | `$terminal-curator-setup` |
-| Check | `/terminal-curator:check` | `$terminal-curator-check` |
-| Run | `/terminal-curator:run` | `$terminal-curator-run` |
-| Dashboard | `/terminal-curator:dashboard` | `$terminal-curator-dashboard` |
+| Setup | `/terminal-curator:setup` | `$terminal-curator:setup` |
+| Check | `/terminal-curator:check` | `$terminal-curator:check` |
+| Run | `/terminal-curator:run` | `$terminal-curator:run` |
+| Dashboard | `/terminal-curator:dashboard` | `$terminal-curator:dashboard` |
 
 Select `runtime_info.input.task_source.local_block: terminal-curator` in
 Tracer when using its verified pool. Root setup/run select that producer;
@@ -140,7 +140,7 @@ expensive or stateful work.
 
 For consistency, the rest of this documentation uses Claude Code skill syntax
 for its examples: `/<block>:<skill>`. Codex users can replace each example with
-the equivalent `$<block>-<skill>` form. For example, use `$tracer-run` wherever
+the equivalent `$<block>:<skill>` form. For example, use `$tracer:run` wherever
 the documentation shows `/tracer:run`; both invoke the same canonical workflow.
 
 

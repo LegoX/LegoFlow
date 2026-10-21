@@ -12,16 +12,56 @@ import sys
 
 import pytest
 import yaml
+from test_terminal_curator_integration import attest_fixture, make_task
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("mutate_after_preflight", [False, True])
+def test_final_integrity_check_stops_harbor_after_proxy_warmup(tmp_path, mutate_after_preflight):
+    """Execute the real final launch section with an already warmed proxy."""
+    pool = tmp_path / "batch"
+    pool.mkdir()
+    make_task(pool, "tc-final")
+    (pool / "verifiable_tasks.txt").write_text("tc-final\n")
+    (pool / "registry.json").write_text(json.dumps([
+        {"name": "terminal-curator", "version": "1.0",
+         "tasks": [{"name": "tc-final", "path": str(pool / "tc-final")}]}
+    ]))
+    attest_fixture(pool)
+    if mutate_after_preflight:
+        (pool / "tc-final/instruction.md").write_text("Changed during proxy warmup.\n")
+    source = (ROOT / "blocks/evaluator/scripts/start.sh").read_text()
+    # Select the actual launch boundary rather than reproducing its shell logic.
+    before_harbor = source.index('\n(cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND")')
+    boundary = source.index('\necho "=== evaluator start ==="')
+    end = source.index('\nHARBOR_RC=', before_harbor)
+    marker = tmp_path / "harbor-started"
+    env = {**os.environ, "BLOCK_DIR": str(ROOT / "blocks/evaluator"),
+           "DATASET_NAME": "terminal-curator", "REGISTRY_ABS": str(pool / "registry.json"),
+           "HARBOR_DIR": str(tmp_path), "RUN_COMMAND": "touch " + shlex.quote(str(marker)),
+           "LOG_FILE": str(tmp_path / "launch.log")}
+    result = subprocess.run(["bash", "-c", "set -eo pipefail\n" + source[boundary:end]],
+                            env=env, text=True, capture_output=True, timeout=30)
+    if mutate_after_preflight:
+        assert result.returncode == 2
+        assert "integrity check failed" in result.stderr
+        assert not marker.exists()
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert marker.exists()
+
+
 @pytest.mark.parametrize("dataset_name", ["terminal-curator", "swebench-verified"])
-def test_only_terminal_registry_is_frozen_when_publication_changes_before_execution(tmp_path, dataset_name):
+@pytest.mark.parametrize('mutate', [False, True])
+def test_only_terminal_registry_is_frozen_when_publication_changes_before_execution(tmp_path, dataset_name, mutate):
     block = tmp_path / "blocks/evaluator"
     (block / "scripts").mkdir(parents=True)
     shutil.copy2(ROOT / "blocks/evaluator/scripts/start.sh", block / "scripts")
+    verifier = block.parent / 'terminal-curator/scripts/publication.py'
+    verifier.parent.mkdir(parents=True)
+    shutil.copy2(ROOT / 'blocks/terminal-curator/scripts/publication.py', verifier)
     (block / "scripts/dryrun.sh").write_text("exit 0\n")
     harbor = block / "repos/harbor"
     (harbor / ".git").mkdir(parents=True)
@@ -38,6 +78,12 @@ def test_only_terminal_registry_is_frozen_when_publication_changes_before_execut
         (batch / "registry.json").write_text(json.dumps([
             {"name": dataset_name, "version": "1.0",
              "tasks": [{"name": f"tc-{batch.name}", "path": str(batch / f"tc-{batch.name}")}]}]))
+        make_task(batch, f'tc-{batch.name}')
+        if dataset_name == 'terminal-curator':
+            (batch / 'verifiable_tasks.txt').write_text(f'tc-{batch.name}\n')
+            attest_fixture(batch)
+    if mutate:
+        (first / 'tc-first/instruction.md').write_text('Changed after validation.\n')
     public = tmp_path / "producer/tasks"
     public.symlink_to(first, target_is_directory=True)
     config = yaml.safe_load((ROOT / "blocks/evaluator/config.yaml").read_text())
@@ -69,6 +115,12 @@ def test_only_terminal_registry_is_frozen_when_publication_changes_before_execut
     result = subprocess.run(["bash", str(block / "scripts/start.sh"), "--dry-run-command"],
                             cwd=tmp_path, env=env, text=True, capture_output=True, timeout=30)
 
+    if mutate and dataset_name == 'terminal-curator':
+        assert result.returncode != 0
+        assert 'integrity check failed' in result.stderr
+        assert public.resolve() == first
+        assert not list((block / 'artifacts/litellm').glob('*/*.yaml'))
+        return
     assert result.returncode == 0, result.stdout + result.stderr
     command = next(line for line in result.stdout.splitlines() if line.startswith("uv run harbor run "))
     arguments = shlex.split(command.split(" --mounts-json ", 1)[0])

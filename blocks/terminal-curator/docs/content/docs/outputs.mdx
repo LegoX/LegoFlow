@@ -12,6 +12,7 @@ a symlink to an immutable `artifacts/tasks-versions/<batch-id>/` publication:
 artifacts/tasks/
 ├── verifiable_tasks.txt
 ├── registry.json
+├── validation.json
 └── <task-id>/
     ├── instruction.md
     ├── task.toml
@@ -27,6 +28,10 @@ as its allowlist. `registry.json` describes the same IDs as
 `terminal-curator@1.0`, using absolute paths into that immutable batch for
 Evaluator. Both switch together; keep versions referenced by existing jobs.
 See [Downstream Handoff](./usage/downstream-handoff.mdx) for consumer configuration.
+
+Newly generated candidates also retain `generation-test-review.json`: the
+structured approval and hashes of the instruction, reference and tests before
+normalization. Preserve it as generation history when auditing a corrected copy.
 
 ## Reports and checksums
 
@@ -48,6 +53,9 @@ verified-task counts.
 | `task_checksums` | Separate block file digest; not interchangeable with Harbor's checksum. |
 
 These identities are checked around validation and on the copied publication.
+`validation.json` binds the accepted IDs, Oracle/NOP gate outcomes and task
+identities to that batch. Tracer and Evaluator check it before consumption;
+changed task contents, modes, directory trees or manifests are rejected.
 Use trial results and the [semantic review](./usage/validation-checks.mdx)
 record together before downstream use.
 

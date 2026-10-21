@@ -9,4 +9,4 @@ Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/collect-pr
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$curator-collect-prs`.
+Invoke this Codex skill as `$curator:collect-prs`.

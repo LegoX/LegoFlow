@@ -19,7 +19,6 @@ import re
 import shlex
 import shutil
 import signal
-import stat
 import subprocess
 import sys
 import tomllib
@@ -96,38 +95,11 @@ def task_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
-def task_tree_fingerprint(path: Path) -> str:
-    """Supplement Harbor's content hash with empty directories and permissions.
-
-    Native Harbor checksums remain the role-binding identity. This independent
-    fingerprint protects filesystem semantics that dirhash intentionally omits.
-    """
-    digest = hashlib.sha256()
-    for entry in [path, *sorted(path.rglob("*"), key=lambda item: os.fsencode(item.relative_to(path)))]:
-        metadata = entry.lstat()
-        relative = entry.relative_to(path).as_posix()
-        if stat.S_ISDIR(metadata.st_mode):
-            kind, content = "directory", ""
-        elif stat.S_ISREG(metadata.st_mode):
-            kind = "file"
-            file_hash = hashlib.sha256()
-            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
-            with os.fdopen(os.open(entry, flags), "rb") as stream:
-                metadata = os.fstat(stream.fileno())
-                if not stat.S_ISREG(metadata.st_mode):
-                    raise ValueError("candidate entry changed its file type while hashing")
-                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                    file_hash.update(chunk)
-            content = file_hash.hexdigest()
-        else:
-            raise ValueError("candidate tree must contain only real directories and regular files")
-        record = [relative, kind, stat.S_IMODE(metadata.st_mode), content]
-        digest.update(json.dumps(record, ensure_ascii=True, separators=(",", ":")).encode() + b"\n")
-    return digest.hexdigest()
-
-
-def task_tree_fingerprints(candidates: Path) -> dict:
-    return {task.name: task_tree_fingerprint(task) for task in sorted(candidates.iterdir()) if task.is_dir()}
+_publication_spec = importlib.util.spec_from_file_location("terminal_publication", BLOCK / "scripts/publication.py")
+_publication = importlib.util.module_from_spec(_publication_spec)
+_publication_spec.loader.exec_module(_publication)
+task_tree_fingerprint = _publication.task_tree_fingerprint
+task_tree_fingerprints = _publication.task_tree_fingerprints
 
 
 def load_config(path: Path) -> dict:
@@ -381,9 +353,28 @@ def safe_environment(env_data: dict) -> None:
 def generator_class(module):
     """Keep upstream generation, but never accept its failed-review fallback."""
     class Generator(module.TaskGenerator):
+        @staticmethod
+        def _review_hashes(instruction, solution, test_code):
+            return {name: hashlib.sha256(text.encode("utf-8")).hexdigest() for name, text in (
+                ("instruction.md", instruction), ("solution/solve.sh", solution),
+                ("tests/test_outputs.py", test_code))}
+
+        def _approved_review(self, instruction, solution, test_code):
+            record = getattr(self, "_reviewed_tests", {}).get(test_code)
+            if (record and record["pass"] is True and record["issues"] == []
+                    and record["sha256"] == self._review_hashes(instruction, solution, test_code)):
+                return record
+            return None
+
         def _write_files(self, instruction, env_data, test_data, solution, dockerfile, difficulty="medium"):
             safe_environment(env_data)
+            review = self._approved_review(instruction, solution, test_data.get("test_outputs_py", ""))
+            if review is None:
+                raise ValueError("generated files do not match an approved test review")
             super()._write_files(instruction, env_data, test_data, solution, dockerfile, difficulty)
+            write_json(self.task_dir / "generation-test-review.json", {
+                "stage": "generation-before-normalization", **review,
+            })
 
         def _review_tests(self, instruction, env_file_list, solution, test_code):
             prompt = module.TEST_REVIEW_PROMPT_TEMPLATE.format(instruction=instruction,
@@ -410,12 +401,15 @@ def generator_class(module):
                     pass
             if not hasattr(self, "_reviewed_tests"):
                 self._reviewed_tests = {}
-            self._reviewed_tests[test_code] = review.get("pass") is True
+            self._reviewed_tests[test_code] = {
+                "pass": review["pass"], "issues": list(review["issues"]),
+                "sha256": self._review_hashes(instruction, solution, test_code),
+            }
             return review
 
         def _generate_tests(self, instruction, env_data, solution):
             data = super()._generate_tests(instruction, env_data, solution)
-            if data and getattr(self, "_reviewed_tests", {}).get(data.get("test_outputs_py")) is True:
+            if data and self._approved_review(instruction, solution, data.get("test_outputs_py", "")):
                 return data
             return None
     return Generator
@@ -848,6 +842,13 @@ def run(config: dict, run_id: str | None = None, config_path: Path | None = None
                 raise ValueError("publication bytes differ from the validated candidates")
             if task_tree_fingerprints(batch) != {task.name: fingerprints[task.name] for task in accepted}:
                 raise ValueError("publication tree differs from the validated candidates")
+            write_json(batch / "validation.json", {
+                "schema_version": 1, "run_id": run_id,
+                "verified_tasks": sorted(accepted_checksums),
+                "harbor_task_checksums": accepted_checksums,
+                "tree_fingerprints": {name: fingerprints[name] for name in sorted(accepted_checksums)},
+                "validation": {"oracle": {"passed": True, "reward": 1}, "nop": {"passed": True, "reward": 0}},
+            })
         publish_tasks(accepted, pool, validate_batch=validate_batch)
         report["published_batch"] = str(pool.resolve())
         report["verified_tasks"] = [p.name for p in accepted]

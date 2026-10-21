@@ -10,10 +10,10 @@ block plugin:
 
 | Workflow | Claude Code | Codex |
 | --- | --- | --- |
-| Setup | `/terminal-curator:setup` | `$terminal-curator-setup` |
-| Check | `/terminal-curator:check` | `$terminal-curator-check` |
-| Run | `/terminal-curator:run` | `$terminal-curator-run` |
-| Progress | `/terminal-curator:dashboard` | `$terminal-curator-dashboard` |
+| Setup | `/terminal-curator:setup` | `$terminal-curator:setup` |
+| Check | `/terminal-curator:check` | `$terminal-curator:check` |
+| Run | `/terminal-curator:run` | `$terminal-curator:run` |
+| Progress | `/terminal-curator:dashboard` | `$terminal-curator:dashboard` |
 
 The equivalent scripts are `scripts/{setup,dryrun,start,stop,clean,archive_run}.sh`.
 Checks run before generation. Publishable tasks must pass Oracle=1 and NOP=0 in

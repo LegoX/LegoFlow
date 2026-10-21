@@ -9,4 +9,4 @@ Read and follow `blocks/tracer/.claude/plugins/tracer-plugin/skills/dashboard/SK
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$tracer-dashboard`.
+Invoke this Codex skill as `$tracer:dashboard`.

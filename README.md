@@ -123,7 +123,7 @@ codex plugin add trainer@legoflow
 codex plugin add evaluator@legoflow
 ```
 
-Restart Codex after installation. Use native Codex skills such as `$<block>-<skill>`, for example `$curator-check`.
+Restart Codex after installation. Use native Codex skills such as `$<block>:<skill>`, for example `$curator:check`.
 
 ### Example Usages
 
@@ -135,10 +135,10 @@ Every block has clear roles and functions. Users can easily trigger these blocks
 
 | Workflow | Claude Code | Codex |
 | --- | --- | --- |
-| Setup | `/<block>:setup` | `$<block>-setup` |
-| Check | `/<block>:check` | `$<block>-check` |
-| Run | `/<block>:run` | `$<block>-run` |
-| Dashboard | `/<block>:dashboard` | `$<block>-dashboard` |
+| Setup | `/<block>:setup` | `$<block>:setup` |
+| Check | `/<block>:check` | `$<block>:check` |
+| Run | `/<block>:run` | `$<block>:run` |
+| Dashboard | `/<block>:dashboard` | `$<block>:dashboard` |
 
 The setup skill prepares dependencies and fills in `config.yaml`; check validates the configuration and performs a preflight; run does the work and archives intermediate output to `artifacts/`; and dashboard helps monitor progress and status.
 
@@ -146,14 +146,14 @@ The detailed guides to each individual block can be found at [docs](https://lego
 
 For terminal tasks, fill `blocks/terminal-curator/config.yaml` and use
 `/terminal-curator:{setup,check,run,dashboard}` in Claude Code or the matching
-`$terminal-curator-<skill>` in Codex. Supply API keys through environment
+`$terminal-curator:<skill>` in Codex. Supply API keys through environment
 variables. Set Tracer's `task_source.local_block: terminal-curator` with
 `provider: local` and `terminal_tasks_dir: ../terminal-curator/artifacts/tasks`.
 The verified `verifiable_tasks.txt` manifest gates rollout; existing SWE
 workflows keep `local_block: curator` by default. See the
 [terminal configuration guide](blocks/terminal-curator/docs/content/docs/usage/configuration.mdx).
 
-Use `/root:run` (Codex: `$root-run`) for terminal orchestration: the producer
+Use `/root:run` (Codex: `$root:run`) for terminal orchestration: the producer
 skill audits instructions, tests, and the reference solution, records corrections,
 and repeats fresh Oracle/NOP checks before hand-off. The legacy
 `bash scripts/start.sh` refuses an implicit terminal-to-Tracer chain. Explicit
