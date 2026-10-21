@@ -6,7 +6,7 @@ description: Bootstrap LegoFlow Terminal Curator's pinned repositories and isola
 # /terminal-curator:setup
 
 Read `blocks/terminal-curator/CLAUDE.md`, the selected `config.yaml`, and
-`blocks/terminal-curator/docs/content/docs/configuration.mdx`. Resolve paths
+`blocks/terminal-curator/docs/content/docs/usage/configuration.mdx`. Resolve paths
 from the repository root; execute commands from `blocks/terminal-curator/`.
 Honor an explicit `--config` overlay and use it for every following command.
 

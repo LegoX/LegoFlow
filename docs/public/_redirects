@@ -3,4 +3,7 @@
 /docs/running-blocks/cascaded    /docs/running-blocks/full-pipeline    301
 /docs/block-design    /docs/development/block-design    301
 /docs/showcase    /docs/running-blocks/full-pipeline    301
+/docs/blocks/terminal-curator/configuration    /docs/blocks/terminal-curator/usage/configuration    301
+/docs/blocks/terminal-curator/workflow    /docs/blocks/terminal-curator/usage/validation-checks    301
+/docs/blocks/terminal-curator/evaluator-handoff    /docs/blocks/terminal-curator/usage/downstream-handoff#evaluator    301
 /docs/showcase/*    /docs/running-blocks/full-pipeline    301

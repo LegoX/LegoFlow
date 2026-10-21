@@ -1,31 +1,21 @@
 # Terminal Curator documentation
 
-The operator documentation lives in `content/docs/` and is mounted by the root
-LegoFlow documentation site at `/docs/blocks/terminal-curator`. There is no
-second web app or dependency lockfile to maintain for this block.
+The operator guide in `content/docs/` is mounted by the root LegoFlow site at
+`/docs/blocks/terminal-curator`. It follows the shared block chapters:
 
-From the repository root:
+- [Overview](content/docs/index.mdx)
+- [Getting Started](content/docs/getting-started.mdx)
+- Usage: [Configuration](content/docs/usage/configuration.mdx),
+  [Validation Checks](content/docs/usage/validation-checks.mdx),
+  [Downstream Handoff](content/docs/usage/downstream-handoff.mdx)
+- [Design](content/docs/design.mdx)
+- [Output Format](content/docs/outputs.mdx)
+- [Dashboard](content/docs/dashboard.mdx)
 
-```bash
-cd docs
-npm ci
-npm run build
-```
+Build from the repository root with `cd docs && npm ci && npm run build`.
+Use relative Markdown links inside block pages and mounted
+`/docs/blocks/terminal-curator/...` links from root pages.
 
-The root site's content loader, sidebar, static routes, and search index all
-include these pages. Use `/docs/blocks/terminal-curator/...` links when linking
-from root documentation. Within the block pages use relative Markdown links
-so they also work when browsing this folder on GitHub.
-
-Start with [getting started](content/docs/getting-started.mdx), then read
-[configuration](content/docs/configuration.mdx), [workflow](content/docs/workflow.mdx),
-[outputs](content/docs/outputs.mdx), [Evaluator hand-off](content/docs/evaluator-handoff.mdx),
-and [dashboard](content/docs/dashboard.mdx).
-
-
-The dashboard page embeds an explicitly synthetic, self-contained demo from
-`public/dashboard_demo/terminal-curator/`. Its small declared JSON fixture and
-`dashboard/build_demo.py` deterministically regenerate the single tracked
-HTML snapshot; never replace it with an actual run. Root `npm run build` and
-`npm run dev` stage ignored copies of all block demos through
-`docs/scripts/stage_dashboard_demos.mjs`, also reused by deployment builds.
+The dashboard demo is synthetic. `dashboard/build_demo.py` renders its
+checked-in fixture; root build/dev commands stage the canonical snapshot from
+`public/dashboard_demo/terminal-curator/`. Keep actual run data separate.

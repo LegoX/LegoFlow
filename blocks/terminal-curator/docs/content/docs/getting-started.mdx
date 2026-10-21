@@ -1,77 +1,51 @@
 ---
 title: Getting Started
-description: Configure a finite terminal-task batch and let an agent operate it.
+description: Set up the block and run your first finite batch.
 ---
 
 ## Requirements
 
-- A checkout of LegoFlow with the pinned `repos/terminal-lego` submodule.
-- Python 3.12 and `uv`; setup creates isolated environments under `artifacts/`.
-- A Docker-capable CPU host for validation and later Tracer rollout.
-- For generation, an OpenAI-compatible LLM endpoint, model, and API key.
-- For live collection, access to the Stack Exchange API; an API key is optional.
+Use Python 3.12, `uv`, and a Docker-capable CPU host. Generation also needs an
+OpenAI-compatible LLM endpoint/model/key; live collection needs Stack Exchange
+access. Local candidate imports need no generation key. Setup prepares the
+pinned repositories and isolated environments.
 
-Local candidate validation needs Docker and Harbor but no LLM credential.
-The upstream submodule remains read-only; task files, logs, and environments
-are created outside it.
+## Install the plugin
 
-## Install the agent plugin
-
-From the repository root, for Claude Code:
+From the repository root, choose your agent:
 
 ```bash
+# Claude Code; then reload plugins or restart the session.
 claude plugin marketplace add ./blocks/terminal-curator/.claude/plugins
 claude plugin install terminal-curator@terminal-curator-block
-```
 
-Run `/reload-plugins` or restart the Claude Code session. For Codex:
-
-```bash
+# Codex; then restart the session.
 codex plugin marketplace add .
 codex plugin add terminal-curator@legoflow
 ```
 
-Restart Codex after installation. Claude Code and Codex share the canonical
-workflow; Codex uses `$terminal-curator-...` native skill names.
+## Configure a small batch
 
-## Fill the configuration
+Edit `blocks/terminal-curator/config.yaml`. Choose `source.type`:
+`stackoverflow`, `json`, or `tasks`; set `source.path` for the latter two.
+Start with `max_questions: 1`, `generation.workers: 1` and
+`validation.n_concurrent: 1`.
 
-Edit `blocks/terminal-curator/config.yaml` to select `source.type` and finite
-limits. Use `stackoverflow` for live questions, `json` for Terminal-Lego's
-`{"questions": [...]}` input format, or `tasks` for a local Harbor candidate
-pool. Fill `source.path` for the latter two modes. Supply your endpoint and
-model under `llm_api`; leave its tracked `api_key` empty and supply the secret
-as `OPENAI_API_KEY` in the execution environment.
-
-For a small first generation run, set `source.max_questions: 1`,
-`generation.workers: 1`, and `validation.n_concurrent: 1`. A finite limit is
-part of the run configuration, including when `question_ids` are specified.
-See [the configuration reference](./configuration.mdx) for the complete inputs.
+For generation, set `llm_api.api_base_url` and `llm_api.model`, leave its
+tracked key empty, and supply `OPENAI_API_KEY` through the execution environment.
+See [Configuration](./usage/configuration.mdx) for all source and profile options.
 
 ## Check and run
 
-In Claude Code:
+| Action | Claude Code | Codex |
+| --- | --- | --- |
+| Prepare | `/terminal-curator:setup` | `$terminal-curator-setup` |
+| Preflight | `/terminal-curator:check` | `$terminal-curator-check` |
+| Run | `/terminal-curator:run` | `$terminal-curator-run` |
+| Monitor | `/terminal-curator:dashboard` | `$terminal-curator-dashboard` |
 
-```text
-/terminal-curator:setup
-/terminal-curator:check
-/terminal-curator:run
-/terminal-curator:dashboard
-```
-
-In Codex:
-
-```text
-$terminal-curator-setup
-$terminal-curator-check
-$terminal-curator-run
-$terminal-curator-dashboard
-```
-
-The agent prepares dependencies, reports preflight results and the resolved
-source/model/host/limits, then performs the authorized finite run. If the
-scope has not already been authorized, it asks before starting. The script
-equivalents, from `blocks/terminal-curator/`, are:
+The agent reports the resolved source, host, model and budget, then performs
+an authorized run. Script equivalents, from `blocks/terminal-curator/`:
 
 ```bash
 bash scripts/setup.sh
@@ -80,30 +54,14 @@ bash scripts/start.sh
 artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py --html
 ```
 
-Use `--config /path/to/local-config.yaml` with setup, dryrun, start, and the monitor when keeping
-machine-specific settings in an ignored overlay. Checks must run on the
-Docker host that will execute the task containers. If this machine has no
-Docker, select a permitted CPU node, synchronize the checkout and input files,
-and perform the run there in tmux.
+Pass the same `--config <file>` to each command when using a private full
+profile. Run checks and containers on the selected Docker host; synchronize
+code, inputs and profiles before remote execution through SSH and tmux.
 
-## Inspect and hand off
+## Inspect the result
 
-Read the exact per-run report, its archive runtime `run_id`, and
-`artifacts/tasks/verifiable_tasks.txt`. The run archive uses the redacted
-configuration frozen at launch, not a profile edited afterward. A task appears
-there only after Oracle=1 and NOP=0 in independent fresh environments. A run
-that yields no verified tasks fails rather than handing an empty pool to
-Tracer. Inspect each rejection reason before selecting another source or
-changing generation settings.
-
-Before handing off, the agent maps each test expectation to the instruction
-and executes the requested behavior. Correct unstated output checks or an
-inaccurate reference solution in a candidate copy, record the changes in
-provenance, and rerun both fresh Oracle and NOP trials. Use the corrected
-passing publication. The [workflow](./workflow.mdx) describes this semantic
-audit; source-text checks alone cannot establish the required behavior.
-
-Set Tracer's `task_source.local_block: terminal-curator` and
-`task_source.terminal_tasks_dir: ../terminal-curator/artifacts/tasks`, keeping
-`provider: local`. Then run Tracer's own check and authorized rollout. See
-[workflow](./workflow.mdx) for how to verify the resulting trajectory.
+Check the run report, archive and `artifacts/tasks/verifiable_tasks.txt`.
+The run skill completes [validation and semantic review](./usage/validation-checks.mdx),
+including fresh trials after corrections, before handing tasks downstream.
+Then follow [Downstream Handoff](./usage/downstream-handoff.mdx) to select the
+publication in Tracer or Evaluator.

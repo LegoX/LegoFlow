@@ -48,13 +48,24 @@ for (const block of blocks) {
   assert.equal(source.getPageByHref(href)?.page.url, href, `mounted lookup: ${block}`);
   assert.equal(source.getPageByHref(`${href}#setup`)?.hash, 'setup', `anchor lookup: ${block}`);
 }
-const terminal = source.getPage(['blocks', 'terminal-curator', 'workflow']);
-assert.equal(terminal.url, '/docs/blocks/terminal-curator/workflow');
-assert.equal(source.resolveHref('./configuration.mdx#inputs', terminal), '/docs/blocks/terminal-curator/configuration#inputs');
-assert.equal(source.resolveHref('/docs/configuration#inputs', terminal), '/docs/blocks/terminal-curator/configuration#inputs');
-assert.equal(source.resolveHref('#acceptance', terminal), '#acceptance');
-assert.equal(source.getPageByHref('/docs/blocks/terminal-curator#introduction')?.page.url, '/docs/blocks/terminal-curator');
-assert.equal(source.getPageByHref('/docs/blocks/terminal-curator#introduction')?.hash, 'introduction');
+const terminalBase = '/docs/blocks/terminal-curator';
+const terminalDirectory = join(repoRoot, 'blocks/terminal-curator/docs/content/docs');
+const terminalMeta = JSON.parse(await readFile(join(terminalDirectory, 'meta.json'), 'utf8'));
+assert.deepEqual(terminalMeta.pages, ['index', 'getting-started', 'usage', 'design', 'outputs', 'dashboard']);
+const usageMeta = JSON.parse(await readFile(join(terminalDirectory, 'usage/meta.json'), 'utf8'));
+assert.equal(usageMeta.title, 'Usage');
+assert.deepEqual(usageMeta.pages, ['configuration', 'validation-checks', 'downstream-handoff']);
+for (const slug of ['design', 'outputs', 'dashboard', ...usageMeta.pages.map((name) => `usage/${name}`)]) {
+  assert.equal(source.getPageByHref(`${terminalBase}/${slug}`)?.page.url, `${terminalBase}/${slug}`);
+}
+const terminal = source.getPage(['blocks', 'terminal-curator', 'usage', 'validation-checks']);
+assert.equal(terminal.url, `${terminalBase}/usage/validation-checks`);
+assert.equal(source.resolveHref('./configuration.mdx#source-modes', terminal), `${terminalBase}/usage/configuration#source-modes`);
+assert.equal(source.resolveHref('../outputs.mdx#reports-and-checksums', terminal), `${terminalBase}/outputs#reports-and-checksums`);
+assert.equal(source.resolveHref('/docs/usage/configuration#source-modes', terminal), `${terminalBase}/usage/configuration#source-modes`);
+assert.equal(source.resolveHref('#task-acceptance', terminal), '#task-acceptance');
+assert.equal(source.getPageByHref('/docs/blocks/terminal-curator#where-to-go-next')?.page.url, '/docs/blocks/terminal-curator');
+assert.equal(source.getPageByHref('/docs/blocks/terminal-curator#where-to-go-next')?.hash, 'where-to-go-next');
 const cross = '/docs/blocks/tracer/getting-started#configuration';
 assert.equal(source.resolveHref(cross, terminal), cross);
 assert.equal(source.getPageByHref(cross)?.page.url, '/docs/blocks/tracer/getting-started');
@@ -64,4 +75,11 @@ assert.equal(source.resolveHref('../outputs.mdx#formats', nested), '/docs/blocks
 assert.equal(source.getPageByHref('/docs/blocks/terminal-curator-extra/workflow'), undefined);
 assert.equal(source.resolveHref('/docs/blocks/terminal-curator-extra/workflow', terminal), '/docs/blocks/terminal-curator-extra/workflow');
 assert.equal(source.resolveHref('/docs/getting-started', { ...terminal, url: '/docs/blocks/terminal-curator-extra/workflow' }), '/docs/getting-started');
+const redirects = await readFile(join(docsRoot, 'public/_redirects'), 'utf8');
+for (const [oldSlug, newSlug] of [['configuration', 'usage/configuration'], ['workflow', 'usage/validation-checks'], ['evaluator-handoff', 'usage/downstream-handoff#evaluator']]) {
+  assert.ok(redirects.split('\n').some((line) => {
+    const [from, to, status] = line.trim().split(/\s+/);
+    return from === `${terminalBase}/${oldSlug}` && to === `${terminalBase}/${newSlug}` && status === '301';
+  }), `old terminal URL redirects: ${oldSlug}`);
+}
 console.log('PASS: real Fumadocs loaders — all five mounted namespaces, relative/nested links, cross-block links, anchors and strict boundaries.');

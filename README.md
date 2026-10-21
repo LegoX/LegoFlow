@@ -151,7 +151,7 @@ variables. Set Tracer's `task_source.local_block: terminal-curator` with
 `provider: local` and `terminal_tasks_dir: ../terminal-curator/artifacts/tasks`.
 The verified `verifiable_tasks.txt` manifest gates rollout; existing SWE
 workflows keep `local_block: curator` by default. See the
-[terminal configuration guide](blocks/terminal-curator/docs/content/docs/configuration.mdx).
+[terminal configuration guide](blocks/terminal-curator/docs/content/docs/usage/configuration.mdx).
 
 Use `/root:run` (Codex: `$root-run`) for terminal orchestration: the producer
 skill audits instructions, tests, and the reference solution, records corrections,
@@ -167,7 +167,7 @@ The publication also exports a native `terminal-curator@1.0` registry for
 Evaluator. Select `registry_path:
 ../terminal-curator/artifacts/tasks/registry.json`, with `no_hack: false` and
 `job_analysis.enabled: false`. See the
-[Evaluator hand-off](blocks/terminal-curator/docs/content/docs/evaluator-handoff.mdx)
+[Evaluator hand-off](blocks/terminal-curator/docs/content/docs/usage/downstream-handoff.mdx#evaluator)
 for the complete task-source snippet.
 
 #### Running Multiple Blocks

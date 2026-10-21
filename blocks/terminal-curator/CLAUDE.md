@@ -45,7 +45,7 @@ The user supplies the source, finite limits, LLM endpoint/model, and resource
 host in `runtime_info.input` / `meta_info.resources`; progress belongs in
 `artifacts/state.json`, `artifacts/reports/latest.json`, and `artifacts/index.yaml`.
 
-Read [the configuration reference](docs/content/docs/configuration.mdx) for
+Read [the configuration reference](docs/content/docs/usage/configuration.mdx) for
 field meanings. The adapter accepts `--config <path>`; `setup.sh`, `dryrun.sh`, `start.sh`, and `archive_run.sh`
 accept the same option so a private local overlay can be used without changing
 the tracked defaults. Confirm the resolved source, limits, host, output pool,
@@ -231,8 +231,9 @@ terminal-curator`, `version: "1.0"`, and
 describe these terminal verifiers. Run Evaluator separately on a host that
 can read the versioned task paths, with its own configured endpoint/model.
 Inspect per-trial rewards and trajectories before reporting evaluation
-success. See [Evaluator hand-off](docs/content/docs/evaluator-handoff.mdx).
+success. See [Evaluator hand-off](docs/content/docs/usage/downstream-handoff.mdx#evaluator).
 
-See [workflow and hand-off](docs/content/docs/workflow.mdx) and
+See [validation checks](docs/content/docs/usage/validation-checks.mdx),
+[downstream hand-off](docs/content/docs/usage/downstream-handoff.mdx), and
 [outputs](docs/content/docs/outputs.mdx). Keep the human-facing overview
 accurate and record durable implementation observations in `memory/notes.md`.

@@ -1,16 +1,12 @@
 ---
-title: Outputs and Evidence
-description: The published Harbor pool, verified manifest, reports, and redacted archives.
+title: Output Format
+description: Published tasks, consumer manifests and per-run evidence.
 ---
 
-The output directory is declared by
-`runtime_info.output.harbor_tasks_dir.path`, normally `artifacts/tasks/`.
+## Published task pool
 
-That path is a symlink to the newest immutable publication under
-`artifacts/tasks-versions/<batch-id>/`. A passing batch is copied into a new
-version, then the output symlink switches atomically. Tracer resolves the
-version path when staging; later publications leave its existing inputs
-unchanged. Retain versions still referenced by downstream jobs.
+`runtime_info.output.harbor_tasks_dir.path` defaults to `artifacts/tasks/`,
+a symlink to an immutable `artifacts/tasks-versions/<batch-id>/` publication:
 
 ```text
 artifacts/tasks/
@@ -19,123 +15,62 @@ artifacts/tasks/
 └── <task-id>/
     ├── instruction.md
     ├── task.toml
+    ├── provenance.json
     ├── environment/Dockerfile
     ├── solution/solve.sh
     ├── tests/test.sh
     └── tests/test_outputs.py
 ```
 
-The manifest is a newline-delimited list of task IDs that passed this block's
-fresh Oracle/NOP gate. It is an allowlist, not a progress log. Only those IDs
-may be staged into Tracer. A generated candidate that has not passed both
-trials is never eligible for downstream inference.
+`verifiable_tasks.txt` lists accepted task IDs, one per line. Tracer uses it
+as its allowlist. `registry.json` describes the same IDs as
+`terminal-curator@1.0`, using absolute paths into that immutable batch for
+Evaluator. Both switch together; keep versions referenced by existing jobs.
+See [Downstream Handoff](./usage/downstream-handoff.mdx) for consumer configuration.
 
-`runtime_info.output.eval_registry.path` must name the generated
-`harbor_tasks_dir.path/registry.json`; config validation rejects a separate
-registry location.
-Its `terminal-curator@1.0` entry lists the same accepted IDs with absolute
-paths into this immutable batch. Evaluator loads those local paths through
-its standard Harbor registry flow; no task upload or registry service is
-needed. The registry and manifest switch together with the publication
-symlink. Keep referenced versions available on the evaluation host.
-See [Evaluator hand-off](./evaluator-handoff.mdx) for configuration.
+## Reports and checksums
 
-Each task describes a terminal problem, its reproducible environment, the
-reference solution, and a verifier that writes a Harbor reward. Schema
-normalization targets Tracer's pinned Harbor version. The adapter preserves
-task provenance and validation evidence without putting API credentials in
-task metadata or instructions.
+| Path | Contents |
+| --- | --- |
+| `artifacts/state.json` | Latest phase, counters and per-task progress. |
+| `artifacts/reports/latest.json` | Latest run report, including failures and validation outcomes. |
+| `artifacts/runs/<run-id>/report.json` | Exact run report and links to its local evidence. |
+| `artifacts/runs/<run-id>/validation/` | Raw Oracle/NOP trial results and JUnit reports. |
 
-The canonical verifier runs `tests/test_outputs.py` through pytest and
-records JUnit evidence. Validation rejects zero collected assertions,
-collection/runtime errors, all-skipped suites, a failing Oracle, and a NOP
-that passes. The local candidate import mode therefore expects
-Terminal-Lego's pytest layout rather than an arbitrary Harbor verifier.
+`generation_completed` includes failed attempts; `generation_failed` is that
+subset. Imports use `collected_questions: null`. Candidate counts are not
+verified-task counts.
 
-Runtime acceptance is followed by the operating agent's semantic audit of
-the instruction, assertions, and reference behavior before downstream use.
-Keep its requirement/test mapping and correction provenance with the task.
-Any repaired candidate needs both new fresh Oracle/NOP trials; see the
-[workflow](./workflow.mdx) for the audit and correction procedure.
+| Report field | Identity |
+| --- | --- |
+| `harbor_task_checksums` | Native Harbor checksum; must match each trial's `task_checksum`. |
+| `tree_fingerprints` | File contents, types, permissions and empty directories. |
+| `task_checksums` | Separate block file digest; not interchangeable with Harbor's checksum. |
 
-## Checksum identity
-
-`harbor_task_checksums` records the pinned Harbor `Task.checksum` for each
-normalized candidate. Oracle/NOP trial `task_checksum` values must match it.
-The block checks those same bytes before and after each job and in the final
-copied publication before switching the output symlink. This binds the
-published task to what actually passed both trials.
-
-Harbor's checksum does not include empty directories or permission bits.
-`tree_fingerprints` adds those filesystem properties and file content hashes;
-it is checked at the same boundaries, including the final copied batch.
-This prevents a permission or empty-directory change from slipping through a
-content-only checksum comparison.
-
-`task_checksums` is a separate block file digest for accepted task contents.
-It is useful for block-level comparison, but it is not Harbor's checksum and
-must never be used as a substitute when matching a trial to its task. The
-Dashboard's task dialog labels both explicitly and uses the Harbor identity
-for validation linkage.
-
-## Progress and failures
-
-`artifacts/state.json` is the live phase/count snapshot. At run completion or
-failure, `artifacts/reports/latest.json` contains the machine-readable report.
-The report records collection/generation counters, successful candidate IDs,
-per-task progress, validation outcomes, checksums and local evidence paths.
-`generation_completed` includes failures; `generation_failed` is its failed
-subset. Imported tasks keep `collected_questions: null`. The dashboard
-projects safe metadata from live state, matching reports, publications,
-archive summaries and contained trial/JUnit files. Inspect the actual JSON
-rather than assuming all discovered directories passed.
-
-Intermediate source data, generated candidates, and Harbor validation jobs
-remain under `artifacts/` outside the published task pool. These are useful
-for diagnosing rejected tasks and service failures. They are local runtime
-materials and are ignored by Git.
+These identities are checked around validation and on the copied publication.
+Use trial results and the [semantic review](./usage/validation-checks.mdx)
+record together before downstream use.
 
 ## Run archives
 
-`start.sh` installs an EXIT trap so success, errors, and interruption produce
-an archive and an entry in `artifacts/index.yaml`:
+`start.sh` archives on success, failure or interruption and appends
+`artifacts/index.yaml`:
 
 ```text
 artifacts/archives/run_NNN/
 ├── metadata.yaml
 ├── config.yaml
-├── report.json       # only when linked by the exact runtime run_id
+├── report.json
 └── scripts/
 ```
 
-At run start the worker freezes the loaded configuration, with defaults and
-secrets redacted, at `artifacts/runs/<runtime-id>/config.yaml`. Archival copies
-that frozen document, including the selected overlay; it does not reread a
-profile edited while the job was running. Environment-provided credentials
-are not materialized into the snapshot and must be supplied separately when
-reproducing the run.
+The archive stores redacted configuration and code frozen at run start,
+exit status and repository SHAs. Its sequential `id: run_NNN` differs from
+the runtime `run_id`; `report.json` is included only for that exact run.
+Failed preflight may have no config/report snapshot. No vendor tree or
+credentials are copied.
 
-The worker also freezes script code at launch. Archives copy that frozen
-code rather than later checkout edits. Only Python/shell code and requirements
-files are included; private profiles, hidden files, symlinks and the selected
-configuration file are excluded. The configuration has its own redacted snapshot.
-`start.sh` holds a lifecycle lock through preflight, execution and archival;
-cleanup checks it in addition to the worker/archive locks.
-
-Metadata distinguishes the archive's sequential `id: run_NNN` from the
-actual runtime `run_id`. Only that runtime ID's per-run report is copied;
-`latest.json` from another attempt is never adopted. It records exit state,
-repo SHAs and whether the config snapshot exists, plus verified/rejected
-counts when an exact report is available. Invalid preflight input can still
-produce a failed-run record with `config_snapshot: unavailable`. A failure
-to create the archive is surfaced, not reported as a successful run.
-
-For manual archival, pass `--run-id <runtime-id>` to link a specific report.
-An invocation without a runtime ID does not claim an existing report. No
-vendored repository tree is copied. A fresh checkout has no index; the first archived run creates it.
-
-An archive entry does not establish a successful task or rollout by itself.
-Use its report, manifest, Oracle/NOP results, and separately generated Tracer
-trajectory to make those claims. Review artifacts before sharing them and
-keep raw credentials, private infrastructure details, and generated datasets
-out of a code PR.
+For manual archival, use `--run-id <id>` to link a specific report. A fresh
+checkout has no index. Raw candidates, traces and archives are local ignored
+artifacts; review them before sharing and retain diagnostic evidence before
+cleanup.

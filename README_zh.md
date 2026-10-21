@@ -153,7 +153,7 @@ Codex 中使用对应的 `$terminal-curator-<skill>`。密钥通过环境变量�
 只有独立新容器中通过 Oracle=1、NOP=0 验证且列入
 `verifiable_tasks.txt` 的任务才会进入推理；现有 SWE 工作流默认保留
 `local_block: curator`。详见
-[terminal 配置说明](blocks/terminal-curator/docs/content/docs/configuration.mdx)。
+[terminal 配置说明](blocks/terminal-curator/docs/content/docs/usage/configuration.mdx)。
 
 终端编排请使用 `/root:run`（Codex 为 `$root-run`）：producer skill 会逐项核对
 题面、tests 和参考解，记录修正依据，再重新执行独立 Oracle/NOP 验证后交给下游。
@@ -166,7 +166,7 @@ SWE shell helper 保留原有 Python `create_py.sh` 启动方式。root skills �
 发布结果还包含原生 `terminal-curator@1.0` registry，可交给 Evaluator。
 将 `registry_path` 设为 `../terminal-curator/artifacts/tasks/registry.json`，
 并设置 `no_hack: false`、`job_analysis.enabled: false`。完整配置见
-[Evaluator 接入说明](blocks/terminal-curator/docs/content/docs/evaluator-handoff.mdx)。
+[Evaluator 接入说明](blocks/terminal-curator/docs/content/docs/usage/downstream-handoff.mdx#evaluator)。
 
 #### 运行多个 Block
 

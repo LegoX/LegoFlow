@@ -30,12 +30,14 @@ Tracer reads this pool with `task_source.provider: local`,
 
 Evaluator reads the generated `artifacts/tasks/registry.json` through its
 existing `harbor_registry` provider as `terminal-curator@1.0`. See the
-[Evaluator configuration](docs/content/docs/evaluator-handoff.mdx) for the
+[Evaluator configuration](docs/content/docs/usage/downstream-handoff.mdx#evaluator) for the
 registry path and required `no_hack: false` setting.
 
 - [Getting started](docs/content/docs/getting-started.mdx)
-- [Configuration](docs/content/docs/configuration.mdx)
-- [Workflow and Tracer hand-off](docs/content/docs/workflow.mdx)
+- [Configuration](docs/content/docs/usage/configuration.mdx)
+- [Validation Checks](docs/content/docs/usage/validation-checks.mdx)
+- [Downstream Handoff](docs/content/docs/usage/downstream-handoff.mdx)
+- [Design](docs/content/docs/design.mdx)
 - [Dashboard](dashboard/README.md)
 - [Agent contract](CLAUDE.md)
 
