@@ -8,7 +8,32 @@ Evaluator is registry driven: it does not stage tasks locally. Switch benchmark 
 {"task_source:\n  provider: harbor_registry\n  dataset_name: swebench-verified\n  version: \"1.0\"\n  registry_path: repos/harbor/registry.json\n  no_hack: false"}
 </ConfigSnippet>
 
-Harbor resolves `(dataset_name, version)` against `repos/harbor/registry.json` and fetches the underlying task data automatically. No `artifacts/tasks/` staging is required.
+Harbor resolves `(dataset_name, version)` against the configured `registry_path`.
+The default registry fetches its remote task data automatically. No evaluator
+`artifacts/tasks/` staging is required.
+
+## Terminal Curator's local registry
+
+To evaluate a published terminal batch, keep the `harbor_registry` provider and
+select the registry exported by Terminal Curator:
+
+<ConfigSnippet title="blocks/evaluator/config.yaml → runtime_info.input">
+{"task_source:\n  provider: harbor_registry\n  dataset_name: terminal-curator\n  version: \"1.0\"\n  registry_path: ../terminal-curator/artifacts/tasks/registry.json\n  no_hack: false\njob_analysis:\n  enabled: false\nharbor_job:\n  n_tasks: 2\n  n_concurrent: 2"}
+</ConfigSnippet>
+
+This snippet updates a full Evaluator config or private `EVAL_CONFIG` profile;
+retain its other required fields. The generated registry contains only tasks
+that passed Terminal Curator's Oracle/NOP gate. Its absolute task paths refer
+to an immutable batch, which must remain readable on the evaluator host.
+The conditional dependency on `terminal-curator.output.eval_registry` becomes
+active when this dataset name is selected. Existing default benchmarks are
+unaffected.
+
+Set `no_hack: false` because the remap below applies only to SWE-bench Verified.
+Set `job_analysis.enabled: false` because SWE gold-dataset analysis is not
+defined for these terminal verifiers. Harbor still records rewards, trial
+exceptions, and trajectories for the Evaluator dashboard. Use the normal
+Evaluator check/run workflow; it does not start a new curation batch.
 
 ## Nohack (agent egress control)
 

@@ -1,0 +1,6 @@
+{
+  "name": "terminal-curator",
+  "description": "Create verified Harbor terminal tasks from a bounded Stack Overflow, questions JSON, or local candidate batch. Provides /terminal-curator:setup, /terminal-curator:check, /terminal-curator:run, and /terminal-curator:dashboard.",
+  "version": "0.1.0",
+  "author": { "name": "LegoX" }
+}

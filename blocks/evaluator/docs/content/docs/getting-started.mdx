@@ -109,7 +109,7 @@ Now run setup:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/evaluator:setup` | `$evaluator-setup` |
+| `/evaluator:setup` | `$evaluator:setup` |
 
 This prepares the pinned Harbor checkout, builds the Harbor and LiteLLM
 environments, and checks the local runtime paths. Re-running it is fine.
@@ -120,7 +120,7 @@ Before launching the benchmark, run:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/evaluator:check` | `$evaluator-check` |
+| `/evaluator:check` | `$evaluator:check` |
 
 This is read-only. It checks config, Harbor repo state, environments, benchmark
 registry, LLM endpoint, proxy port, Docker, and agent runtime. For exact pass
@@ -136,7 +136,7 @@ Launch the benchmark:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/evaluator:run` | `$evaluator-run` |
+| `/evaluator:run` | `$evaluator:run` |
 
 Evaluator starts the per-job LiteLLM proxy, builds the Harbor command from
 `config.yaml`, runs the selected benchmark, captures trajectories and verifier
@@ -183,7 +183,7 @@ After an Evaluator run starts or finishes, open the dashboard:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/evaluator:dashboard` | `$evaluator-dashboard` |
+| `/evaluator:dashboard` | `$evaluator:dashboard` |
 
 The dashboard helps browse jobs, benchmark scores, trajectories, verifier
 reports, and post-eval analysis. It reads `artifacts/jobs/` directly, so keep

@@ -9,4 +9,4 @@ Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/setup/SKIL
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$curator-setup`.
+Invoke this Codex skill as `$curator:setup`.

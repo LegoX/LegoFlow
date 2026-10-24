@@ -1,0 +1,70 @@
+---
+title: Downstream Handoff
+---
+
+Complete [validation and semantic review](./validation-checks.mdx) first.
+Use the corrected publication's manifest and registry together; retain
+immutable versions while downstream jobs reference them.
+
+## Tracer
+
+Set these fields under Tracer's `runtime_info.input`:
+
+```yaml
+task_source:
+  provider: local
+  local_block: terminal-curator
+  terminal_tasks_dir: ../terminal-curator/artifacts/tasks
+```
+
+Keep the other required Tracer settings, including its existing SWE
+`dataset_name`; the producer selector chooses the terminal pool. Run
+`/tracer:check` then the authorized `/tracer:run` (Codex: `$tracer:check`,
+`$tracer:run`). Tracer stages only manifest-listed IDs and locks that batch.
+
+For root orchestration, use `/root:run` / `$root:run`, which includes the
+producer's semantic audit. The legacy shell helper refuses an implicit
+terminal-to-Tracer chain; explicit terminal-only, audit/revalidation, then
+tracer-only operations remain available.
+
+Inspect each trial's actual reward and solving trajectory. Oracle validation
+and a successful launcher exit do not establish that a solving agent succeeded.
+See [Tracer Getting Started](/docs/blocks/tracer/getting-started).
+
+## Trainer
+
+Use Tracer's normal trajectory conversion and Trainer input workflow; no
+terminal-specific training runtime is needed. Count solved trials and retained
+LF records separately: existing role, tool-pair and reasoning checks may
+exclude a reward-1 trace. Inspect conversion statistics and retained records
+before data preparation, keeping those quality thresholds in effect.
+
+## Evaluator
+
+Select the native local registry in a full Evaluator config or `EVAL_CONFIG`
+profile. These fields belong under `runtime_info.input`:
+
+```yaml
+task_source:
+  provider: harbor_registry
+  dataset_name: terminal-curator
+  version: "1.0"
+  registry_path: ../terminal-curator/artifacts/tasks/registry.json
+  no_hack: false
+harbor_job:
+  n_tasks: 2
+  n_concurrent: 2
+  max_retries: 0
+job_analysis:
+  enabled: false
+```
+
+Retain the remaining endpoint/model/agent settings; supply credentials through
+the environment. `n_tasks: 2` is a small starting run; `null` selects the whole
+batch. SWE-specific `no_hack` remapping and gold-data analysis stay disabled.
+
+Run `/evaluator:check` then `/evaluator:run` (Codex: `$evaluator:check`,
+`$evaluator:run`) and inspect real per-task results. Evaluator locks the physical
+registry version before launch. Its absolute task paths must remain readable
+on the Docker host; using another node requires making that batch available
+there. See [Evaluator Getting Started](/docs/blocks/evaluator/getting-started).

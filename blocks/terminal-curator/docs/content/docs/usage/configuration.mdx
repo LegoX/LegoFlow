@@ -1,0 +1,100 @@
+---
+title: Configuration Guide
+---
+
+Edit `blocks/terminal-curator/config.yaml`, or select a complete private
+profile with `--config <file>` / `TERMINAL_CURATOR_CONFIG`. Profiles use the
+same `meta_info` / `runtime_info` schema; they are not partial patches.
+Relative paths resolve from the block directory.
+
+## Source modes
+
+| `source.type` | Input | Generation LLM required? |
+| --- | --- | --- |
+| `stackoverflow` | Questions and accepted answers selected by tags or IDs. | Yes |
+| `json` | Saved Terminal-Lego questions at `source.path`. | Yes |
+| `tasks` | Local candidate directories at `source.path`. | No |
+
+For live collection, start with a small batch under `runtime_info.input`:
+
+```yaml
+source:
+  type: stackoverflow
+  tags: [bash]
+  question_ids: []
+  max_questions: 1
+  min_score: 10
+  max_pages: 1
+generation:
+  workers: 1
+  request_timeout_sec: 180
+  max_retries: 2
+validation:
+  n_concurrent: 1
+  timeout_multiplier: 1.0
+  job_timeout_sec: 1800
+```
+
+Keep the remaining fields from the full config, including
+`validation.harbor_bin`. Explicit question IDs still obey `max_questions`.
+Tags and IDs are arrays; limits/concurrency are positive integers, timeouts
+are positive finite numbers, and `max_retries` counts **extra** attempts
+(`2` allows at most three API attempts per call).
+
+### Saved questions
+
+JSON input contains a `questions` array with question and accepted-answer
+bodies. This abbreviated format example uses placeholder IDs:
+
+```json
+{"questions": [{
+  "question_id": 123456, "title": "A concrete shell task",
+  "body": "<p>The problem.</p>", "tags": ["bash"], "score": 10,
+  "accepted_answer_id": 123457,
+  "accepted_answer": {"answer_id": 123457, "body": "<p>The answer.</p>"}
+}]}
+```
+
+Use real source attribution in runs. The pinned repository's
+`examples/sample_input.json` provides a complete example.
+
+### Local candidates
+
+Each candidate needs `instruction.md`, `task.toml`,
+`environment/Dockerfile`, `solution/solve.sh`, and pytest tests in
+`tests/test_outputs.py`. Symlinked candidates are rejected. The adapter
+creates the canonical `tests/test.sh`, preserving an existing entrypoint as
+`test.sh.upstream`. Imports receive fresh validation even if they already
+have an upstream manifest; arbitrary verifier frameworks are not supported.
+
+## Credentials
+
+Set `llm_api.api_base_url` and `llm_api.model` for generation. Keep tracked
+key fields empty and supply secrets on the execution host:
+
+| Environment variable | Purpose |
+| --- | --- |
+| `OPENAI_API_KEY` | Generation API key. |
+| `OPENAI_API_BASE_URL` / `OPENAI_API_BASE` | Endpoint override. |
+| `MODEL_NAME` | Model override. |
+| `SO_API_KEY` | Optional Stack Exchange key. |
+| `SO_API_BASE_URL` | Stack Exchange base override. |
+
+Environment values override configured values. Keep secrets out of source
+JSON, commands, reports and commits. `source.type: tasks` needs no LLM key.
+
+## Host and output paths
+
+`meta_info.resources.ip: local` selects the current machine. For a remote
+Docker host, set its block `directory`, synchronize code/input/profile files,
+and run there through SSH and tmux. An in-block profile keeps its relative
+location under the remote block directory; an external absolute profile
+must also exist on that host.
+
+Setup reuses pinned Terminal-Lego and Tracer's pinned Harbor environment.
+Keep both vendored repositories unchanged.
+
+Outputs must stay under this block's `artifacts/`, without overlapping inputs,
+reports, lifecycle files or immutable versions. `eval_registry.path` must be
+the task pool's `registry.json`. See [Output Format](../outputs.mdx) for the
+defaults and [Downstream Handoff](./downstream-handoff.mdx) for consumer settings.

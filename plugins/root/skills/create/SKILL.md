@@ -9,4 +9,4 @@ Read and follow `.claude/plugins/root-plugin/skills/create/SKILL.md` in full. It
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$root-create`.
+Invoke this Codex skill as `$root:create`.

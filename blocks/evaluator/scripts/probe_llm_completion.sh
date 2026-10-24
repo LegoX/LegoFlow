@@ -19,10 +19,18 @@ set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${EVAL_CONFIG:-$BLOCK_DIR/config.yaml}"
+[[ "$CONFIG" = /* ]] || CONFIG="$BLOCK_DIR/$CONFIG"
 
 cfg() { python3 - "$CONFIG" "$1" <<'PY'
 import sys, yaml
-d = yaml.safe_load(open(sys.argv[1])) or {}
+try:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        d = yaml.safe_load(stream) or {}
+except yaml.YAMLError as exc:
+    mark = getattr(exc, "problem_mark", None)
+    location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+    print(f"ERROR: invalid YAML in {sys.argv[1]}{location}", file=sys.stderr)
+    raise SystemExit(2)
 cur = (d.get("runtime_info") or {}).get("input", {}).get("llm_api", {})
 print((cur.get(sys.argv[2]) or "").strip())
 PY

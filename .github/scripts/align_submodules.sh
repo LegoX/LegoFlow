@@ -145,6 +145,7 @@ for target in "${targets[@]}"; do
   case "$target" in
     all)
       align_one curator legoflow-curator
+      align_one terminal-curator terminal-lego
       align_one tracer harbor
       align_one tracer LegoFlow-Trace-Crafter blocks/trainer/repos/LegoFlow-Trace-Crafter trainer
       align_one evaluator harbor
@@ -153,6 +154,9 @@ for target in "${targets[@]}"; do
       ;;
     curator)
       align_one curator legoflow-curator
+      ;;
+    terminal-curator)
+      align_one terminal-curator terminal-lego
       ;;
     tracer)
       align_one tracer harbor

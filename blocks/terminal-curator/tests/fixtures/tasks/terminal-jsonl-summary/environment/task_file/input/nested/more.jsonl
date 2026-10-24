@@ -1,0 +1,9 @@
+{"service":"api","timestamp":1700000020,"status":404,"latency_ms":70}
+{"service":"worker","timestamp":1700000021,"status":502,"latency_ms":10}
+{"service":"café","timestamp":1700000022,"status":200,"latency_ms":40}
+{"service":"café","timestamp":1700000023,"status":504,"latency_ms":80}
+{"service":" api ","timestamp":1700000024,"status":599,"latency_ms":50}
+{"service":"   ","timestamp":1700000025,"status":200,"latency_ms":12}
+{"service":"api","timestamp":1700000026,"status":600,"latency_ms":12}
+["api",200,12]
+{"service":"api","timestamp":1700000026,"status":200,"latency_ms":false}

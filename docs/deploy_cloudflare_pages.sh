@@ -58,19 +58,9 @@ if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
 fi
 export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
 
-# 3. Stage the per-block dashboard snapshots. Each one lives with its own block
-# (blocks/<name>/docs/public/dashboard_demo/<name>) and that copy is the source
-# of truth, but this site renders the block docs pages, so it has to serve their
-# snapshots at the same URL the pages link to. The staged copy is gitignored.
-DEMO_DIR="$SCRIPT_DIR/public/dashboard_demo"
-rm -rf "$DEMO_DIR"
-for block in curator tracer trainer evaluator; do
-  demo_src="$SCRIPT_DIR/../blocks/$block/docs/public/dashboard_demo/$block"
-  [[ -d "$demo_src" ]] || continue
-  mkdir -p "$DEMO_DIR"
-  cp -r "$demo_src" "$DEMO_DIR/$block"
-  log "Staged dashboard snapshot: $block"
-done
+# 3. Dashboard demos are staged from their canonical block snapshots by the
+# npm prebuild hook (scripts/stage_dashboard_demos.mjs), including terminal-curator.
+# This keeps normal local builds/dev previews consistent with deployment.
 
 # 4. Install deps + static build. Prefer a deterministic, lockfile-based
 # install (npm ci) whenever package-lock.json exists; fall back to npm install

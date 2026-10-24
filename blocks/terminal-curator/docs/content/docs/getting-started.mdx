@@ -1,0 +1,69 @@
+---
+title: Getting Started
+---
+
+## Requirements
+
+Use Python 3.12, `uv`, and a Docker-capable CPU host. Generation also needs an
+OpenAI-compatible LLM endpoint/model/key; live collection needs Stack Exchange
+access. Local candidate imports need no generation key. Setup prepares the
+pinned repositories and isolated environments.
+
+## Install the plugin
+
+From the repository root, choose your agent:
+
+```bash
+# Claude Code; then reload plugins or restart the session.
+claude plugin marketplace add ./blocks/terminal-curator/.claude/plugins
+claude plugin install terminal-curator@terminal-curator-block
+
+# Codex; then restart the session.
+codex plugin marketplace add .
+codex plugin add terminal-curator@legoflow
+```
+
+## Configure a small batch
+
+Edit `blocks/terminal-curator/config.yaml`. Choose `source.type`:
+`stackoverflow`, `json`, or `tasks`; set `source.path` for the latter two.
+Start with `max_questions: 1`, `generation.workers: 1` and
+`validation.n_concurrent: 1`.
+
+For generation, set `llm_api.api_base_url` and `llm_api.model`, leave its
+tracked key empty, and supply `OPENAI_API_KEY` through the execution environment.
+See [Configuration Guide](./usage/configuration.mdx) for all source and profile options.
+
+## Check and run
+
+| Action | Claude Code | Codex |
+| --- | --- | --- |
+| Prepare | `/terminal-curator:setup` | `$terminal-curator:setup` |
+| Preflight | `/terminal-curator:check` | `$terminal-curator:check` |
+| Run | `/terminal-curator:run` | `$terminal-curator:run` |
+| Monitor | `/terminal-curator:dashboard` | `$terminal-curator:dashboard` |
+
+The agent reports the resolved source, host, model and budget, then performs
+an authorized run. Script equivalents, from `blocks/terminal-curator/`:
+
+```bash
+bash scripts/setup.sh
+bash scripts/dryrun.sh
+bash scripts/start.sh
+artifacts/env/terminal-curator/bin/python dashboard/progress_monitor.py --html
+```
+
+Pass the same `--config <file>` to each command when using a private full
+profile. Run checks and containers on the selected Docker host; synchronize
+code, inputs and profiles before remote execution through SSH and tmux.
+Carry resource variables into the actual execution window: new tmux windows
+inherit the session/server environment, which may differ from the current shell.
+Use session-scoped settings or a private environment file for credentials.
+
+## Inspect the result
+
+Check the run report, archive and `artifacts/tasks/verifiable_tasks.txt`.
+The run skill completes [validation and semantic review](./usage/validation-checks.mdx),
+including fresh trials after corrections, before handing tasks downstream.
+Then follow [Downstream Handoff](./usage/downstream-handoff.mdx) to select the
+publication in Tracer or Evaluator.

@@ -9,4 +9,4 @@ Read and follow `.claude/plugins/root-plugin/skills/check/SKILL.md` in full. It 
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$root-check`.
+Invoke this Codex skill as `$root:check`.

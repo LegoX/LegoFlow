@@ -7,6 +7,13 @@ description: >
 
 # /root:dashboard
 
+Show every registered block, including both `curator` and `terminal-curator`,
+even when only one is the active task producer. Label the selected producer
+from Tracer's `task_source.local_block` when `provider: local`; `external`
+or a non-local provider means neither producer is active. An unused producer with no artifacts
+is a normal no-runs state. Reading its dashboard does not require API keys or
+activate its setup/run workflow.
+
 Run only from the repository root. Read config.yaml and verify
 meta_info.name is legoflow, then execute:
 

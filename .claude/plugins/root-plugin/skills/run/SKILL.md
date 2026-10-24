@@ -6,6 +6,13 @@ description: >
 
 # /root:run
 
+
+Read [Effective profiles](../../resources/EFFECTIVE_PROFILES.md) before loading
+child configs. Honor explicit profiles and `TRAJGEN_CONFIG`, `EVAL_CONFIG`, and
+`TERMINAL_CURATOR_CONFIG` with block-relative path resolution. Use that same
+effective profile set for source selection, sibling dependency checks, resource
+selection, and child dispatch; never reset a parent-selected profile.
+
 Preflight the target block, then execute its `scripts/start.sh`. Refuse to execute if any prerequisite is missing — a missing input is the user's signal to fill it, never a signal to invent a value.
 
 ## Arguments
@@ -33,13 +40,13 @@ Never silently mutate `runtime_info` or `meta_info` fields. A user instruction i
 
 | Args | Target | Behavior |
 | ---- | ------ | -------- |
-| *(empty)* | root | run root `start.sh` directly |
+| *(empty)* | root | dispatch selected child run skills in dependency order |
 | `curator` | curator | run directly |
 | `curator only 32 verified tasks` | curator | propose config/flag change, confirm, run |
 | `run curator with 32 tasks` | curator | same — name embedded in text |
 | `run the trajectory generator` | tracer | resolved via paraphrase + `CLAUDE.md` |
 | `run curator and tracer` | ambiguous | ask which block |
-| `start the data pipeline` | root | run root `start.sh` directly |
+| `start the data pipeline` | root | dispatch selected child run skills in dependency order |
 | `run frobnicator` | abort | print valid list, ask user to pick |
 
 Every step below operates on `TARGET_DIR`. Where the rest of this document says "this block" or "CWD", read it as `TARGET_DIR`.
@@ -47,7 +54,7 @@ Every step below operates on `TARGET_DIR`. Where the rest of this document says 
 **IMPORTANT: Before executing, the agent MUST:**
 1. Run `/root:check` (or this skill's built-in preflight) to validate all prerequisites.
 2. Present the check results and run configuration summary to the user.
-3. **Wait for explicit user confirmation** before launching `scripts/start.sh`. Never auto-launch — training runs consume GPUs for hours and are hard to reverse once started.
+3. **Confirm authorization** before launching `scripts/start.sh`. Reuse explicit authorization already given for the same source, host, budget, and operation. If that scope is unresolved or a new large run is proposed, obtain user confirmation before launch.
 
 ## Step 0 — Orient
 
@@ -72,7 +79,7 @@ If `config.yaml` is required but absent (block target), go back to user and ask 
 
 ## Step 2 — Load blocks
 
-For each `name` listed under `meta_info.blocks` in `./config.yaml`, read `./blocks/<name>/config.yaml`. Keep a map:
+For each `name` listed under `meta_info.blocks` in `./config.yaml`, read its effective config from the profile map (committed config.yaml only when no profile is selected). Keep a map:
 
 ```
 <name> -> {
@@ -83,6 +90,33 @@ For each `name` listed under `meta_info.blocks` in `./config.yaml`, read `./bloc
 
 If a declared block directory is missing, record it as a preflight failure (do not abort yet — collect all failures first).
 
+### Select the active task producer
+
+For a root pipeline run, read Tracer's
+`runtime_info.input.task_source` before constructing the execution list:
+
+| Tracer source | Producer to run |
+| --- | --- |
+| `provider: local`, `local_block: curator` (also the default when absent) | `curator` |
+| `provider: local`, `local_block: terminal-curator` | `terminal-curator` |
+| `provider: local`, `local_block: external` | Neither; use the external local pool. |
+| Any non-local provider | Neither; use the configured provider. |
+
+If Evaluator is also in the requested pipeline and its
+`task_source.dataset_name` is `terminal-curator`, add `terminal-curator` to
+the selected producer set: Evaluator consumes its exported registry. Use the
+union of Tracer's and Evaluator's requirements, so a SWE Tracer and a terminal
+Evaluator can require both producers. The default benchmark selects no
+additional producer. A directly targeted Evaluator run uses the existing
+registry and does not start a curation sibling.
+
+Remove the unselected producer(s) from the root dispatch and health-check
+list. Report the selected source and skipped producer(s); do not request their
+API keys or launch their setup/run scripts. Reject an unknown local producer
+rather than guessing. Other registered children remain in the requested
+pipeline scope. A directly targeted `TARGET_DIR=./blocks/<name>/` runs that
+block regardless of Tracer's selector, and does not run its siblings.
+
 ## Step 3 — Preflight checklist (fail-fast, all failures reported together)
 
 Walk through every check below. Collect failures. Only after the full pass, decide whether to proceed.
@@ -91,7 +125,7 @@ Walk through every check below. Collect failures. Only after the full pass, deci
 | - | ----- | ---------------- |
 | 1 | `./scripts/start.sh` exists. | "Missing `scripts/start.sh`." |
 | 2 | `./scripts/start.sh` is executable. If not, `chmod +x` it and emit a warning (not a failure). | warning only |
-| 3 | Run `python3 <repo_root>/scripts/validate_config.py --block <TARGET_DIR>` (or `--root <repo_root>` in root mode). Any `[FAIL]` line — unfilled `human` markers (`input:unfilled`), legacy placeholders, schema drift, or dependency failures (`dep:bad-key` / `dep:bad-ref` / `dep:unresolved`) — is a preflight failure; quote the validator's message verbatim. | validator `[FAIL]` lines |
+| 3 | Run `python3 <repo_root>/scripts/validate_config.py --block <TARGET_DIR> --config <effective-profile> --effective-profiles` for a direct target. In root mode, validate root identity and each selected block separately with `--block`; do not require readiness from an inactive producer. Any `[FAIL]` line — unfilled `human` markers (`input:unfilled`), legacy placeholders, schema drift, or dependency failures (`dep:bad-key` / `dep:bad-ref` / `dep:unresolved`) — is a preflight failure; quote the validator's message verbatim. | validator `[FAIL]` lines |
 | 4 | (covered by check #3 — the validator resolves each `meta_info.dependencies.from` entry against the producer's `runtime_info.output`, honoring `when:` gates and `required: false`, and cross-checks it against the producer's own `dependencies.to`.) | — |
 | 5 | For each entry under `meta_info.repos`: `./repos/<name>/` exists. If a `commit_id` is pinned, the checked-out HEAD of that submodule matches it. | "Repo `<name>` missing under `repos/`." or "Repo `<name>` HEAD `<actual>` does not match pinned `<commit_id>`." |
 | 6 | If `meta_info.environment.venv_path` is set: that path exists on the host that will run the script (local for local execution; the remote node for remote). | "Virtual env `<path>` not found." |
@@ -111,8 +145,8 @@ Rationale: each block owns its own contract (preflight, confirmation, archiving,
 
 Procedure at a parent:
 
-1. Topologically sort the children by the dependency graph read from **each child's own** `meta_info.dependencies.from` (`blocks/<name>/config.yaml`): a child that consumes `<src>.output.<key>` must run after `<src>`. Edges that are conditionally inactive (`when:` not matching) or optional (`required: false`) still order the sort but do not block execution. Break ties by the declaration order in the root's `meta_info.blocks`.
-2. For each child in that order, invoke `/<child>:run` and wait for it to complete. The child skill is responsible for its own preflight, confirmation, execution, and archiving.
+1. Start with the active dispatch list from Step 2. Topologically sort it by **active required** dependency edges read from each child's `meta_info.dependencies.from` (`blocks/<name>/config.yaml`): a child that consumes `<src>.output.<key>` runs after `<src>` when the condition matches. Do not add an unselected producer back because an inactive edge names it. Optional edges to already available outputs do not require a new upstream run. Break ties by declaration order in the root's `meta_info.blocks`.
+2. For each child in that order, retain its effective profile selector, invoke `/<child>:run`, and wait for it to complete. Terminal Curator must finish its semantic audit and fresh Oracle/NOP revalidation after corrections before a downstream child starts. The child skill is responsible for its own preflight, confirmation, execution, and archiving.
 3. If a child fails or the user aborts at its confirmation gate, stop the parent's dispatch immediately — do not run downstream children. Report which child stopped the pipeline and surface its failure verbatim.
 4. The parent block does not have its own `scripts/start.sh` to execute; it has nothing to run beyond dispatching children. If the user explicitly asks for "just the root" (no children), there is nothing to do — say so and exit.
 

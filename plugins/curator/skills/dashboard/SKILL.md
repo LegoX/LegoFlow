@@ -9,4 +9,4 @@ Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/dashboard/
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$curator-dashboard`.
+Invoke this Codex skill as `$curator:dashboard`.

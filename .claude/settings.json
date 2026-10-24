@@ -12,6 +12,12 @@
         "path": "blocks/curator/.claude/plugins"
       }
     },
+    "terminal-curator-block": {
+      "source": {
+        "source": "directory",
+        "path": "blocks/terminal-curator/.claude/plugins"
+      }
+    },
     "tracer": {
       "source": {
         "source": "directory",
@@ -34,6 +40,7 @@
   "enabledPlugins": {
     "root@root-block": true,
     "curator@curator-block": true,
+    "terminal-curator@terminal-curator-block": true,
     "tracer@tracer": true,
     "trainer@trainer-block": true,
     "evaluator@evaluator-block": true

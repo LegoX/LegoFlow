@@ -138,7 +138,7 @@ Now run setup:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/trainer:setup` | `$trainer-setup` |
+| `/trainer:setup` | `$trainer:setup` |
 
 This initializes the pinned repos, builds the `uv` training environment,
 installs LLaMA-Factory and `legoflow-trace-crafter`, and checks the key imports.
@@ -154,7 +154,7 @@ Before using GPUs, run:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/trainer:check` | `$trainer-check` |
+| `/trainer:check` | `$trainer:check` |
 
 This is read-only. It checks config, repo pins, the training environment, source
 data, converter availability, model path, output directory safety, GPU
@@ -169,7 +169,7 @@ Launch the full training pipeline:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/trainer:run` | `$trainer-run` |
+| `/trainer:run` | `$trainer:run` |
 
 Trainer obtains LF data, registers it in LLaMA-Factory's
 `dataset_info.json`, generates a training YAML, runs LLaMA-Factory, and updates
@@ -228,7 +228,7 @@ After a run starts, open the dashboard:
 
 | Claude Code | Codex |
 | --- | --- |
-| `/trainer:dashboard` | `$trainer-dashboard` |
+| `/trainer:dashboard` | `$trainer:dashboard` |
 
 The dashboard reads training logs and model artifacts directly. Use it to watch
 loss curves, compare runs, and inspect final metrics. During long training,

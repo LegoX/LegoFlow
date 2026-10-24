@@ -55,6 +55,53 @@ PY
 
 ROOT_CFG="$ROOT_DIR/config.yaml"
 
+
+block_config() {
+  python3 - "$ROOT_DIR" "$1" <<'PYPROFILE'
+import sys
+sys.path.insert(0, sys.argv[1] + "/scripts")
+from validate_config import effective_config_path
+print(effective_config_path(sys.argv[1] + "/blocks/" + sys.argv[2]))
+PYPROFILE
+}
+
+# Normalize once before entering child directories; all local consumers read
+# the same profile and sibling dependency set.
+for profile_block in tracer evaluator terminal-curator; do
+  profile_path="$(block_config "$profile_block")"
+  case "$profile_block" in
+    tracer) export TRAJGEN_CONFIG="$profile_path" ;;
+    evaluator) export EVAL_CONFIG="$profile_path" ;;
+    terminal-curator) export TERMINAL_CURATOR_CONFIG="$profile_path" ;;
+  esac
+done
+
+remote_config_path() {
+  python3 - "$ROOT_DIR/blocks/$1" "$2" "$3" "${4:-$1}" <<'PY'
+import os
+from pathlib import Path
+import posixpath
+import sys
+
+block, profile, remote_directory, worker_block = sys.argv[1:5]
+profile = Path(os.path.abspath(profile))
+try:
+    relative = profile.relative_to(Path(os.path.abspath(block))).as_posix()
+except ValueError:
+    print(profile)
+else:
+    # The worker enters resources.directory before launching the child. Keep
+    # an in-block profile at the same relative location in that checkout.
+    source_block = Path(block).name
+    if posixpath.isabs(remote_directory):
+        source_directory = remote_directory if source_block == worker_block else posixpath.join(posixpath.dirname(remote_directory), source_block)
+        print(posixpath.join(source_directory, relative))
+    else:
+        print(relative if source_block == worker_block else posixpath.join("..", source_block, relative))
+PY
+}
+
+
 echo "=== Block Dryrun: legoflow ==="
 echo ""
 
@@ -92,7 +139,7 @@ done
 echo ""
 echo "2. Config validation (scripts/validate_config.py --root)"
 
-VALIDATOR_OUT="$(python3 "$ROOT_DIR/scripts/validate_config.py" --root "$ROOT_DIR" 2>&1)" && VALIDATOR_RC=0 || VALIDATOR_RC=$?
+VALIDATOR_OUT="$(python3 "$ROOT_DIR/scripts/validate_config.py" --root "$ROOT_DIR" --effective-profiles 2>&1)" && VALIDATOR_RC=0 || VALIDATOR_RC=$?
 echo "$VALIDATOR_OUT" | sed 's/^/    /'
 V_FAIL="$(echo "$VALIDATOR_OUT" | grep -c '^\[FAIL\]' || true)"
 V_WARN="$(echo "$VALIDATOR_OUT" | grep -c '^\[WARN\]' || true)"
@@ -102,6 +149,7 @@ else
   fail "validate_config: ${V_FAIL} failures (${V_WARN} warnings) — see lines above"
 fi
 WARN=$((WARN+V_WARN))
+[[ "$VALIDATOR_OUT" != *" schema:parse-error "* ]] || exit 1
 
 # ── 3. Deployment & registry credentials ─────────────────────────────────────
 echo ""
@@ -216,19 +264,39 @@ PY
       warn "blocks/${block} has no scripts/dryrun.sh"
       continue
     fi
-    if [[ $SSH_OK -eq 1 ]]; then
-      REMOTE_REPO_DIR="${REMOTE_DIR%/}/${LEGOFLOW_REMOTE_REPO_NAME:-LegoFlow}"
-      info "running blocks/${block}/scripts/dryrun.sh on remote ..."
-      if ssh -o BatchMode=yes "${REMOTE_USER}@${REMOTE_IP}" \
-           "cd '${REMOTE_REPO_DIR}/blocks/${block}' && bash scripts/dryrun.sh" 2>&1 \
+    child_config="$(block_config "$block")"
+    child_host="$(cfg "$child_config" meta_info.resources.ip)"
+    child_user="$(cfg "$child_config" meta_info.resources.user)"
+    child_directory="$(cfg "$child_config" meta_info.resources.directory)"
+    if [[ -z "$child_host" || "$child_host" == local || "$child_host" == null || "$child_host" == None ]]; then
+      info "running blocks/${block}/scripts/dryrun.sh locally ..."
+      if (cd "$ROOT_DIR/blocks/${block}" && bash scripts/dryrun.sh) 2>&1 \
            | sed "s/^/    [${block}] /"; then
         ok "blocks/${block} dryrun passed"
       else
         fail "blocks/${block} dryrun failed"
       fi
     else
-      info "running blocks/${block}/scripts/dryrun.sh locally ..."
-      if (cd "$ROOT_DIR/blocks/${block}" && bash scripts/dryrun.sh) 2>&1 \
+      if [[ -z "$child_directory" || "$child_directory" == null || "$child_directory" == None ]]; then
+        fail "blocks/${block} remote dryrun requires resources.directory (the block checkout)"
+        continue
+      fi
+      [[ -z "$child_user" || "$child_user" == null || "$child_user" == None ]] || child_host="$child_user@$child_host"
+      # Only profile filenames are forwarded. The operator supplies the remote
+      # checkout and environment; this helper never syncs or forwards secrets.
+      profile_exports="export"
+      for source_block in tracer evaluator terminal-curator; do
+        case "$source_block" in
+          tracer) variable=TRAJGEN_CONFIG ;;
+          evaluator) variable=EVAL_CONFIG ;;
+          terminal-curator) variable=TERMINAL_CURATOR_CONFIG ;;
+        esac
+        mapped="$(remote_config_path "$source_block" "$(block_config "$source_block")" "$child_directory" "$block")"
+        printf -v profile_exports '%s %q' "$profile_exports" "$variable=$mapped"
+      done
+      printf -v child_command 'cd %q && %s && bash scripts/dryrun.sh' "$child_directory" "$profile_exports"
+      info "running blocks/${block}/scripts/dryrun.sh on configured remote ..."
+      if ssh -o BatchMode=yes -o ConnectTimeout=5 "$child_host" "$child_command" 2>&1 \
            | sed "s/^/    [${block}] /"; then
         ok "blocks/${block} dryrun passed"
       else

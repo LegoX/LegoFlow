@@ -16,6 +16,13 @@ A **block** is the basic collaboration unit in a block-structured project: a sel
 
 ## Install
 
+In LegoFlow, root setup/run select one task producer from Tracer's
+`runtime_info.input.task_source`: `curator` is the default local source;
+`terminal-curator` chooses bounded terminal curation. An external local source
+or non-local provider starts neither producer. Default checks cover the active
+pipeline; an explicit full-tree check can inspect every block. Dashboards
+show both producers without starting either or requiring unused credentials.
+
 ### Local development
 
 ```bash

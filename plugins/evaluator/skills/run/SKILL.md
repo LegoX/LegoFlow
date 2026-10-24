@@ -9,4 +9,4 @@ Read and follow `blocks/evaluator/.claude/plugins/evaluator-plugin/skills/run/SK
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$evaluator-run`.
+Invoke this Codex skill as `$evaluator:run`.

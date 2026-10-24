@@ -24,7 +24,7 @@ on:
       block:
         description: "Which block to rebuild + test"
         type: choice
-        options: [curator, tracer, evaluator, trainer, all]
+        options: [curator, terminal-curator, tracer, evaluator, trainer, all]
         default: all
       run_smoke:
         description: "Also run the smoke tests (~30 min each, real LLM + Docker)"
@@ -46,6 +46,57 @@ env:
   CICD_SHARED: ${{ vars.LEGOFLOW_CI_SHARED || '/opt/legoflow-ci/shared' }}
 
 jobs:
+  # Terminal wrapper checks are offline. The opt-in smoke uses hand-authored
+  # tasks with real Harbor Oracle/NOP validation and never calls an LLM.
+  terminal-curator:
+    name: terminal-curator (from-scratch)
+    if: ${{ inputs.block == 'terminal-curator' || inputs.block == 'all' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install wrapper test dependencies and uv
+        run: pip install --no-cache-dir uv -r blocks/terminal-curator/tests/requirements.txt
+      - name: Run offline terminal-curator checks
+        run: bash blocks/terminal-curator/tests/run.sh
+      - name: Initialize pinned runtime repositories (if smoke requested)
+        if: ${{ inputs.run_smoke == true }}
+        env:
+          LEGOFLOW_SUBMODULE_TOKEN: ${{ secrets.LEGOFLOW_SUBMODULE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$LEGOFLOW_SUBMODULE_TOKEN" ]]; then
+            git -c 'http.https://github.com/.extraheader=' \
+              -c 'credential.helper=!f() { echo username=x-access-token; echo password=$LEGOFLOW_SUBMODULE_TOKEN; }; f' \
+              submodule update --init -- blocks/terminal-curator/repos/terminal-lego blocks/tracer/repos/harbor
+          else
+            git submodule update --init -- blocks/terminal-curator/repos/terminal-lego blocks/tracer/repos/harbor
+          fi
+      - name: Build isolated runtime (if smoke requested)
+        if: ${{ inputs.run_smoke == true }}
+        run: bash blocks/terminal-curator/scripts/setup.sh
+      - name: Verify both fixtures with Harbor Oracle and NOP
+        if: ${{ inputs.run_smoke == true }}
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: bash blocks/terminal-curator/tests/run.sh --with-smoke
+      - name: Upload fixture validation evidence
+        if: always() && inputs.run_smoke == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-curator-from-scratch-${{ github.run_id }}
+          path: |
+            blocks/terminal-curator/artifacts/reports/
+            blocks/terminal-curator/artifacts/index.yaml
+          if-no-files-found: ignore
+          retention-days: 14
+
   # ===========================================================================
   # curator — fresh venv + repos/legoflow-curator submodule
   # ===========================================================================

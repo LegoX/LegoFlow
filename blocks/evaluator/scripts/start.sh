@@ -10,6 +10,7 @@ set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${EVAL_CONFIG:-$BLOCK_DIR/config.yaml}"
+[[ "$CONFIG" = /* ]] || CONFIG="$BLOCK_DIR/$CONFIG"
 export EVAL_CONFIG="$CONFIG"
 LOG_DIR="$BLOCK_DIR/artifacts/logs"
 PRINT_COMMAND_ONLY=0
@@ -111,8 +112,17 @@ except ImportError:
     sys.exit(2)
 
 config_path, output_path, template_path = sys.argv[1:4]
-with open(config_path, encoding="utf-8") as fh:
-    config = yaml.safe_load(fh) or {}
+def read_yaml(path):
+    try:
+        with open(path, encoding="utf-8") as stream:
+            return yaml.safe_load(stream) or {}
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        print(f"ERROR: invalid YAML in {path}{location}", file=sys.stderr)
+        raise SystemExit(2)
+
+config = read_yaml(config_path)
 
 model_api = dict((config.get("runtime_info") or {}).get("input", {}).get("llm_api") or {})
 proxy = (config.get("runtime_info") or {}).get("input", {}).get("litellm_proxy") or {}
@@ -141,8 +151,7 @@ if template_path:
     if not template_file.is_file():
         print(f"ERROR: LiteLLM config template not found: {template_path}", file=sys.stderr)
         sys.exit(2)
-    with open(template_file, encoding="utf-8") as fh:
-        loaded = yaml.safe_load(fh) or {}
+    loaded = read_yaml(template_file)
     if not isinstance(loaded, dict):
         print(f"ERROR: LiteLLM config template must be a mapping: {template_path}", file=sys.stderr)
         sys.exit(2)
@@ -181,7 +190,9 @@ litellm_settings.update({
 })
 data["litellm_settings"] = litellm_settings
 
-with open(output_path, "w", encoding="utf-8") as fh:
+fd = os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+os.chmod(output_path, 0o600)
+with os.fdopen(fd, "w", encoding="utf-8") as fh:
     yaml.safe_dump(data, fh, sort_keys=False)
 PY
 }
@@ -330,6 +341,18 @@ if [[ -n "$DATASET_VERSION" ]]; then
 fi
 REGISTRY_ABS="$(abspath "$REGISTRY_RAW")"
 [[ -f "$REGISTRY_ABS" ]] || { echo "ERROR: registry.json not found at $REGISTRY_RAW" >&2; exit 1; }
+if [[ "$DATASET_NAME" == terminal-curator ]]; then
+  # Freeze the producer's publication pointer before proxy warmup. Registry
+  # entries already name immutable task paths; the registry itself must refer
+  # to that same batch if another producer publishes while this job starts.
+  REGISTRY_ABS="$(python3 - "$REGISTRY_ABS" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).resolve(strict=True))
+PY
+)"
+  python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --registry "$REGISTRY_ABS"
+fi
 
 JOB_NAME_PREFIX="$(cfg runtime_info.input.harbor_job.job_name_prefix)"
 if [[ -z "$JOB_NAME_PREFIX" ]]; then
@@ -666,8 +689,11 @@ echo "Config:     $JOB_DIR_RAW/config.yaml" | tee -a "$LOG_FILE"
 echo "Command:    $RUN_COMMAND" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
+if [[ "$DATASET_NAME" == terminal-curator ]]; then
+  python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --registry "$REGISTRY_ABS"
+fi
 set +e
-(cd "$HARBOR_DIR" && bash -lc "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
+(cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
 PIPE_STATUS=("${PIPESTATUS[@]}")
 set -e
 HARBOR_RC="${PIPE_STATUS[0]:-1}"

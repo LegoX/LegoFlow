@@ -13,7 +13,7 @@ changing the block contract itself.
 | Area | Edit when | Main fields |
 | --- | --- | --- |
 | Model endpoint | You want Tracer to call a different model or gateway. | `llm_api.api_key`, `api_base_url`, `model` |
-| Task source | You are receiving Curator output or using a dataset from Hugging Face. | `task_source.provider`, `dataset_name`, `split` |
+| Task source | You are receiving SWE/terminal tasks, an external local pool, or an HF snapshot. | `task_source.provider`, `local_block`, `dataset_name`, `terminal_tasks_dir`, `split` |
 | Rollout scale | You are doing a smoke run, a batch run, or a full production run. | `harbor_job.n_tasks`, `n_concurrent`, `max_retries`, `timeout_multiplier` |
 | Agent scaffold | You switch between Claude Code, OpenCode, or OpenHands SDK. | `agent.name`, `version`, `runtime_image`, `runtime_host_path` |
 | Remote machine | You want Tracer to run rollouts on another Docker server. | `meta_info.resources.ip`, `user`, `pwd`, `directory` |
@@ -51,7 +51,7 @@ point at the Tracer block checkout, not just the repository root.
 
 ### Task source
 
-Tracer receives valid tasks to produce trajectories either from the Curator, or open-sourced tasks from Huggingface. 
+Tracer accepts Harbor task pools from the selected local producer, an external local directory, or a prebuilt Hugging Face snapshot. `TRAJGEN_CONFIG` selects a complete private profile; relative profile filenames resolve from this block. An omitted `local_block` keeps the SWE `curator` default; explicit invalid selectors are rejected.
 
 - From Curator Tasks:
 
@@ -60,11 +60,52 @@ Tracer receives valid tasks to produce trajectories either from the Curator, or 
 </ConfigSnippet>
 
 
+- From Terminal Curator:
+
+<ConfigSnippet title="blocks/tracer/config.local.yaml">
+{"runtime_info:\n  input:\n    task_source:\n      provider: local\n      local_block: terminal-curator\n      terminal_tasks_dir: ../terminal-curator/artifacts/tasks\n    harbor_job:\n      n_tasks: 2\n      n_concurrent: 1\n      max_retries: 0\n"}
+</ConfigSnippet>
+
+Terminal input uses `terminal_tasks_dir`, leaving the SWE `dataset_name` intact.
+Its independent dependency edge is active only for
+`{task_source.provider: local, task_source.local_block: terminal-curator}` and
+consumes `terminal-curator.output.harbor_tasks_dir`. A nonempty manifest is
+required; missing or invalid listed tasks fail preparation. Before inference,
+the producer skill must audit instruction/tests/reference-solution semantics,
+record corrections, then repeat fresh Oracle/NOP validation. A runtime pass or
+manifest alone does not prove that audit.
+
+For an unrelated local pool, set `local_block: external` and `dataset_name`;
+this selects neither producer. For local sources, a manifest filters IDs when
+present; sources outside the terminal contract retain the valid-directory
+fallback when absent.
+
 - From Hugging Face Task Dataset:
 
 <ConfigSnippet title="blocks/tracer/config.yaml">
 {"runtime_info:\n  input:\n    task_source:\n      provider: huggingface\n      dataset_name: Lego-X/<dataset-name>\n      split: train"}
 </ConfigSnippet>
+
+HF preparation downloads a raw prebuilt-task snapshot. `split` participates in
+profile/cache identity but does not filter a dataset-library split here.
+
+### Staging ownership and refresh
+
+The public `harbor_job.dataset_path` defaults to `artifacts/tasks/<dataset>`
+(`terminal-curator` for terminal input). `harbor_job.dataset` can override the
+dataset label. Preparation atomically points the public path at an owned version
+under `artifacts/tasks/.legoflow-staging-v1/`, keyed by resolved source, manifest,
+settings, and file metadata. `start.sh` uses the fixed version returned by that
+invocation, even if another preparation advances the public pointer.
+
+Local task directories remain links. Terminal links resolve to immutable producer
+batches; mutable external/SWE contents may still change in place. HF files are
+materialized copies and a matching owned copy can be reused without download;
+`prepare_tasks.sh --overwrite` requests a fresh download. An existing real
+dataset directory or unrelated symlink is never replaced, including with that
+flag. Choose a fresh `dataset_path`, or move old staging yourself after checking
+active jobs. Retained versions are removed only by explicit cleanup, so preserve
+versions referenced by active jobs.
 
 ### Smoke run
 
@@ -112,7 +153,7 @@ entry documents that this value comes from Curator's `merged_tasks_dir`, so
 root-level checks can validate the handoff.
 
 <ConfigSnippet title="blocks/tracer/config.yaml">
-{"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:\n        from: curator.output.merged_tasks_dir\n        when: {task_source.provider: local}\n\nruntime_info:\n  input:\n    task_source:\n      provider: local\n      dataset_name: ../curator/artifacts/merged_swe_tasks"}
+{"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:\n        from: curator.output.merged_tasks_dir\n        when: {task_source.provider: local, task_source.local_block: curator}\n\nruntime_info:\n  input:\n    task_source:\n      provider: local\n      dataset_name: ../curator/artifacts/merged_swe_tasks"}
 </ConfigSnippet>
 
 ### Produce Trainer-ready data
@@ -133,7 +174,9 @@ when Tracer should produce that file after rollout.
 | `llm_api.model` | Yes | `openai/Qwen3.6-35B-A3B` | Change when testing a different teacher model. |
 | `litellm_proxy.port` | Yes | `4003` | Change only if the local port is already occupied. |
 | `task_source.provider` | Yes | `local` | Use `local` for Curator output; use `huggingface` for a published dataset. |
-| `task_source.dataset_name` | Yes | `../curator/artifacts/merged_swe_tasks` | Change to another local task directory or dataset id. |
+| `task_source.local_block` | For local | `curator` | Choose `curator`, `terminal-curator`, or `external`; omission alone defaults to curator. |
+| `task_source.terminal_tasks_dir` | For terminal | `../terminal-curator/artifacts/tasks` | Path to the terminal producer publication and manifest. |
+| `task_source.dataset_name` | Except terminal | `../curator/artifacts/merged_swe_tasks` | Change to another local task directory or dataset id. |
 | `harbor_job.n_concurrent` | Yes | `8` | Tune for endpoint capacity, Docker capacity, and API rate limits. |
 | `harbor_job.n_tasks` | No | `40` | Use `5` or `10` for smoke runs; use `null` to run all staged tasks. |
 | `harbor_job.max_retries` | Yes | `2` | Lower for fast checks; raise only for unstable infrastructure. |

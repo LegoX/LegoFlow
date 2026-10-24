@@ -9,4 +9,4 @@ Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/create-tas
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$curator-create-tasks`.
+Invoke this Codex skill as `$curator:create-tasks`.

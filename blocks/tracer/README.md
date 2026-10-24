@@ -1,19 +1,21 @@
 # tracer
 
 The trajectory-generation block of [LegoFlow](../../README.md). It runs a
-coding agent (via [Harbor](https://github.com/LegoX/harbor)) on verified SWE
+coding agent (via [Harbor](https://github.com/LegoX/harbor)) on verified Harbor SWE or terminal
 tasks, captures each rollout as a raw trajectory, and optionally converts those
 trajectories into SFT training data for the downstream `trainer` block.
 
 ## Role in the pipeline
 
 ```
-curator ─ verifiable_tasks.txt ─► tracer ─ trajectories / SFT data ─► trainer ─► rl
+curator / terminal-curator ─ verified tasks ─► tracer ─ trajectories / SFT data ─► trainer
 ```
 
-tracer sits between task generation and training. It **only** consumes tasks
-that curator has marked verified in `verifiable_tasks.txt`, and tracks which
-tasks it has already processed so no task is run twice.
+Tracer sits between task generation and training. Select the local producer
+through `task_source.local_block` (`curator` by default, or `terminal-curator`),
+or use external/HF Harbor tasks. Terminal input requires `verifiable_tasks.txt`
+and the producer skill's completed semantic audit plus fresh revalidation.
+The run skill updates a processed-task ledger used to exclude prior work.
 
 ## What it does
 
@@ -47,7 +49,7 @@ blocks/tracer/
 ## Inputs / Outputs at a glance
 
 Everything is declared in [`config.yaml`](config.yaml); see
-[`docs/content/docs/reference/io.mdx`](docs/content/docs/reference/io.mdx) for the full reference.
+[`docs/content/docs/usage/configuration.mdx`](docs/content/docs/usage/configuration.mdx) for the full reference.
 
 | | Key items |
 |---|---|
@@ -55,7 +57,14 @@ Everything is declared in [`config.yaml`](config.yaml); see
 | **Outputs** | `raw_trajectories_dir` → `artifacts/jobs/` (consumed by `trainer`); `sft_data_dir` → `artifacts/sft_data/` (LF format, consumed by `trainer`) |
 
 The only external value you normally fill is `runtime_info.input.llm_api`; the
-task source is wired from curator via `meta_info.dependencies`.
+task source is selected through `task_source` and conditionally wired from the selected producer via `meta_info.dependencies`.
+
+Local preparation publishes an owned version of task links behind the public
+staging pointer; `start.sh` pins its invocation's returned version. HF files
+are materialized copies. Mutable external/SWE content remains linked, while
+terminal links resolve to immutable producer batches. Preparation refuses old
+real staging directories and unrelated links, even with `--overwrite`; choose a
+fresh dataset_path or move old staging after checking active jobs.
 
 ## Quick start
 
@@ -68,8 +77,7 @@ Run from the repo root with the `block` plugin loaded, or from this directory.
 /tracer:dashboard       # view Overview, Jobs, and Trajectories locally or sync online
 ```
 
-After a job, do the tracer-specific bookkeeping (ledger + `HARBOR_EXCLUDE_TASKS`
-+ status) described in `/tracer:run`, and use `/tracer:dashboard` to refresh
+After a job, do the tracer-specific bookkeeping (ledger and exclusion sources) described in `/tracer:run`, and use `/tracer:dashboard` to refresh
 SFT data/stats when needed.
 
 ## Operating skills (`.claude/`)

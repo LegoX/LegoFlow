@@ -4,6 +4,8 @@ set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${TRAJGEN_CONFIG:-$BLOCK_DIR/config.yaml}"
+[[ "$CONFIG" = /* ]] || CONFIG="$BLOCK_DIR/$CONFIG"
+export TRAJGEN_CONFIG="$CONFIG"
 
 PASS=0
 FAIL=0
@@ -16,11 +18,13 @@ warn() { echo "  [WARN] $1"; WARN=$((WARN+1)); }
 # --- shared block-contract validation (schema, deps, fill markers) ------------
 REPO_ROOT="$(cd "$BLOCK_DIR/../.." && pwd)"
 if [[ -f "$REPO_ROOT/scripts/validate_config.py" ]]; then
-  if VAL_OUT="$(python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" --config "$CONFIG" 2>&1)"; then
+  if VAL_OUT="$(python3 "$REPO_ROOT/scripts/validate_config.py" --block "$BLOCK_DIR" --config "$CONFIG" --effective-profiles 2>&1)"; then
     ok "validate_config: block contract OK"
   else
     echo "$VAL_OUT" | sed 's/^/    /'
     fail "validate_config reported failures (see lines above)"
+    # Do not parse malformed YAML again: parser tracebacks can echo secrets.
+    [[ "$VAL_OUT" != *" schema:parse-error "* ]] || exit 1
   fi
 else
   warn "shared validator not found at <repo_root>/scripts/validate_config.py — skipping contract validation"
@@ -108,7 +112,7 @@ run_in_harbor_env() {
       export UV_PROJECT_ENVIRONMENT="$UV_PROJECT_ENVIRONMENT_ABS"
     fi
     export HARBOR_EDITABLE_ROOT="$HARBOR_DIR"
-    bash -lc "$command"
+    bash -c "$command"
   )
 }
 
@@ -660,7 +664,6 @@ for key in \
   runtime_info.input.litellm_proxy.port \
   runtime_info.input.litellm_proxy.master_key \
   runtime_info.input.task_source.provider \
-  runtime_info.input.task_source.dataset_name \
   runtime_info.input.harbor_job.jobs_dir \
   runtime_info.input.harbor_job.n_concurrent \
   runtime_info.input.harbor_job.max_retries \
@@ -668,7 +671,13 @@ for key in \
   runtime_info.input.agent.name \
   runtime_info.input.agent.version; do
   value="$(cfg "$key")"
-  [[ -n "$value" ]] && ok "$key = $value" || fail "$key is required"
+  if [[ -z "$value" ]]; then
+    fail "$key is required"
+  elif [[ "$key" == runtime_info.input.litellm_proxy.master_key ]]; then
+    ok "$key is set"
+  else
+    ok "$key = $value"
+  fi
 done
 
 LITELLM_TEMPLATE_RAW="$(cfg runtime_info.input.litellm_proxy.config_template)"
@@ -694,10 +703,11 @@ fi
 
 HARBOR_JOBS_DIR="$(cfg runtime_info.input.harbor_job.jobs_dir)"
 HARBOR_DATASET_PATH="$(cfg runtime_info.input.harbor_job.dataset_path)"
-TASK_SOURCE_DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
+TASK_SOURCE_DATASET_NAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_name)"
+ok "selected task source = $TASK_SOURCE_DATASET_NAME"
 HARBOR_DATASET="$(cfg runtime_info.input.harbor_job.dataset)"
 if [[ -z "$HARBOR_DATASET" && -n "$TASK_SOURCE_DATASET_NAME" ]]; then
-  HARBOR_DATASET="$(basename "$TASK_SOURCE_DATASET_NAME")"
+  HARBOR_DATASET="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_id)"
 fi
 if [[ -z "$HARBOR_DATASET_PATH" && -n "$HARBOR_DATASET" ]]; then
   HARBOR_DATASET_PATH="artifacts/tasks/$HARBOR_DATASET"
@@ -733,14 +743,24 @@ else
 fi
 
 # What is worth checking here is the *source*, which staging cannot conjure.
-TASK_PROVIDER="$(cfg runtime_info.input.task_source.provider)"
+TASK_PROVIDER="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field provider)"
+MANIFEST_REQUIRED="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field manifest_required)"
 case "$TASK_PROVIDER" in
   local)
     TASK_SOURCE_ABS="$(abspath "$TASK_SOURCE_DATASET_NAME")"
     if [[ -d "$TASK_SOURCE_ABS" ]]; then
       ok "local task source exists: $TASK_SOURCE_DATASET_NAME"
+      if [[ "$MANIFEST_REQUIRED" == "true" && ! -s "$TASK_SOURCE_ABS/verifiable_tasks.txt" ]]; then
+        fail "terminal-curator task source requires a non-empty verifiable_tasks.txt"
+      elif [[ "$MANIFEST_REQUIRED" == "true" ]]; then
+        if python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --pool "$TASK_SOURCE_ABS" >/dev/null 2>&1; then
+          ok "terminal-curator publication integrity matches accepted Oracle/NOP evidence"
+        else
+          fail "terminal-curator publication changed or lacks validation.json; re-import and revalidate"
+        fi
+      fi
     else
-      warn "local task source not found: $TASK_SOURCE_DATASET_NAME (upstream curator may not have produced it yet)"
+      warn "local task source not found: $TASK_SOURCE_DATASET_NAME (the selected upstream may not have produced it yet)"
     fi
     ;;
   huggingface)

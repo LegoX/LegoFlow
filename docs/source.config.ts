@@ -38,6 +38,16 @@ export const tracerDocs = defineDocs({
   },
 });
 
+export const terminalCuratorDocs = defineDocs({
+  dir: path.join(repoRoot, 'blocks/terminal-curator/docs/content/docs'),
+  docs: {
+    schema: frontmatterSchema,
+  },
+  meta: {
+    schema: metaSchema,
+  },
+});
+
 export const trainerDocs = defineDocs({
   dir: path.join(repoRoot, 'blocks/trainer/docs/content/docs'),
   docs: {

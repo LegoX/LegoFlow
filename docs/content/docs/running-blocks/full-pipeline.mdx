@@ -8,6 +8,29 @@ The full pipeline workflow uses the root plugin to run Curator, Tracer, Trainer,
 and Evaluator in dependency order. Use it after running the blocks individually at least once,
 when their inputs, outputs, and approval gates are already familiar.
 
+Curator is the default SWE task producer. To build terminal tasks, configure
+[Terminal Curator](/docs/blocks/terminal-curator/getting-started) and select
+`task_source.local_block: terminal-curator` in Tracer with `provider: local`.
+Root setup/run then choose Terminal Curator instead of SWE Curator; an
+external local pool or non-local source launches neither producer. The
+downstream Tracer, Trainer, and Evaluator workflow stays the same. The PR
+collection step below applies to the SWE route; the terminal route collects
+its configured bounded question batch inside `terminal-curator:run`.
+
+The terminal producer skill also audits each instruction against its tests and
+reference solution, records corrections and provenance, and repeats fresh
+Oracle/NOP validation before Tracer or Evaluator runs. Runtime verifier success
+alone does not establish task quality. Use `/root:run` / `$root:run` for this
+orchestration. The legacy root `scripts/start.sh` refuses an implicit terminal
+to Tracer chain before generation; explicit terminal-only, the agent audit,
+then tracer-only remain available. The SWE shell helper keeps `create_py.sh`.
+
+Root skills retain complete profiles selected by `TERMINAL_CURATOR_CONFIG`,
+`TRAJGEN_CONFIG`, and `EVAL_CONFIG`. Resolve relative profile filenames from
+the corresponding block directory and use the same effective profiles for
+source selection, dependency validation, resource selection, and execution.
+No private profile is copied over committed config.yaml.
+
 The workflow has four steps: prepare the pipeline, validate it, collect the
 pull requests Curator will use, then ask the root plugin to run it. Block
 configuration remains authoritative, and undeclared handoffs are never inferred
@@ -41,7 +64,7 @@ benchmarks, and endpoint locations belong in the relevant block's
 
 | Claude Code | Codex |
 | --- | --- |
-| `/root:setup` | `$root-setup` |
+| `/root:setup` | `$root:setup` |
 
 This checks shared tooling and ensures the root `config.yaml` exists. It can
 offer to invoke each child's setup, but recursion is optional and confirmed one
@@ -52,7 +75,7 @@ and fill approved inputs; it does not launch workloads.
 
 | Claude Code | Codex |
 | --- | --- |
-| `/root:check` | `$root-check` |
+| `/root:check` | `$root:check` |
 
 This is operationally read-only: it validates configs, both ends of declared
 dependencies, repository pins, environments, per-block dry runs, and live model
@@ -66,7 +89,7 @@ only affect dashboard publishing and do not block the pipeline.
 
 | Claude Code | Codex |
 | --- | --- |
-| `/curator:collect-prs` | `$curator-collect-prs` |
+| `/curator:collect-prs` | `$curator:collect-prs` |
 
 Root orchestration consumes Curator's existing collection under
 `blocks/curator/artifacts/collected_prs/`. Wait for collection to finish before
@@ -76,7 +99,7 @@ starting the root run.
 
 | Claude Code | Codex |
 | --- | --- |
-| `/root:run ${INSTRUCTION}` | `$root-run ${INSTRUCTION}` |
+| `/root:run ${INSTRUCTION}` | `$root:run ${INSTRUCTION}` |
 
 
 The root skill repeats preflight, presents the resolved configuration, and waits

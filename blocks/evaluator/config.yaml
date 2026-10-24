@@ -5,7 +5,10 @@ meta_info:
   parent: legoflow
   blocks: {}
   dependencies:
-    from: {}
+    from:
+      task_source.registry_path:
+        from: terminal-curator.output.eval_registry
+        when: {task_source.dataset_name: terminal-curator}
     to: {}
 
   resources:

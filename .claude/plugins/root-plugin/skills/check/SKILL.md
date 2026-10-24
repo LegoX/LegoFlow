@@ -6,6 +6,13 @@ description: >
 
 # /root:check
 
+
+Read [Effective profiles](../../resources/EFFECTIVE_PROFILES.md) before loading
+child configs. Honor explicit profiles and `TRAJGEN_CONFIG`, `EVAL_CONFIG`, and
+`TERMINAL_CURATOR_CONFIG` with block-relative path resolution. Use that same
+effective profile set for source selection, sibling dependency checks, resource
+selection, and child dispatch; never reset a parent-selected profile.
+
 Recursively walk the block tree rooted at the current working directory and validate every block's config, resources, external APIs, and block-specific runtime prerequisites. **Safe to run:** only `scripts/dryrun.sh` (a side-effect-free validation script) is executed — no `scripts/start.sh`, no config edits, no archives written.
 
 **This skill is MANDATORY before `/root:run`.** The agent must:
@@ -13,7 +20,7 @@ Recursively walk the block tree rooted at the current working directory and vali
 2. Present the configuration summary and check results to the user.
 3. **Wait for explicit user confirmation** ("yes", "go ahead", etc.) before launching `/root:run`.
 
-Never skip the confirmation step — even if all checks pass. Heavy operations (GPU training, multi-hour jobs) are expensive and hard to reverse once started.
+Confirm the requested scope before launch. Existing explicit user authorization for the same source, host, and budget satisfies this gate; a passed check alone does not authorize a new or expanded run.
 
 ## Arguments
 
@@ -65,15 +72,38 @@ Starting at `TARGET_DIR` (resolved in the Arguments section), decide where to be
 
 Build a flat list `[(block_path, parsed_config_yaml)]` of every reachable block — exactly one entry when `block_name` is set, more when walking the full tree. Record any declared block whose directory is missing as a `tree:missing-child` failure on its parent (only applicable when walking the tree).
 
+### Active pipeline versus full-tree scope
+
+For a default root check, filter the discovered list using Tracer's
+`runtime_info.input.task_source`: `provider: local` selects `local_block`
+(`curator` when absent, or `terminal-curator`); `local_block: external` and
+non-local providers select neither producer for Tracer. If Evaluator is in
+the requested tree and its `task_source.dataset_name` is `terminal-curator`,
+also keep `terminal-curator`, whose exported registry is an active dependency.
+Use the union of these producer requirements. Keep the root and other
+downstream children. Reject an unknown local producer rather than guessing.
+
+Report the selected producer and explicitly skipped producer(s). Do not run
+an unused producer's dryrun/live probes, require its API keys, or bootstrap it.
+Static cross-block references may still be inspected for schema consistency;
+they do not activate an otherwise inactive producer.
+
+If the user explicitly asks for **all blocks / full tree**, inspect both
+producers as requested and distinguish inactive-producer readiness from
+active-pipeline blockers. Do not treat missing credentials in an unused
+producer as a reason the selected pipeline cannot run. For a specifically
+targeted block, check only that block regardless of Tracer's selector.
+
 ## Step 2 — Per-block static checks
 
 Schema, fill-marker, and dependency validation is owned by the shared validator. Run it once for the whole scope and map its output lines directly into the report:
 
 ```bash
-# full-tree scope (TARGET_DIR is the root):
-python3 <repo_root>/scripts/validate_config.py --root <repo_root>
-# single-block scope:
-python3 <repo_root>/scripts/validate_config.py --block <block_path>
+# explicitly requested full-tree scope:
+python3 <repo_root>/scripts/validate_config.py --root <repo_root> --effective-profiles
+# default active pipeline: run once per selected block (and root identity);
+# single-block scope uses only that block:
+python3 <repo_root>/scripts/validate_config.py --block <block_path> --config <effective-profile> --effective-profiles
 ```
 
 Every `[FAIL] <label> ...` / `[WARN] <label> ...` line becomes one finding row, keyed by its label (`schema:parse-error`, `schema:missing-section`, `schema:legacy-status`, `schema:legacy-evolving`, `schema:unknown-toplevel`, `schema:name-mismatch`, `schema:root-wiring`, `tree:missing-child`, `dep:bad-shape`, `dep:bad-key`, `dep:bad-ref`, `dep:unresolved`, `dep:path-mismatch`, `dep:link-mismatch`, `input:unfilled`, `input:placeholder`, `output:shape`). Include the validator's message verbatim.

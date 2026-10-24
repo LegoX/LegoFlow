@@ -1,0 +1,84 @@
+---
+title: Validation Checks
+---
+
+## Check before running
+
+Use `/terminal-curator:check` or `$terminal-curator:check` on the execution
+host. It checks configuration, source inputs, budgets, repository pins,
+Harbor and Docker. The script equivalent, from the block directory, is:
+
+```bash
+bash scripts/dryrun.sh --config config.local.yaml
+```
+
+`dryrun.sh` is read-only. For generation, an explicit
+`terminal_curator.py --config <file> probe` command additionally tests live
+Stack Exchange and LLM completions; a model catalog response alone does not
+establish working generation.
+
+## Task acceptance
+
+`/terminal-curator:run` / `$terminal-curator:run` operates one finite batch.
+The runtime gate requires:
+
+| Check | Required result |
+| --- | --- |
+| Oracle in a fresh environment | Reference solution exits successfully; reward 1. |
+| NOP in a separate fresh environment | Reward 0 from failing assertions. |
+| Verifier evidence | Meaningful pytest/JUnit results, no setup/collection errors or all-skipped suite. |
+| Trial integrity | No Harbor exception; task checksums match before/after jobs and publication. |
+
+A timeout, missing reward or crash does not count as a valid NOP result.
+Only passing tasks are published; a batch with no passing tasks fails and
+preserves the previous publication.
+
+## Semantic review before handoff
+
+The operating agent must also check instruction, tests and reference behavior:
+
+1. Map assertions to stated requirements and find required behavior with no test.
+2. Execute representative inputs; check stdout/stderr, exit status, files and
+   input-preservation rules. The reference must work when Harbor invokes
+   `/solution/solve.sh` without arguments.
+3. Repair mismatches in a mutable candidate copy, preserving source attribution
+   and recording findings, changes and behavioral results in provenance.
+4. Re-import corrections with `source.type: tasks` and repeat both fresh trials.
+
+The generator's structured test review requires boolean `pass: true` and
+`issues: []`; it does not replace this audit. Keep unresolved tasks out of
+Tracer/Evaluator and leave published batches unchanged.
+
+Consumers require the publication's `validation.json` integrity record.
+Re-import older batches without it and run fresh Oracle/NOP; do not fabricate
+an approval record or update published provenance to add later review results.
+
+## Failures and recovery
+
+Oracle and NOP each have their own `validation.job_timeout_sec` limit. When
+Oracle completes, times out, or exits nonzero, the adapter retains completed
+trial evidence and automatically runs NOP for only the tasks passing the full
+Oracle gate. It copies those tasks unchanged into `nop-candidates` and checks
+their Harbor checksums and file-tree fingerprints. After an interrupted job,
+its owned Compose resources must be cleaned before continuing. A real cleanup
+or integrity failure stops the run.
+
+The report's `job_status` distinguishes completed, timed-out, failed and skipped
+jobs. A timed-out job can have passing individual trials; unfinished or invalid
+results are rejected. The same rule retains completed NOP trials if its batch
+times out. Only tasks passing both complete gates can enter the publication.
+The configured time limit and concurrency are unchanged, and a batch with no
+passing Oracle task skips NOP.
+
+Inspect the exact run report and its Oracle/NOP results before changing inputs.
+Single-candidate failures are retained; they do not discard passing siblings.
+The archive links the runtime `run_id` to its frozen config/code and exit state.
+
+Use `scripts/stop.sh` for the recorded run and preview cleanup with
+`scripts/clean.sh --dry-run`. Normal cleanup removes temporary run trees,
+including detailed trial evidence, while retaining publications, environments
+and archives. Preserve diagnostic material first. Full `--all --yes` cleanup
+requires authorization for that scope.
+
+For adapter development, run `bash tests/run.sh`; add `--with-smoke` on a
+Docker host to validate both offline fixtures without generation API calls.

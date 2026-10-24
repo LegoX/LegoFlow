@@ -1,0 +1,66 @@
+# Production schema; bounded hand-authored fixtures, no StackOverflow/LLM calls.
+meta_info:
+  name: terminal-curator
+  label: Terminal Curator
+  description: Build verified Harbor terminal tasks from StackOverflow seeds or local
+    candidates.
+  parent: legoflow
+  blocks: {}
+  dependencies:
+    from: {}
+    to:
+      harbor_tasks_dir:
+        to: tracer.input.task_source.terminal_tasks_dir
+        when:
+          tracer.input.task_source.provider: local
+          tracer.input.task_source.local_block: terminal-curator
+      eval_registry:
+        to: evaluator.input.task_source.registry_path
+        when:
+          evaluator.input.task_source.dataset_name: terminal-curator
+  repos:
+    terminal-lego:
+      commit_id: 1a2a6048a0d568891407ed3c6a441c995f4491b0
+      role: Read-only StackOverflow-to-terminal task generator.
+  resources:
+    ip: local
+    directory: null
+runtime_info:
+  input:
+    source:
+      type: tasks
+      path: tests/fixtures/tasks
+      tags:
+      - bash
+      - python
+      question_ids: []
+      max_questions: 2
+      min_score: 10
+      max_pages: 1
+    stackoverflow:
+      api_base_url: https://api.stackexchange.com/2.3
+      api_key: ''
+    llm_api:
+      api_base_url: ''
+      api_key: ''
+      model: claude-opus-5-5
+    generation:
+      workers: 1
+      request_timeout_sec: 180
+      max_retries: 2
+    validation:
+      harbor_bin: ../tracer/artifacts/env/harbor-uv/bin/harbor
+      n_concurrent: 2
+      timeout_multiplier: 1.0
+      job_timeout_sec: 1800
+  output:
+    harbor_tasks_dir:
+      path: artifacts/tasks
+      description: Only Oracle=1 and NOP=0 tasks, with verifiable_tasks.txt.
+    report:
+      path: artifacts/reports/latest.json
+      description: Source provenance, per-task validation results and Harbor job paths.
+    eval_registry:
+      path: artifacts/tasks/registry.json
+      description: Local Harbor registry for evaluator, referencing this immutable
+        verified batch.

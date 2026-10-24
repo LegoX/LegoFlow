@@ -63,6 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       curator: ${{ steps.filter.outputs.curator }}
+      terminal_curator: ${{ steps.filter.outputs.terminal_curator }}
       tracer: ${{ steps.filter.outputs.tracer }}
       evaluator: ${{ steps.filter.outputs.evaluator }}
       trainer: ${{ steps.filter.outputs.trainer }}
@@ -78,6 +79,12 @@ jobs:
           # filter true for any change at all.
           predicate-quantifier: 'some-with-excludes'
           filters: |
+            terminal_curator:
+              - 'blocks/terminal-curator/**'
+              - 'blocks/tracer/scripts/task_source.py'
+              - 'scripts/validate_config.py'
+              - 'scripts/redact_archive_config.py'
+              - '.github/workflows/ci.yml'
             curator:
               - 'blocks/curator/**'
               # Block documentation is covered by the always-on root sanity
@@ -100,6 +107,23 @@ jobs:
               - '!blocks/trainer/**/*.md'
               - '!blocks/trainer/**/*.mdx'
               - '.github/workflows/ci.yml'
+
+  # Terminal wrapper tests run without Docker, provider keys, or vendored checkouts.
+  terminal-curator-cases:
+    name: terminal-curator tests (cases)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.terminal_curator == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: pip install --no-cache-dir -r blocks/terminal-curator/tests/requirements.txt
+      - name: Run terminal-curator wrapper tests
+        run: bash blocks/terminal-curator/tests/run.sh
 
   # --- curator: cheap test cases (self-hosted, fixed-paths CI runner) ---------
   curator-cases:

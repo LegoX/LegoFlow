@@ -12,6 +12,13 @@ description: >
 
 # /root:setup
 
+
+Read [Effective profiles](../../resources/EFFECTIVE_PROFILES.md) before loading
+child configs. Honor explicit profiles and `TRAJGEN_CONFIG`, `EVAL_CONFIG`, and
+`TERMINAL_CURATOR_CONFIG` with block-relative path resolution. Use that same
+effective profile set for source selection, sibling dependency checks, resource
+selection, and child dispatch; never reset a parent-selected profile.
+
 Per the block plugin guidelines (`resources/BLOCK_DEFINITION.md` → § Plugin
 skills), every block exposes a `:setup` skill that bootstraps everything the
 block needs before `:check` can pass. At the root level this covers:
@@ -33,11 +40,33 @@ block needs before `:check` can pass. At the root level this covers:
    infrastructure credentials that every block reads through
    `scripts/shared_credentials.sh`. Both default to all-empty (feature off) and
    are filled in step 4/5 below, never automatically.
-3. **Recurse (optional)** — for each `name` in `meta_info.blocks`, ask the
+3. **Recurse (optional)** — resolve the active task producer as described
+   below, then for each selected `name` in `meta_info.blocks`, ask the
    user "set up `<name>` now?" and on yes hand off to `/<name>:setup`. Each
    block's setup fills its own `runtime_info.input`, replacing `human`
    markers with real values (never writing secrets into config — env/file
    channels only, as each field's inline comment directs).
+
+### Active producer selection
+
+Read the effective Tracer config → `runtime_info.input.task_source` before
+recursing. With `provider: local`, use `local_block: curator` by default or
+`terminal-curator` when selected. An `external` local source or a non-local
+provider selects neither producer for Tracer. If Evaluator is in scope and
+its `task_source.dataset_name` is `terminal-curator`, also select
+`terminal-curator`: its exported registry is an active upstream dependency.
+Use the union of both consumers' producer requirements. Set up only those
+selected producers and the
+other requested downstream children; do not bootstrap the unused producer,
+require its API credentials, or run any generation batch. State which one was
+skipped. Reject an unknown `local_block` value. A directly targeted Evaluator
+setup does not launch or set up a curation sibling automatically.
+
+An explicitly targeted setup such as `/root:setup terminal-curator` invokes
+`/terminal-curator:setup` without changing Tracer's selector. Existing user
+authorization to set up the requested scope is sufficient; do not ask again
+for each dependency installation already covered by that scope. Missing
+inputs still need clarification before dependent work proceeds.
 
 ## Optional extras
 

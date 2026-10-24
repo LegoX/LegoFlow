@@ -1,0 +1,12 @@
+email,name,updated_epoch,status
+alice@example.com," Alice, newest ",010,active
+BOB@example.com,Bob current,101,active
+gone@example.com,Gone deleted,111," DELETED "
+carol@example.com,Carol removed,121,deleted
+carol@example.com," Carol
+restored ",122,active
+tie@example.com,Tie source z first,130,active
+tie@example.com,Tie source z last,130,active
+new@example.com,New contact,0,active
+badplus@example.com,Plus timestamp,+4,active
+badfloat@example.com,Float timestamp,4.0,active

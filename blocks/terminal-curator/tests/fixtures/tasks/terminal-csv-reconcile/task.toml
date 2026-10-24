@@ -1,0 +1,20 @@
+schema_version = "1.1"
+
+[metadata]
+author_name = "LegoFlow maintainers"
+difficulty = "medium"
+category = "data-processing"
+tags = ["terminal", "python", "csv", "offline-fixture"]
+dataset_source = "hand-authored-offline-fixture"
+
+[verifier]
+timeout_sec = 120.0
+
+[agent]
+timeout_sec = 300.0
+
+[environment]
+build_timeout_sec = 300.0
+cpus = 1
+memory_mb = 1024
+storage_mb = 2048

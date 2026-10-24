@@ -136,7 +136,7 @@ serve it through the local model path.
 | `litellm_proxy.port` | Yes | `4101` | Change only if the local port is occupied. |
 | `task_source.dataset_name` | Yes | `swebench-verified` | Choose another Harbor benchmark. |
 | `task_source.version` | Yes | `"1.0"` | Match the Harbor registry entry. |
-| `task_source.registry_path` | Yes | `repos/harbor/registry.json` | Change only for a custom Harbor registry. |
+| `task_source.registry_path` | Yes | `repos/harbor/registry.json` | For Terminal Curator, select `../terminal-curator/artifacts/tasks/registry.json` with `dataset_name: terminal-curator`, `version: "1.0"`, and `no_hack: false`. |
 | `task_source.no_hack` | No | `true` | Toggle hardened SWE-bench Verified behavior. |
 | `harbor_job.n_concurrent` | Yes | `24` | Tune for endpoint capacity and machine resources. |
 | `harbor_job.n_tasks` | No | `null` | Use a number for smoke runs; `null` runs the full benchmark. |

@@ -9,4 +9,4 @@ Read and follow `blocks/evaluator/.claude/plugins/evaluator-plugin/skills/setup/
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$evaluator-setup`.
+Invoke this Codex skill as `$evaluator:setup`.

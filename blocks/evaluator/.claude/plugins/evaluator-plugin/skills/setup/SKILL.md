@@ -13,6 +13,14 @@ description: >
 
 # /evaluator:setup
 
+
+Use the complete effective profile selected by `EVAL_CONFIG` (relative filenames
+resolve from `blocks/evaluator/`), otherwise this block's `config.yaml`. Retain a
+parent-selected profile throughout checks, setup, launch, and archive. Block-local
+references to `config.yaml` below mean that profile; root shared-credential config
+references keep their existing meaning. Do not reset the selector or copy a
+private profile over the committed config.
+
 Brings the evaluator block from a fresh clone to "`/evaluator:check` passes." The
 skill is idempotent: any step already satisfied is skipped. It never
 launches Harbor — that's `/evaluator:run`.
@@ -132,12 +140,17 @@ Walk `runtime_info.input` and prompt only for unset fields (the literal `human` 
 - `litellm_proxy.{config_template, port, master_key}` — defaults
   (`scripts/serve_llm/litellm_config.example.yaml`, port `4101`) are
   usually fine; the template path is resolved relative to `repos/harbor`.
-- `task_source.{dataset_name, version, no_hack}` — `(dataset_name, version)`
-  must resolve to an entry in `repos/harbor/registry.json`. Suggest a
+- `task_source.{dataset_name, version, registry_path, no_hack}` — `(dataset_name, version)`
+  must resolve to an entry in the configured registry. Suggest a
   benchmark from the curated `CLAUDE.md` table (e.g. `swebench-verified@1.0`,
-  or a `-100` subset for a smoke run). Keep `provider: harbor_registry` and
-  `registry_path: repos/harbor/registry.json` — evaluator does **not** stage
-  tasks locally. `no_hack` defaults to `false`; set `true` only with
+  or a `-100` subset for a smoke run). Keep `provider: harbor_registry`;
+  `registry_path: repos/harbor/registry.json` is the benchmark default.
+  For a Terminal Curator publication, select `terminal-curator@1.0`, use
+  `../terminal-curator/artifacts/tasks/registry.json`, and keep `no_hack: false`
+  and `job_analysis.enabled: false`. Verify the registry and its immutable
+  local task paths are available on the evaluation host. Do not overwrite
+  that custom registry choice with the default path. Evaluator does **not**
+  stage tasks locally. Set `no_hack: true` only with
   `swebench-verified` to run the hardened local `swebench-verified-nohack`
   registry (agent egress allowlisted to LiteLLM). If the user picks a
   benchmark **outside** the curated table, surface the agent-compatibility

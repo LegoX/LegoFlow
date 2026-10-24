@@ -9,4 +9,4 @@ Read and follow `blocks/tracer/.claude/plugins/tracer-plugin/skills/setup/SKILL.
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$tracer-setup`.
+Invoke this Codex skill as `$tracer:setup`.

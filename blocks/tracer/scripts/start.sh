@@ -4,6 +4,7 @@ set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${TRAJGEN_CONFIG:-$BLOCK_DIR/config.yaml}"
+[[ "$CONFIG" = /* ]] || CONFIG="$BLOCK_DIR/$CONFIG"
 export TRAJGEN_CONFIG="$CONFIG"
 LOG_DIR="$BLOCK_DIR/artifacts/logs"
 PRINT_COMMAND_ONLY=0
@@ -134,8 +135,17 @@ except ImportError:
     sys.exit(2)
 
 config_path, output_path, template_path = sys.argv[1:4]
-with open(config_path, encoding="utf-8") as fh:
-    config = yaml.safe_load(fh) or {}
+def read_yaml(path):
+    try:
+        with open(path, encoding="utf-8") as stream:
+            return yaml.safe_load(stream) or {}
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        print(f"ERROR: invalid YAML in {path}{location}", file=sys.stderr)
+        raise SystemExit(2)
+
+config = read_yaml(config_path)
 
 model_api = dict((config.get("runtime_info") or {}).get("input", {}).get("llm_api") or {})
 proxy = (config.get("runtime_info") or {}).get("input", {}).get("litellm_proxy") or {}
@@ -165,8 +175,7 @@ if template_path:
     if not template_file.is_file():
         print(f"ERROR: LiteLLM config template not found: {template_path}", file=sys.stderr)
         sys.exit(2)
-    with open(template_file, encoding="utf-8") as fh:
-        loaded = yaml.safe_load(fh) or {}
+    loaded = read_yaml(template_file)
     if not isinstance(loaded, dict):
         print(f"ERROR: LiteLLM config template must be a mapping: {template_path}", file=sys.stderr)
         sys.exit(2)
@@ -205,7 +214,9 @@ litellm_settings.update({
 })
 data["litellm_settings"] = litellm_settings
 
-with open(output_path, "w", encoding="utf-8") as fh:
+fd = os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+os.chmod(output_path, 0o600)
+with os.fdopen(fd, "w", encoding="utf-8") as fh:
     yaml.safe_dump(data, fh, sort_keys=False)
 PY
 }
@@ -247,10 +258,32 @@ fi
 # Stage by default. Preflight no longer fails on an unstaged block — an unstaged
 # block is simply one that has not run yet — so a launch has to do the staging
 # itself, or Harbor is pointed at a directory nobody filled. Staging is
-# idempotent (a valid dataset directory is reused) and, now that a local pool is
-# linked rather than copied, close to free. Set TRAJGEN_PREPARE_TASKS=0 to skip.
+# idempotent for the same selection. Capture its version path: a different
+# prepare may advance the public pointer while Harbor has queued trials.
+# Local sources remain task links; mutable external/SWE pools are not byte
+# snapshots. Set TRAJGEN_PREPARE_TASKS=0 to use existing staging.
+PREPARED_HARBOR_DATASET_PATH=""
 if [[ "${TRAJGEN_PREPARE_TASKS:-1}" != "0" ]]; then
-  bash "$BLOCK_DIR/scripts/prepare_tasks.sh" --config "$CONFIG"
+  PREPARE_RESULT="$(mktemp)"
+  if bash "$BLOCK_DIR/scripts/prepare_tasks.sh" --config "$CONFIG" --result-file "$PREPARE_RESULT"; then
+    if ! PREPARED_HARBOR_DATASET_PATH="$(python3 - "$PREPARE_RESULT" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+data = json.loads(Path(sys.argv[1]).read_text())
+print(Path(data["dataset_path"]).resolve(strict=True))
+PY
+)"; then
+      rm -f -- "$PREPARE_RESULT"
+      exit 1
+    fi
+  else
+    prepare_status=$?
+    rm -f -- "$PREPARE_RESULT"
+    exit "$prepare_status"
+  fi
+  rm -f -- "$PREPARE_RESULT"
 fi
 
 echo "=== tracer preflight ==="
@@ -264,9 +297,9 @@ LITELLM_UV_RAW="$(cfg meta_info.environment.litellm_uv)"
 HARBOR_DATASET_PATH_RAW="$(cfg runtime_info.input.harbor_job.dataset_path)"
 HARBOR_JOBS_DIR_RAW="$(cfg runtime_info.input.harbor_job.jobs_dir)"
 HARBOR_DATASET="$(cfg runtime_info.input.harbor_job.dataset)"
-TASK_SOURCE_DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
+TASK_SOURCE_DATASET_NAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_name)"
 if [[ -z "$HARBOR_DATASET" && -n "$TASK_SOURCE_DATASET_NAME" ]]; then
-  HARBOR_DATASET="$(basename "$TASK_SOURCE_DATASET_NAME")"
+  HARBOR_DATASET="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_id)"
 fi
 if [[ -z "$HARBOR_DATASET_PATH_RAW" && -n "$HARBOR_DATASET" ]]; then
   HARBOR_DATASET_PATH_RAW="artifacts/tasks/$HARBOR_DATASET"
@@ -360,7 +393,16 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/tracer_$(date +%Y-%m-%d_%H-%M-%S).log"
 
 JOB_DIR="$(abspath "$JOB_DIR_RAW")"
-HARBOR_DATASET_PATH="$(abspath "$HARBOR_DATASET_PATH_RAW")"
+if [[ -n "$PREPARED_HARBOR_DATASET_PATH" ]]; then
+  HARBOR_DATASET_PATH="$PREPARED_HARBOR_DATASET_PATH"
+else
+  HARBOR_DATASET_PATH="$(python3 - "$(abspath "$HARBOR_DATASET_PATH_RAW")" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).resolve(strict=True))
+PY
+)"
+fi
 HARBOR_JOBS_DIR="$(abspath "$HARBOR_JOBS_DIR_RAW")"
 mkdir -p "$(dirname "$HARBOR_DATASET_PATH")" "$HARBOR_JOBS_DIR" "$JOB_DIR"
 
@@ -626,7 +668,10 @@ echo "Config:     $JOB_DIR_RAW/config.yaml" | tee -a "$LOG_FILE"
 echo "Command:    $RUN_COMMAND" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
-(cd "$HARBOR_DIR" && bash -lc "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
+if [[ "$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field producer)" == terminal-curator ]]; then
+  python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --staging "$HARBOR_DATASET_PATH"
+fi
+(cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
 
 SFT_CONVERT_ENABLED="$(cfg runtime_info.input.sft_conversion.enabled)"
 if [[ "$SFT_CONVERT_ENABLED" == "true" ]]; then

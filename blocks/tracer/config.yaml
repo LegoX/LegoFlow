@@ -8,7 +8,10 @@ meta_info:
     from:
       task_source.dataset_name:
         from: curator.output.merged_tasks_dir
-        when: {task_source.provider: local}
+        when: {task_source.provider: local, task_source.local_block: curator}
+      task_source.terminal_tasks_dir:
+        from: terminal-curator.output.harbor_tasks_dir
+        when: {task_source.provider: local, task_source.local_block: terminal-curator}
     to:
       raw_trajectories_dir:
         to: trainer.input.source.job_dir
@@ -63,8 +66,10 @@ runtime_info:
       master_key: legoflow-local-proxy-key
 
     task_source:
-      provider: local                  # local (curator) | huggingface — see /tracer:setup reference
+      provider: local                  # local | huggingface
+      local_block: curator             # curator | terminal-curator | external (used only for local)
       dataset_name: ../curator/artifacts/merged_swe_tasks
+      terminal_tasks_dir: ../terminal-curator/artifacts/tasks
       split: train
 
     harbor_job:

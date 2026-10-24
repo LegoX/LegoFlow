@@ -1,4 +1,4 @@
-import { curatorDocs, docs, evaluatorDocs, tracerDocs, trainerDocs } from '@/.source/server';
+import { curatorDocs, docs, evaluatorDocs, terminalCuratorDocs, tracerDocs, trainerDocs } from '@/.source/server';
 import { loader } from 'fumadocs-core/source';
 import { lucideIconsPlugin } from 'fumadocs-core/source/lucide-icons';
 
@@ -15,6 +15,11 @@ const blockSources = {
   curator: loader({
     baseUrl: '/docs/blocks/curator',
     source: curatorDocs.toFumadocsSource(),
+    plugins,
+  }),
+  'terminal-curator': loader({
+    baseUrl: '/docs/blocks/terminal-curator',
+    source: terminalCuratorDocs.toFumadocsSource(),
     plugins,
   }),
   tracer: loader({
@@ -38,6 +43,7 @@ type BlockName = keyof typeof blockSources;
 
 const blockLabels: Record<BlockName, string> = {
   curator: 'Curator',
+  'terminal-curator': 'Terminal Curator',
   tracer: 'Tracer',
   trainer: 'Trainer',
   evaluator: 'Evaluator',
@@ -46,10 +52,21 @@ const blockLabels: Record<BlockName, string> = {
 function isBlockName(value: string | undefined): value is BlockName {
   return (
     value === 'curator' ||
+    value === 'terminal-curator' ||
     value === 'tracer' ||
     value === 'trainer' ||
     value === 'evaluator'
   );
+}
+
+// Match a complete namespace, not names such as terminal-curator-extra.
+function mountedBlock(href: string | undefined): BlockName | undefined {
+  const pathname = href?.split(/[?#]/, 1)[0];
+  if (!pathname) return undefined;
+  return (Object.keys(blockSources) as BlockName[]).find((name) => {
+    const base = `/docs/blocks/${name}`;
+    return pathname === base || pathname.startsWith(`${base}/`);
+  });
 }
 
 function blockFolder(name: BlockName) {
@@ -74,9 +91,9 @@ function resolveBlockHref(
   // namespace instead of letting fumadocs resolve against the mounted page's
   // final slug (which can produce /docs/blocks/<page>/...).
   const blockBase = `/docs/blocks/${name}`;
-  if (href === blockBase || href.startsWith(`${blockBase}/`) || href.startsWith(`${blockBase}#`)) {
-    return href;
-  }
+  // An explicit link to any mounted block already has its final namespace.
+  // In particular, a cross-block link must not be prefixed with this block.
+  if (mountedBlock(href)) return href;
 
   // fumadocs may already have resolved a standalone /docs/... link against
   // the mounted page before this hook runs, yielding
@@ -92,6 +109,9 @@ function resolveBlockHref(
   ) {
     return `${blockBase}${href.slice(syntheticBase.length)}`;
   }
+
+  // Keep unknown explicit block routes intact rather than inventing a target.
+  if (href.startsWith('/docs/blocks/')) return href;
 
   if (href === '/docs' || href.startsWith('/docs/') || href.startsWith('/docs#')) {
     return `${blockBase}${href.slice('/docs'.length)}`;
@@ -113,6 +133,7 @@ function mergedPageTree() {
         children: [
           ...(node.children ?? []),
           blockFolder('curator'),
+          blockFolder('terminal-curator'),
           blockFolder('tracer'),
           blockFolder('trainer'),
           blockFolder('evaluator'),
@@ -179,54 +200,16 @@ export const source = {
   },
 
   resolveHref(href: string, parent: any) {
-    if (parent.url?.startsWith('/docs/blocks/curator')) {
-      return resolveBlockHref('curator', href, parent);
-    }
-
-    if (parent.url?.startsWith('/docs/blocks/tracer')) {
-      return resolveBlockHref('tracer', href, parent);
-    }
-
-    if (parent.url?.startsWith('/docs/blocks/trainer')) {
-      return resolveBlockHref('trainer', href, parent);
-    }
-
-    if (parent.url?.startsWith('/docs/blocks/evaluator')) {
-      return resolveBlockHref('evaluator', href, parent);
-    }
-
-    return rootSource.resolveHref(href, parent);
+    const block = mountedBlock(parent.url);
+    return block ? resolveBlockHref(block, href, parent) : rootSource.resolveHref(href, parent);
   },
 
   getPageByHref(href: string, options?: any) {
-    if (href.startsWith('/docs/blocks/curator')) {
-      return blockSources.curator.getPageByHref(
-        href.replace('/docs/blocks/curator', '/docs'),
-        options,
-      );
-    }
-
-    if (href.startsWith('/docs/blocks/tracer')) {
-      return blockSources.tracer.getPageByHref(
-        href.replace('/docs/blocks/tracer', '/docs'),
-        options,
-      );
-    }
-
-    if (href.startsWith('/docs/blocks/trainer')) {
-      return blockSources.trainer.getPageByHref(
-        href.replace('/docs/blocks/trainer', '/docs'),
-        options,
-      );
-    }
-
-    if (href.startsWith('/docs/blocks/evaluator')) {
-      return blockSources.evaluator.getPageByHref(
-        href.replace('/docs/blocks/evaluator', '/docs'),
-        options,
-      );
-    }
-
-    return rootSource.getPageByHref(href, options);
+    const block = mountedBlock(href);
+    // Each block loader was created with the mounted baseUrl. Removing that
+    // prefix before lookup makes every otherwise valid mounted href miss.
+    return block
+      ? blockSources[block].getPageByHref(href, options)
+      : rootSource.getPageByHref(href, options);
   },
 };

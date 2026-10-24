@@ -1,0 +1,103 @@
+---
+title: Output Format
+---
+
+## Published task pool
+
+`runtime_info.output.harbor_tasks_dir.path` defaults to `artifacts/tasks/`,
+a symlink to an immutable `artifacts/tasks-versions/<batch-id>/` publication:
+
+```text
+artifacts/tasks/
+├── verifiable_tasks.txt
+├── registry.json
+├── validation.json
+└── <task-id>/
+    ├── instruction.md
+    ├── task.toml
+    ├── provenance.json
+    ├── environment/Dockerfile
+    ├── solution/solve.sh
+    ├── tests/test.sh
+    └── tests/test_outputs.py
+```
+
+`verifiable_tasks.txt` lists accepted task IDs, one per line. Tracer uses it
+as its allowlist. `registry.json` describes the same IDs as
+`terminal-curator@1.0`, using absolute paths into that immutable batch for
+Evaluator. Both switch together; keep versions referenced by existing jobs.
+See [Downstream Handoff](./usage/downstream-handoff.mdx) for consumer configuration.
+
+## Verified, rejected and unfinished tasks
+
+Both Curator and Terminal Curator use `verifiable_tasks.txt` as the authoritative
+list of runtime-verified tasks. Directory existence alone never proves acceptance.
+Their raw layouts differ: Curator's per-language pool can also contain candidates;
+Terminal Curator's `artifacts/tasks/` contains only published tasks, like Curator's
+verified `artifacts/merged_swe_tasks/` export.
+
+| Location | Meaning |
+| --- | --- |
+| `artifacts/tasks/<task-id>/` plus its manifest entry | Published after fresh Oracle=1 and NOP=0; `validation.json` binds its identity. |
+| `artifacts/runs/<run-id>/candidates/` | Generated candidates, including partial or rejected attempts when files exist. |
+| `artifacts/runs/<run-id>/normalized/` | Candidates that passed normalization; Oracle/NOP may still fail or be unfinished. |
+| `artifacts/runs/<run-id>/report.json` | `verified_tasks`, `rejected` reasons, `task_progress` and per-role `validation` results. |
+
+There is no separate `failed/` pool. Imported originals stay at `source.path`;
+failed generation may leave only a report entry. If no task passes, the previous
+publication stays available. Match run IDs before comparing its manifest with
+the latest report; Dashboard's **retained** batches are historical publications.
+
+Newly generated candidates also retain `generation-test-review.json`: the
+structured approval and hashes of the instruction, reference and tests before
+normalization. Preserve it as generation history when auditing a corrected copy.
+
+## Reports and checksums
+
+| Path | Contents |
+| --- | --- |
+| `artifacts/state.json` | Latest phase, counters and per-task progress. |
+| `artifacts/reports/latest.json` | Latest run report, including failures and validation outcomes. |
+| `artifacts/runs/<run-id>/report.json` | Exact run report and links to its local evidence. |
+| `artifacts/runs/<run-id>/validation/` | Raw Oracle/NOP trial results and JUnit reports. |
+
+`generation_completed` includes failed attempts; `generation_failed` is that
+subset. Imports use `collected_questions: null`. Candidate counts are not
+verified-task counts.
+
+| Report field | Identity |
+| --- | --- |
+| `harbor_task_checksums` | Native Harbor checksum; must match each trial's `task_checksum`. |
+| `tree_fingerprints` | File contents, types, permissions and empty directories. |
+| `task_checksums` | Separate block file digest; not interchangeable with Harbor's checksum. |
+
+These identities are checked around validation and on the copied publication.
+`validation.json` binds the accepted IDs, Oracle/NOP gate outcomes and task
+identities to that batch. Tracer and Evaluator check it before consumption;
+changed task contents, modes, directory trees or manifests are rejected.
+Use trial results and the [semantic review](./usage/validation-checks.mdx)
+record together before downstream use.
+
+## Run archives
+
+`start.sh` archives on success, failure or interruption and appends
+`artifacts/index.yaml`:
+
+```text
+artifacts/archives/run_NNN/
+├── metadata.yaml
+├── config.yaml
+├── report.json
+└── scripts/
+```
+
+The archive stores redacted configuration and code frozen at run start,
+exit status and repository SHAs. Its sequential `id: run_NNN` differs from
+the runtime `run_id`; `report.json` is included only for that exact run.
+Failed preflight may have no config/report snapshot. No vendor tree or
+credentials are copied.
+
+For manual archival, use `--run-id <id>` to link a specific report. A fresh
+checkout has no index. Raw candidates, traces and archives are local ignored
+artifacts; review them before sharing and retain diagnostic evidence before
+cleanup.

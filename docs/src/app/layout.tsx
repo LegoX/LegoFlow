@@ -5,7 +5,7 @@ import "./global.css";
 export const metadata: Metadata = {
   title: "LegoFlow",
   description:
-    "A self-evolving LLM development pipeline composed of pluggable blocks: curator → tracer → trainer → evaluator.",
+    "A self-evolving LLM development pipeline with SWE or terminal task curation, trajectory generation, training, and evaluation.",
 };
 
 export default function Layout({ children }: LayoutProps<"/">) {

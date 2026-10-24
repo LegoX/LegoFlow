@@ -5,7 +5,8 @@
 set -euo pipefail
 
 BLOCK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$BLOCK_DIR/config.yaml"
+CONFIG="${TRAJGEN_CONFIG:-$BLOCK_DIR/config.yaml}"
+[[ "$CONFIG" = /* ]] || CONFIG="$BLOCK_DIR/$CONFIG"
 
 usage() {
   cat <<'EOF'
@@ -105,8 +106,14 @@ except ImportError:
     sys.exit(2)
 
 config_path, dotted_key = sys.argv[1], sys.argv[2]
-with open(config_path, encoding="utf-8") as fh:
-    data = yaml.safe_load(fh) or {}
+try:
+    with open(config_path, encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+except yaml.YAMLError as exc:
+    mark = getattr(exc, "problem_mark", None)
+    location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+    print(f"ERROR: invalid YAML in {config_path}{location}", file=sys.stderr)
+    raise SystemExit(2)
 
 value = data
 for part in dotted_key.split("."):

@@ -9,4 +9,4 @@ Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/run/SKILL.
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$curator-run`.
+Invoke this Codex skill as `$curator:run`.

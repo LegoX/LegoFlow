@@ -43,12 +43,13 @@
 
 ![LegoFlow block tree](docs/public/figures/my-version-coding-repos-expandable.png)
 
-LegoFlow 采用 **block** 的树形结构。根 block 编排四个子 block：
+LegoFlow 采用 **block** 的树形结构。根 block 编排五个子 block，SWE 和 terminal 两种任务生产端共用后续流水线：
 
 
 | Block | 职责 |
 | ----- | ---- |
-| [`curator`](https://legoflow-docs.legox.net/docs/blocks/curator/getting-started) | 从 GitHub PR、issue 以及在线论坛中构建高质量 SWE 与编程任务 |
+| [`curator`](https://legoflow-docs.legox.net/docs/blocks/curator/getting-started) | 从 GitHub pull request 构建已验证的 SWE 任务 |
+| [`terminal-curator`](blocks/terminal-curator/README.md) | 从有限的 Stack Overflow、问题 JSON 或本地候选批次构建 Harbor terminal 任务，通过 Oracle=1、NOP=0 后交付 Tracer 或 Evaluator |
 | [`tracer`](https://legoflow-docs.legox.net/docs/blocks/tracer/getting-started) | 采集带可验证奖励的高质量轨迹，支持多种编程 scaffold |
 | [`trainer`](https://legoflow-docs.legox.net/docs/blocks/trainer/getting-started) | 把 rollout 轨迹转成可训练格式，并启动端到端训练 |
 | [`evaluator`](https://legoflow-docs.legox.net/docs/blocks/evaluator/getting-started) | 在编程 benchmark 上评测 checkpoint，并支持按 rubric 与标签做细粒度分析 |
@@ -93,12 +94,14 @@ cd LegoFlow
 ```bash
 claude plugin marketplace add ./.claude/plugins
 claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/terminal-curator/.claude/plugins
 claude plugin marketplace add ./blocks/tracer/.claude/plugins
 claude plugin marketplace add ./blocks/trainer/.claude/plugins
 claude plugin marketplace add ./blocks/evaluator/.claude/plugins
 
 claude plugin install root@root-block
 claude plugin install curator@curator-block
+claude plugin install terminal-curator@terminal-curator-block
 claude plugin install tracer@tracer
 claude plugin install trainer@trainer-block
 claude plugin install evaluator@evaluator-block
@@ -114,12 +117,13 @@ LegoFlow 还在 `plugins/` 下提供了封装 Claude Code skills 的 Codex 插�
 codex plugin marketplace add .
 codex plugin add root@legoflow
 codex plugin add curator@legoflow
+codex plugin add terminal-curator@legoflow
 codex plugin add tracer@legoflow
 codex plugin add trainer@legoflow
 codex plugin add evaluator@legoflow
 ```
 
-安装完成后重启 Codex。Codex 使用 `$<block>-<skill>` 形式的原生 skills，例如 `$curator-check`。
+安装完成后重启 Codex。Codex 使用 `$<block>:<skill>` 形式的原生 skills，例如 `$curator:check`。
 
 ### 使用示例
 
@@ -131,14 +135,38 @@ codex plugin add evaluator@legoflow
 
 | 工作流 | Claude Code | Codex |
 | --- | --- | --- |
-| 准备 | `/<block>:setup` | `$<block>-setup` |
-| 检查 | `/<block>:check` | `$<block>-check` |
-| 运行 | `/<block>:run` | `$<block>-run` |
-| 看板 | `/<block>:dashboard` | `$<block>-dashboard` |
+| 准备 | `/<block>:setup` | `$<block>:setup` |
+| 检查 | `/<block>:check` | `$<block>:check` |
+| 运行 | `/<block>:run` | `$<block>:run` |
+| 看板 | `/<block>:dashboard` | `$<block>:dashboard` |
 
 setup skill 用于准备依赖并填写 `config.yaml`；check 用于校验配置并执行预检；run 用于执行任务并把中间产物归档到 `artifacts/`；dashboard 用于监控运行进度与状态。
 
 各个 block 的详细指引见 [docs](https://legoflow-docs.legox.net/docs/running-blocks/block-by-block)。
+
+构建 terminal 任务时，填写 `blocks/terminal-curator/config.yaml`，然后在
+Claude Code 中使用 `/terminal-curator:{setup,check,run,dashboard}`，或在
+Codex 中使用对应的 `$terminal-curator:<skill>`。密钥通过环境变量提供。
+将 Tracer 配置为 `task_source.provider: local`、
+`task_source.local_block: terminal-curator`，并设置
+`terminal_tasks_dir: ../terminal-curator/artifacts/tasks`。
+只有独立新容器中通过 Oracle=1、NOP=0 验证且列入
+`verifiable_tasks.txt` 的任务才会进入推理；现有 SWE 工作流默认保留
+`local_block: curator`。详见
+[terminal 配置说明](blocks/terminal-curator/docs/content/docs/usage/configuration.mdx)。
+
+终端编排请使用 `/root:run`（Codex 为 `$root:run`）：producer skill 会逐项核对
+题面、tests 和参考解，记录修正依据，再重新执行独立 Oracle/NOP 验证后交给下游。
+旧的 `bash scripts/start.sh` 会在生成前拒绝隐式 terminal→Tracer 串联；可显式执行
+`--terminal-curator-only`，由 agent 完成语义审查和重验证后再用 `--tracer-only`。
+SWE shell helper 保留原有 Python `create_py.sh` 启动方式。root skills 全程沿用
+`TERMINAL_CURATOR_CONFIG`、`TRAJGEN_CONFIG`、`EVAL_CONFIG` 选择的完整私有配置；
+相对配置文件名以对应 block 目录为基准。
+
+发布结果还包含原生 `terminal-curator@1.0` registry，可交给 Evaluator。
+将 `registry_path` 设为 `../terminal-curator/artifacts/tasks/registry.json`，
+并设置 `no_hack: false`、`job_analysis.enabled: false`。完整配置见
+[Evaluator 接入说明](blocks/terminal-curator/docs/content/docs/usage/downstream-handoff.mdx#evaluator)。
 
 #### 运行多个 Block
 
@@ -173,7 +201,7 @@ LegoFlow 构建在以下项目之上：[Harbor](https://www.harborframework.com/
 
 ## Roadmap
 
-- [ ] **TerminalBench**：将 [Terminal-Lego](https://www.legox.net/blog/terminal-lego/) 的工作流迁移并升级到 LegoFlow，以适配 [Terminal-Bench 3.0](https://www.tbench.ai/news/terminal-bench-3-0) 和 [Terminal-Bench 4.0](https://www.tbench.ai/news/terminal-bench-4-0)。
+- [ ] **TerminalBench**：在 `terminal-curator` 集成 [Terminal-Lego](https://www.legox.net/blog/terminal-lego/) 的基础上扩展任务来源与覆盖范围，以适配 [Terminal-Bench 3.0](https://www.tbench.ai/news/terminal-bench-3-0) 和 [Terminal-Bench 4.0](https://www.tbench.ai/news/terminal-bench-4-0)。
 - [ ] **ProgramBench 与 NL2Repo**：挖掘更加复杂的长程软件工程任务，这些任务从一个可执行程序或自然语言需求开始。
 - [ ] **递归自我改进**：利用 block 的执行反馈，支持更加通用、可长期运行的自我改进系统。
 

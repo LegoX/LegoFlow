@@ -9,4 +9,4 @@ Read and follow `blocks/tracer/.claude/plugins/tracer-plugin/skills/check/SKILL.
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$tracer-check`.
+Invoke this Codex skill as `$tracer:check`.

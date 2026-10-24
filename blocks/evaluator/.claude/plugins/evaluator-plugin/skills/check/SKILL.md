@@ -8,7 +8,7 @@ description: >
   `bash scripts/probe_llm_completion.sh` (a minimal real chat
   completion); confirm the configured
   `(task_source.dataset_name, version)` resolves in
-  `repos/harbor/registry.json`; confirm the LiteLLM proxy port is free
+  the configured registry (`repos/harbor/registry.json` by default); confirm the LiteLLM proxy port is free
   or held by the current job. Read-only. Reports all failures in one
   consolidated message with a run-configuration summary.
   **Mandatory before `:run`.** Triggers on phrases like "check evaluator",
@@ -17,6 +17,14 @@ description: >
 ---
 
 # /evaluator:check
+
+
+Use the complete effective profile selected by `EVAL_CONFIG` (relative filenames
+resolve from `blocks/evaluator/`), otherwise this block's `config.yaml`. Retain a
+parent-selected profile throughout checks, setup, launch, and archive. Block-local
+references to `config.yaml` below mean that profile; root shared-credential config
+references keep their existing meaning. Do not reset the selector or copy a
+private profile over the committed config.
 
 Read-only preflight. Wraps `scripts/dryrun.sh` — the single source of
 truth for what "evaluator is ready" means — and adds the few live, contextual
@@ -79,6 +87,14 @@ the other end does not actually provide. The one exception is when
 smoke, not real drift, and must not be reported as such.
 
 ## Contextual checks the skill adds
+
+For `dataset_name: terminal-curator`, resolve the conditional
+`terminal-curator.output.eval_registry` dependency and inspect the exported
+registry's local task paths on the configured execution host. They must point
+to an available immutable publication. Require `no_hack: false` and use
+`job_analysis.enabled: false`; SWE gold-dataset analysis does not describe
+these tasks. Do not substitute the default benchmark registry or launch
+another curation batch as part of this check.
 
 `dryrun.sh` is static. Add these live checks and fold them into the
 report:

@@ -16,3 +16,6 @@
 [submodule "blocks/evaluator/repos/harbor"]
 	path = blocks/evaluator/repos/harbor
 	url = https://github.com/LegoX/harbor.git
+[submodule "blocks/terminal-curator/repos/terminal-lego"]
+	path = blocks/terminal-curator/repos/terminal-lego
+	url = https://github.com/LegoX/Terminal-Lego.git

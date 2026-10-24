@@ -9,8 +9,10 @@ Before starting, make sure you have the pieces that LegoFlow cannot create
 for you:
 
 - Claude Code or Codex, which operate LegoFlow through plugin skills.
-- LLM endpoints for Curator, Tracer, and Evaluator jobs.
+- LLM endpoints for the selected task producer, Tracer, and Evaluator jobs.
 - GitHub token(s), used by Curator when collecting pull requests.
+- A Docker-capable CPU host for Harbor task validation and rollout. Terminal
+  Curator optionally uses a Stack Exchange API key instead of GitHub tokens.
 - A GPU server if you plan to run training or evaluate self-hosted models.
 - Optional Docker credentials, useful when large runs pull many task images.
 - Optional Cloudflare credentials, only needed if you want to publish dashboards.
@@ -27,6 +29,7 @@ each local plugin directory as a Claude Code marketplace:
 ```bash
 claude plugin marketplace add ./.claude/plugins
 claude plugin marketplace add ./blocks/curator/.claude/plugins
+claude plugin marketplace add ./blocks/terminal-curator/.claude/plugins
 claude plugin marketplace add ./blocks/tracer/.claude/plugins
 claude plugin marketplace add ./blocks/trainer/.claude/plugins
 claude plugin marketplace add ./blocks/evaluator/.claude/plugins
@@ -39,6 +42,7 @@ Then install the plugin from each marketplace. The format is
 ```bash
 claude plugin install root@root-block
 claude plugin install curator@curator-block
+claude plugin install terminal-curator@terminal-curator-block
 claude plugin install tracer@tracer
 claude plugin install trainer@trainer-block
 claude plugin install evaluator@evaluator-block
@@ -60,14 +64,15 @@ local marketplace and install the plugins before starting Codex:
 codex plugin marketplace add .
 codex plugin add root@legoflow
 codex plugin add curator@legoflow
+codex plugin add terminal-curator@legoflow
 codex plugin add tracer@legoflow
 codex plugin add trainer@legoflow
 codex plugin add evaluator@legoflow
 ```
 
 Restart Codex after installation. Codex does not use the Claude Code
-marketplace commands above. Invoke native skills such as `$curator-check` and
-`$tracer-run`.
+marketplace commands above. Invoke native skills such as `$curator:check` and
+`$tracer:run`.
 
 ```bash
 cd LegoFlow
@@ -79,6 +84,7 @@ The available Codex plugin directories are:
 ```text
 plugins/root/
 plugins/curator/
+plugins/terminal-curator/
 plugins/tracer/
 plugins/trainer/
 plugins/evaluator/
@@ -92,24 +98,41 @@ workflow.
 Codex uses the following namespaced native skills:
 
 ```text
-$root-check
-$curator-check
-$curator-create-tasks
-$tracer-run
-$trainer-run
-$evaluator-dashboard
+$root:check
+$curator:check
+$curator:create-tasks
+$terminal-curator:check
+$tracer:run
+$trainer:run
+$evaluator:dashboard
 ```
 
 Curator's native Codex skills are:
 
 | Workflow | Codex skill |
 | --- | --- |
-| Check | `$curator-check` |
-| Setup | `$curator-setup` |
-| Collect PRs | `$curator-collect-prs` |
-| Create tasks | `$curator-create-tasks` |
-| Run | `$curator-run` |
-| Dashboard | `$curator-dashboard` |
+| Check | `$curator:check` |
+| Setup | `$curator:setup` |
+| Collect PRs | `$curator:collect-prs` |
+| Create tasks | `$curator:create-tasks` |
+| Run | `$curator:run` |
+| Dashboard | `$curator:dashboard` |
+
+For terminal tasks, use the sibling
+[Terminal Curator block](/docs/blocks/terminal-curator/getting-started):
+
+| Workflow | Claude Code | Codex |
+| --- | --- | --- |
+| Setup | `/terminal-curator:setup` | `$terminal-curator:setup` |
+| Check | `/terminal-curator:check` | `$terminal-curator:check` |
+| Run | `/terminal-curator:run` | `$terminal-curator:run` |
+| Dashboard | `/terminal-curator:dashboard` | `$terminal-curator:dashboard` |
+
+Select `runtime_info.input.task_source.local_block: terminal-curator` in
+Tracer when using its verified pool. Root setup/run select that producer;
+existing SWE runs keep the default `curator`. An external local source or a
+non-local provider does not launch either producer. The unused producer does
+not need credentials for the active pipeline.
 
 Use `check -> confirm -> run` with either agent. Run the relevant check first,
 review its report, and wait for explicit confirmation before launching
@@ -117,7 +140,7 @@ expensive or stateful work.
 
 For consistency, the rest of this documentation uses Claude Code skill syntax
 for its examples: `/<block>:<skill>`. Codex users can replace each example with
-the equivalent `$<block>-<skill>` form. For example, use `$tracer-run` wherever
+the equivalent `$<block>:<skill>` form. For example, use `$tracer:run` wherever
 the documentation shows `/tracer:run`; both invoke the same canonical workflow.
 
 

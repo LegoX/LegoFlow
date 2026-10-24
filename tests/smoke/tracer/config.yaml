@@ -93,6 +93,7 @@ runtime_info:
 
     harbor_job:
       jobs_dir: artifacts/jobs/root-smoke   # ROOT: isolate from prod + the block smoke
+      dataset_path: artifacts/tasks/root-smoke-owned-v1  # fresh owned staging; never replace legacy real datasets
       # ROOT: 1 = one agent at a time. The shared upstream endpoint was
       # overloaded (429/500/timeout/overloaded) under concurrent agent load and
       # contended by another job; one-at-a-time spares it.

@@ -7,7 +7,7 @@ This repo is organized as a tree of blocks. The root directory is the root block
 ## Block Identity
 
 - **Name**: tracer
-- **Role**: Data generation - creates agent trajectories from SWE tasks
+- **Role**: Data generation - creates agent trajectories from Harbor SWE or terminal tasks
 - **Parent**: legoflow
 - **Children**: none (leaf block)
 
@@ -18,12 +18,12 @@ This repo is organized as a tree of blocks. The root directory is the root block
 
 ## Input / Output contract
 
-Read from `config.yaml` before running (details in `docs/content/docs/reference/io.mdx`):
+Read the effective config (`TRAJGEN_CONFIG`, or this block's `config.yaml`) before running (details in `docs/content/docs/usage/configuration.mdx`):
 - `meta_info.repositories.{harbor,legoflow_trace_crafter}` — Git url/branch/commit/path/readonly for the two managed local-only repos
 - `meta_info.environment` — `harbor_uv`, `litellm_uv`, `legoflow_trace_crafter_uv`, `legoflow_trace_crafter_extras`
 - `runtime_info.input.llm_api` — upstream API used to build the per-job LiteLLM proxy
 - `runtime_info.input.litellm_proxy` — proxy config template, port, master key
-- `runtime_info.input.task_source` — SWE task source (wired from curator via `meta_info.dependencies.from."task_source.dataset_name"`, mirrored by curator's own `dependencies.to`)
+- `runtime_info.input.task_source` — `provider: local` selects `local_block: curator` by default, `terminal-curator`, or `external`. SWE/external sources use `dataset_name`; terminal sources use `terminal_tasks_dir` and require a nonempty `verifiable_tasks.txt`. `huggingface` uses `dataset_name` without a local producer. The two producer edges have independent conditions and mirrored `dependencies.to` declarations.
 - `runtime_info.input.harbor_job` — jobs_dir, concurrency, retries, timeout multiplier
 - `runtime_info.input.agent` — agent name, version, runtime image, max turns, temperature
 - `runtime_info.input.sft_conversion` — optional post-Harbor conversion (`enabled`, `scaffold`, `out_dir`, …)
@@ -35,10 +35,12 @@ Write to `config.yaml` → `runtime_info.output` after running:
 
 ## Task consumption contract
 
-Tracer **only** runs tasks listed in curator's `verifiable_tasks.txt`, and never re-runs one it already processed:
-1. `prepare_tasks.sh` stages only manifest-listed task IDs into `artifacts/tasks/<dataset>/`, as one symlink per task id back to the source pool — the directory is real, its entries are links, and nothing is duplicated on disk.
-2. `artifacts/processed_tasks.yaml` is the source of truth for processed task IDs (`pending | running | done | failed | skipped`).
-3. `start.sh` resolves `HARBOR_EXCLUDE_TASKS` through that ledger, so recording a task there is what makes Harbor skip it next time. Retire a task permanently by appending its id to the git-tracked `excluded_tasks.txt` — the ledger lives under gitignored `artifacts/`.
+Terminal tasks must complete the producer skill's instruction/tests/reference-solution semantic audit, followed by fresh Oracle/NOP validation, before downstream rollout. Oracle/NOP alone establishes runnable behavior; the Tracer manifest gate does not certify that semantic audit.
+
+1. `prepare_tasks.sh` filters a source through `verifiable_tasks.txt` when present, and requires that manifest for terminal-curator. Other local/HF sources retain the fallback to valid Harbor child directories. It atomically points `artifacts/tasks/<dataset>/` (or `harbor_job.dataset_path`) at an owned version under `artifacts/tasks/.legoflow-staging-v1/`. Local versions contain one link per selected task; HF versions contain materialized copies. Source, manifest, settings, and file metadata determine reuse. Existing real directories and unrelated symlinks are refused even with `--overwrite`; choose a fresh dataset_path or move old staging yourself after checking active jobs.
+2. `start.sh` uses the fixed version returned by its prepare invocation, so another prepare cannot change its selected batch through the public pointer. Terminal publication links resolve to immutable producer batches. Mutable SWE/external task contents remain linked and may change; staging is not a byte snapshot for those sources. Version caches remain until explicit cleanup; do not remove one used by active jobs.
+3. `artifacts/processed_tasks.yaml` records processed task IDs (`pending | running | done | failed | skipped`). The `/tracer:run` agent updates this ledger after inspecting actual results; the shell launcher does not automatically record outcomes.
+4. `start.sh` resolves `HARBOR_EXCLUDE_TASKS` through that ledger: terminal `done | failed | skipped` entries and retired IDs are excluded next time. This bookkeeping is required to avoid accidental repeats; it is not an exactly-once runtime guarantee. IDs are shared across sources, so use distinct task IDs or a deliberately separate ledger when comparing datasets. Retire a task permanently in git-tracked `excluded_tasks.txt`.
 
 Operating detail for the run + post-run bookkeeping is in the `/tracer:run` skill.
 

@@ -6,6 +6,8 @@ meta_info:
   blocks:
     curator:
       role: "Collect GitHub PRs, and turn them into verified SWE tasks"
+    terminal-curator:
+      role: "Build and verify terminal tasks in Harbor format"
     tracer:
       role: "Generate LLM trajectories from verified tasks via Harbor"
     trainer:

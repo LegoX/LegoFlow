@@ -1,0 +1,55 @@
+---
+title: Design
+---
+
+Terminal Curator adapts the pinned Terminal-Lego generator to LegoFlow's agent
+workflow. It shares the downstream Harbor contract with SWE Curator while
+keeping terminal data construction independent.
+
+```text
+Stack Overflow / questions JSON → generation ┐
+Local candidates → import ──────────────────┤
+                                           ↓
+                         normalize → fresh Oracle / NOP
+                                           ↓
+                              immutable publication
+                                           ↓
+                         agent semantic audit / corrections
+                            → fresh validation after edits
+                                           ↓
+                    Tracer manifest + Evaluator local registry
+```
+
+## Bounded execution and pinned tools
+
+One invocation handles one configured batch. Question/page caps, worker limits,
+request retries and validation timeouts bound its work. It does not launch
+upstream's open-ended `run_pipeline.sh`. Vendored generation code remains
+read-only; compatibility logic belongs in the block adapter.
+
+Normalization targets Tracer's pinned Harbor schema. It prepares an isolated
+pytest runtime during image build, preserves the final Dockerfile user and
+avoids grading-time dependency downloads. The verifier checks task behavior
+without accessing Harbor's hidden `/solution` reference.
+
+## Validation and publication
+
+Independent fresh Oracle/NOP environments prevent solution state from leaking
+into the baseline. These checks establish runnable tasks and nontrivial
+verifiers; the agent's [semantic audit](./usage/validation-checks.mdx) checks
+the written contract and coverage before consumer handoff.
+
+Native Harbor checksums bind trials to task contents. Tree fingerprints also
+cover permissions and empty directories. After checking the final copied
+batch, the adapter atomically switches the public symlink. Tracer and Evaluator
+resolve physical versions so later publications cannot retarget their jobs.
+
+## Reproducible runs
+
+Live state stays in artifacts. Each run freezes redacted configuration and
+script code; its EXIT archive copies only that run's report and records repo
+SHAs. Lifecycle locks protect launch, cleanup and archival. Stop uses recorded
+process identity and exact Compose ownership rather than global cleanup.
+
+See [Output Format](./outputs.mdx) for the files and checksum fields, or
+[Configuration Guide](./usage/configuration.mdx) for the available inputs.

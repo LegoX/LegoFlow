@@ -5,7 +5,7 @@ description: >
   passes: generate the per-job LiteLLM config from
   `runtime_info.input.litellm_proxy`, start the LiteLLM proxy on the
   configured port, then run the Harbor job with
-  `--dataset <name>@<version> --registry-path repos/harbor/registry.json` and any
+  the configured dataset/version and registry path, together with any
   `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS`. Long-running.
   Stamps live state into `artifacts/index.yaml` via
   `scripts/archive_run.sh`. Triggers on phrases like "run evaluator",
@@ -14,6 +14,14 @@ description: >
 ---
 
 # /evaluator:run
+
+
+Use the complete effective profile selected by `EVAL_CONFIG` (relative filenames
+resolve from `blocks/evaluator/`), otherwise this block's `config.yaml`. Retain a
+parent-selected profile throughout checks, setup, launch, and archive. Block-local
+references to `config.yaml` below mean that profile; root shared-credential config
+references keep their existing meaning. Do not reset the selector or copy a
+private profile over the committed config.
 
 Preflight-then-execute entry point. Always invoke `/evaluator:check` first;
 require explicit user confirmation before launching. evaluator is a **leaf
@@ -92,12 +100,16 @@ the confirm step.
 ## Conventions to honour
 
 - **Benchmark selection lives in `config.yaml`, not flags.** To change
-  benchmark, edit `runtime_info.input.task_source.{dataset_name,version,no_hack}`
+  benchmark, edit `runtime_info.input.task_source.{dataset_name,version,registry_path,no_hack}`
   and re-run `/evaluator:check`. Refuse to override these via free-form args —
   launching a different benchmark than the one `:check` validated is
   never correct. `no_hack: true` only applies to `swebench-verified` — the
   `-100` subset is rejected (cap with `harbor_job.n_tasks` instead); start.sh
   remaps to the local hardened registry + agent allowlist.
+  Terminal Curator's `terminal-curator@1.0` uses its exported local registry
+  with `no_hack: false` and `job_analysis.enabled: false`; retain that registry
+  path through preflight and launch. Keep the referenced immutable batch
+  available, and do not start a curation run as an evaluation side effect.
 - **Agent selection lives in `config.yaml`, not flags.** Switch agents by
   editing `agent.{name, version, runtime_image, runtime_host_path}`
   together and re-running `/evaluator:check` (so the runtime-extraction check

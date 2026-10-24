@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>LegoFlow-Terminal Curator</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('curator-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}</script>
+<style>__STYLES__</style>
+</head>
+<body data-live="__LIVE__">
+<div class="layout">
+  <aside class="sidebar" aria-label="Dashboard navigation">
+    <div class="sidebar-logo"><div class="logo-mark">LF</div><div class="logo-title">Terminal Curator</div></div>
+    <nav class="nav" aria-label="Views">
+      <div class="section-label">Views</div>
+      <button class="nav-item active" data-page="overview" aria-controls="page-overview"><span class="nav-icon" aria-hidden="true">◧</span><span class="nav-label">Overview</span></button>
+      <button class="nav-item" data-page="tasks" aria-controls="page-tasks"><span class="nav-icon" aria-hidden="true">☰</span><span class="nav-label">Task List</span><span class="nav-count" id="nav-tasks">—</span></button>
+      <button class="nav-item" data-page="validation" aria-controls="page-validation"><span class="nav-icon" aria-hidden="true">✓</span><span class="nav-label">Validation</span></button>
+      <button class="nav-item" data-page="runs" aria-controls="page-runs"><span class="nav-icon" aria-hidden="true">◷</span><span class="nav-label">Runs</span><span class="nav-count" id="nav-runs">—</span></button>
+    </nav>
+    <div class="sidebar-section"><div class="section-label">Global</div><div id="global-stats"></div></div>
+    <div class="sidebar-foot">Verified terminal tasks<br>Oracle = 1 · NOP = 0<br><span id="snapshot-label">Reading snapshot…</span></div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div><h1 id="page-title">Overview</h1><div class="sub" id="page-sub">Terminal task curation and verification</div></div>
+      <div class="topbar-actions">
+        <button id="refreshToggle" class="icon-btn" aria-label="Refresh dashboard" title="Refresh dashboard"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg></button>
+        <button id="infoToggle" class="icon-btn" aria-label="Dashboard info" title="Data sources and verification rules"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button>
+        <button id="themeToggle" class="icon-btn theme-toggle" aria-label="Toggle theme" title="Toggle light and dark"><svg class="icon theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13A8 8 0 0 1 11 4a8 8 0 1 0 9 9Z"/></svg><svg class="icon theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1 1M18 18l1 1M5 19l1-1M18 6l1-1"/></svg></button>
+      </div>
+    </header>
+    <main class="content" id="main-content">
+      <div id="notices" aria-live="polite"></div>
+      <section class="page active" id="page-overview" aria-label="Overview"><div id="overview-content"></div></section>
+      <section class="page" id="page-tasks" aria-label="Task list">
+        <div class="section-head">Published batches</div><div class="ds-list" id="batch-list"></div>
+        <div class="section-head">Tasks</div>
+        <div class="toolbar">
+          <label class="search-label"><span class="sr-only">Search tasks</span><input id="task-search" type="search" placeholder="Search task ID or tag" aria-label="Search tasks"></label>
+          <label>Status<select id="status-filter" aria-label="Filter task status"><option value="">All statuses</option><option value="published">Current publication</option><option value="retained">Retained version</option><option value="validated">Validated, unpublished</option><option value="rejected">Rejected</option><option value="pending">Pending</option><option value="running">Running</option><option value="missing">Unavailable</option></select></label>
+          <label>Source<select id="source-filter" aria-label="Filter task source"><option value="">All sources</option><option value="stackoverflow">Stack Overflow</option><option value="json">Questions JSON</option><option value="tasks">Local candidates</option><option value="unknown">Not recorded</option></select></label>
+          <label>Batch<select id="batch-filter" aria-label="Filter task batch"><option value="">All batches</option></select></label>
+          <span class="result-count" id="task-count" role="status"></span>
+        </div>
+        <div id="task-table"></div>
+        <p class="footer-note">Current publication is the manifest-listed pool for new downstream jobs. Retained versions preserve earlier inputs. Validation results shown here are runtime evidence; semantic audits and solved agent trajectories are separate checks.</p>
+      </section>
+      <section class="page" id="page-validation" aria-label="Validation"><div id="validation-content"></div></section>
+      <section class="page" id="page-runs" aria-label="Run history"><div id="runs-content"></div></section>
+      <noscript><p class="noscript">Run __INITIAL_RUN__ · __INITIAL_STATUS__. Enable JavaScript for navigation, filters, and validation details. The JSON status output remains available through the local CLI.</p></noscript>
+    </main>
+  </div>
+</div>
+<div class="modal" id="infoPanel" role="dialog" aria-modal="true" aria-labelledby="info-title" hidden>
+ <div class="modal-box"><div class="modal-head"><div><h3 id="info-title">What this board is reading</h3><div class="sub">Measured artifacts · shared Curator visual system</div></div><button class="modal-close" data-close aria-label="Close dialog">×</button></div>
+ <div class="modal-body">
+  <table><tr><td>Current run</td><td>Live state, plus the completed report only when its run ID matches.</td></tr><tr><td>Published batches</td><td>Verified manifest and immutable versions; metadata comes from each task.</td></tr><tr><td>Validation</td><td>Oracle/NOP report verdicts. Available local trial results and JUnit supply actual rewards and test counts.</td></tr><tr><td>Run history</td><td>Run index and matching archived reports. Missing measurements appear as —.</td></tr><tr><td>Privacy</td><td>No task text, source files, solutions, prompts, traces, config, endpoints, host paths, or raw exception text are included.</td></tr></table>
+  <p class="explanation">Oracle must receive reward 1 and NOP reward 0 in separate fresh environments, with meaningful assertions and no trial exception. A reported pass with unavailable raw evidence is labeled “report only.” Semantic requirement/test review and successful Tracer/Evaluator solving require their own evidence.</p>
+  <p class="explanation">Counts describe different scopes: the latest attempt may fail while a previous publication remains available. This board does not invent collection totals, difficulty scores, or semantic approvals. Source, task IDs, run IDs, tags, and numeric usage remain visible; review them before sharing a snapshot.</p>
+ </div></div>
+</div>
+<div class="modal" id="taskPanel" role="dialog" aria-modal="true" aria-labelledby="task-title" hidden>
+ <div class="modal-box modal-wide"><div class="modal-head"><div><h3 id="task-title">Task details</h3><div class="sub" id="task-sub"></div></div><button class="modal-close" data-close aria-label="Close dialog">×</button></div><div class="modal-body" id="task-detail"></div></div>
+</div>
+<script id="dashboard-data" type="application/json">__PAYLOAD__</script>
+<script>__APP_SCRIPT__</script>
+</body>
+</html>

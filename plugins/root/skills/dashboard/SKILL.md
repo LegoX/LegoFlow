@@ -9,4 +9,4 @@ Read and follow `.claude/plugins/root-plugin/skills/dashboard/SKILL.md` in full.
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$root-dashboard`.
+Invoke this Codex skill as `$root:dashboard`.

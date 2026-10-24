@@ -9,4 +9,4 @@ Read and follow `blocks/curator/.claude/plugins/curator-plugin/skills/check/SKIL
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$curator-check`.
+Invoke this Codex skill as `$curator:check`.

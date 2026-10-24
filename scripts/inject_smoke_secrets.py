@@ -69,7 +69,7 @@ def resolve(suffix: str, block: str) -> tuple[str, str]:
     """Return (value, env_var_consulted). Block-specific wins over shared."""
     names = []
     if block:
-        names.append(f"SMOKE_{block.upper()}_{suffix}")
+        names.append(f"SMOKE_{block.upper().replace('-', '_')}_{suffix}")
     names.append(f"SMOKE_{suffix}")
     for name in names:
         value = os.environ.get(name, "")

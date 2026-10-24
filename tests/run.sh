@@ -31,7 +31,7 @@
 set -uo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BLOCKS=(curator tracer trainer evaluator)
+BLOCKS=(curator terminal-curator tracer trainer evaluator)
 
 SMOKE_TARGET=""                          # "", root, <block>, blocks/all
 SMOKE_FROM=""; SMOKE_TO=""
@@ -137,7 +137,7 @@ case "$SMOKE_TARGET" in
     run_root_smoke ;;
   blocks|all)
     for b in "${BLOCKS[@]}"; do run_block_smoke "$b"; done ;;
-  curator|tracer|trainer|evaluator)
+  curator|terminal-curator|tracer|trainer|evaluator)
     run_block_smoke "$SMOKE_TARGET" ;;
   *)
     echo "ERROR: unknown --smoke target '$SMOKE_TARGET' (want: root | ${BLOCKS[*]} | blocks)" >&2

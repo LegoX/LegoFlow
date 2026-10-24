@@ -9,4 +9,4 @@ Read and follow `blocks/trainer/.claude/plugins/trainer-plugin/skills/dashboard/
 
 ## Native Codex Invocation
 
-Invoke this Codex skill as `$trainer-dashboard`.
+Invoke this Codex skill as `$trainer:dashboard`.

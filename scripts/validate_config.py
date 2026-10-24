@@ -98,6 +98,14 @@ def dot_get(mapping, dotted):
     return True, node
 
 
+def dependency_value(mapping, dotted, block_name):
+    """Match the Tracer resolver's legacy omitted-selector default."""
+    found, value = dot_get(mapping, dotted)
+    if not found and block_name == "tracer" and dotted == "task_source.local_block":
+        return True, "curator"
+    return found, value
+
+
 def iter_leaves(node, prefix=""):
     if isinstance(node, dict):
         for k, v in node.items():
@@ -147,6 +155,32 @@ def resolve_output(entry):
 # <OVERLAY_DIR>/<block>/config.yaml instead of the block's real location, so a
 # whole alternate config set validates as one self-consistent tree.
 OVERLAY_DIR = None
+EFFECTIVE_PROFILES = False
+PROFILE_ENV = {
+    "tracer": "TRAJGEN_CONFIG",
+    "evaluator": "EVAL_CONFIG",
+    "terminal-curator": "TERMINAL_CURATOR_CONFIG",
+}
+
+
+def effective_config_path(block_dir):
+    """Runtime profiles are opt-in; relative filenames are block-relative."""
+    block_dir = os.path.abspath(block_dir)
+    variable = PROFILE_ENV.get(os.path.basename(block_dir))
+    profile = os.environ.get(variable, "") if variable else ""
+    return os.path.abspath(os.path.join(block_dir, profile or "config.yaml"))
+
+
+def yaml_diagnostic(path, exc):
+    """PyYAML's str(exc) embeds source lines, which can contain credentials."""
+    mark = getattr(exc, "problem_mark", None) or getattr(exc, "context_mark", None)
+    location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+    return f"invalid YAML in {path}{location}"
+
+
+def sibling_block_dir(block_dir, other_name, is_root):
+    base = os.path.join(block_dir, "blocks") if is_root else os.path.dirname(os.path.abspath(block_dir))
+    return os.path.join(base, other_name)
 
 
 def sibling_config_path(block_dir, src_name):
@@ -207,6 +241,8 @@ def load_sibling(block_dir, other_name, is_root, sibling_cache):
     """Load another block's config by name, using/populating sibling_cache."""
     if OVERLAY_DIR:
         cfg_path = os.path.join(OVERLAY_DIR, other_name, "config.yaml")
+    elif EFFECTIVE_PROFILES:
+        cfg_path = effective_config_path(sibling_block_dir(block_dir, other_name, is_root))
     elif is_root:
         cfg_path = os.path.join(block_dir, "blocks", other_name, "config.yaml")
     else:
@@ -217,7 +253,7 @@ def load_sibling(block_dir, other_name, is_root, sibling_cache):
     if os.path.isfile(cfg_path):
         try:
             cfg = load_yaml(cfg_path)
-        except yaml.YAMLError:
+        except (yaml.YAMLError, OSError, UnicodeError):
             cfg = None
     if sibling_cache is not None:
         sibling_cache[cfg_path] = cfg
@@ -227,7 +263,7 @@ def load_sibling(block_dir, other_name, is_root, sibling_cache):
 def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, schema_only=False):
     """Validate one block config. Returns the parsed config (or None)."""
     name = "root" if is_root else os.path.basename(os.path.normpath(block_dir))
-    cfg_path = config_path or os.path.join(block_dir, "config.yaml")
+    cfg_path = config_path or (effective_config_path(block_dir) if EFFECTIVE_PROFILES else os.path.join(block_dir, "config.yaml"))
     label_prefix = f"{name}:" if not is_root else "root:"
 
     if not os.path.isfile(cfg_path):
@@ -236,7 +272,10 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
     try:
         cfg = load_yaml(cfg_path)
     except yaml.YAMLError as exc:
-        fail("schema:parse-error", f"{label_prefix} {exc}")
+        fail("schema:parse-error", f"{label_prefix} {yaml_diagnostic(cfg_path, exc)}")
+        return None
+    except (OSError, UnicodeError):
+        fail("schema:parse-error", f"{label_prefix} cannot read UTF-8 config at {cfg_path}")
         return None
     if not isinstance(cfg, dict):
         fail("schema:parse-error", f"{label_prefix} config is not a mapping")
@@ -368,7 +407,7 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
             if not isinstance(when, dict):
                 fail("dep:bad-ref", f"{label_prefix} dependencies.from.{dep_key}: `when` must be a mapping of input dot-path -> expected value")
                 continue
-            active = all(dot_get(rt_input, k) == (True, v) for k, v in when.items())
+            active = all(dependency_value(rt_input, k, name) == (True, v) for k, v in when.items())
             if not active:
                 ok("dep:inactive", f"{label_prefix} dependencies.from.{dep_key} inactive (when {when} does not match current input)")
                 continue
@@ -398,8 +437,8 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
             # consumer's relative path (`../curator/artifacts/...`) still points
             # at the real tree, so using the config's dirname would compare two
             # unrelated roots and flag every edge.
-            producer_base = (os.path.join(os.path.dirname(os.path.abspath(block_dir)), src)
-                             if OVERLAY_DIR else os.path.dirname(src_cfg_path))
+            producer_base = (sibling_block_dir(block_dir, src, is_root)
+                             if OVERLAY_DIR or EFFECTIVE_PROFILES else os.path.dirname(src_cfg_path))
             producer_abs = os.path.abspath(os.path.join(producer_base, producer_path))
             consumer_abs = os.path.abspath(os.path.join(block_dir, consumer_val))
             if not (consumer_abs == producer_abs or consumer_abs.startswith(producer_abs + os.sep)):
@@ -464,7 +503,7 @@ def check_block(block_dir, config_path=None, is_root=False, sibling_cache=None, 
                         active = False
                         continue
                     _, cond_path = cond_parsed
-                    if dot_get(consumer_input, cond_path) != (True, cond_val):
+                    if dependency_value(consumer_input, cond_path, consumer) != (True, cond_val):
                         active = False
         if to_when is not None:
             if active:
@@ -517,14 +556,19 @@ def main():
     parser.add_argument("--overlay-dir", metavar="DIR",
                         help="validate the config SET under DIR/<block>/config.yaml as one tree "
                              "(siblings resolve there too); for tests/smoke/")
+    parser.add_argument("--effective-profiles", action="store_true",
+                        help="use TRAJGEN_CONFIG, EVAL_CONFIG, and TERMINAL_CURATOR_CONFIG for this block and siblings; relative paths are block-relative")
     args = parser.parse_args()
 
     if args.config and not args.block:
         parser.error("--config requires --block")
     if args.overlay_dir and args.block:
         parser.error("--overlay-dir applies to a whole tree; use it with --root")
+    if args.overlay_dir and args.effective_profiles:
+        parser.error("--overlay-dir and --effective-profiles are separate config sets; choose one")
 
-    global OVERLAY_DIR
+    global OVERLAY_DIR, EFFECTIVE_PROFILES
+    EFFECTIVE_PROFILES = args.effective_profiles
     sibling_cache = {}
     if args.root:
         root_dir = os.path.abspath(args.root)
