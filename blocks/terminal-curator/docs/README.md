@@ -5,7 +5,7 @@ The operator guide in `content/docs/` is mounted by the root LegoFlow site at
 
 - [Overview](content/docs/index.mdx)
 - [Getting Started](content/docs/getting-started.mdx)
-- Usage: [Configuration](content/docs/usage/configuration.mdx),
+- Usage: [Configuration Guide](content/docs/usage/configuration.mdx),
   [Validation Checks](content/docs/usage/validation-checks.mdx),
   [Downstream Handoff](content/docs/usage/downstream-handoff.mdx)
 - [Design](content/docs/design.mdx)
