@@ -47,3 +47,13 @@ are generated in `artifacts/state.json`, `artifacts/reports/latest.json`, and
 - The docs dashboard demo is deterministically rendered from a declared,
   explicitly synthetic fixture. Actual reviewed run snapshots are separate
   deliverables and must never overwrite that tracked demonstration.
+- `validation.job_timeout_sec` bounds the entire Oracle or NOP job, including
+  all queued candidates, environment setup and cleanup. It is not a per-task
+  timeout. Normal runs retain completed per-task evidence even when a job times
+  out or exits nonzero, record the job outcome in `job_status`, and automatically
+  run fresh NOP only for the unchanged tasks satisfying the complete Oracle
+  gate. Each phase keeps the configured timeout and concurrency. Partial NOP
+  results can qualify only with complete paired evidence; unfinished or invalid
+  results never count as zero reward. Interrupted jobs clean only their recorded
+  Compose projects before continuation; cleanup/integrity failures still stop
+  the run. The adapter publication does not replace the semantic handoff audit.
