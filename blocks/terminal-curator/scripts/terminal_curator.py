@@ -611,7 +611,14 @@ def normalize_task(source: Path, destination: Path, provenance: dict) -> Path:
 def evaluate_trials(job_dir: Path, expected: float, expected_checksums: dict | None = None) -> dict:
     results = {}
     for result_path in sorted(job_dir.glob("*/result.json")):
-        data = json.loads(result_path.read_text())
+        try:
+            data = json.loads(result_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            # Termination can interrupt a result write. Other completed trials
+            # remain usable, but this file establishes no passing evidence.
+            continue
+        if not isinstance(data, dict):
+            continue
         task = data.get("task_name", "")
         if not task:
             continue
@@ -703,6 +710,32 @@ print(json.dumps({path.name: Task(path).checksum for path in tasks}))
     return checksums
 
 
+class HarborJobError(ValueError):
+    """A stopped Harbor job may still contain complete, valid trial results."""
+
+
+def cleanup_harbor_job(job: Path) -> None:
+    """Recover only this stopped job's Compose resources before another job starts."""
+    projects = sorted({path.parent.name.lower() for path in job.glob('*/config.json')})
+    for project in projects:
+        if not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', project):
+            raise ValueError('invalid Harbor Compose project identity')
+    # Filter at the daemon as well as locally; never enumerate/remove unrelated jobs.
+    for listing, removal in ((['docker', 'ps', '-a'], ['docker', 'rm', '-f']),
+                             (['docker', 'network', 'ls'], ['docker', 'network', 'rm'])):
+        for project in projects:
+            result = subprocess.run(listing + ['--filter', f'label=com.docker.compose.project={project}',
+                '--format', '{{.ID}}\t{{.Label "com.docker.compose.project"}}'],
+                capture_output=True, text=True, check=True, timeout=30)
+            owned = []
+            for line in result.stdout.splitlines():
+                fields = line.split('\t', 1)
+                if len(fields) == 2 and fields[1] == project and re.fullmatch(r'[a-f0-9]+', fields[0]):
+                    owned.append(fields[0])
+            if owned:
+                subprocess.run(removal + owned, capture_output=True, check=True, timeout=30)
+
+
 def run_harbor(config: dict, candidates: Path, run_dir: Path, agent: str) -> Path:
     validation = config["runtime_info"]["input"]["validation"]
     harbor = resolve(validation["harbor_bin"])
@@ -728,7 +761,7 @@ def run_harbor(config: dict, candidates: Path, run_dir: Path, agent: str) -> Pat
                     os.killpg(child.pid, signal.SIGKILL)
                     child.wait()
     if rc:
-        raise ValueError(f"Harbor {agent} job exited {rc}; see local {agent}.log")
+        raise HarborJobError(f"Harbor {agent} job exited {rc}; see local {agent}.log")
     return jobs_dir / job_name
 
 
@@ -804,18 +837,55 @@ def run(config: dict, run_id: str | None = None, config_path: Path | None = None
         report["tree_fingerprints"] = fingerprints
         checksums = harbor_task_checksums(config, normalized)
         report["harbor_task_checksums"] = checksums
+        report['job_status'] = {}
+        report['validation']['nop'] = {}
+        validation_pool = normalized
         for agent, expected in (("oracle", 1.0), ("nop", 0.0)):
             if harbor_task_checksums(config, normalized) != checksums:
                 raise ValueError("normalized tasks changed before Harbor validation")
             if task_tree_fingerprints(normalized) != fingerprints:
                 raise ValueError("normalized task tree changed before Harbor validation")
-            for task in checksums:
+            stage_checksums = checksums
+            if agent == 'nop':
+                selected = sorted(task for task, verdict in report['validation']['oracle'].items()
+                                  if verdict['passed'])
+                if not selected:
+                    report['job_status']['nop'] = {'status': 'skipped', 'reason': 'no complete passing Oracle trials'}
+                    break
+                validation_pool = run_dir / 'nop-candidates'
+                validation_pool.mkdir()
+                for task in selected:
+                    shutil.copytree(normalized / task, validation_pool / task)
+                stage_checksums = {task: checksums[task] for task in selected}
+            stage_fingerprints = {task: fingerprints[task] for task in stage_checksums}
+            if (harbor_task_checksums(config, validation_pool) != stage_checksums
+                    or task_tree_fingerprints(validation_pool) != stage_fingerprints):
+                raise ValueError('validation input differs from the Oracle-bound task tree')
+            for task in stage_checksums:
                 report["task_progress"][task] = {"stage": "validate-" + agent, "status": "running"}
+            job = run_dir / 'validation' / agent
+            report['jobs'][agent] = str(job)
+            report['job_status'][agent] = {'status': 'running', 'task_ids': sorted(stage_checksums)}
             state("validate-" + agent)
-            job = run_harbor(config, normalized, run_dir, agent)
-            report["jobs"][agent] = str(job)
-            report["validation"][agent] = evaluate_trials(job, expected, checksums)
-            for task in checksums:
+            stopped = False
+            try:
+                run_harbor(config, validation_pool, run_dir, agent)
+            except (subprocess.TimeoutExpired, HarborJobError) as exc:
+                stopped = True
+                report['job_status'][agent].update(
+                    status='timed_out' if isinstance(exc, subprocess.TimeoutExpired) else 'failed',
+                    error=redact(str(exc)))
+            except BaseException:
+                report['job_status'][agent]['status'] = 'failed'
+                raise
+            else:
+                report['job_status'][agent]['status'] = 'completed'
+            finally:
+                report['validation'][agent] = evaluate_trials(job, expected, stage_checksums)
+                for task in stage_checksums:
+                    report['validation'][agent].setdefault(task, {
+                        'passed': False, 'reason': 'missing or incomplete Harbor trial'})
+            for task in stage_checksums:
                 verdict = report["validation"][agent].get(task, {})
                 report["task_progress"][task] = {"stage": "validate-" + agent, "status": "completed" if verdict.get("passed") else "failed"}
             state("validate-" + agent)
@@ -823,6 +893,21 @@ def run(config: dict, run_id: str | None = None, config_path: Path | None = None
                 raise ValueError("normalized tasks changed during Harbor validation")
             if task_tree_fingerprints(normalized) != fingerprints:
                 raise ValueError("normalized task tree changed during Harbor validation")
+            if (harbor_task_checksums(config, validation_pool) != stage_checksums
+                    or task_tree_fingerprints(validation_pool) != stage_fingerprints):
+                raise ValueError('validation task tree changed during Harbor validation')
+            if stopped:
+                # Killing the Harbor process alone does not remove Docker sidecars.
+                # A real cleanup failure must still stop the next phase safely.
+                report['job_status'][agent]['cleanup'] = 'running'
+                state('cleanup-' + agent)
+                try:
+                    cleanup_harbor_job(job)
+                except (subprocess.SubprocessError, OSError, ValueError):
+                    report['job_status'][agent]['cleanup'] = 'failed'
+                    raise
+                report['job_status'][agent]['cleanup'] = 'completed'
+                state('validate-' + agent)
         accepted = []
         for task in sorted(normalized.iterdir()):
             verdicts = [report["validation"][a].get(task.name, {"passed": False, "reason": "missing Harbor trial"}) for a in ("oracle", "nop")]

@@ -1,11 +1,15 @@
 ---
 title: Overview
-description: Build verified Harbor terminal tasks through Claude Code or Codex.
 ---
 
 Terminal Curator turns finite Stack Overflow batches, saved questions JSON,
 or local candidates into Harbor terminal tasks. It runs alongside SWE Curator
 and feeds the same Tracer, Trainer and Evaluator pipeline.
+
+It adapts the [Terminal-Lego](https://github.com/LegoX/Terminal-Lego) pipeline
+introduced in the paper
+[What Makes Interaction Trajectories Effective for Training Terminal Agents?](https://arxiv.org/abs/2606.03461)
+to LegoFlow's plugin workflow and Harbor validation.
 
 Fill `config.yaml` with inputs, limits and resources; supply credentials
 through the environment. Claude Code or Codex then operates setup, checks,

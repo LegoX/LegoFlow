@@ -37,6 +37,8 @@ Coding is the core capability of modern LLMs, yet producing high-quality coding 
 
 ## News
 
+🔥 **2026-10-24**: [Terminal-Lego](https://github.com/LegoX/Terminal-Lego) is now supported on LegoFlow through the [`terminal-curator`](blocks/terminal-curator/README.md) block. An updated batch of data is coming soon on Hugging Face.
+
 🔥 **2026-09-10**: We released LegoFlow v0.1, the initial version of a fully agentic pipeline for software-engineering data.
 
 ## Architecture

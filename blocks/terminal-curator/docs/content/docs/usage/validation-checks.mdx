@@ -1,6 +1,5 @@
 ---
 title: Validation Checks
-description: Preflight, task acceptance, semantic review and recovery.
 ---
 
 ## Check before running
@@ -55,6 +54,21 @@ Re-import older batches without it and run fresh Oracle/NOP; do not fabricate
 an approval record or update published provenance to add later review results.
 
 ## Failures and recovery
+
+Oracle and NOP each have their own `validation.job_timeout_sec` limit. When
+Oracle completes, times out, or exits nonzero, the adapter retains completed
+trial evidence and automatically runs NOP for only the tasks passing the full
+Oracle gate. It copies those tasks unchanged into `nop-candidates` and checks
+their Harbor checksums and file-tree fingerprints. After an interrupted job,
+its owned Compose resources must be cleaned before continuing. A real cleanup
+or integrity failure stops the run.
+
+The report's `job_status` distinguishes completed, timed-out, failed and skipped
+jobs. A timed-out job can have passing individual trials; unfinished or invalid
+results are rejected. The same rule retains completed NOP trials if its batch
+times out. Only tasks passing both complete gates can enter the publication.
+The configured time limit and concurrency are unchanged, and a batch with no
+passing Oracle task skips NOP.
 
 Inspect the exact run report and its Oracle/NOP results before changing inputs.
 Single-candidate failures are retained; they do not discard passing siblings.
