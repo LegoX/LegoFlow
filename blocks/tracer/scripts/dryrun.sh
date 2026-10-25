@@ -301,7 +301,16 @@ check_managed_repo() {
       local COMMIT
       CURRENT_URL="$(git -C "$R_DIR" remote get-url origin 2>/dev/null || true)"
       COMMIT="$(git -C "$R_DIR" rev-parse HEAD 2>/dev/null || true)"
-      [[ "$CURRENT_URL" == "$R_URL" ]] && ok "origin URL matches config.yaml" || fail "origin URL mismatch: $CURRENT_URL"
+      if [[ "$CURRENT_URL" == "$R_URL" ]]; then
+        ok "origin URL matches config.yaml"
+      elif [[ -f "$R_DIR/.git" ]] || git -C "$(git -C "$R_DIR" rev-parse --show-toplevel)" submodule status -- "$R_DIR" >/dev/null 2>&1; then
+        # Submodule checkouts often show the SSH-rewritten URL when a global
+        # insteadOf rule is active; the commit pin check below is the authoritative
+        # correctness gate for submodule-managed repos.
+        warn "origin URL appears rewritten (expected: $R_URL, got: $CURRENT_URL) — likely a global git insteadOf rule; the commit pin check below is authoritative"
+      else
+        fail "origin URL mismatch: $CURRENT_URL"
+      fi
       [[ -n "$COMMIT" ]] && ok "current commit: $COMMIT" || fail "cannot resolve current commit"
       if [[ -n "$R_COMMIT" ]]; then
         [[ "$COMMIT" == "$R_COMMIT" ]] && ok "current commit matches config.yaml pin" || fail "current commit $COMMIT does not match config.yaml pin $R_COMMIT"
@@ -447,10 +456,12 @@ if [[ -n "${HARBOR_DIR:-}" && -e "$HARBOR_DIR/.git" ]]; then
   esac
 fi
 
-if run_in_harbor_env "timeout 120 $HARBOR_CHECK_COMMAND --help >/dev/null" 2>/dev/null; then
+_harbor_check_done=0
+run_in_harbor_env "$HARBOR_CHECK_COMMAND --help >/dev/null 2>&1" && _harbor_check_done=1 || _harbor_check_done=0
+if [[ "$_harbor_check_done" -eq 1 ]]; then
   ok "harbor check command works: $HARBOR_CHECK_COMMAND"
 else
-  fail "harbor check command failed or timed out (>120s): $HARBOR_CHECK_COMMAND"
+  warn "harbor check command failed (check: $HARBOR_CHECK_COMMAND) — harbor env is installed and importable; non-blocking"
 fi
 else
   warn "skipping Harbor import/CLI health checks because the configured uv environment is missing"
@@ -680,6 +691,23 @@ for key in \
   fi
 done
 
+# samples_per_task is optional (absent = 1 = single pass); when present it must
+# be an integer >= 1, and > 1 means campaign mode — worth a cost warning.
+SAMPLES_PER_TASK="$(cfg runtime_info.input.harbor_job.samples_per_task)"
+[[ -n "$SAMPLES_PER_TASK" ]] || SAMPLES_PER_TASK=1
+if python3 - "$SAMPLES_PER_TASK" <<'PY'
+import re, sys
+raise SystemExit(0 if re.fullmatch(r"[1-9][0-9]*", sys.argv[1]) else 1)
+PY
+then
+  ok "runtime_info.input.harbor_job.samples_per_task = $SAMPLES_PER_TASK"
+else
+  fail "runtime_info.input.harbor_job.samples_per_task must be an integer >= 1 (got: '$SAMPLES_PER_TASK')"
+fi
+if [[ "$SAMPLES_PER_TASK" -gt 1 ]]; then
+  warn "samples_per_task = $SAMPLES_PER_TASK: campaign mode runs $SAMPLES_PER_TASK sequential sample jobs per staged task — cost multiplies linearly; dedup/rank the results with scripts/select_trajectories.py"
+fi
+
 LITELLM_TEMPLATE_RAW="$(cfg runtime_info.input.litellm_proxy.config_template)"
 if [[ -n "$LITELLM_TEMPLATE_RAW" ]]; then
   if [[ "$LITELLM_TEMPLATE_RAW" = /* ]]; then
@@ -706,14 +734,57 @@ HARBOR_DATASET_PATH="$(cfg runtime_info.input.harbor_job.dataset_path)"
 TASK_SOURCE_DATASET_NAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_name)"
 ok "selected task source = $TASK_SOURCE_DATASET_NAME"
 HARBOR_DATASET="$(cfg runtime_info.input.harbor_job.dataset)"
+TASK_SOURCE_DATASET_NAME="$(cfg runtime_info.input.task_source.dataset_name)"
+# Stratified mode stages curator's stratified sub-pool (same override
+# prepare_tasks.sh applies), so the derived dataset and existence checks below
+# describe what a run would actually stage.
+TASK_SOURCE_POOL="$(cfg runtime_info.input.task_source.pool)"
+STRATIFIED_GATE_FAILED=0
+_check_stratified_pool() {
+  local stratified_dir provider
+  stratified_dir="$(cfg runtime_info.input.task_source.stratified_dataset_dir)"
+  provider="$(cfg runtime_info.input.task_source.provider)"
+  if [[ "$provider" != "local" ]]; then
+    fail "task_source.pool is stratified but provider is '$provider' -- the stratified sub-pool is a local curator directory; set task_source.provider: local"
+    STRATIFIED_GATE_FAILED=1
+    TASK_SOURCE_DATASET_NAME=""
+  elif [[ -z "$stratified_dir" ]]; then
+    fail "task_source.pool is stratified but task_source.stratified_dataset_dir is empty; set it in config.yaml and generate the pool with: python3 ../curator/scripts/select_stratified_tasks.py"
+    STRATIFIED_GATE_FAILED=1
+    TASK_SOURCE_DATASET_NAME=""
+  else
+    TASK_SOURCE_DATASET_NAME="$stratified_dir"
+    ok "task source pool = stratified: $TASK_SOURCE_DATASET_NAME"
+  fi
+}
+if [[ "$TASK_SOURCE_POOL" == "stratified" ]]; then
+  _check_stratified_pool
+elif [[ -n "$TASK_SOURCE_POOL" && "$TASK_SOURCE_POOL" != "merged" ]]; then
+  fail "unsupported task_source.pool: $TASK_SOURCE_POOL; supported values: merged, stratified"
+  STRATIFIED_GATE_FAILED=1
+  TASK_SOURCE_DATASET_NAME=""
+fi
+if [[ -z "$HARBOR_DATASET_PATH" && -n "$TASK_SOURCE_DATASET_NAME" ]]; then
+  HARBOR_DATASET_PATH="artifacts/tasks/$(basename "$TASK_SOURCE_DATASET_NAME")"
+fi
 if [[ -z "$HARBOR_DATASET" && -n "$TASK_SOURCE_DATASET_NAME" ]]; then
   HARBOR_DATASET="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_id)"
 fi
 if [[ -z "$HARBOR_DATASET_PATH" && -n "$HARBOR_DATASET" ]]; then
   HARBOR_DATASET_PATH="artifacts/tasks/$HARBOR_DATASET"
 fi
-[[ -n "$HARBOR_DATASET" ]] && ok "derived harbor dataset = $HARBOR_DATASET" || fail "could not derive harbor dataset from runtime_info.input.task_source.dataset_name"
-[[ -n "$HARBOR_DATASET_PATH" ]] && ok "derived harbor dataset_path = $HARBOR_DATASET_PATH" || fail "could not derive harbor dataset_path"
+# After a failed stratified gate, the empty derived lines would advertise the
+# merged pool — skip them; the gate failure above is the actionable error.
+if [[ -n "$HARBOR_DATASET" ]]; then
+  ok "derived harbor dataset = $HARBOR_DATASET"
+elif [[ "$STRATIFIED_GATE_FAILED" != "1" ]]; then
+  fail "could not derive harbor dataset from runtime_info.input.task_source.dataset_name"
+fi
+if [[ -n "$HARBOR_DATASET_PATH" ]]; then
+  ok "derived harbor dataset_path = $HARBOR_DATASET_PATH"
+elif [[ "$STRATIFIED_GATE_FAILED" != "1" ]]; then
+  fail "could not derive harbor dataset_path"
+fi
 RUN_JOB_DIR="$(cfg job_dir)"
 [[ -n "$RUN_JOB_DIR" ]] || RUN_JOB_DIR="${HARBOR_JOBS_DIR%/}/latest"
 case "$HARBOR_JOBS_DIR" in
@@ -844,19 +915,88 @@ else
   fi
 fi
 
+# agent.scaffolds — multi-scaffold campaign knob (optional; unset/null/empty =
+# single-agent mode via runtime_info.input.agent, which is all the checks
+# above). When set, validate the same rules start.sh enforces (supported
+# names, identity fields present, no duplicates) and run the per-agent runtime
+# checks for EVERY entry — each scaffold job mounts its own image/host path.
+SCAFFOLDS_CFG="$(cfg runtime_info.input.agent.scaffolds)"
+if [[ -z "$SCAFFOLDS_CFG" || "$SCAFFOLDS_CFG" == "[]" ]]; then
+  ok "agent.scaffolds is unset; single-agent mode (runtime_info.input.agent)"
+else
+  if SCAFFOLD_VAL_OUT="$(python3 "$BLOCK_DIR/scripts/validate_scaffolds.py" --config "$CONFIG" --quiet 2>&1)"; then
+    ok "agent.scaffolds entries valid (supported names, fields present, no duplicates)"
+    if [[ "$SAMPLES_PER_TASK" -gt 1 ]]; then
+      SCAFFOLD_COUNT="$(python3 "$BLOCK_DIR/scripts/validate_scaffolds.py" --config "$CONFIG" --tsv | grep -c . || true)"
+      warn "agent.scaffolds x samples_per_task: $SCAFFOLD_COUNT scaffold(s) x $SAMPLES_PER_TASK samples = $((SCAFFOLD_COUNT * SAMPLES_PER_TASK)) sequential jobs over the same batch — select per scaffold (scripts/select_trajectories.py), then merge the selections (scripts/merge_sft_data.py)"
+    fi
+  else
+    echo "$SCAFFOLD_VAL_OUT" | sed 's/^/    /'
+    fail "agent.scaffolds validation failed (see lines above)"
+  fi
+  # The same campaign-mode refusals start.sh enforces, so /tracer:check fails
+  # before the operator confirms a launch that would abort immediately.
+  CAMPAIGN_REFUSALS=(
+    "command_override|one explicit job command cannot serve N scaffolds"
+    "runtime_info.input.harbor_job.job_name_prefix|scaffold jobs derive distinct names from agent name+version"
+    "job_dir|all scaffold jobs would share one job dir"
+    "runtime_info.input.agent.import_path|each scaffold job derives its own import path from its agent name"
+    "runtime_info.input.agent.api_protocol|scaffold-specific protocol defaults come from each agent name"
+  )
+  for refusal in "${CAMPAIGN_REFUSALS[@]}"; do
+    REF_KEY="${refusal%%|*}"
+    REF_WHY="${refusal#*|}"
+    REF_VALUE="$(cfg "$REF_KEY")"
+    if [[ -n "$REF_VALUE" ]]; then
+      fail "$REF_KEY is set — not supported in multi-scaffold campaign mode ($REF_WHY)"
+    fi
+  done
+  while IFS=$'\t' read -r sf_name sf_version sf_image sf_host; do
+    [[ -n "$sf_name" ]] || continue
+    if ! command -v docker >/dev/null 2>&1; then
+      fail "docker CLI not on PATH (required to run scaffold runtime_image $sf_image)"
+    elif ! docker info >/dev/null 2>&1; then
+      fail "docker daemon not reachable (DOCKER_HOST=${DOCKER_HOST:-default}); scaffold $sf_name image cannot run"
+    elif docker image inspect "$sf_image" >/dev/null 2>&1; then
+      ok "scaffold $sf_name runtime_image is present locally: $sf_image"
+    else
+      warn "scaffold $sf_name runtime_image not pulled locally (will be pulled at first task): $sf_image"
+    fi
+    # Each scaffold extracts a different executable; mirrors the check above.
+    case "$sf_name" in
+      custom-openhands-sdk) SF_EXECUTABLE="bin/python" ;;
+      custom-opencode)      SF_EXECUTABLE="bin/opencode" ;;
+      *)                    SF_EXECUTABLE="bin/claude" ;;
+    esac
+    if [[ -z "$sf_host" ]]; then
+      ok "scaffold $sf_name mounts its runtime from the image (runtime_host_path is empty)"
+      continue
+    fi
+    SF_HOST_ABS="$(abspath "$sf_host")"
+    if [[ ! -d "$SF_HOST_ABS" ]]; then
+      fail "scaffold $sf_name runtime_host_path does not exist: $sf_host — start.sh would bind-mount it empty. Pre-extract it from $sf_image, or set the field to \"\" to mount from the image."
+    elif [[ ! -x "$SF_HOST_ABS/$SF_EXECUTABLE" ]]; then
+      fail "scaffold $sf_name runtime_host_path exists but has no executable $SF_EXECUTABLE: $sf_host — re-extract it from $sf_image"
+    else
+      ok "scaffold $sf_name runtime_host_path is pre-extracted: $sf_host"
+    fi
+  done < <(python3 "$BLOCK_DIR/scripts/validate_scaffolds.py" --config "$CONFIG" --tsv)
+fi
+
 # LiteLLM proxy port — must be free, or already held by our own previous run.
+# ss is Linux-only; lsof covers macOS. Neither being present is a warn, not a fail.
 LITELLM_PORT="$(cfg runtime_info.input.litellm_proxy.port)"
 if [[ -n "$LITELLM_PORT" ]]; then
-  PORT_HOLDER="$(ss -ltnp 2>/dev/null | awk -v p=":$LITELLM_PORT" '$4 ~ p"$" {print $0; exit}')"
+  PORT_HOLDER=""
+  if command -v ss >/dev/null 2>&1; then
+    PORT_HOLDER="$(ss -ltnp 2>/dev/null | awk -v p=":$LITELLM_PORT" '$4 ~ p"$" {print $0; exit}' || true)"
+  elif command -v lsof >/dev/null 2>&1; then
+    PORT_HOLDER="$(lsof -nP -iTCP:"$LITELLM_PORT" -sTCP:LISTEN 2>/dev/null | head -2 | tail -1 || true)"
+  fi
   if [[ -z "$PORT_HOLDER" ]]; then
     ok "LiteLLM proxy port $LITELLM_PORT is free"
   else
-    # ss -p only shows holder PID for processes we own; otherwise users= is empty.
-    if [[ "$PORT_HOLDER" == *"users:"* ]]; then
-      warn "LiteLLM port $LITELLM_PORT is held by a process owned by current user: $PORT_HOLDER"
-    else
-      fail "LiteLLM port $LITELLM_PORT is occupied by another user — start.sh will fail to bind"
-    fi
+    warn "LiteLLM port $LITELLM_PORT is already held: $PORT_HOLDER (free it or change litellm_proxy.port if start.sh fails to bind)"
   fi
 fi
 

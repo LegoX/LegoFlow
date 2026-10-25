@@ -70,6 +70,8 @@ cases/                cheap deterministic checks
   06_harbor_smoke.sh
   07_create_tasks_skill.sh
   08_create_tasks_docs.sh
+  09_runtime_env_config.sh
+  10_stratified_selection.sh
 smoke/                expensive end-to-end runs (--with-smoke gates them)
   10_pr_demo.sh
   fixtures/python_pr_ids.txt
@@ -151,6 +153,21 @@ metadata advertises the canonical command.
 
 Checks that public Curator guidance recommends `/curator:create-tasks` and that
 the maintained docs deploy to `legoflow-curator-docs`.
+</details>
+
+<details>
+<summary><code>cases/10_stratified_selection.sh</code> — stratified sub-pool selection</summary>
+
+Builds a synthetic merged pool (14 tasks, 6 repos, 6 strata incl. an
+unknown-difficulty/untagged task) and asserts `scripts/select_stratified_tasks.py`:
+stratum floors first (unknown stratum never dropped), repo coverage,
+√-proportional top-up with deterministic tie-breaks (a 16-vs-4 pool pins the
+7/3 sqrt split), byte-identical reruns, symlink staging, report fields, loud
+failures (`--count 0`, manifest-less pool, manifest ids with no task directory
+skipped with a WARN). Also asserts tracer's `prepare_tasks.sh` honors
+`task_source.pool: stratified` via `TRAJGEN_CONFIG` sandboxes (empty dir fails
+before staging; a real pool passes the gate) with Harbor checks sandboxed in
+the temp dir so the stop is deterministic on every machine.
 </details>
 
 <details>

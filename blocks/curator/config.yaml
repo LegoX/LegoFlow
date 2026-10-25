@@ -11,6 +11,10 @@ meta_info:
         to: tracer.input.task_source.dataset_name
         when: {tracer.input.task_source.provider: local, tracer.input.task_source.local_block: curator}
 
+      stratified_tasks_dir:
+        to: tracer.input.task_source.stratified_dataset_dir
+        when: {tracer.input.task_source.pool: stratified}
+
   repos:
     legoflow-curator:
       name: legoflow-curator
@@ -79,6 +83,15 @@ runtime_info:
       java: { enabled: true,  params: { timeout: 3200, cc_timeout: 2400, n_concurrent: 16, max_verified_tasks: 128 } }
       rust: { enabled: true,  params: { timeout: 3600, cc_timeout: 3000, n_concurrent: 16, max_verified_tasks: 128 } }
 
+    # Stratified sub-pool selection (opt-in; consumed by tracer's
+    # task_source.pool: stratified mode). null/"all" = whole pool (the
+    # selection script then only re-orders and reports coverage); N > 0 =
+    # select N tasks by difficulty bin x language strata with a per-repo floor
+    # and sqrt-proportional quotas. Deterministic: re-running over an
+    # unchanged pool reproduces the same manifest.
+    selection:
+      count: null
+
   output:
     swe_tasks_dir:
       path: artifacts/swe_tasks
@@ -90,6 +103,12 @@ runtime_info:
       description: Optional flattened directory containing all verified tasks from all languages (populated by scripts/extract_verified_tasks.py)
       structure: "artifacts/merged_swe_tasks/{task_id}/ with instruction.md, environment/, solution/, tests/"
       extract_command: python scripts/extract_verified_tasks.py
+
+    stratified_tasks_dir:
+      path: artifacts/stratified_swe_tasks
+      description: Optional stratified sub-pool of verified tasks (one symlink per selected task + its own verifiable_tasks.txt + selection_report.json; populated by scripts/select_stratified_tasks.py)
+      structure: "artifacts/stratified_swe_tasks/{task_id} -> merged_swe_tasks/{task_id} symlinks, verifiable_tasks.txt, selection_report.json"
+      select_command: python3 scripts/select_stratified_tasks.py
 
     logs:
       path: artifacts/logs/legoflow-curator-create

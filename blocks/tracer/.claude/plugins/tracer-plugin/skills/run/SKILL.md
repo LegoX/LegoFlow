@@ -57,7 +57,10 @@ confirmation:
 
 - task source dataset and prepared task count
 - Harbor concurrency, retry count, and timeout multiplier
-- agent name, version, runtime image, and model
+- sample count (`runtime_info.input.harbor_job.samples_per_task`; `>= 2` multiplies cost linearly and triggers best-of-n campaign mode)
+- agent name, version, runtime image, and model — or, when
+  `runtime_info.input.agent.scaffolds` is set, the full scaffold list and the
+  expected per-scaffold job names printed by the multi-scaffold campaign banner
 - SFT conversion mode (`runtime_info.input.sft_conversion.enabled`)
 
 Do not auto-launch a long Harbor job just because preflight passed.
@@ -87,9 +90,39 @@ scripts/start.sh --update-repos  # refresh Harbor first (or TRAJGEN_UPDATE_REPOS
 5. if `runtime_info.input.sft_conversion.enabled: true`, run
    `scripts/convert_trajectories.sh --job "$JOB_NAME"` after Harbor exits.
 
+With `runtime_info.input.harbor_job.samples_per_task >= 2` (best-of-n
+campaign), steps 3-5 repeat as k sequential sample jobs named
+`<job>-s1` … `<job>-s<k>`, each with its own proxy and conversion, and with
+processed-task (ledger) exclusion suppressed so every sample re-runs the staged
+set — `excluded_tasks.txt` ids are still honored. Samples never run
+concurrently: the readiness probe accepts any listener on the proxy port.
+
 Job output lands under `runtime_info.input.harbor_job.jobs_dir` =
 `artifacts/jobs/<job>/`, with per-task logs at
 `artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl`.
+
+## Step 3b — Multi-scaffold campaign mode
+
+When `runtime_info.input.agent.scaffolds` is set (default `null` = single-agent
+mode, everything above unchanged), `start.sh` validates every entry up front —
+supported names only, no silent claude-code fall-through — then runs one
+**sequential** Harbor job per scaffold over the same staged batch, each with
+its own LiteLLM proxy lifecycle (shared port, so never concurrent), its own
+`--scaffold` for conversion, and `HARBOR_LEDGER_EXCLUDE=0` so every scaffold
+re-runs the whole batch (`excluded_tasks.txt` still applies). Job names are
+distinct per scaffold via name+version. `command_override` and
+`harbor_job.job_name_prefix` are refused in this mode.
+
+The campaign summary prints the merge command at the end; run it to produce the
+campaign dataset:
+
+```bash
+python3 scripts/merge_sft_data.py --jobs <job1>,<job2>,... [--per-task-cap N]
+```
+
+Trainer consumes the merged file by pointing its config at it
+(`trainer.source.type: local_lf`, `source.lf_path` →
+`artifacts/sft_data/merged/lf.json`) — no trainer-side change is needed.
 
 ## Step 4 — Stop the proxy
 
@@ -130,6 +163,41 @@ every job, maintain the ledger to avoid accidental repeated work:
 3. Do not add a `status:` block to `config.yaml` — that section is retired (see
    the root `CLAUDE.md`). `config.yaml` is one-shot per run; the authoritative
    timeline is `artifacts/index.yaml`, written by `archive_run.sh`.
+
+**Best-of-n campaign bookkeeping** (`samples_per_task >= 2`): bookkeep per
+sample job, not once per task. Append one ledger entry per sample job per task
+— same flat `runs:` shape, with `trajectory_path` pointing at that sample job's
+trajectory (`artifacts/jobs/<job>-s<i>/<task>/agent/litellm-trajectory.jsonl`)
+and `note` recording the sample index (e.g. `sample 2/3`). Because every sample
+re-runs the same tasks, the ledger ends up with k entries per task; that is
+expected. After all sample jobs are converted, produce the campaign's final
+dataset by selecting the best records per task:
+
+```bash
+python3 scripts/select_trajectories.py --jobs <job>-s1,<job>-s2,<job>-s3 --per-task-cap 2
+```
+
+If `sft_conversion.out_dir` is not the default `artifacts/sft_data`, the sample
+jobs live elsewhere — pass `--sft-root <out_dir>` so they resolve.
+
+The merged dataset lands in `artifacts/sft_data/selected/` (`lf.json` plus
+`lf.stats.json` and `selection_manifest.json`); that directory — not any single
+sample's — is the campaign's handoff to Trainer.
+
+**Multi-scaffold campaign bookkeeping** (`agent.scaffolds` set): bookkeep per
+scaffold job. Append one flat ledger entry per task per scaffold job, each with
+the `trajectory_path` under that job's `artifacts/jobs/<job>/…` directory (the
+ledger is task-keyed, so same task across scaffold jobs = multiple entries with
+different `trajectory_path` values — that is expected, and it is why campaign
+jobs launch with `HARBOR_LEDGER_EXCLUDE=0`). After the last job, merge the
+per-scaffold SFT datasets to produce the campaign dataset:
+
+```bash
+python3 scripts/merge_sft_data.py --jobs <job1>,<job2>,<job3>
+```
+
+Then record in the run notes which jobs were merged and the
+`per_scaffold_counts` from `artifacts/sft_data/merged/merge_manifest.json`.
 
 ## Step 7 — Optional dashboard/SFT refresh
 

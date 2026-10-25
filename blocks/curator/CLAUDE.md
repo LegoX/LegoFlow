@@ -269,6 +269,15 @@ python scripts/extract_verified_tasks.py
 
 Reads `verifiable_tasks.txt` from each language, copies verified task directories to `artifacts/merged_swe_tasks/`.
 
+Optionally, build a stratified sub-pool for tracer rollouts (coverage-first selection by difficulty bin × language, per-repo floor, √-proportional quotas; `selection.count` in config.yaml, `null` = whole pool):
+
+```bash
+python3 scripts/select_stratified_tasks.py            # writes artifacts/stratified_swe_tasks/
+python3 scripts/select_stratified_tasks.py --count 120 --dry-run   # preview the coverage report
+```
+
+Tracer consumes it by setting `task_source.pool: stratified` in its config; its `task_source.stratified_dataset_dir` defaults to this block's `artifacts/stratified_swe_tasks`. Deterministic — re-running over an unchanged pool reproduces the same manifest.
+
 ## Downstream Agent Interface
 
 Downstream agents consume verified SWE tasks for trajectory inference. The **authoritative consumer contract** is the manifest file:
@@ -281,6 +290,7 @@ Two interfaces are supported:
 
 1. **In-place** (recommended): consumer reads tasks directly from `artifacts/swe_tasks/{lang}-cc/<task_id>/`, gated by entries in `verifiable_tasks.txt`. tracer uses this path.
 2. **Merged**: run `python scripts/extract_verified_tasks.py` to materialize a flat `artifacts/merged_swe_tasks/` directory containing only verified tasks.
+3. **Stratified**: run `python3 scripts/select_stratified_tasks.py` to materialize `artifacts/stratified_swe_tasks/` — a deterministic, coverage-first sub-pool (one symlink per selected task + its own `verifiable_tasks.txt` + `selection_report.json`), selected by difficulty bin × language strata with a per-repo floor and √-proportional quotas. Tracer opts in via `task_source.pool: stratified`.
 
 Each task directory contains:
 - `instruction.md` — problem description (input to the solving agent)
@@ -300,6 +310,7 @@ artifacts/
   collected_prs/      # PR ID lists (input to legoflow-curator create)
   swe_tasks/          # Generated SWE tasks per language ({lang}-cc/)
   merged_swe_tasks/   # Optional flat verified-task export
+  stratified_swe_tasks/  # Optional stratified sub-pool (symlinks + own manifest + selection_report.json)
   logs/               # Per-language create logs
 ```
 
@@ -311,6 +322,7 @@ artifacts/
 | `artifacts/swe_tasks/{lang}-cc/verifiable_tasks.txt` | Authoritative manifest of validated task IDs per language. Consumers (e.g. tracer) must filter by this file. |
 | `artifacts/swe_tasks/{lang}-cc/.legoflow-curator-create-batch/` | Per-batch state JSON used by `legoflow-curator create` for resume/dedup. |
 | `scripts/extract_verified_tasks.py` | Optional: merges all verified tasks into a flat `artifacts/merged_swe_tasks/` directory. |
+| `scripts/select_stratified_tasks.py` | Optional: writes a deterministic stratified sub-pool `artifacts/stratified_swe_tasks/` (difficulty bin × language strata, per-repo floor, √ quotas; knob `runtime_info.input.selection.count`). |
 
 ## Coding Standards
 
