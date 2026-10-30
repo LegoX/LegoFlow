@@ -104,6 +104,22 @@ echo "output:       $DATASET_DIR"
 echo "python:       $PY"
 echo ""
 
+# Step 3 (best-effort, non-fatal): rebuild the decontamination identity index
+# from the freshly generated gold (RSI_LOOP_PLAN §9: the index must track the
+# dataset). decontam_check.py fails closed on a missing/stale index, so a
+# skipped rebuild only means curator-side decontamination keeps refusing until
+# scripts/build_identity_index.py is run manually.
+rebuild_identity_index() {
+  local out="$BLOCK_DIR/artifacts/bench_identity/$GOLD_BASE.identity.json"
+  if python3 "$BLOCK_DIR/scripts/build_identity_index.py" \
+      --dataset "$GOLD_BASE" --dataset-dir "$DATASET_DIR" --out "$out"; then
+    echo "identity index: $out"
+  else
+    echo "WARNING: identity index rebuild failed (rc=$?). Decontamination stays" >&2
+    echo "         fail-closed until scripts/build_identity_index.py is run manually." >&2
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Step 1: adapter -> gold task dirs (idempotent unless PREP_FORCE=1).
 # ---------------------------------------------------------------------------
@@ -129,6 +145,7 @@ echo ""
 if [[ "${PREP_SKIP_TAGGING:-0}" == "1" ]]; then
   echo "Step 2/2 tagger: SKIP (PREP_SKIP_TAGGING=1). Gold is usable; Language/Area"
   echo "                 breakdown will be limited until task.toml tags are completed."
+  rebuild_identity_index
   echo ""
   echo "prepare dataset complete (gold only): $DATASET_DIR"
   exit 0
@@ -169,6 +186,7 @@ TAG_RETRY_DELAY_SEC="${PREP_TAG_RETRY_DELAY_SEC:-2}"
 if [[ -z "$TAG_MODEL" || -z "$TAG_URL" ]]; then
   echo "Step 2/2 tagger: SKIP — no LLM endpoint (set llm_api in config.yaml or PREP_TAG_* env)."
   echo "                 Gold is usable; complete tags later with scripts/task_analysis."
+  rebuild_identity_index
   echo ""
   echo "prepare dataset complete (gold only): $DATASET_DIR"
   exit 0
@@ -195,4 +213,6 @@ if [[ "$TAG_RC" -ne 0 ]]; then
   echo "           PREP_TAG_BASE_URL=<url> PREP_TAG_MODEL=<model> PREP_TAG_API_KEY=<key> \\"
   echo "             bash scripts/prepare_dataset.sh \"$DATASET_NAME\""
 fi
+
+rebuild_identity_index
 echo "prepare dataset complete: $DATASET_DIR"
