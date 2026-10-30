@@ -5,7 +5,19 @@ meta_info:
   parent: legoflow
   blocks: {}
   dependencies:
-    from: {}   # task source block; no upstream
+    from:
+      # task source block upstream: none. The two evaluator feedback edges below
+      # close the RSI loop; both stay conditional + optional (required: false)
+      # so dispatch can never deadlock on a cycle while targeting/decontam are
+      # disabled (the loop's cycle-breaker).
+      targeting.directives_path:
+        from: evaluator.output.weakness_report
+        when: {targeting.enabled: true}
+        required: false
+      decontam.benchmark_index:
+        from: evaluator.output.benchmark_identity_index
+        when: {decontam.enabled: true}
+        required: false
     to:
       merged_tasks_dir:
         to: tracer.input.task_source.dataset_name
@@ -91,6 +103,19 @@ runtime_info:
     # unchanged pool reproduces the same manifest.
     selection:
       count: null
+
+    # RSI loop feedback inputs (both default-off; flipping enabled: true
+    # activates the mirrored conditional dependencies.from edges above).
+    targeting:
+      enabled: false                          # true = next create run consumes evaluator weakness directives
+      directives_path: ../evaluator/artifacts/weakness/weakness_report.json
+      min_tag_n: 20                           # tags with fewer samples never receive directives
+      noise_gate_multiplier: 2.0              # |delta| must clear multiplier x measured noise floor
+      supply_satisfaction_threshold: 40       # already-well-supplied tags are not targeted
+
+    decontam:
+      enabled: false                          # enable per-profile only once the identity index exists
+      benchmark_index: ../evaluator/artifacts/bench_identity/swebench-verified.identity.json
 
   output:
     swe_tasks_dir:
