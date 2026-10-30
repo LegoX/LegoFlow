@@ -1,0 +1,261 @@
+# =============================================================================
+# LegoFlow RSI loop — signal firewall policy (NORMATIVE)
+# RSI_LOOP_PLAN.md §5.6 + §10 fix 8: this file + scripts/signal_guard.py are the
+# mechanical enforcement of the offline/online signal split. Git-tracked on
+# purpose: changing it is a reviewable act, never a runtime accident.
+#
+# The rule being enforced
+# -----------------------
+# Gold-aware analysis signals (the C1–C4 localization features, diff hunk
+# overlap, judge labels that saw the gold patch, raw gold metadata, and any
+# per-record product of joining gold tags onto per-instance records) may be
+# computed OFFLINE for attribution dashboards, but must NEVER appear in an
+# artifact that feeds the improvement loop (weakness report -> curator
+# targeting directives -> next-run data selection). Acting on gold-aware
+# signals online is how a self-improving loop quietly becomes a
+# benchmark-memorization loop.
+#
+# Contexts (where a payload may flow)
+# -----------------------------------
+#   online  - directive-feeding artifacts: scripts/build_weakness_report.py
+#             output (legoflow.weakness.v1), response-matrix rows, loop ledger
+#             rows, curator directives. Strictest context.
+#   offline - evaluator-local analysis products (job analysis/ dirs,
+#             dashboards, failure studies). May contain gold-aware fields;
+#             must still not leak audit-slice readouts.
+#   eval    - evaluator-internal measurement only (audit-slice promotion
+#             readouts, placebos unblinding). Anything is allowed here.
+#
+# Known upstream caveat (documented, not silently ignored)
+# --------------------------------------------------------
+# Harbor's job_analysis labeler folds C1–C4 into the failure axes and
+# primary_failure. The loop therefore treats axis/primary_failure values as
+# ADVISORY online signals (they are labeler summaries, not raw gold joins);
+# the raw C1–C4 / hunk-overlap numbers stay offline-only and are what the
+# guard blocks. If the labeler is ever made strictly gold-free, nothing here
+# needs to change.
+#
+# Deliberate exemption
+# --------------------
+# artifacts/bench_identity/<base>.identity.json (scripts/build_identity_index.py)
+# is gold-derived BY DESIGN but is consumed only for EXCLUSION
+# (scripts/curator decontam_check.py removes overlapping PRs/tasks). Removing
+# contaminated data cannot inject gold signal into training, so the identity
+# index is not routed through signal_guard. Do not feed it to any ranking or
+# selection consumer.
+# =============================================================================
+
+schema: legoflow.signal_policy.v1
+
+contexts:
+  online:
+    description: directive-feeding artifacts (weakness report, response matrix, loop ledger, directives)
+    allowed_tiers: [online_eligible]
+  offline:
+    description: evaluator-local analysis and dashboards
+    allowed_tiers: [online_eligible, offline_only]
+  eval:
+    description: evaluator-internal measurement (audit readouts, placebo unblinding)
+    allowed_tiers: [online_eligible, offline_only, eval_only]
+
+tiers:
+  # --- gold-aware: offline dashboards only, never in the loop ---------------
+  offline_only:
+    description: >-
+      Fields whose value depends on gold data (gold patch/test files, judge
+      output that saw gold, gold-tag join products) or raw diff text. Allowed
+      in offline analysis and eval-internal artifacts only.
+    fields:
+      # C1-C4 gold-aware localization features (harbor features/localization.py)
+      - c1_file_read
+      - c2_func_read
+      - c3_file_alignment
+      - c4_func_alignment
+      # gold-vs-model diff geometry
+      - diff_hunk_overlap
+      - diff_line_delta
+      - diff_file_delta
+      - modified_test_file
+      # tier-1 judge (prompted with the gold patch)
+      - tier1_labels
+      - tier1_judgment
+      - localization_quality
+      - behavioral_understanding
+      - implementation_quality
+      - tool_usage_health
+      - failure_attribution
+      - reasoning
+      # reward-hack detector (compares against the gold test patch)
+      - hack_details
+      - hacks_detected
+      # raw gold metadata (harbor tests/config.json entries)
+      - patch
+      - test_patch
+      - gold_patch
+      - model_patch
+      - base_commit
+      - problem_statement
+      - fail_to_pass
+      - pass_to_pass
+      - gold_instance
+      - gold_instances
+      # per-record gold-tag / gold-difficulty join products (task_instances.jsonl)
+      - gold_files_modified
+      - gold_lines_changed
+      - gold_lines_added
+      - gold_lines_removed
+      - gold_hunk_count
+      - gold_cross_file
+      - gold_cross_dir
+      - swebench_difficulty
+    patterns:
+      - "gold_*"          # any gold-join product at any depth
+      - "*_gold_*"
+      - "c[1-4]_*"        # the gold-aware C1..C4 feature family, any alias spelling
+      - "*hunk*"
+      - "*fail_to_pass"
+      - "*pass_to_pass"
+      - "judge_*"
+      - "tier1*"
+      - "*_patch"         # raw diff text (either side) never feeds the loop
+      - "*_patch_*"
+    allowed_contexts: [offline, eval]
+
+  # --- gold-free: may feed online feedback ----------------------------------
+  online_eligible:
+    description: >-
+      Reward/outcome fields, the gold-free C5 signal, tool-error/pathology
+      flags, failure-axis summaries, and the loop bookkeeping keys. These are
+      the ONLY fields allowed in directive-feeding artifacts.
+    fields:
+      # identity / bookkeeping
+      - schema
+      - round
+      - dataset
+      - generated_at
+      - k
+      - eval_jobs
+      - eval_job
+      - checkpoint_ref
+      - checkpoint_sha
+      - checkpoint_sha256
+      - tagger_version
+      - taxonomy_version
+      - scaffold
+      - model
+      - task_id
+      - task_name
+      - instance_id
+      - trial_index
+      - repeat_idx
+      - tokens
+      - n_input_tokens
+      - n_output_tokens
+      # rewards / outcomes
+      - reward
+      - rewards
+      - resolved
+      - resolved_count
+      - outcome
+      - pass_rate
+      - reward_mean
+      - ci95_wilson
+      # progress / noise
+      - delta_vs_prev
+      - learning_progress
+      - noise
+      - noise_floor
+      - between_repeat_sd
+      - per_tag_sd
+      - tag_sd
+      - per_repeat
+      - global_sd
+      # failure summaries (advisory; see caveat above)
+      - failure_mix
+      - primary_failure
+      - secondary_failures
+      - axes
+      - localization
+      - diagnosis
+      - implementation
+      - tool_usage
+      - long_horizon
+      - flags
+      - environment_noise
+      - empty_patch
+      - error_instance
+      - exceptions
+      # gold-free deterministic signals
+      - c5_test_executed
+      - loop_detected
+      - premature_stop
+      - tool_error_storm
+      - tool_error_storm_count
+      - context_truncation
+      - model_patch_exists
+      - trajectory_length
+      - max_iterations
+      # tags used as grouping keys (values are labels, not gold features)
+      - tags
+      - language
+      - area
+      - topic
+      - bug_class
+      - difficulty_tier
+      - key
+      - reason
+      - directives_blocked
+      - directives_sha256
+      - verdict
+      - tasks
+      - internal_resolve
+      - placebo
+      # audit-slice membership bookkeeping. The slice itself is git-tracked
+      # (RSI_LOOP_PLAN §5.3), so the *hash of the excluded id set* is public
+      # loop bookkeeping; only slice PERFORMANCE readouts are eval_only.
+      - audit_excluded_ids_sha256
+    allowed_contexts: [online, offline, eval]
+
+  # --- evaluator-internal only ----------------------------------------------
+  eval_only:
+    description: >-
+      Audit-slice performance readouts and promotion numbers. The audit slice
+      is the loop's held-out honesty control: its scores must never leak into
+      any shared artifact, or promotions stop being an independent readout.
+    fields:
+      - audited_resolve
+      - audited_pass_rate
+      - audit_resolve_rate
+      - audit_pass_rate
+      - audit_slice_report
+      - promotion_readout
+    patterns:
+      - "audit*resolve*"
+      - "audit*pass_rate*"
+      - "audited_*"
+    allowed_contexts: [eval]
+
+# List-valued fields whose ELEMENTS are enum labels rather than ids. Raw key
+# matching cannot see inside lists; the guard classifies these values against
+# the same tiers so e.g. a flags entry of "hack" is caught, while a task id
+# that happens to collide with a field name is not.
+enum_value_tiers:
+  flags:
+    online_eligible: [environment_noise, empty_patch, error_instance]
+    offline_only: [hack, alternative_fix, missing_gold]
+  secondary_failures:
+    online_eligible: [localization, diagnosis, implementation, tool_usage, long_horizon]
+    offline_only: [hack, alternative_fix, missing_gold]
+
+# Map-valued fields whose SUB-KEYS are ids (report['tasks'] -> task_id) or tag
+# labels (noise.per_tag_sd -> "dimension:value"), not field names. Sub-keys of
+# these maps are never classified, so a task id or tag label that happens to
+# match a pattern tier ("x__gold_rush-1" vs "*_gold_*", "topic:gold-rush")
+# cannot trip the firewall; the VALUES under them are still walked normally.
+id_carrier_maps:
+  - tasks
+  - per_tag_sd
+
+# Unknown keys: reported as warnings by default, treated as violations when
+# signal_guard runs with --strict (recommended for new artifact types).
+strict: false
