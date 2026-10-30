@@ -7,7 +7,9 @@ description: >
   scripts/start.sh — which runs dryrun.sh, then train.sh (obtain/convert LF
   data, dataset registration, LLaMA-Factory + DeepSpeed ZeRO-3
   training on 8× GPU, WandB tracking), and on exit archives the run via
-  scripts/archive_run.sh. Background by default — training is long-running.
+  scripts/archive_run.sh. train.sh STEP 3 also writes the RSI loop round
+  receipt (checkpoint + data-mix identity) alongside the checkpoint_path
+  writeback. Background by default — training is long-running.
   train.sh itself writes runtime_info.output; archive_run.sh appends to
   artifacts/index.yaml. Triggers on phrases like "run trainer", "launch trainer
   training", "start the trainer block", "kick off the supervised fine-tuning",
@@ -177,6 +179,18 @@ Stop:
 
 For foreground runs, swap "Monitor" for the final exit code, final loss
 (from `runtime_info.output.training_metrics`), and the training-log tail.
+
+**RSI loop round receipt.** `train.sh` STEP 3 writes the round receipt
+(`artifacts/model/<run>/round_receipt.json`) alongside the `checkpoint_path`
+writeback — `{round, checkpoint_sha256, mix_manifest_sha, n_instances,
+tokens, final_loss}` — pinning which checkpoint and which data mix this
+round produced, and keying the row in evaluator's loop ledger
+(`RSI_LOOP_PLAN.md` §5.3; round procedure: `RSI_RUNBOOK.md` at the repo
+root). In the report, surface the receipt path and the `mix_manifest_sha`
+so the next eval can be tied to this run. `checkpoint_path` flows to
+evaluator's optional `local_model_serving.from_trainer_checkpoint` edge;
+serving is evaluator's `serve_local_model.sh`, not this block — never start
+vLLM from here.
 
 ## What this skill must NOT do
 

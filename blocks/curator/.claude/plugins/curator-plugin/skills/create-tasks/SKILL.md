@@ -7,7 +7,11 @@ description: >
   `verifiable_tasks.txt`. Per-language launches use
   `bash scripts/create_<lang>.sh` (tuned `--timeout`, `--cc-timeout`,
   `--n-concurrent`, `--state-dir`). Long-running (hours per language).
-  For a first-time end-to-end smoke before committing to a full run,
+  When the RSI loop inputs are enabled, also runs the targeting audit gate
+  (`apply_targeting.py` directives → agent audit → user confirmation before
+  any config edit) and the two `decontam_check.py` stages (PR-ID prefilter
+  before `create`, pool scrub after). For a first-time end-to-end smoke
+  before committing to a full run,
   this skill can drive a 10-PR `--max-pr 1` flow that attempts to produce one
   verified task ID. Full mode archives launcher exit into
   `artifacts/index.yaml` via `scripts/archive_run.sh`; smoke and single-language
@@ -72,6 +76,45 @@ Resolve the user's natural-language request into one mode:
 If the request implies config changes, such as "32 tasks" or "more
 concurrency", show the exact proposed config/env override and wait for
 confirmation before changing or launching.
+
+## Step 2b - RSI targeting gate (only when `targeting.enabled: true`)
+
+The RSI loop's actuation gate — mirrors the terminal-curator semantic-audit
+pattern: scripts propose, this agent audits, the human confirms, and only then
+does anything touch `config.yaml`. Design: `RSI_LOOP_PLAN.md` §2.2/§5.3;
+round context: `RSI_RUNBOOK.md`.
+
+1. Run `python3 scripts/apply_targeting.py`. It refuses on any open verdict
+   in `artifacts/targeting/hypothesis_ledger.yaml`, supply-checks each weak
+   tag against this block's own manifests, applies the noise gate, ranks by
+   learning progress, and writes `artifacts/targeting/directives_round_NNN.yaml`
+   with a pre-registered hypothesis (target tags, expected direction,
+   actuation, noise floor).
+2. **Audit the directives like the terminal-curator semantic audit, not a
+   rubber stamp**: check each target tag's supply count and delta against the
+   weakness report, confirm blocked tags are legitimately blocked
+   (`below_noise_gate`, `n < min_tag_n`), confirm holdout tags are reserved,
+   and confirm the quota deltas stay within the stability guards (slew ≤
+   ±20%/round, per-repo ≤15%, per-tag-cell ≤25%). A directives file whose
+   numbers do not match its own `source_report_sha256` is refused.
+3. Present the reviewable diff (quota vector + filter deltas + skip-file
+   reference) and **wait for explicit user confirmation**. Only then apply
+   the numbers to the **next run's** `config.yaml` or private profile —
+   one-shot semantics: never edit a config mid-run. Directives that fail the
+   audit are recorded back in the ledger, not silently dropped.
+4. No directive round at all (`directives_blocked` empty, targeting disabled,
+   or the report absent) is a normal outcome — proceed with the ordinary
+   create flow and say so plainly.
+
+## Step 2c - RSI decontam prefilter (only when `decontam.enabled: true`)
+
+Before any production launch, run `python3 scripts/decontam_check.py
+--index <decontam.benchmark_index> --stage pr_ids` so benchmark-overlapping
+PRs are filtered out of `artifacts/collected_prs/{lang}_pr_ids.txt`
+**before** `create` — this saves the expensive Docker Oracle/NOP minutes. It
+fails closed on a missing identity index: fix the index path or disable
+decontam for this run; never launch with a dangling index. Hits are recorded
+with match basis in `artifacts/decontam/quarantine.yaml`.
 
 ## Step 3 - Preflight
 
@@ -197,6 +240,23 @@ as healthy unless a separately supervised compatible proxy remains available.
 Do not pre-write entries to `artifacts/index.yaml`; the scripts own launcher
 archiving.
 
+## Step 5b - RSI decontam pool scrub (only when `decontam.enabled: true`)
+
+After generation and Oracle/NOP verification append to
+`verifiable_tasks.txt`, run `python3 scripts/decontam_check.py --index
+<decontam.benchmark_index> --stage pool` to scrub any identity match that
+slipped through the PR-ID prefilter out of
+the manifests, re-run `scripts/extract_verified_tasks.py` if the merged pool
+already exists, and report the quarantined IDs with their match basis (repo+PR,
+patch-path Jaccard, test-file overlap, or normalized patch hash) plus the
+pruned counts. Never delete task directories silently — quarantine evidence
+goes to `artifacts/decontam/quarantine.yaml`; durable suppressions use
+`owner__repo-<PR>` lines (bare PR number, e.g. `owner__repo-101`) in the skip
+file consumed by `--skip-pr-files` — the form `cli.py` actually matches.
+Remind the user to `git add` the git-tracked loop-memory files
+(`artifacts/targeting/`, `artifacts/decontam/`) so `clean.sh --all` cannot
+wipe the hypothesis history.
+
 ## Step 6 - Report and monitor
 
 After launch, print:
@@ -218,3 +278,10 @@ started, then hand off to `/curator:dashboard`.
 - Do not modify `repos/legoflow-curator/` source while running data generation.
 - Do not delete generated tasks, state dirs, or logs unless the user asks
   for cleanup.
+- RSI directives reach `config.yaml` only through the Step 2b audited gate —
+  agent audit plus explicit user confirmation of the reviewable diff. Never
+  apply a directives file mechanically or edit a config mid-run.
+- Decontam skip-file lines must be `owner__repo-<PR>` (double underscore, bare
+  PR number); `legoflow-curator --skip-pr-files` parses a literal
+  `owner__repo-pr-N` line as repo `owner/repo-pr` (no suppression) and rejects
+  `owner/repo:pr-N` lines.

@@ -60,6 +60,14 @@ blocks/*/artifacts/index.yaml
 
 # LegoFlow Curator block — generated data and virtual env
 blocks/curator/artifacts/*
+# RSI loop memory (hypothesis/verdict ledger, directives, decontam quarantine,
+# attach-mode manifest) is git-tracked so scripts/clean.sh --all (keeps
+# tracked files only) never wipes the loop's history. `artifacts/*` ignores
+# direct children only, so these directory negations re-include the dirs and
+# everything inside them.
+!blocks/curator/artifacts/targeting/
+!blocks/curator/artifacts/decontam/
+!blocks/curator/artifacts/attach/
 blocks/curator/scripts/jobs/*
 blocks/curator/scripts/.legoflow-curator-*/
 

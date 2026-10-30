@@ -44,6 +44,21 @@ Terminal tasks must complete the producer skill's instruction/tests/reference-so
 
 Operating detail for the run + post-run bookkeeping is in the `/tracer:run` skill.
 
+## RSI Loop (post-campaign scaffold signal)
+
+No config change — one post-run step
+([RSI_LOOP_PLAN.md](../../RSI_LOOP_PLAN.md) §5.4; round procedure:
+[RSI_RUNBOOK.md](../../RSI_RUNBOOK.md)). After a multi-scaffold campaign,
+`python3 scripts/scaffold_disagreement.py` compares per-task outcome vectors
+across the campaign's scaffold jobs (zero extra rollouts) and writes proposals
+under `artifacts/scaffold_signal/`: `saturated` (every scaffold solves →
+retire to the eval reserve), `flaky` (mixed + high variance + exceptions →
+reject candidate), `reaudit` (none solves although Oracle passed at curation →
+instruction-ambiguity audit), `frontier` (mixed → keep mining). Proposals are
+**advice only**: the `/tracer:run` agent reviews them with the user, and
+accepted retirements are appended to git-tracked `excluded_tasks.txt` — the
+existing `HARBOR_EXCLUDE_TASKS` namespace — never acted on silently.
+
 ## Repos
 
 - `repos/harbor/` — trajectory generation runtime (managed local-only dependency, gitignored, read-only after checkout)

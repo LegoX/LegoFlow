@@ -65,6 +65,21 @@ If archiving is needed, create `artifacts/archives/run_NNN/` containing metadata
 a credential-redacted config snapshot, and a scripts copy, then append the
 terminal record to `artifacts/index.yaml`.
 
+## RSI Loop (round receipt)
+
+`scripts/train.sh` STEP 3 writes a **round receipt**
+(`artifacts/model/<run>/round_receipt.json`, via
+`scripts/round_receipt.py`) alongside the `checkpoint_path` writeback —
+`{round, checkpoint_sha256, mix_manifest_sha, n_instances, tokens,
+final_loss}` pinning the run's plant identity
+([RSI_LOOP_PLAN.md](../../RSI_LOOP_PLAN.md) §5.3; round
+procedure: [RSI_RUNBOOK.md](../../RSI_RUNBOOK.md)). The receipt gives every
+downstream eval an attributable identity (which checkpoint + which data mix),
+and keys rows in evaluator's loop ledger. `checkpoint_path` feeds evaluator's
+optional `local_model_serving.from_trainer_checkpoint` edge (the `to:` mirror
+declared in this block's `config.yaml`); serve it with evaluator's
+`scripts/serve_local_model.sh`, never from this block.
+
 ## Dashboard
 
 `dashboard/` is a real-time, read-only web UI (React + a Python `server.py`) for

@@ -278,6 +278,51 @@ python3 scripts/select_stratified_tasks.py --count 120 --dry-run   # preview the
 
 Tracer consumes it by setting `task_source.pool: stratified` in its config; its `task_source.stratified_dataset_dir` defaults to this block's `artifacts/stratified_swe_tasks`. Deterministic — re-running over an unchanged pool reproduces the same manifest.
 
+## RSI Loop (targeting + decontamination, default off)
+
+Curator is the actuation point of the RSI loop — evaluator feedback becomes
+next-run curation knobs here ([RSI_LOOP_PLAN.md](../../RSI_LOOP_PLAN.md) §2.2/§5;
+round procedure: [RSI_RUNBOOK.md](../../RSI_RUNBOOK.md)). Two default-off input
+groups arrive through conditional, `required: false` dependency edges (their
+optionality is the cycle-breaker that keeps `/root:run` dispatch deadlock-free):
+
+- **`runtime_info.input.targeting`** (`enabled: false` by default;
+  `directives_path` → evaluator's `artifacts/weakness/weakness_report.json`;
+  `min_tag_n: 20`, `noise_gate_multiplier: 2.0`,
+  `supply_satisfaction_threshold: 40`): `python3 scripts/apply_targeting.py`
+  turns a weakness report into `artifacts/targeting/directives_round_NNN.yaml`
+  — bounded per-language quota deltas (`languages.<lang>.params.max_verified_tasks`),
+  `pr_collection.filters` tweaks, and a skip-file reference for the **next**
+  run. It refuses to run while any prior verdict in
+  `artifacts/targeting/hypothesis_ledger.yaml` is still open, refuses
+  weak-but-already-supplied tags and sub-noise deltas, ranks survivors by
+  learning progress, and pre-registers the hypothesis before anything is
+  actuated. Directives reach `config.yaml` only through the
+  `/curator:create-tasks` agent gate: the agent audits the directives, the
+  user confirms, then the numbers are applied to the next-run config/profile
+  as a reviewable diff — the terminal-curator semantic-audit pattern.
+- **`runtime_info.input.decontam`** (`enabled: false` until the evaluator's
+  identity index exists; `benchmark_index` →
+  `../evaluator/artifacts/bench_identity/<base>.identity.json`):
+  `python3 scripts/decontam_check.py --index <benchmark_index> --stage pr_ids`
+  filters `artifacts/collected_prs/{lang}_pr_ids.txt` **before** `create`
+  (skips the expensive Docker Oracle/NOP minutes) and `--stage pool` scrubs
+  `verifiable_tasks.txt` post-hoc. Matching is identity-based (repo+PR exact →
+  patch-path Jaccard → test-file overlap → normalized patch hash), fail-closed
+  on a missing index; every hit lands in `artifacts/decontam/quarantine.yaml`
+  with its match basis and similarity, never a silent boolean. The durable
+  skip file uses `owner__repo-<PR>` task-ID lines (double underscore, bare PR
+  number, e.g. `owner__repo-101`) — the exact form
+  `legoflow-curator --skip-pr-files` actually matches: `cli.py` parses a task
+  id as `owner__repo-<PR>`, so a literal `owner__repo-pr-101` line would parse
+  its repo as `repo-pr` and never suppress anything. `owner/repo:pr-N` and
+  `owner__repo-pr-N` lines are accepted on input and normalized.
+
+`artifacts/targeting/` and `artifacts/decontam/` are git-tracked loop memory
+(un-ignored in the root `.gitignore`) so `scripts/clean.sh --all` — which keeps
+only git-tracked files — never wipes the hypothesis history. Both groups stay
+disabled in the committed config; enable them per run profile only.
+
 ## Downstream Agent Interface
 
 Downstream agents consume verified SWE tasks for trajectory inference. The **authoritative consumer contract** is the manifest file:
