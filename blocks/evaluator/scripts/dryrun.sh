@@ -221,7 +221,7 @@ if [[ $FAIL -eq 0 ]]; then
   fi
   MODEL_API_INPUT_COST="$(cfg runtime_info.input.llm_api.input_cost_per_token)"
   MODEL_API_OUTPUT_COST="$(cfg runtime_info.input.llm_api.output_cost_per_token)"
-  RUN_COMMAND="$(cfg command_override)"
+  RUN_COMMAND="$(cfg runtime_info.input.command_override)"
 else
   HARBOR_URL=""
   HARBOR_BRANCH=""

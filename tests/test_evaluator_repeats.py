@@ -218,7 +218,7 @@ def test_run_command_is_rebuilt_per_repeat_from_the_override():
     """RUN_COMMAND must not be reused across repeats: without command_override
     each repeat rebuilds the default Harbor command so its own -rN --job-name
     is embedded (a frozen repeat-1 command would rerun the -r1 job)."""
-    assert 'COMMAND_OVERRIDE="$(cfg command_override)"' in START_TEXT
+    assert 'COMMAND_OVERRIDE="$(cfg runtime_info.input.command_override)"' in START_TEXT
     assert 'RUN_COMMAND="$(cfg command_override)"' not in START_TEXT
     region = function_region(START_TEXT, "build_run_command")
     reset = re.search(r'RUN_COMMAND="\$COMMAND_OVERRIDE"', region)
@@ -442,7 +442,6 @@ raise SystemExit(int(os.environ.get("HARNESS_BUILDER_RC", "0")))
 """
 
 FAKE_CONFIG = """
-command_override: {command_override}
 meta_info:
   repositories:
     harbor:
@@ -452,6 +451,7 @@ meta_info:
     litellm_uv: artifacts/env/litellm-venv
 runtime_info:
   input:
+    command_override: {command_override}
     llm_api:
       api_key: harness-key
       api_base_url: http://127.0.0.1:9/v1
@@ -836,3 +836,20 @@ def test_harness_k1_job_name_is_a_fresh_timestamp(tmp_path):
         f"job dir timestamp {dirs[0]} is not bracketed by the run window "
         f"[{before}, {after}]"
     )
+
+
+def test_command_override_read_from_runtime_input_not_root():
+    """Regression: command_override is read from runtime_info.input.command_override.
+
+    A root-level key would fail schema validation (only meta_info/runtime_info
+    are allowed top-level), and dryrun gates every config read on zero schema
+    failures — so a root-level read made the escape hatch unusable end-to-end.
+    """
+    import re
+    for script in ("scripts/start.sh", "scripts/dryrun.sh"):
+        path = REPO_ROOT / "blocks" / "evaluator" / script
+        src = path.read_text(encoding="utf-8")
+        assert "runtime_info.input.command_override" in src, f"{script} must read the override from runtime_info.input"
+        assert not re.search(r'cfg command_override( |"|\))', src), (
+            f"{script} must not read a bare root-level command_override"
+        )

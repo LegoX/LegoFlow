@@ -258,7 +258,7 @@ if [[ "$PRINT_COMMAND_ONLY" != "1" ]]; then
 fi
 
 HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
-COMMAND_OVERRIDE="$(cfg command_override)"
+COMMAND_OVERRIDE="$(cfg runtime_info.input.command_override)"
 UV_PROJECT_ENVIRONMENT_RAW="$(cfg meta_info.environment.harbor_uv)"
 LITELLM_UV_RAW="$(cfg meta_info.environment.litellm_uv)"
 HARBOR_JOBS_DIR_RAW="$(cfg runtime_info.input.harbor_job.jobs_dir)"
