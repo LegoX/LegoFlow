@@ -105,7 +105,7 @@ echo "python:       $PY"
 echo ""
 
 # Step 3 (best-effort, non-fatal): rebuild the decontamination identity index
-# from the freshly generated gold (RSI_LOOP_PLAN §9: the index must track the
+# from the freshly generated gold (the index must track the
 # dataset). decontam_check.py fails closed on a missing/stale index, so a
 # skipped rebuild only means curator-side decontamination keeps refusing until
 # scripts/build_identity_index.py is run manually.

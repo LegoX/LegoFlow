@@ -8,7 +8,7 @@ twice on the same command line — `--attach legoflow-swe` AND the environment
 variable `LEGOFLOW_RSI_ATTACH=legoflow-swe` (belt and suspenders) — and
 refuses with exit 2 otherwise.
 
-Why it exists (RSI_LOOP_PLAN.md cost table, row P0.5): a fresh checkout has
+Why it exists: a fresh checkout has
 zero run data, and the supervisor's shortcut is to reuse the published
 ~6,500-task corpus instead of rolling a new pool from scratch. The dataset
 ships COMPLETE Harbor task directories (`tasks/` and `tasks-anti-hack/`:

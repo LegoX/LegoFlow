@@ -1,4 +1,4 @@
-"""Signal firewall tests (RSI_LOOP_PLAN §5.6 / §10 fix 8).
+"""Signal firewall tests.
 
 Covers blocks/evaluator/signal_policy.yaml + scripts/signal_guard.py:
   * module + CLI classification of offline-only / online-eligible / eval-only,

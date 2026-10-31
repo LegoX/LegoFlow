@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Curator-side targeting gate: evaluator weakness findings -> next-run mining directives.
 
-This is the agent gate of RSI_LOOP_PLAN.md §5.4 A3 (with the §5.4 stability
+This is the agent gate of the RSI loop (with the stability
 guards and the §9 zero-yield / futility deadlock fixes). It never edits
 `config.yaml` and never mines anything itself; it reads one
 `legoflow.weakness.v1` report (Edge 1), checks it against this block's OWN
@@ -258,7 +258,7 @@ def tag_n_map(report: dict[str, Any]) -> dict[str, int]:
 # --- ledger -------------------------------------------------------------------
 # Append-only by discipline: rows are never reordered, removed, or rewritten
 # except that --close-round fills the `verdict: null` of its own round
-# (RSI_LOOP_PLAN.md §5.3, normative fix 7 — the curator ledger owns verdicts).
+# (the curator ledger owns verdicts).
 
 
 def load_ledger(path: Path) -> list[dict[str, Any]]:
@@ -1048,7 +1048,7 @@ def audited_direction_block(row: dict[str, Any], args: argparse.Namespace) -> di
     two-part verdict is internal-only — a loud WARN, never a silent pass."""
     if not args.audit_readout:
         print("WARN: closing round without --audit-readout — the verdict is "
-              "internal-only (audit-excluded deltas); RSI_LOOP_PLAN.md §7.6(b) "
+              "internal-only (audit-excluded deltas); "
               "wants promotion decisions to read the audited slice",
               file=sys.stderr)
         return {}

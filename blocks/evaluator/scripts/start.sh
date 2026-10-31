@@ -312,7 +312,7 @@ TEMPERATURE="$(cfg runtime_info.input.agent.temperature)"
 [[ -n "$MAX_RETRIES" ]] || { echo "ERROR: runtime_info.input.harbor_job.max_retries is empty" >&2; exit 1; }
 [[ -n "$TIMEOUT_MULTIPLIER" ]] || { echo "ERROR: runtime_info.input.harbor_job.timeout_multiplier is empty" >&2; exit 1; }
 
-# RSI loop: harbor_job.repeats = k variance-gated repeats (RSI_LOOP_PLAN.md §2.1).
+# RSI loop: harbor_job.repeats = k variance-gated repeats.
 # k=1 keeps the pre-loop single-pass behavior exactly (job naming, artifacts,
 # exit codes); k>1 reruns the Harbor + analysis section once per repeat with a
 # fresh per-job LiteLLM proxy and -rN-suffixed job dirs, then joins the k job
@@ -751,7 +751,7 @@ PY
 }
 
 # Join the repeat job dirs into the RSI-loop weakness report
-# (legoflow.weakness.v1; RSI_LOOP_PLAN.md §5.3/A1). Best-effort by design — a
+# (legoflow.weakness.v1). Best-effort by design — a
 # failed build must never fail the eval run (same policy as analyze_job.sh).
 build_weakness_report() {
   WEAKNESS_REPORT_ATTEMPTED=1
@@ -798,7 +798,7 @@ build_weakness_report() {
   return 0
 }
 
-# EXIT-trap salvage (RSI_LOOP_PLAN.md §10 fix 4): when the script dies
+# EXIT-trap salvage: when the script dies
 # mid-round, still try to report from whatever complete repeat job dirs exist.
 # Guarded end-to-end so it can never mask the original exit code.
 weakness_report_salvage() {

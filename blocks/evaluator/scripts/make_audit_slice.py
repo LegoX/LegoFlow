@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw the stratified audit slice for the RSI loop (RSI_LOOP_PLAN §5.3).
+"""Draw the stratified audit slice for the RSI loop.
 
 The audit slice is the loop's held-out honesty control: its task ids are
 excluded from every directive-feeding aggregate (build_weakness_report.py
@@ -32,7 +32,7 @@ slice_version differs is refused unless --rotate is passed — a silent version
 change would make same-version comparisons across rounds meaningless.
 
 --emit-registry additionally writes the frozen Harbor-style registry the loop
-serves the audit slice through (RSI_LOOP_PLAN §5.3): a JSON list with one
+serves the audit slice through a frozen Harbor-style registry (a JSON list with one
 {name, version, tasks: [{name, path}]} entry over the slice's task dirs,
 mirroring terminal-curator's artifacts/tasks/registry.json schema. Refused
 when any sampled task dir is missing.

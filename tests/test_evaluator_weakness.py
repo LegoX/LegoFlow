@@ -1,4 +1,4 @@
-"""RSI-loop evaluator measurement tests (RSI_LOOP_PLAN §5.4 A1, §5.3, §10 fixes 8/10).
+"""RSI-loop evaluator measurement tests.
 
 Fixture-driven tests for blocks/evaluator/scripts/:
   * build_weakness_report.py — pooled pass rates, per-repeat SD, Wilson CI,
@@ -523,7 +523,7 @@ def test_empty_repeat_excluded_from_noise_floor(tmp_path):
     """A repeat whose Harbor run wrote no per-trial results must not fabricate
     a 0.0 global rate — a phantom rate would inflate between_repeat_sd and
     every tag's noise floor; the repeat is excluded and recorded in
-    noise.empty_repeats (RSI_LOOP_PLAN §2.1: the gate uses measured spread)."""
+    noise.empty_repeats (the gate uses measured spread)."""
     populated = tmp_path / "round1" / "job_r1"
     empty = tmp_path / "round1" / "job_r2"
     write_job(populated, REWARDS_R1)   # tuple values -> repeat-1 rewards

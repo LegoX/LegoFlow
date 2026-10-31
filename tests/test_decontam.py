@@ -1,4 +1,4 @@
-"""Curator decontamination gate (RSI_LOOP_PLAN.md §2.3, §10 fix 1) — unit tests.
+"""Curator decontamination gate — unit tests.
 
 Covers blocks/curator/scripts/decontam_check.py: the identity match cascade
 (repo+PR exact -> patch-path Jaccard -> shared test path -> normalized patch
@@ -426,7 +426,7 @@ def test_token_jaccard_threshold_boundary():
     assert DC.jaccard(tokens_a, tokens_b) >= 0.85
     assert DC.jaccard(tokens_a, frozenset()) == 0.0
     assert DC.jaccard(frozenset(), frozenset()) == 0.0
-    # The normative thresholds themselves (RSI_LOOP_PLAN.md §2.3) are pinned:
+    # The normative thresholds themselves are pinned:
     # a constant edit cannot silently co-move with a test expectation.
     assert DC.PATCH_PATH_JACCARD_MIN == 0.6
     assert DC.NORM_TOKEN_JACCARD_MIN == 0.85

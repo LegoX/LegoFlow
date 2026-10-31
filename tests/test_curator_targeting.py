@@ -1,4 +1,4 @@
-"""Curator targeting gate (RSI_LOOP_PLAN.md §5.4 A3, §5.7, §9) — unit tests.
+"""Curator targeting gate — unit tests.
 
 Covers blocks/curator/scripts/apply_targeting.py: supply-check caps, the
 noise gate, learning-progress ranking, quota slew clamping, deterministic
@@ -657,7 +657,7 @@ def test_close_round_records_audited_direction_and_warns_on_absence(tmp_path):
     bare = close_round_cmd(ws2, "--new-report",
                            str(improved_report(tmp_path / "p2" / "r2.json")))
     assert bare.returncode == 0, bare.stdout + bare.stderr
-    assert "internal-only" in bare.stderr and "7.6(b)" in bare.stderr
+    assert "internal-only" in bare.stderr and "audited slice" in bare.stderr
     verdict2 = yaml.safe_load(ws2["ledger"].read_text())[0]["verdict"]
     assert "audit_readout_sha256" not in verdict2
 

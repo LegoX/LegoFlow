@@ -64,7 +64,7 @@ print("" if value is None else value)
 PY
 }
 
-# RSI loop Edge 3 (RSI_LOOP_PLAN.md §5.2/§10.2): prefer the trainer checkpoint
+# RSI loop Edge 3: prefer the trainer checkpoint
 # writeback when set. Env MODEL_PATH still wins for one-off runs; the external
 # model_path knob is used only when the checkpoint leaf is empty.
 if [[ -z "${MODEL_PATH:-}" ]]; then

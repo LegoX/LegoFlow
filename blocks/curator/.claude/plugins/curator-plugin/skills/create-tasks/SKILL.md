@@ -81,8 +81,7 @@ confirmation before changing or launching.
 
 The RSI loop's actuation gate — mirrors the terminal-curator semantic-audit
 pattern: scripts propose, this agent audits, the human confirms, and only then
-does anything touch `config.yaml`. Design: `RSI_LOOP_PLAN.md` §2.2/§5.3;
-round context: `RSI_RUNBOOK.md`.
+does anything touch `config.yaml`.
 
 1. Run `python3 scripts/apply_targeting.py`. It refuses on any open verdict
    in `artifacts/targeting/hypothesis_ledger.yaml`, supply-checks each weak

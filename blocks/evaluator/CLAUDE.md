@@ -234,9 +234,7 @@ self-contained `analysis_config.yaml`.
 
 ## RSI Loop (repeats, weakness report, identity index — default off)
 
-Evaluator is the loop's measurement point
-([RSI_LOOP_PLAN.md](../../RSI_LOOP_PLAN.md) §5; round procedure:
-[RSI_RUNBOOK.md](../../RSI_RUNBOOK.md)):
+Evaluator is the loop's measurement point:
 
 - **`runtime_info.input.harbor_job.repeats`** (default `1`): `k > 1` runs the
   Harbor + analyze section k times sequentially, **restarting the LiteLLM

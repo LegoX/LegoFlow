@@ -281,8 +281,7 @@ Tracer consumes it by setting `task_source.pool: stratified` in its config; its 
 ## RSI Loop (targeting + decontamination, default off)
 
 Curator is the actuation point of the RSI loop — evaluator feedback becomes
-next-run curation knobs here ([RSI_LOOP_PLAN.md](../../RSI_LOOP_PLAN.md) §2.2/§5;
-round procedure: [RSI_RUNBOOK.md](../../RSI_RUNBOOK.md)). Two default-off input
+next-run curation knobs here. Two default-off input
 groups arrive through conditional, `required: false` dependency edges (their
 optionality is the cycle-breaker that keeps `/root:run` dispatch deadlock-free):
 

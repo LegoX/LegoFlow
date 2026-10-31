@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Signal firewall guard for the LegoFlow RSI loop (normative, RSI_LOOP_PLAN §5.6 + §10 fix 8).
+"""Signal firewall guard for the LegoFlow RSI loop (normative).
 
 Checks a JSON payload against blocks/evaluator/signal_policy.yaml and refuses
 (non-zero exit, offending-key list) when it carries fields that are not allowed

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Identity-based decontamination gate for the curator pool (RSI_LOOP_PLAN.md §2.3).
+"""Identity-based decontamination gate for the curator pool.
 
 Mined PRs and SWE-bench-style benchmarks are the same population — a mined task
 can literally *be* a benchmark task, so n-gram checks are not enough. This gate
@@ -145,7 +145,7 @@ def parse_hunks(patch_text: str) -> list[tuple[str, str]]:
 
 def norm_patch_sha256(patch_text: str) -> str:
     """sha256 over the identifier-normalized, sorted-hunk-stable serialization
-    (shared contract, RSI_LOOP_PLAN.md §2.3 / CLI contract item 5)."""
+    (shared contract, CLI item 5)."""
     payload = "\n".join(f"{name}\n{body}" for name, body in sorted(parse_hunks(patch_text)))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 

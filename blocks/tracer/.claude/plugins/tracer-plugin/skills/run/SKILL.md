@@ -206,8 +206,7 @@ Then record in the run notes which jobs were merged and the
 ## Step 6b — RSI loop: scaffold disagreement (multi-scaffold campaigns)
 
 After a multi-scaffold campaign's jobs are merged, run the loop's free
-frontier signal (zero extra rollouts; design `RSI_LOOP_PLAN.md` §5.4, round
-context `RSI_RUNBOOK.md`):
+frontier signal (zero extra rollouts):
 
 ```bash
 python3 scripts/scaffold_disagreement.py --jobs <job_dir_scaffold_A> <job_dir_scaffold_B> ...

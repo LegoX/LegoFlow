@@ -1,4 +1,4 @@
-"""RSI-loop config contract for LegoFlow (RSI_LOOP_PLAN.md sections 5.2/5.5).
+"""RSI-loop config contract for LegoFlow.
 
 Covers the three new feedback edges landed for the self-improvement loop:
 
@@ -218,7 +218,7 @@ def test_enabling_a_flag_activates_its_mirrored_edge_pair(
 
 
 def test_serve_script_prefers_trainer_checkpoint():
-    """Edge 3 runtime consumer (RSI_LOOP_PLAN.md §5.2 / §10 fix 2).
+    """Edge 3 runtime consumer.
 
     `config.yaml` and `blocks/evaluator/CLAUDE.md` both document that
     `serve_local_model.sh` prefers `local_model_serving.from_trainer_checkpoint`

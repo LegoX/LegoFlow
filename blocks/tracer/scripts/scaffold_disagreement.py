@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Free frontier signal: per-task outcome disagreement across the scaffolds of
-one multi-scaffold tracer campaign (RSI_LOOP_PLAN.md §5.4 A5 / §6.1 M1).
+one multi-scaffold tracer campaign.
 
 A campaign (`runtime_info.input.agent.scaffolds`) leaves one Harbor job dir per
 scaffold (times `samples_per_task` sample jobs per scaffold) under

@@ -1,4 +1,4 @@
-"""Curator LegoFlow-SWE attach gate + import contract (RSI_LOOP_PLAN.md P0.5).
+"""Curator LegoFlow-SWE attach gate + import contract.
 
 `blocks/curator/scripts/import_legoflow_swe.py` is an EXPLICIT, DEFAULT-OFF
 escape hatch: default pipeline behavior (loop starts from the Curator) must be

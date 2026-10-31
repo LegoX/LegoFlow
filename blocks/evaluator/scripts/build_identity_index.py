@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the benchmark identity index for RSI-loop decontamination.
 
-RSI_LOOP_PLAN.md §2.3 / §5.3: contamination is decided by TASK IDENTITY, not
+Contamination is decided by TASK IDENTITY, not
 n-gram overlap. This script walks the evaluator's gold dataset (the same
 artifacts/datasets/<base>/ tree scripts/prepare_dataset.sh produces) and emits
 one entry per task:

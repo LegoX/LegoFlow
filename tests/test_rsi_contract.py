@@ -1,16 +1,13 @@
 """RSI-loop contract-surface checks for LegoFlow.
 
-Validates the human/agent contract layer added for the RSI loop
-(RSI_LOOP_PLAN.md / RSI_RUNBOOK.md):
+Validates the human/agent contract layer added for the RSI loop:
 
 - loop-memory artifact paths are un-ignored (git-tracked memory survives
   ``clean.sh --all``) while ordinary run artifacts stay ignored;
 - each pipeline block's CLAUDE.md documents its RSI loop steps;
 - the four canonical ``:run``/``create-tasks`` SKILL.md files carry the new
   loop steps (repeats + weakness/identity/audit-slice, targeting gate +
-  decontam, scaffold disagreement, round receipt);
-- RSI_RUNBOOK.md exists with the flag table, the delimited attach section,
-  and resolvable links.
+  decontam, scaffold disagreement, round receipt).
 
 Read-only: uses ``git check-ignore`` / ``git ls-files`` in a subprocess; no
 network, no Docker, no script execution.
@@ -128,12 +125,6 @@ def test_block_claude_documents_rsi_loop(name: str):
     assert "RSI Loop" in text or "RSI loop" in text, (
         f"{BLOCK_DOCS[name]} lacks its RSI loop section"
     )
-    assert "RSI_LOOP_PLAN.md" in text, (
-        f"{BLOCK_DOCS[name]} should link the authoritative RSI_LOOP_PLAN.md"
-    )
-    assert "RSI_RUNBOOK.md" in text, (
-        f"{BLOCK_DOCS[name]} should link the round procedure in RSI_RUNBOOK.md"
-    )
 
 
 @pytest.mark.parametrize(
@@ -226,47 +217,11 @@ def test_curator_skill_targeting_gate_needs_confirmation():
 
 
 def test_serve_script_prefers_trainer_checkpoint():
-    """Edge 3 (RSI_LOOP_PLAN.md §5.2/§10.2) is wired in config and claimed by
+    """Edge 3 is wired in config and claimed by
     three docs; its runtime consumer must actually read the leaf, so the
     doc/script drift cannot silently regress."""
     text = (REPO_ROOT / "blocks/evaluator/scripts/serve_local_model.sh").read_text()
     assert "from_trainer_checkpoint" in text
-
-
-# --- RSI_RUNBOOK.md -----------------------------------------------------------
-
-
-def test_runbook_exists_with_flag_table():
-    runbook = REPO_ROOT / "RSI_RUNBOOK.md"
-    assert runbook.is_file(), "missing RSI_RUNBOOK.md"
-    text = runbook.read_text()
-    for flag in (
-        "LEGOFLOW_RSI_ATTACH",
-        "harbor_job.repeats",
-        "targeting.enabled",
-        "decontam.enabled",
-        "--placebo",
-        "OPENAI_BASE_URL_HUAWEI",
-        "OPENAI_API_KEY_HUAWEI",
-    ):
-        assert flag in text, f"RSI_RUNBOOK.md missing flag/knob '{flag}'"
-    # Attach stays opt-in: the default must be stated as off.
-    assert re.search(r"LEGOFLOW_RSI_ATTACH.*default", text) or "default off" in text
-
-
-def test_runbook_attach_section_is_delimited():
-    text = (REPO_ROOT / "RSI_RUNBOOK.md").read_text()
-    begin = text.find("BEGIN ATTACH-MODE SECTION")
-    end = text.find("END ATTACH-MODE SECTION")
-    assert begin != -1 and end != -1 and begin < end, (
-        "RSI_RUNBOOK.md needs the delimited attach section so concurrent appends merge"
-    )
-
-
-def test_runbook_links_resolve():
-    runbook = REPO_ROOT / "RSI_RUNBOOK.md"
-    for target in re.findall(r"\]\(([^)#]+?\.md)\)", runbook.read_text()):
-        assert (runbook.parent / target).exists(), f"broken link in runbook: {target}"
 
 
 @pytest.mark.parametrize("name", sorted(BLOCK_DOCS))

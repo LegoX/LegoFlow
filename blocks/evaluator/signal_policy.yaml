@@ -1,6 +1,6 @@
 # =============================================================================
 # LegoFlow RSI loop — signal firewall policy (NORMATIVE)
-# RSI_LOOP_PLAN.md §5.6 + §10 fix 8: this file + scripts/signal_guard.py are the
+# This file + scripts/signal_guard.py are the
 # mechanical enforcement of the offline/online signal split. Git-tracked on
 # purpose: changing it is a reviewable act, never a runtime accident.
 #
@@ -211,7 +211,7 @@ tiers:
       - internal_resolve
       - placebo
       # audit-slice membership bookkeeping. The slice itself is git-tracked
-      # (RSI_LOOP_PLAN §5.3), so the *hash of the excluded id set* is public
+      # by design, so the *hash of the excluded id set* is public
       # loop bookkeeping; only slice PERFORMANCE readouts are eval_only.
       - audit_excluded_ids_sha256
     allowed_contexts: [online, offline, eval]

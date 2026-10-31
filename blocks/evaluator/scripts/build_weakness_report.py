@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the RSI-loop weakness report (schema legoflow.weakness.v1).
 
-RSI_LOOP_PLAN.md §5.4 A1 + §10 fixes 8/10. Joins the k repeat eval job dirs of
+Joins the k repeat eval job dirs of
 one (checkpoint, dataset) round into the single artifact that may feed curator
 targeting — after the signal firewall has vetted it (normative: the output dict
 is run through signal_guard BEFORE anything is written; a violation aborts the

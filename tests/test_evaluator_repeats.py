@@ -1,4 +1,4 @@
-"""Evaluator k-repeat loop (RSI_LOOP_PLAN.md §2.1, §5.5, §10 fix 4).
+"""Evaluator k-repeat loop.
 
 ``blocks/evaluator/scripts/start.sh`` gained ``runtime_info.input.harbor_job.repeats``:
 

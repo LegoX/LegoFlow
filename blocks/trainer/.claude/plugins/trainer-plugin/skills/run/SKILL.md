@@ -184,9 +184,8 @@ For foreground runs, swap "Monitor" for the final exit code, final loss
 (`artifacts/model/<run>/round_receipt.json`) alongside the `checkpoint_path`
 writeback — `{round, checkpoint_sha256, mix_manifest_sha, n_instances,
 tokens, final_loss}` — pinning which checkpoint and which data mix this
-round produced, and keying the row in evaluator's loop ledger
-(`RSI_LOOP_PLAN.md` §5.3; round procedure: `RSI_RUNBOOK.md` at the repo
-root). In the report, surface the receipt path and the `mix_manifest_sha`
+round produced, and keying the row in evaluator's loop ledger. In the
+report, surface the receipt path and the `mix_manifest_sha`
 so the next eval can be tied to this run. `checkpoint_path` flows to
 evaluator's optional `local_model_serving.from_trainer_checkpoint` edge;
 serving is evaluator's `serve_local_model.sh`, not this block — never start
