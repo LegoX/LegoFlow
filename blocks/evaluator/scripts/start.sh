@@ -693,7 +693,13 @@ start_litellm_proxy() {
   # multiprocess boot tolerance and every child dies ("Child process [...] died"),
   # so the port never serves. Override with LITELLM_NUM_WORKERS=N if needed.
   export LITELLM_NUM_WORKERS="${LITELLM_NUM_WORKERS:-1}"
-  setsid bash -c '
+  # Detach the proxy into its own session where setsid exists (Linux eval
+  # nodes). macOS ships no setsid; there the tmux session already shields the
+  # proxy from terminal HUP, so run it as a plain background child instead of
+  # failing with "setsid: command not found" before the port ever binds.
+  DETACH=(setsid)
+  command -v setsid >/dev/null 2>&1 || DETACH=()
+  ${DETACH[@]+"${DETACH[@]}"} bash -c '
     cd "$1"
     PATH="$(dirname "$EVAL_LITELLM_BIN"):$PATH" \
       LITELLM_CONFIG="$2" \

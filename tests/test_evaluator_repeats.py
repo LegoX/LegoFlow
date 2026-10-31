@@ -853,3 +853,16 @@ def test_command_override_read_from_runtime_input_not_root():
         assert not re.search(r'cfg command_override( |"|\))', src), (
             f"{script} must not read a bare root-level command_override"
         )
+
+
+def test_proxy_launch_survives_missing_setsid():
+    """Regression (found on a real local macOS run): the proxy launcher called
+    setsid unconditionally; macOS has no setsid, so every local run died with
+    "setsid: command not found" before the proxy could bind. The launcher must
+    fall back to a plain background child when setsid is absent."""
+    src = (REPO_ROOT / "blocks" / "evaluator" / "scripts" / "start.sh").read_text(encoding="utf-8")
+    assert "command -v setsid >/dev/null 2>&1 || DETACH=()" in src
+    # The guarded bash-3.2-safe expansion must gate the launch line, and no
+    # unguarded bare `setsid bash -c` may remain.
+    assert 'setsid bash -c' not in src
+    assert '${DETACH[@]+"${DETACH[@]}"} bash -c' in src
