@@ -951,6 +951,55 @@ def test_audit_slice_meta_version_refuses_silent_change(tmp_path):
     assert json.loads(meta_path.read_text(encoding="utf-8"))["slice_version"] == 2
 
 
+def test_audit_slice_membership_refuses_silent_redraw(tmp_path):
+    """Prior rounds' audit_excluded_ids_sha256 pin the exact slice they were
+    measured against; only slice_version was guarded, so a different --seed (or
+    a changed population) silently rewrote the frozen slice + meta + registry
+    and broke every longitudinal comparison. Membership drift now needs an
+    explicit --refreeze."""
+    dataset_dir = write_slice_population(tmp_path, {"python": 6, "go": 4})
+    meta_path = tmp_path / "meta.json"
+    out = tmp_path / "slice.txt"
+    base = [sys.executable, str(SCRIPTS_DIR / "make_audit_slice.py"),
+            "--dataset-dir", str(dataset_dir), "--n", "3", "--seed", "1",
+            "--strata", "language", "--out", str(out), "--meta", str(meta_path)]
+    assert subprocess.run(base, capture_output=True, text=True).returncode == 0
+    frozen_ids = out.read_text(encoding="utf-8")
+    frozen_meta = meta_path.read_text(encoding="utf-8")
+
+    # Idempotent same-params re-run stays allowed.
+    again = subprocess.run(base, capture_output=True, text=True)
+    assert again.returncode == 0, again.stderr
+
+    # Seed drift: refused, files untouched, and --rotate does NOT unlock it.
+    reseeded = subprocess.run(base + ["--seed", "2"], capture_output=True, text=True)
+    assert reseeded.returncode == 1
+    assert "seed" in reseeded.stderr and "--refreeze" in reseeded.stderr
+    assert out.read_text(encoding="utf-8") == frozen_ids
+    assert meta_path.read_text(encoding="utf-8") == frozen_meta
+    rotated = subprocess.run(base + ["--seed", "2", "--rotate"],
+                             capture_output=True, text=True)
+    assert rotated.returncode == 1
+    assert "--refreeze" in rotated.stderr
+
+    # Population drift (a task dir added under the same dataset dir): refused.
+    extra = dataset_dir / "python__python-99999"
+    extra.mkdir()
+    (extra / "task.toml").write_text(
+        '[metadata]\ntags = ["python", "backend", "misc", "bug"]\n', encoding="utf-8")
+    grown = subprocess.run(base, capture_output=True, text=True)
+    assert grown.returncode == 1
+    assert "population_sha256" in grown.stderr
+    assert out.read_text(encoding="utf-8") == frozen_ids
+
+    # --refreeze is the explicit unlock and actually redraws membership.
+    refrozen = subprocess.run(base + ["--seed", "2", "--refreeze"],
+                              capture_output=True, text=True)
+    assert refrozen.returncode == 0, refrozen.stderr
+    assert out.read_text(encoding="utf-8") != frozen_ids
+    assert json.loads(meta_path.read_text(encoding="utf-8"))["seed"] == 2
+
+
 def test_audit_slice_refuses_n_above_population(tmp_path):
     dataset_dir = write_slice_population(tmp_path, {"python": 3, "go": 2})
     proc = subprocess.run(

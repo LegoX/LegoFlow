@@ -136,6 +136,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rotate", action="store_true",
                         help="allow replacing an existing meta whose "
                              "slice_version differs (refused by default)")
+    parser.add_argument("--refreeze", action="store_true",
+                        help="allow changing slice MEMBERSHIP (seed/n/strata/"
+                             "population) over an existing frozen meta; an older "
+                             "meta missing these fields also counts as drift")
     args = parser.parse_args(argv)
 
     dataset_dir = Path(args.dataset_dir)
@@ -156,24 +160,36 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+    population_sha256 = hashlib.sha256(
+        "\n".join(sorted(population)).encode("utf-8")).hexdigest()
 
-    # Refuse a silent slice_version change: an existing meta recorded under a
-    # different version may only be replaced deliberately (--rotate), before
-    # any file is written.
+    # Refuse silent slice changes before any file is written. slice_version
+    # drift needs --rotate; MEMBERSHIP drift (seed / n / strata / population)
+    # needs --refreeze: prior rounds' audit_excluded_ids_sha256 pin the exact
+    # slice they were measured against, and a silently redrawn slice breaks
+    # every longitudinal comparison. An older meta missing any membership field
+    # counts as drift — take one deliberate --refreeze when upgrading.
     meta_path = Path(args.meta) if args.meta else None
-    if meta_path is not None and meta_path.is_file() and not args.rotate:
-        prev_version = None
+    if meta_path is not None and meta_path.is_file():
         try:
             prev_meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             prev_meta = None
         if isinstance(prev_meta, dict):
             prev_version = prev_meta.get("slice_version", 1)
-        if prev_version != args.slice_version:
-            print(f"ERROR: {meta_path} records slice_version {prev_version}; "
-                  f"refusing to overwrite it with version {args.slice_version} "
-                  f"without --rotate.", file=sys.stderr)
-            return 1
+            if prev_version != args.slice_version and not args.rotate:
+                print(f"ERROR: {meta_path} records slice_version {prev_version}; "
+                      f"refusing to overwrite it with version {args.slice_version} "
+                      f"without --rotate.", file=sys.stderr)
+                return 1
+            incoming = {"seed": args.seed, "n": len(slice_ids),
+                        "strata": args.strata, "population_sha256": population_sha256}
+            drifted = [k for k, v in incoming.items() if prev_meta.get(k) != v]
+            if drifted and not args.refreeze:
+                print(f"ERROR: {meta_path} was frozen with a different "
+                      f"{', '.join(drifted)}; refusing to redraw the audit slice "
+                      f"without --refreeze.", file=sys.stderr)
+                return 1
 
     # Registry payload (frozen legoflow-audit Harbor registry) is built — and
     # its task dirs verified — BEFORE any file is written: a slice whose task
@@ -211,8 +227,7 @@ def main(argv: list[str] | None = None) -> int:
             "created_from": str(dataset_dir),
             "n": len(slice_ids),
             "population_size": len(population),
-            "population_sha256": hashlib.sha256(
-                "\n".join(sorted(population)).encode("utf-8")).hexdigest(),
+            "population_sha256": population_sha256,
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
         meta_path.parent.mkdir(parents=True, exist_ok=True)
