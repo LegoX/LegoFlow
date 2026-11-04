@@ -68,6 +68,8 @@ blocks/curator/artifacts/*
 !blocks/curator/artifacts/targeting/
 !blocks/curator/artifacts/decontam/
 !blocks/curator/artifacts/attach/
+# The attach lock is live mutex state (kernel-released flock), never provenance.
+blocks/curator/artifacts/attach/.manifest.lock
 blocks/curator/scripts/jobs/*
 blocks/curator/scripts/.legoflow-curator-*/
 
