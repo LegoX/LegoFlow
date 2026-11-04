@@ -214,6 +214,11 @@ tiers:
       # by design, so the *hash of the excluded id set* is public
       # loop bookkeeping; only slice PERFORMANCE readouts are eval_only.
       - audit_excluded_ids_sha256
+      # Closed-verdict audit provenance: the DIRECTION decision and the sha pin
+      # of the eval-side readout file. The raw audited scores stay in the
+      # eval-side file (eval_only tier) and never enter the shared ledger.
+      - promotion_direction
+      - audit_readout_sha256
     allowed_contexts: [online, offline, eval]
 
   # --- evaluator-internal only ----------------------------------------------

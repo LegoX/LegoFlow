@@ -675,7 +675,10 @@ def close_round_cmd(workspace, *extra):
 
 def test_close_round_records_audited_direction_and_warns_on_absence(tmp_path):
     """§7.6(b): with --audit-readout at open AND close time the verdict carries
-    an audited_direction block; without any, the two-part close warns loudly."""
+    the audited promotion_direction decision; without any, the two-part close
+    warns loudly. The raw audit-slice scores stay OUT of the git-tracked ledger
+    (audited_* is eval_only under the signal policy) — only the direction
+    decision and the readout sha pin are recorded."""
     pool = make_pool(tmp_path / "p1")
     ws1 = {"root": tmp_path / "p1", "pool": pool,
            "report": make_report(tmp_path / "p1" / "report.json", DEFAULT_TAGS),
@@ -689,12 +692,21 @@ def test_close_round_records_audited_direction_and_warns_on_absence(tmp_path):
     assert closed.returncode == 0, closed.stdout + closed.stderr
     verdict = yaml.safe_load(ws1["ledger"].read_text())[0]["verdict"]
     assert verdict["audit_readout_sha256"] == AT.sha256_file(new_readout)
-    audited = verdict["audited_direction"]
-    assert audited["baseline"] == pytest.approx(0.20)
-    assert audited["current"] == pytest.approx(0.50)
-    assert audited["delta"] == pytest.approx(0.30)
-    assert audited["direction"] == "improved"   # 0.30 >= 2 x max(0.02, 1/10) = 0.2
+    # The decision, never the scores: no audited_direction block — the raw
+    # 0.20/0.50 readout values appear nowhere under an audit-derived key (the
+    # internal mean_direction deltas are online-eligible by design and stay).
+    assert verdict["promotion_direction"] == {"direction": "improved"}
+    assert "audited_direction" not in verdict
     assert "internal-only" not in closed.stderr
+    # The loop's own firewall must pass the closed ledger row online: the close
+    # path enforces it, and the reduced verdict keeps it green (regression: the
+    # old audited_direction block made the guard flag the loop's own ledger).
+    row = yaml.safe_load(ws1["ledger"].read_text())[0]
+    guarded = subprocess.run(
+        [sys.executable, str(AT.SIGNAL_GUARD), "check", "--payload", "-",
+         "--context", "online"],
+        input=json.dumps(row), capture_output=True, text=True)
+    assert guarded.returncode == 0, guarded.stderr
 
     # Without any audit readout the close still works but warns (§7.6(b)).
     ws2 = {"root": tmp_path / "p2", "pool": make_pool(tmp_path / "p2"),

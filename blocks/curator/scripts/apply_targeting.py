@@ -1043,9 +1043,11 @@ def _as_float(value: Any) -> float:
 def audited_direction_block(row: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
     """§5.3/§7.6(b): promotion decisions must read the audit slice, not
     internal-only deltas. With --audit-readout the verdict carries the audited
-    delta (closing readout vs the baseline readout stamped at pre-register,
-    sha-verified) under the same noise_gate_multiplier deadband. Without it the
-    two-part verdict is internal-only — a loud WARN, never a silent pass."""
+    DIRECTION (closing readout vs the baseline readout stamped at pre-register,
+    sha-verified) under the same noise_gate_multiplier deadband — the direction
+    decision only: raw audit-slice scores are eval_only under the signal policy
+    and never enter the shared ledger. Without it the two-part verdict is
+    internal-only — a loud WARN, never a silent pass."""
     if not args.audit_readout:
         print("WARN: closing round without --audit-readout — the verdict is "
               "internal-only (audit-excluded deltas); "
@@ -1094,11 +1096,11 @@ def audited_direction_block(row: dict[str, Any], args: argparse.Namespace) -> di
         _as_float(readout.get("between_repeat_sd")),
         1.0 / audited_n)
     delta = float(new_value) - float(base_value)
-    block["audited_direction"] = {
-        "baseline": round(float(base_value), 6),
-        "current": round(float(new_value), 6),
-        "delta": round(delta, 6),
-        "deadband": round(deadband, 6),
+    # Only the DECISION lands in the git-tracked ledger: audit-slice scores are
+    # eval_only under the signal policy (pattern audited_*), and the loop's own
+    # firewall must never flag its own ledger. The raw readouts stay in the
+    # eval-side files pinned by audit_readout_sha256 for later audit.
+    block["promotion_direction"] = {
         "direction": ("improved" if delta >= deadband
                       else "regressed" if delta <= -deadband else "flat"),
     }
@@ -1141,6 +1143,7 @@ def close_round(args: argparse.Namespace) -> int:
                 print(f"WARN: supply-limited-null asserted but some target tags have pool "
                       f"supply: {above}", file=sys.stderr)
         row["verdict"] = verdict
+        enforce_signal_firewall(row, "closed verdict (closure)")
         save_ledger(ledger_path, rows)
         print(f"Round {args.round} closed as {args.closure}; next round may now open")
         return 0
@@ -1264,6 +1267,7 @@ def close_round(args: argparse.Namespace) -> int:
     }
     verdict.update(audited_direction_block(row, args))
     row["verdict"] = verdict
+    enforce_signal_firewall(row, "closed verdict (two-part)")
     save_ledger(ledger_path, rows)
     print(f"Round {args.round} verdict: mean={mean_direction.get('direction')} "
           f"intended_moved={row['verdict']['intended_effect']['moved']} "
