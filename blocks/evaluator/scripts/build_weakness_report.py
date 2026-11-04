@@ -945,6 +945,19 @@ def main(argv: list[str] | None = None) -> int:
         history_path.write_text(payload, encoding="utf-8")
     out_path.write_text(payload, encoding="utf-8")
 
+    # A complete final row written without its newline (a torn flush or a hand
+    # edit) would glue the next append onto it and re-brick the loop one
+    # torn-line-heal later. Repair the separator before appending anything.
+    if append_matrix_rows and matrix_path.exists() and matrix_path.stat().st_size > 0:
+        with matrix_path.open("rb") as probe:
+            probe.seek(-1, 2)
+            ends_with_newline = probe.read(1) == b"\n"
+        if not ends_with_newline:
+            print(f"WARNING: response matrix {matrix_path} lacks a trailing "
+                  f"newline; repairing the separator before appending",
+                  file=sys.stderr)
+            with matrix_path.open("a", encoding="utf-8") as fix:
+                fix.write("\n")
     with matrix_path.open("a", encoding="utf-8") as fh:
         for row in append_matrix_rows:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")

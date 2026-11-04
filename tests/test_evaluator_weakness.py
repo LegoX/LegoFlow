@@ -646,11 +646,21 @@ def test_torn_trailing_matrix_line_heals_and_midfile_corruption_refuses(tmp_path
     assert len(lines) == 12, "healed tail + round-2 rows, no fragment, no dupes"
     assert all(ln.get("round") in (1, 2) for ln in lines)
 
+    # Complete final row without trailing newline: repair the separator, do
+    # not glue the next append onto it.
+    lines_now = matrix.read_text(encoding="utf-8").splitlines()
+    matrix.write_text("\n".join(lines_now), encoding="utf-8")  # no trailing \n
+    healed2 = run_weakness(root, build_round(root, 3))
+    assert "lacks a trailing newline" in healed2["proc"].stderr
+    final_rows = [json.loads(ln) for ln in
+                  matrix.read_text(encoding="utf-8").splitlines()]
+    assert len(final_rows) == 18 and all(r.get("round") in (1, 2, 3) for r in final_rows)
+
     # Mid-file corruption (line 1) is not a crash artifact: refuse.
     lines_now = matrix.read_text(encoding="utf-8").splitlines()
     lines_now[0] = "{not json at all"
     matrix.write_text("\n".join(lines_now) + "\n", encoding="utf-8")
-    third = run_weakness(root, build_round(root, 3), expect_ok=False)
+    third = run_weakness(root, build_round(root, 4), expect_ok=False)
     assert third["proc"].returncode != 0
     assert "unparseable response matrix" in third["proc"].stderr
     assert "line 1" in third["proc"].stderr
