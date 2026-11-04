@@ -284,6 +284,32 @@ def test_language_and_cross_language_tags_map_to_quota_deltas(workspace):
     assert quotas["go"]["new_value"] == quotas["go"]["baseline"] + quotas["go"]["delta"]
 
 
+def test_targeting_knobs_default_from_config(tmp_path, monkeypatch):
+    """runtime_info.input.targeting owns the knobs: tuning config.yaml must
+    take effect without mirroring every value into CLI flags, and explicit
+    flags must still win (argparse set_defaults)."""
+    (tmp_path / "config.yaml").write_text(
+        "runtime_info:\n  input:\n    targeting:\n"
+        "      directives_path: ../evaluator/artifacts/weakness/weakness_report.json\n"
+        "      min_tag_n: 5\n"
+        "      noise_gate_multiplier: 3.5\n"
+        "      supply_satisfaction_threshold: 7\n",
+        encoding="utf-8")
+    monkeypatch.setattr(AT, "BLOCK_DIR", tmp_path)
+    defaults = AT.targeting_config_defaults()
+    assert defaults["min_tag_n"] == 5
+    assert defaults["noise_gate_multiplier"] == pytest.approx(3.5)
+    assert defaults["supply_satisfaction_threshold"] == 7
+    assert defaults["report"].endswith(
+        "evaluator/artifacts/weakness/weakness_report.json"), \
+        "relative directives_path resolves against the block dir"
+    parser = AT.build_parser()
+    args = parser.parse_args([])
+    assert args.min_tag_n == 5 and args.supply_satisfaction_threshold == 7
+    overridden = parser.parse_args(["--min-tag-n", "30"])
+    assert overridden.min_tag_n == 30, "explicit flags must beat config defaults"
+
+
 def test_slew_limit_clamps_quota_deltas():
     quotas, unallocated = AT.apply_slew_limit({"py": 999, "go": 3}, {"py": 10, "go": 50}, 0.2)
     assert quotas["py"]["delta"] == 2            # 20% of baseline 10

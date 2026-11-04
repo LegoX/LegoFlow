@@ -83,7 +83,12 @@ The RSI loop's actuation gate — mirrors the terminal-curator semantic-audit
 pattern: scripts propose, this agent audits, the human confirms, and only then
 does anything touch `config.yaml`.
 
-1. Run `python3 scripts/apply_targeting.py`. It refuses on any open verdict
+1. Run `python3 scripts/apply_targeting.py`. Knobs (`--report` source,
+   `--min-tag-n`, `--noise-gate-multiplier`,
+   `--supply-satisfaction-threshold`) default from
+   `runtime_info.input.targeting` in `config.yaml`; explicit flags override,
+   so pass flags only when deliberately deviating from the config. It refuses
+   on any open verdict
    in `artifacts/targeting/hypothesis_ledger.yaml`, supply-checks each weak
    tag against this block's own manifests, applies the noise gate, ranks by
    learning progress, and writes `artifacts/targeting/directives_round_NNN.yaml`

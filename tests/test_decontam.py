@@ -731,6 +731,21 @@ def test_skip_file_is_consumed_by_every_create_launcher(tmp_path):
     assert "eval_overlap_pr_ids.txt" in emitted[0]
 
     # Empty skip file -> no emission (no exclusion in force, flag omitted).
+    # The min-source-files knob (targeting's create.min_source_files directive)
+    # is real: emitted from config params, defaulting to the historical 2.
+    assert "MIN_SOURCE_FILES=2" in out.stdout  # default when params omit it
+    (cfg_dir / "config.yaml").write_text(
+        "runtime_info:\n  input:\n    languages:\n      py:\n"
+        "        params: {timeout: 10, cc_timeout: 9, n_concurrent: 2, "
+        "min_source_files: 3}\n",
+        encoding="utf-8")
+    skip.write_text("owner__exact-101\n", encoding="utf-8")
+    out3 = sp.run(
+        [sys.executable, str(REPO_ROOT / "blocks/curator/scripts/read_params.py"),
+         "--lang", "py", "--config-yaml", str(cfg_dir / "config.yaml")],
+        capture_output=True, text=True)
+    assert "MIN_SOURCE_FILES=3" in out3.stdout
+
     skip.write_text("\n", encoding="utf-8")
     out2 = sp.run(
         [sys.executable, str(REPO_ROOT / "blocks/curator/scripts/read_params.py"),

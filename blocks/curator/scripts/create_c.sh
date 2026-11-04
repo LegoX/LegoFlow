@@ -40,6 +40,6 @@ legoflow-curator create \
   --timeout "${TIMEOUT}" \
   --cc-timeout "${CC_TIMEOUT}" \
   --no-require-issue \
-  --min-source-files 2 \
+  --min-source-files "${MIN_SOURCE_FILES:-2}" \
   --max-source-files 10 \
   2>&1 | tee "${PROJECT_ROOT}/artifacts/logs/legoflow-curator-create/cc_c_$(date -u +%Y%m%dT%H%M%SZ).txt"

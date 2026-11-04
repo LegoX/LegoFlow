@@ -53,6 +53,11 @@ def main():
     # the wrapper must OMIT the flag; emitting "" made ${VAR:-5000} cap it at 5000.
     max_verified = params.get("max_verified_tasks", 10)
     print(f"MAX_VERIFIED_TASKS={'all' if max_verified == 'all' else max_verified}")
+    # The yield/difficulty knob targeting directives adjust
+    # (filter_overrides['create.min_source_files']); hardcoded 2 in the
+    # launchers made that directive key dead. Defaults to the historical 2.
+    min_source_files = params.get("min_source_files", 2)
+    print(f"MIN_SOURCE_FILES={min_source_files}")
 
     # Emitted resolved so create_<lang>.sh uses the declared output pool
     # instead of hardcoding artifacts/swe_tasks.

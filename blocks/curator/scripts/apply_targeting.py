@@ -1278,10 +1278,38 @@ def close_round(args: argparse.Namespace) -> int:
 # --- CLI ---------------------------------------------------------------------------
 
 
+def targeting_config_defaults() -> dict[str, Any]:
+    """CLI-overridable defaults from runtime_info.input.targeting in the block
+    config — the documented knobs (directives_path, min_tag_n,
+    noise_gate_multiplier, supply_satisfaction_threshold) are real
+    configuration, not documentation; tuning them in config.yaml must take
+    effect without the operator mirroring every value into CLI flags. Explicit
+    flags always win."""
+    try:
+        with open(BLOCK_DIR / "config.yaml", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except OSError:
+        return {}
+    targeting = (((data.get("runtime_info") or {}).get("input") or {})
+                 .get("targeting") or {})
+    defaults: dict[str, Any] = {}
+    for key, cast in (("min_tag_n", int), ("noise_gate_multiplier", float),
+                      ("supply_satisfaction_threshold", int)):
+        value = targeting.get(key)
+        if value is not None:
+            defaults[key] = cast(value)
+    report = targeting.get("directives_path")
+    if report:
+        path = Path(str(report))
+        defaults["report"] = str(path if path.is_absolute() else BLOCK_DIR / path)
+    return defaults
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--report", help="weakness_report.json (legoflow.weakness.v1)")
+    ap.add_argument("--report", help="weakness_report.json (legoflow.weakness.v1); "
+                                     "default: runtime_info.input.targeting.directives_path")
     ap.add_argument("--pool-root", default=str(BLOCK_DIR / "artifacts" / "swe_tasks"),
                     help="curator task pool root (default: %(default)s)")
     ap.add_argument("--ledger", default=str(BLOCK_DIR / "artifacts" / "targeting"
@@ -1336,6 +1364,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="verify an existing directives file against --report "
                          "(re-hash source_report_sha256; refuse on divergence) "
                          "instead of opening a round")
+    # Config-owned knobs become argparse defaults; explicit flags still win.
+    ap.set_defaults(**targeting_config_defaults())
     return ap
 
 
