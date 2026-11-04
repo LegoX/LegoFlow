@@ -448,18 +448,35 @@ def filter_matrix_rows(matrix_path: Path, matrix_rows: list[dict]) -> list[dict]
     """
     existing: dict[tuple, dict] = {}
     if matrix_path.exists():
-        for line_no, line in enumerate(
-                matrix_path.read_text(encoding="utf-8").splitlines(), start=1):
-            line = line.strip()
-            if not line:
-                continue
+        content_lines = matrix_path.read_text(encoding="utf-8").splitlines()
+        numbered = [(no, ln.strip()) for no, ln in enumerate(content_lines, start=1)
+                    if ln.strip()]
+        torn_tail: tuple[int, str] | None = None
+        for idx, (line_no, line) in enumerate(numbered):
             try:
                 row = json.loads(line)
             except json.JSONDecodeError as exc:
+                if idx == len(numbered) - 1:
+                    # A crash mid-append can only ever tear the FINAL line.
+                    # Heal it (warn + truncate the fragment atomically) so one
+                    # torn write cannot brick every future round; mid-file
+                    # corruption is real damage and still refuses.
+                    torn_tail = (line_no, line)
+                    print(f"WARNING: response matrix {matrix_path} has a torn "
+                          f"trailing line ({line_no}, {len(line)} chars) — a "
+                          f"crashed append; truncating it before this round's "
+                          f"append", file=sys.stderr)
+                    break
                 raise SystemExit(f"ERROR: unparseable response matrix "
                                  f"{matrix_path} (line {line_no}): {exc}")
             if isinstance(row, dict):
                 existing[tuple(row.get(f) for f in MATRIX_KEY_FIELDS)] = row
+        if torn_tail is not None:
+            keep = numbered[:len(numbered) - 1]
+            healed = "\n".join(ln for _, ln in keep) + ("\n" if keep else "")
+            tmp = matrix_path.with_name(matrix_path.name + ".heal.tmp")
+            tmp.write_text(healed, encoding="utf-8")
+            tmp.replace(matrix_path)
     append_rows = []
     for row in matrix_rows:
         prior = existing.get(tuple(row.get(f) for f in MATRIX_KEY_FIELDS))

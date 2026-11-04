@@ -623,6 +623,39 @@ def test_builder_reinvocation_refuses_phantom_round(tmp_path):
     assert len(yaml.safe_load(first["ledger"].read_text())) == 1
 
 
+def test_torn_trailing_matrix_line_heals_and_midfile_corruption_refuses(tmp_path):
+    """The matrix is appended without tmp+rename, so a crash mid-append can
+    tear the FINAL line. The builder used to die on any unparseable line, so
+    one torn write permanently bricked every future round until a human
+    hand-truncated the file. A torn TRAILING line is now warned + healed
+    atomically before the round's append; mid-file corruption is real damage
+    and still refuses."""
+    root = tmp_path
+    run_weakness(root, build_round(root, 1))
+    matrix = root / "response_matrix.jsonl"
+    healthy_lines = matrix.read_text(encoding="utf-8").splitlines()
+    assert len(healthy_lines) == 6
+
+    # Crash mid-append: a torn fragment as the final line.
+    with matrix.open("a", encoding="utf-8") as fh:
+        fh.write('{"round": 1, "checkpoint_sha": "x", "task_id": "harbor/t')
+    second = run_weakness(root, build_round(root, 2))
+    assert "torn trailing line" in second["proc"].stderr
+    lines = [json.loads(ln) for ln in
+             matrix.read_text(encoding="utf-8").splitlines()]
+    assert len(lines) == 12, "healed tail + round-2 rows, no fragment, no dupes"
+    assert all(ln.get("round") in (1, 2) for ln in lines)
+
+    # Mid-file corruption (line 1) is not a crash artifact: refuse.
+    lines_now = matrix.read_text(encoding="utf-8").splitlines()
+    lines_now[0] = "{not json at all"
+    matrix.write_text("\n".join(lines_now) + "\n", encoding="utf-8")
+    third = run_weakness(root, build_round(root, 3), expect_ok=False)
+    assert third["proc"].returncode != 0
+    assert "unparseable response matrix" in third["proc"].stderr
+    assert "line 1" in third["proc"].stderr
+
+
 def test_reinvoking_oldest_round_refuses_phantom_round(tmp_path):
     """Regression: the re-measure dedup used to compare only against the NEWEST
     history copy, so re-invoking round 1's exact command with >=2 rounds on
