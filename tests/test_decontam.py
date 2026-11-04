@@ -788,3 +788,39 @@ def test_stale_index_warn_fires_for_both_timestamp_formats(tmp_path, capsys):
         DC.warn_stale_index(index_path, {"entries": [], "generated_at": "garbage"})
         DC.warn_stale_index(index_path, fresh)
     assert err.getvalue() == ""
+
+
+def test_pool_scrub_does_not_touch_config_exports_for_custom_pools(env, tmp_path):
+    """A custom --pool-dir (test fixture, scratch pool) must never prune the
+    config-resolved merged/stratified exports: hitting them would be id-collision
+    luck, not correctness. Without explicit --merged-dir/--stratified-dir the
+    propagation only fires when the scrubbed pool IS the config-declared pool."""
+    # A merged export that WOULD match fixture ids if pruned by naming luck.
+    decoy = tmp_path / "decoy-merged"
+    decoy.mkdir()
+    for tid in ("owner__exact-101", "owner__clean-111"):
+        (decoy / tid).mkdir()
+    (decoy / "verifiable_tasks.txt").write_text(
+        "owner__clean-111\nowner__exact-101\n", encoding="utf-8")
+    # No overrides: env's pool lives in tmp_path, not under the config pool.
+    result = run_pool(env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "derived exports not pruned" in result.stdout
+    assert (decoy / "owner__exact-101").is_dir(), \
+        "custom-pool run must not prune anything it was not explicitly pointed at"
+
+
+def test_scrub_refuses_path_shaped_task_ids(env, tmp_path):
+    """Task ids are single path segments: '..', slashes, and empty ids must
+    never reach rmtree even if a hostile manifest listed them."""
+    env["manifest"].write_text(
+        "../elsewhere\nowner__exact-101\n", encoding="utf-8")
+    merged = tmp_path / "merged_swe_tasks"
+    (merged / "owner__exact-101").mkdir(parents=True)
+    (merged / "verifiable_tasks.txt").write_text("owner__exact-101\n", encoding="utf-8")
+    result = run_pool(env, "--merged-dir", str(merged))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert merged.parent.name != "elsewhere"   # nothing escaped upward
+    assert not (tmp_path / "elsewhere").exists()
+    assert not (merged / "owner__exact-101").exists()      # the real id pruned
+    assert not (merged / "verifiable_tasks.txt").read_text().strip()

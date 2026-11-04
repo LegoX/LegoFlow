@@ -546,7 +546,7 @@ def _config_output_dir(key: str, default: str) -> Path:
         with open(BLOCK_DIR / "config.yaml", encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
         p = (((data.get("runtime_info") or {}).get("output") or {}).get(key) or {}).get("path")
-    except OSError:
+    except (OSError, yaml.YAMLError):
         p = None
     if not p:
         return BLOCK_DIR / default
@@ -564,6 +564,17 @@ def _remove_pool_entry(path: Path) -> bool:
     return False
 
 
+def _task_id_safe(task_id: str) -> bool:
+    """A task id is a single path segment: anything that would escape the pool
+    dir ('..', '/', absolute, empty) is refused before it reaches rmtree."""
+    return bool(task_id) and "/" not in task_id and task_id not in (".", "..")
+
+
+# Sentinel: a derived pool the caller did not name (scrub_derived_pools no-ops
+# on it because it can never exist as a directory).
+_NO_DERIVED_POOL = BLOCK_DIR / "artifacts" / ".no-such-derived-pool"
+
+
 def scrub_derived_pools(quarantined_ids: list[str], merged_dir: Path,
                         stratified_dir: Path) -> None:
     """Propagate pool-stage quarantine into the derived exports tracer consumes.
@@ -573,18 +584,30 @@ def scrub_derived_pools(quarantined_ids: list[str], merged_dir: Path,
     it can never remove a quarantined task once copied; select_stratified_tasks
     symlinks into merged. The scrub itself is therefore the one writer for
     removals: delete each tainted id from both derived pools and rewrite their
-    manifests. No-ops for any derived pool that does not exist.
+    manifests. No-ops for any derived pool that does not exist. The merged
+    remove+rewrite runs under the manifests' own .lock convention so a
+    concurrent pass cannot interleave a presence scan with our removals.
     """
+    quarantined_ids = [t for t in quarantined_ids if _task_id_safe(t)]
     if merged_dir.is_dir():
-        removed = [tid for tid in quarantined_ids if _remove_pool_entry(merged_dir / tid)]
-        if removed:
-            present = sorted(p.name for p in merged_dir.iterdir() if p.is_dir())
-            (merged_dir / "verifiable_tasks.txt").write_text(
-                "\n".join(present) + "\n", encoding="utf-8")
-            print(f"            merged export pruned ({len(removed)} task dir(s)): "
-                  f"{merged_dir}")
-            print("            NOTE: active tracer staging symlinking a pruned task "
-                  "now dangles; re-stage before the next rollout", file=sys.stderr)
+        lock_path = merged_dir / ".verifiable_tasks.lock"
+        with lock_path.open("a+", encoding="utf-8") as lock_fh:
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
+            try:
+                removed = [tid for tid in quarantined_ids
+                           if _remove_pool_entry(merged_dir / tid)]
+                if removed:
+                    present = sorted(p.name for p in merged_dir.iterdir()
+                                     if p.is_dir())
+                    (merged_dir / "verifiable_tasks.txt").write_text(
+                        "\n".join(present) + "\n", encoding="utf-8")
+                    print(f"            merged export pruned ({len(removed)} task "
+                          f"dir(s)): {merged_dir}")
+                    print("            NOTE: active tracer staging symlinking a pruned "
+                          "task now dangles; re-stage before the next rollout",
+                          file=sys.stderr)
+            finally:
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
     if stratified_dir.is_dir():
         removed = [tid for tid in quarantined_ids if _remove_pool_entry(stratified_dir / tid)]
         if removed:
@@ -718,12 +741,32 @@ def run_pool(args: argparse.Namespace, index: IdentityIndex) -> int:
         added = append_skip_lines(skip_file, skip_lines)
         merged_dir = getattr(args, "merged_dir", None)
         stratified_dir = getattr(args, "stratified_dir", None)
-        scrub_derived_pools(
-            [h["task_id"] for h in hits],
-            Path(merged_dir) if merged_dir
-            else _config_output_dir("merged_tasks_dir", "artifacts/merged_swe_tasks"),
-            Path(stratified_dir) if stratified_dir
-            else _config_output_dir("stratified_tasks_dir", "artifacts/stratified_swe_tasks"))
+        if merged_dir or stratified_dir:
+            # Explicit overrides: the caller owns the mapping (tests, scratch
+            # pools) and the scrub touches exactly what was named.
+            scrub_derived_pools(
+                [h["task_id"] for h in hits],
+                Path(merged_dir) if merged_dir else _NO_DERIVED_POOL,
+                Path(stratified_dir) if stratified_dir else _NO_DERIVED_POOL)
+        else:
+            # No overrides: only propagate when the scrubbed pool IS the
+            # config-declared pool. A custom --pool-dir (a test fixture, a
+            # scratch pool) must never prune the live config-resolved exports —
+            # hitting them would be id-collision luck, not correctness.
+            config_pool = _config_output_dir("swe_tasks_dir", "artifacts/swe_tasks")
+            try:
+                pool_is_live = pool_dir.resolve().is_relative_to(config_pool.resolve())
+            except (OSError, ValueError):
+                pool_is_live = False
+            if pool_is_live:
+                scrub_derived_pools(
+                    [h["task_id"] for h in hits],
+                    _config_output_dir("merged_tasks_dir", "artifacts/merged_swe_tasks"),
+                    _config_output_dir("stratified_tasks_dir",
+                                       "artifacts/stratified_swe_tasks"))
+            else:
+                print(f"            NOTE: pool {pool_dir} is not the config-declared "
+                      f"pool ({config_pool}); derived exports not pruned")
         print(f"pool stage: {len(hits)} task(s) quarantined out of {len(task_ids)} listed")
         print(f"            manifest rewritten in place (order preserved, deduped): {manifest}")
         print(f"            quarantine {quarantine}; skip file {skip_file} (+{added} line(s))")
