@@ -334,7 +334,9 @@ def test_record_audit_is_write_once_and_feeds_the_closure(tmp_path):
 def test_targeting_knobs_default_from_config(tmp_path, monkeypatch):
     """runtime_info.input.targeting owns the knobs: tuning config.yaml must
     take effect without mirroring every value into CLI flags, and explicit
-    flags must still win (argparse set_defaults)."""
+    flags must still win (argparse set_defaults). A malformed config or a
+    wrong-typed knob degrades to built-in defaults with a WARN instead of
+    bricking every subcommand."""
     (tmp_path / "config.yaml").write_text(
         "runtime_info:\n  input:\n    targeting:\n"
         "      directives_path: ../evaluator/artifacts/weakness/weakness_report.json\n"
@@ -355,6 +357,17 @@ def test_targeting_knobs_default_from_config(tmp_path, monkeypatch):
     assert args.min_tag_n == 5 and args.supply_satisfaction_threshold == 7
     overridden = parser.parse_args(["--min-tag-n", "30"])
     assert overridden.min_tag_n == 30, "explicit flags must beat config defaults"
+
+    # Malformed config / wrong-typed knob: WARN + built-in defaults, never a
+    # traceback out of build_parser (which would brick --close-round too).
+    (tmp_path / "config.yaml").write_text("runtime_info: [broken\n", encoding="utf-8")
+    assert AT.targeting_config_defaults() == {}
+    AT.build_parser().parse_args(["--close-round", "--round", "1"])
+    (tmp_path / "config.yaml").write_text(
+        "runtime_info:\n  input:\n    targeting:\n      min_tag_n: [20]\n",
+        encoding="utf-8")
+    defaults = AT.targeting_config_defaults()
+    assert "min_tag_n" not in defaults
 
 
 def test_slew_limit_clamps_quota_deltas():
@@ -575,6 +588,46 @@ def test_close_round_resolves_overwritten_live_baseline_via_history(workspace):
         assert tags["language:go"]["moved_expected"] is True
     assert verdict["baseline_source"].endswith("weakness_report_001.json")
     assert verdict["closed_by_report_sha256"] != row_sha
+
+
+def test_close_round_resolves_history_when_live_path_is_gone(workspace):
+    """clean.sh --all keeps git-tracked history but drops the ignored live
+    report, and the firewall quarantine renames it away — the close must still
+    resolve the pinned sha from the history copies instead of forcing a
+    supply-limited-null."""
+    import shutil
+    ws = workspace
+    history = ws["report"].parent / "history"
+    history.mkdir(exist_ok=True)
+    shutil.copyfile(ws["report"], history / "weakness_report_001.json")
+    assert run_targeting(ws).returncode == 0
+    ws["report"].unlink()                      # live copy gone entirely
+    new_report = improved_report(ws["root"] / "weakness_report_r2.json")
+    closed = close_round(ws, new_report)
+    assert closed.returncode == 0, closed.stdout + closed.stderr
+    assert "sha-matched history copy" in closed.stderr
+    verdict = yaml.safe_load(ws["ledger"].read_text())[0]["verdict"]
+    assert verdict["mean_direction"]["direction"] == "improved"
+    assert verdict["baseline_source"].endswith("weakness_report_001.json")
+
+
+def test_record_audit_refuses_closure_flags(tmp_path):
+    """--closure on a record-audit invocation is a misuse that used to be
+    silently swallowed (audit recorded, round left open, rc 0)."""
+    ws = {"root": tmp_path, "pool": make_pool(tmp_path / "pool-root"),
+          "report": make_report(tmp_path / "weakness_report.json", DEFAULT_TAGS),
+          "ledger": tmp_path / "targeting" / "hypothesis_ledger.yaml",
+          "out_dir": tmp_path / "targeting"}
+    assert run_targeting(ws).returncode == 0
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--record-audit", "--round", "1",
+         "--ledger", str(ws["ledger"]), "--audit-outcome", "rejected",
+         "--closure", "supply-limited-null"],
+        capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "only apply with --close-round" in result.stderr
+    row = yaml.safe_load(ws["ledger"].read_text())[0]
+    assert row.get("audit_outcome") is None, "refused misuse must not record"
 
 
 def test_close_round_dies_when_overwritten_baseline_has_no_history_copy(workspace):
@@ -967,7 +1020,7 @@ def test_difficulty_tier_targets_emit_the_filter_override(tmp_path):
     result = run_targeting(ws)
     assert result.returncode == 0, result.stdout + result.stderr
     directives = yaml.safe_load((ws["out_dir"] / "directives_round_001.yaml").read_text())
-    assert directives["filter_overrides"] == {"create.min_source_files": 3}
+    assert directives["filter_overrides"] == {"languages.params.min_source_files": 3}
     # easy-tier targets ask for the inclusive knob instead
     ws2 = {"root": tmp_path / "t2", "pool": make_pool(tmp_path / "t2" / "pool"),
            "report": make_report(tmp_path / "t2" / "report.json", [
@@ -977,7 +1030,7 @@ def test_difficulty_tier_targets_emit_the_filter_override(tmp_path):
     assert result2.returncode == 0, result2.stdout + result2.stderr
     directives2 = yaml.safe_load(
         (ws2["out_dir"] / "directives_round_001.yaml").read_text())
-    assert directives2["filter_overrides"] == {"create.min_source_files": 1}
+    assert directives2["filter_overrides"] == {"languages.params.min_source_files": 1}
 
 
 def make_concentrated_pool(root: Path) -> Path:

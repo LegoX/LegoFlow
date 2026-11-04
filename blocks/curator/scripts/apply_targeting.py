@@ -786,8 +786,10 @@ def plan_directives(report: dict[str, Any], report_path: Path, supply: dict[str,
     filter_overrides: dict[str, Any] = {}
     for candidate in candidates:
         if candidate["dimension"] == "difficulty_tier":
-            # Bounded, documented knob: harder targets need larger diffs to mine.
-            filter_overrides["create.min_source_files"] = (
+            # Bounded, documented knob — names the REAL config path the agent
+            # applies it to (read_params.py -> create_<lang>.sh
+            # --min-source-files): languages.<lang>.params.min_source_files.
+            filter_overrides["languages.params.min_source_files"] = (
                 3 if candidate["value"] == "hard" else 1)
             break
 
@@ -1200,34 +1202,40 @@ def close_round(args: argparse.Namespace) -> int:
                f"(sha256 {new_sha[:12]}… matches source_report_sha256); wait for the "
                f"next round's report or close with --closure supply-limited-null")
     baseline_path = Path(row.get("source_report_path") or "")
-    if not baseline_path.is_file():
-        die(f"baseline report {baseline_path} for round {args.round} is gone; close with "
-            f"--closure supply-limited-null instead (history copies live in the "
-            f"evaluator's weakness history dir)")
     # The pinned baseline sha is authoritative: the live report path recorded at
     # open time (the evaluator's weakness_report.json) is OVERWRITTEN IN PLACE by
     # every eval round, so re-reading it at close compares the round against
     # itself (every delta reads 0.0 -> false futility-freezes). Resolve the pin
-    # against the live path first, then the immutable history copies beside it.
+    # against the live path first, then the immutable history copies beside it —
+    # the history copies are consulted EVEN WHEN the live path is gone (a
+    # clean.sh --all keeps git-tracked history but drops the ignored live copy,
+    # and the firewall quarantine renames it away), so the close still works.
     baseline_source = str(baseline_path)
     if not row_sha:
+        if not baseline_path.is_file():
+            die(f"baseline report {baseline_path} for round {args.round} is gone and "
+                f"the ledger row pins no sha; close with --closure "
+                f"supply-limited-null instead")
         print(f"WARN: round {args.round} ledger row has no source_report_sha256; "
               f"trusting the recorded path {baseline_path} as-is (legacy ledger)",
               file=sys.stderr)
     else:
-        candidates = [baseline_path] + sorted(
+        candidates = ([baseline_path] if baseline_path.is_file() else []) + sorted(
             (baseline_path.parent / "history").glob("weakness_report_*.json"))
         resolved = next(
             (c for c in candidates if c.is_file() and sha256_file(c) == row_sha), None)
         if resolved is None:
             die(f"baseline for round {args.round} no longer matches its pinned sha256 "
-                f"{row_sha[:12]}…: {baseline_path} was overwritten and no matching copy "
-                f"exists under {baseline_path.parent / 'history'}; close with --closure "
-                f"supply-limited-null or restore the pinned report")
+                f"{row_sha[:12]}…: {baseline_path} is "
+                f"{'gone' if not baseline_path.is_file() else 'overwritten'} and no "
+                f"matching copy exists under {baseline_path.parent / 'history'}; "
+                f"close with --closure supply-limited-null or restore the pinned "
+                f"report")
         if resolved != baseline_path:
             baseline_source = str(resolved)
-            print(f"NOTE: live baseline {baseline_path} was overwritten in place; using "
-                  f"sha-matched history copy {resolved} for round {args.round}",
+            print(f"NOTE: live baseline {baseline_path} was "
+                  f"{'missing' if not baseline_path.is_file() else 'overwritten in place'}; "
+                  f"using sha-matched history copy {resolved} for round {args.round}",
                   file=sys.stderr)
     baseline_report = load_report(Path(baseline_source))
     baseline_overall = overall_pass_rate(baseline_report)
@@ -1328,7 +1336,9 @@ def targeting_config_defaults() -> dict[str, Any]:
     try:
         with open(BLOCK_DIR / "config.yaml", encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
-    except OSError:
+    except (OSError, yaml.YAMLError) as exc:
+        print(f"WARN: cannot read targeting knobs from {BLOCK_DIR / 'config.yaml'} "
+              f"({exc}); using built-in defaults", file=sys.stderr)
         return {}
     targeting = (((data.get("runtime_info") or {}).get("input") or {})
                  .get("targeting") or {})
@@ -1337,7 +1347,11 @@ def targeting_config_defaults() -> dict[str, Any]:
                       ("supply_satisfaction_threshold", int)):
         value = targeting.get(key)
         if value is not None:
-            defaults[key] = cast(value)
+            try:
+                defaults[key] = cast(value)
+            except (TypeError, ValueError):
+                print(f"WARN: targeting.{key}={value!r} is not {cast.__name__}; "
+                      f"using the built-in default", file=sys.stderr)
     report = targeting.get("directives_path")
     if report:
         path = Path(str(report))
@@ -1445,6 +1459,18 @@ def verify_directives(args: argparse.Namespace) -> int:
 
 def main() -> int:
     args = build_parser().parse_args()
+    # Misuse guards first, above all dispatch, so no subcommand silently
+    # swallows flags meant for another.
+    if args.new_report or args.closure:
+        if not args.close_round:
+            die("--new-report/--closure only apply with --close-round")
+        if args.record_audit:
+            die("--record-audit and --close-round are separate steps: record the "
+                "audit outcome first, then close the round")
+    if args.verify and args.record_audit:
+        die("--verify cannot be combined with --record-audit")
+    if args.record_audit and not args.audit_outcome:
+        die("--record-audit requires --audit-outcome applied|rejected")
     if args.verify:
         if args.close_round:
             die("--verify cannot be combined with --close-round")
@@ -1461,8 +1487,6 @@ def main() -> int:
     if args.record_audit:
         if args.round is None:
             die("--record-audit requires --round N")
-        if not args.audit_outcome:
-            die("--record-audit requires --audit-outcome applied|rejected")
         return record_audit(args)
     if not args.report:
         die("--report is required (or use --close-round / --verify)")
