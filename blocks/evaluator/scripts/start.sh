@@ -831,7 +831,8 @@ build_weakness_report() {
     receipt_flag=(--receipt "$1/round_receipt.json")
   fi
   echo "=== building weakness report from $# repeat job dir(s) ===" | tee -a "$LOG_FILE"
-  if python3 "$builder" \
+  local build_rc=0
+  if ! python3 "$builder" \
       --jobs "$@" \
       --dataset "$SOURCE_DATASET_NAME" \
       --audit-slice "$audit_slice" \
@@ -840,9 +841,27 @@ build_weakness_report() {
       --response-matrix "$EVAL_ARTIFACTS_DIR/response_matrix.jsonl" \
       --ledger "$EVAL_ARTIFACTS_DIR/loop/ledger.yaml" \
       ${receipt_flag[@]+"${receipt_flag[@]}"} 2>&1 | tee -a "$LOG_FILE"; then
+    build_rc="${PIPESTATUS[0]}"
+  fi
+  if [[ "$build_rc" -eq 0 ]]; then
     echo "weakness report: $out_dir/weakness_report.json" | tee -a "$LOG_FILE"
+  elif [[ "$build_rc" -eq 3 ]]; then
+    # Exit 3 is exclusively the signal-firewall refusal (guard_payloads aborts
+    # BEFORE any write), so the live --out copy still holds the PREVIOUS round
+    # and would keep feeding curator's directives_path as if current. Quarantine
+    # the stale copy and stamp a marker: the next apply_targeting then dies
+    # 'weakness report not found' (fail-closed) instead of silently consuming
+    # round N-1's data. The run itself stays non-fatal by policy — the salvage
+    # path calls this function under `|| true`.
+    echo "ERROR: signal firewall refused the weakness-report payloads (builder exit 3)." | tee -a "$LOG_FILE" >&2
+    if [[ -f "$out_dir/weakness_report.json" ]]; then
+      mv -f "$out_dir/weakness_report.json" "$out_dir/weakness_report.refused.json"
+      echo "ERROR: stale live report quarantined to $out_dir/weakness_report.refused.json — no live report is served until the payload/policy conflict is fixed and the builder re-run." | tee -a "$LOG_FILE" >&2
+    fi
+    printf '{"refused_at": "%s", "builder_exit": 3, "reason": "signal_firewall"}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$out_dir/weakness_refused.json"
   else
-    echo "WARNING: weakness report build failed; eval results are unaffected. See log above." | tee -a "$LOG_FILE"
+    echo "WARNING: weakness report build failed (builder exit $build_rc); eval results are unaffected. See log above." | tee -a "$LOG_FILE"
   fi
   return 0
 }

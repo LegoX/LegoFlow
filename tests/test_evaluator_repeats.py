@@ -675,6 +675,32 @@ def test_harness_builder_failure_is_non_fatal(tmp_path):
     assert "unaffected" in proc.stdout
 
 
+def test_harness_firewall_refusal_quarantines_stale_live_report(tmp_path):
+    """Builder exit 3 is exclusively the signal-firewall refusal (guard_payloads
+    aborts BEFORE any write): the live --out copy still holds the PREVIOUS
+    round and would keep feeding curator's directives_path as if current. The
+    refusal must quarantine the stale copy and stamp a marker; the run itself
+    stays non-fatal by policy (the salvage path calls the builder under
+    `|| true`)."""
+    block, state = make_stub_tree(tmp_path, repeats=2, command_override="")
+    weakness_dir = block / "artifacts" / "weakness"
+    weakness_dir.mkdir(parents=True)
+    (weakness_dir / "weakness_report.json").write_text('{"stale": true}', encoding="utf-8")
+    proc = run_start_sh(block, state, extra_env={"HARNESS_BUILDER_RC": "3"})
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    combined = proc.stdout + proc.stderr
+    assert "signal firewall refused" in combined
+    assert not (weakness_dir / "weakness_report.json").exists()
+    quarantined = weakness_dir / "weakness_report.refused.json"
+    assert quarantined.is_file()
+    assert json.loads(quarantined.read_text()) == {"stale": True}
+    marker = json.loads((weakness_dir / "weakness_refused.json").read_text())
+    assert marker["builder_exit"] == 3
+    assert marker["reason"] == "signal_firewall"
+    assert "rc=0" in state_lines(state, "archive_calls.txt")
+
+
 def test_harness_harbor_failure_stops_loop_and_reports_completed_repeats(tmp_path):
     """A repeat whose Harbor run fails stops the loop; salvage still reports.
 
