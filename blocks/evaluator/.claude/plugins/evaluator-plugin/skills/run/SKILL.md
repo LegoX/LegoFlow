@@ -66,7 +66,12 @@ block** — no child blocks — so this skill runs `scripts/start.sh` directly
    rotated it — `artifacts/reserve/audit_slice.txt` +
    `audit_slice.meta.json`. Surface `directives_blocked` entries (tags
    blocked for `n < min_tag_n` or sub-noise deltas) as first-class outcomes:
-   "do not actuate" is the loop's expected steady state, not a failure. Remind
+   "do not actuate" is the loop's expected steady state, not a failure. If
+   `artifacts/weakness/weakness_refused.json` exists (signal firewall refused
+   the payloads, builder exit 3), report the refusal as the round's outcome:
+   the stale live report was quarantined to `weakness_report.refused.json`,
+   NO live report is served, and the fix is payload/policy + a builder
+   re-run — not an eval re-run. Remind
    the user to `git add` the git-tracked loop-memory files
    (`artifacts/loop/`, `artifacts/weakness/history/`, the two audit-slice
    files, `artifacts/response_matrix.jsonl`) so `clean.sh --all` cannot wipe

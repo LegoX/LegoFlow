@@ -182,7 +182,7 @@ For foreground runs, swap "Monitor" for the final exit code, final loss
 
 **RSI loop round receipt.** `train.sh` STEP 3 writes the round receipt
 (`artifacts/model/<run>/round_receipt.json`) alongside the `checkpoint_path`
-writeback — `{round, checkpoint_sha256, mix_manifest_sha, n_instances,
+writeback — `{round, checkpoint_sha256, mix_manifest_sha256, n_instances,
 tokens, final_loss}` — pinning which checkpoint and which data mix this
 round produced, and keying the row in evaluator's loop ledger. The round
 number comes from `LEGOFLOW_RSI_ROUND`: read the newest round in the

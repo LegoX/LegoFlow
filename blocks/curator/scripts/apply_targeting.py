@@ -1072,20 +1072,20 @@ def audited_direction_block(row: dict[str, Any], args: argparse.Namespace) -> di
                    and sha256_file(baseline_path) == baseline.get("sha256"))
     if not sha_matches:
         print(f"WARN: no sha-matched baseline audit readout for round {row.get('round')} "
-              f"— audited_direction not computable (pass --audit-readout at open "
+              f"— promotion_direction not computable (pass --audit-readout at open "
               f"time too)", file=sys.stderr)
         return block
     try:
         baseline_readout = json.loads(baseline_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         print(f"WARN: cannot re-read baseline audit readout {baseline_path} — "
-              f"audited_direction not computable", file=sys.stderr)
+              f"promotion_direction not computable", file=sys.stderr)
         return block
     base_value = baseline_readout.get("audited_resolve")
     new_value = readout.get("audited_resolve")
     if not (isinstance(base_value, (int, float)) and isinstance(new_value, (int, float))):
         print("WARN: audit readout(s) carry no numeric audited_resolve — "
-              "audited_direction not computable", file=sys.stderr)
+              "promotion_direction not computable", file=sys.stderr)
         return block
     audited_n = 1
     for candidate in (readout.get("audited_n"), baseline_readout.get("audited_n")):
@@ -1401,7 +1401,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help=f"audit-slice readout ({AUDIT_READOUT_SCHEMA}) for the report: "
                          "at open time it is stamped (path+sha256) into the round's "
                          "ledger row; with --close-round it is the closing readout the "
-                         "verdict's audited_direction is computed from")
+                         "verdict's promotion_direction is computed from")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the plan without writing ledger or directives")
     ap.add_argument("--force", action="store_true",

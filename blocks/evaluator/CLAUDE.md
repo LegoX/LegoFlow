@@ -276,8 +276,11 @@ Evaluator is the loop's measurement point:
 `artifacts/loop/`, `artifacts/weakness/history/`, the two audit-slice files,
 and the per-round `artifacts/response_matrix.jsonl` (M2's IRT seed) are
 git-tracked loop memory (un-ignored in this block's `.gitignore`) so
-`scripts/clean.sh --all` — which keeps only git-tracked files — never wipes
-loop history; everything else under `artifacts/` stays ignored.
+`scripts/clean.sh --all` — which keeps only git-tracked files — cannot wipe
+loop history once the files are committed (commit them after every round;
+uncommitted loop memory does not survive `--all`); default-mode `clean.sh`
+keeps them unconditionally. Everything else under `artifacts/` stays
+ignored.
 
 ## Repository Policy
 

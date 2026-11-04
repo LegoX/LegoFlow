@@ -70,10 +70,12 @@ blocks/curator/artifacts/*
 !blocks/curator/artifacts/attach/
 # The attach lock is live mutex state (kernel-released flock), never provenance.
 blocks/curator/artifacts/attach/.manifest.lock
+# Crash-leftover atomic-replace temp of the attach manifest.
+blocks/curator/artifacts/attach/manifest.json.tmp
 blocks/curator/scripts/jobs/*
 blocks/curator/scripts/.legoflow-curator-*/
 
-# Tracer block — runtime mount + per-run artifacts (kept manifest yamls tracked)
+# Tracer block — runtime mount and per-run artifacts
 blocks/tracer/artifacts/*
 
 # Dashboard transient runtime output

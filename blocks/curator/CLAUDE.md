@@ -315,11 +315,20 @@ optionality is the cycle-breaker that keeps `/root:run` dispatch deadlock-free):
   `legoflow-curator --skip-pr-files` actually matches: `cli.py` parses a task
   id as `owner__repo-<PR>`, so a literal `owner__repo-pr-101` line would parse
   its repo as `repo-pr` and never suppress anything. `owner/repo:pr-N` and
-  `owner__repo-pr-N` lines are accepted on input and normalized.
+  `owner__repo-pr-N` lines are accepted on input and normalized. Pool-stage
+hits are also pruned from the derived `merged_swe_tasks/` /
+`stratified_swe_tasks/` exports tracer consumes — re-running
+`extract_verified_tasks.py` alone can never purge them (its manifest is
+presence-derived); re-run `select_stratified_tasks.py` if the stratified pool
+is in use. The skip file is passed automatically by every
+`scripts/create_<lang>.sh` whenever it exists with content.
 
-`artifacts/targeting/` and `artifacts/decontam/` are git-tracked loop memory
-(un-ignored in the root `.gitignore`) so `scripts/clean.sh --all` — which keeps
-only git-tracked files — never wipes the hypothesis history. Both groups stay
+`artifacts/targeting/`, `artifacts/decontam/`, and
+`artifacts/attach/manifest.json` are git-tracked loop memory (un-ignored in
+the root `.gitignore`) so `scripts/clean.sh --all` — which keeps only
+git-tracked files — cannot wipe the hypothesis history once they are
+committed; default-mode `clean.sh` keeps them unconditionally. Commit them
+after every round. Both groups stay
 disabled in the committed config; enable them per run profile only.
 
 ## Downstream Agent Interface
@@ -377,13 +386,14 @@ artifacts/
 
 ## Per-Language Parameters
 
-`config.yaml -> runtime_info.input.languages.<lang>.params` holds three knobs per language:
+`config.yaml -> runtime_info.input.languages.<lang>.params` holds four knobs per language:
 
 | Field | Meaning |
 |---|---|
 | `timeout` | per-task overall timeout (seconds) |
 | `cc_timeout` | Claude Code SDK session timeout (seconds) |
 | `n_concurrent` | concurrent task workers |
+| `min_source_files` | yield/difficulty tradeoff passed as `--min-source-files` (default `2`; the knob targeting directives adjust) |
 
 `scripts/create_<lang>.sh` reads these via `scripts/read_params.py` before launching `legoflow-curator create`. Edit them in `config.yaml`; no auto-tuning is performed.
 The all-language launcher honors `enabled`; set it to `false` to drop a

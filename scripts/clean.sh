@@ -125,6 +125,8 @@ if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     echo "    - trainer's converted datasets and model checkpoints"
     echo "    - evaluator's job results and prepared gold datasets"
     echo "    - every run archive and artifacts/index.yaml"
+    echo "    - any RSI loop memory not yet git-committed (ledgers,"
+    echo "      weakness history, audit slices, response matrices)"
     echo ""
     echo "  Re-running the pipeline from scratch after this takes days"
     echo "  and re-spends GitHub API quota and LLM tokens."
