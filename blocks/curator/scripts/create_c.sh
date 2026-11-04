@@ -36,6 +36,7 @@ legoflow-curator create \
   --n-concurrent "${N_CONCURRENT}" \
   --output "${SWE_TASKS_DIR}/c-cc" \
   --state-dir "$STATE_DIR" \
+  ${SKIP_PR_ARGS[@]+"${SKIP_PR_ARGS[@]}"} \
   --timeout "${TIMEOUT}" \
   --cc-timeout "${CC_TIMEOUT}" \
   --no-require-issue \

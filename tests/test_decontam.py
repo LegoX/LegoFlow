@@ -702,3 +702,45 @@ def test_repo_and_pr_fall_back_to_the_task_id(env):
     identity = DC.pool_task_identity(task, "pallets__flask-5231")
     assert identity["repo"] == "pallets/flask"
     assert identity["pr_number"] == 5231
+
+
+def test_skip_file_is_consumed_by_every_create_launcher(tmp_path):
+    """The skip file is the DURABLE exclusion: decontam_check.py promises
+    quarantined PRs stay excluded 'in later create runs via --skip-pr-files',
+    so the launchers must actually pass it. read_params.py emits an eval-able
+    SKIP_PR_ARGS assignment iff the skip file exists with content; every
+    create_<lang>.sh forwards the array into the create command."""
+    import subprocess as sp
+
+    cfg_dir = tmp_path / "cfgblock"
+    (cfg_dir / "artifacts" / "decontam").mkdir(parents=True)
+    (cfg_dir / "config.yaml").write_text(
+        "runtime_info:\n  input:\n    languages:\n      py:\n"
+        "        params: {timeout: 10, cc_timeout: 9, n_concurrent: 2}\n",
+        encoding="utf-8")
+    skip = cfg_dir / "artifacts" / "decontam" / "eval_overlap_pr_ids.txt"
+    skip.write_text("owner__exact-101\n", encoding="utf-8")
+    out = sp.run(
+        [sys.executable, str(REPO_ROOT / "blocks/curator/scripts/read_params.py"),
+         "--lang", "py", "--config-yaml", str(cfg_dir / "config.yaml")],
+        capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    emitted = [ln for ln in out.stdout.splitlines() if ln.startswith("SKIP_PR_ARGS=")]
+    assert len(emitted) == 1, out.stdout
+    assert "--skip-pr-files" in emitted[0]
+    assert "eval_overlap_pr_ids.txt" in emitted[0]
+
+    # Empty skip file -> no emission (no exclusion in force, flag omitted).
+    skip.write_text("\n", encoding="utf-8")
+    out2 = sp.run(
+        [sys.executable, str(REPO_ROOT / "blocks/curator/scripts/read_params.py"),
+         "--lang", "py", "--config-yaml", str(cfg_dir / "config.yaml")],
+        capture_output=True, text=True)
+    assert "SKIP_PR_ARGS" not in out2.stdout
+
+    # Every per-language launcher forwards the array into the create command.
+    for lang in ("py", "js", "ts", "go", "c", "cpp", "java", "rust"):
+        src = (REPO_ROOT / f"blocks/curator/scripts/create_{lang}.sh").read_text()
+        assert '${SKIP_PR_ARGS[@]+"${SKIP_PR_ARGS[@]}"}' in src, (
+            f"create_{lang}.sh does not forward SKIP_PR_ARGS — the durable "
+            f"decontam exclusion is dead in this launcher")

@@ -64,6 +64,15 @@ def main():
         resolved = yaml_path.resolve().parent / resolved
     print(f"SWE_TASKS_DIR={shlex.quote(str(resolved))}")
 
+    # Durable decontam exclusion: when decontam_check.py has written the skip
+    # file with content, emit an eval-able array so every create_<lang>.sh
+    # passes --skip-pr-files (owner__repo-N task-id lines — the form cli.py
+    # actually matches). Absent/empty -> flag omitted: no exclusion in force.
+    skip_file = (yaml_path.resolve().parent / "artifacts" / "decontam"
+                 / "eval_overlap_pr_ids.txt")
+    if skip_file.is_file() and skip_file.read_text(encoding="utf-8").strip():
+        print(f"SKIP_PR_ARGS=(--skip-pr-files {shlex.quote(str(skip_file))})")
+
 
 if __name__ == "__main__":
     main()
