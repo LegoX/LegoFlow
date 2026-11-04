@@ -1150,13 +1150,43 @@ def close_round(args: argparse.Namespace) -> int:
             "--closure supply-limited-null|futility-freeze")
     new_path = Path(args.new_report)
     new_report = load_report(new_path)
+    new_sha = sha256_file(new_path)
+    row_sha = str(row.get("source_report_sha256") or "")
+    if row_sha and new_sha == row_sha:
+        refuse(f"the opening report for round {args.round} cannot also close it "
+               f"(sha256 {new_sha[:12]}… matches source_report_sha256); wait for the "
+               f"next round's report or close with --closure supply-limited-null")
     baseline_path = Path(row.get("source_report_path") or "")
     if not baseline_path.is_file():
         die(f"baseline report {baseline_path} for round {args.round} is gone; close with "
             f"--closure supply-limited-null instead (history copies live in the "
             f"evaluator's weakness history dir)")
-
-    baseline_report = load_report(baseline_path)
+    # The pinned baseline sha is authoritative: the live report path recorded at
+    # open time (the evaluator's weakness_report.json) is OVERWRITTEN IN PLACE by
+    # every eval round, so re-reading it at close compares the round against
+    # itself (every delta reads 0.0 -> false futility-freezes). Resolve the pin
+    # against the live path first, then the immutable history copies beside it.
+    baseline_source = str(baseline_path)
+    if not row_sha:
+        print(f"WARN: round {args.round} ledger row has no source_report_sha256; "
+              f"trusting the recorded path {baseline_path} as-is (legacy ledger)",
+              file=sys.stderr)
+    else:
+        candidates = [baseline_path] + sorted(
+            (baseline_path.parent / "history").glob("weakness_report_*.json"))
+        resolved = next(
+            (c for c in candidates if c.is_file() and sha256_file(c) == row_sha), None)
+        if resolved is None:
+            die(f"baseline for round {args.round} no longer matches its pinned sha256 "
+                f"{row_sha[:12]}…: {baseline_path} was overwritten and no matching copy "
+                f"exists under {baseline_path.parent / 'history'}; close with --closure "
+                f"supply-limited-null or restore the pinned report")
+        if resolved != baseline_path:
+            baseline_source = str(resolved)
+            print(f"NOTE: live baseline {baseline_path} was overwritten in place; using "
+                  f"sha-matched history copy {resolved} for round {args.round}",
+                  file=sys.stderr)
+    baseline_report = load_report(Path(baseline_source))
     baseline_overall = overall_pass_rate(baseline_report)
     current_overall = overall_pass_rate(new_report)
     multiplier = args.noise_gate_multiplier
@@ -1229,7 +1259,8 @@ def close_round(args: argparse.Namespace) -> int:
         },
         "holdout_tags_excluded": sorted(holdouts & set(targets)),
         "closed_at": now_iso(),
-        "closed_by_report_sha256": sha256_file(new_path),
+        "closed_by_report_sha256": new_sha,
+        "baseline_source": baseline_source,
     }
     verdict.update(audited_direction_block(row, args))
     row["verdict"] = verdict

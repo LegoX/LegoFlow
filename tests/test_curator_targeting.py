@@ -476,6 +476,53 @@ def test_two_part_verdict_closure_opens_the_next_round(workspace):
     assert [row["round"] for row in rows] == [1, 2]
 
 
+def test_close_round_resolves_overwritten_live_baseline_via_history(workspace):
+    """The wired default opens a round from the evaluator's LIVE report path,
+    which the next eval overwrites in place (immutable copies go to history/).
+    Close must resolve the pinned baseline sha against the history copies and
+    read the real deltas, not compare the round against itself."""
+    import shutil
+    ws = workspace
+    history = ws["report"].parent / "history"
+    history.mkdir(exist_ok=True)
+    shutil.copyfile(ws["report"], history / "weakness_report_001.json")
+    assert run_targeting(ws).returncode == 0
+    row_sha = yaml.safe_load(ws["ledger"].read_text())[0]["source_report_sha256"]
+    # The next eval overwrites the live path AND files its own history copy.
+    improved_report(ws["report"])
+    shutil.copyfile(ws["report"], history / "weakness_report_002.json")
+    closed = close_round(ws, ws["report"])
+    assert closed.returncode == 0, closed.stdout + closed.stderr
+    assert "history copy" in closed.stderr
+    verdict = yaml.safe_load(ws["ledger"].read_text())[0]["verdict"]
+    assert verdict["mean_direction"]["direction"] == "improved"
+    tags = verdict["intended_effect"]["tags"]
+    if "language:go" in tags:
+        assert tags["language:go"]["delta"] == pytest.approx(0.20)
+        assert tags["language:go"]["moved_expected"] is True
+    assert verdict["baseline_source"].endswith("weakness_report_001.json")
+    assert verdict["closed_by_report_sha256"] != row_sha
+
+
+def test_close_round_dies_when_overwritten_baseline_has_no_history_copy(workspace):
+    ws = workspace
+    assert run_targeting(ws).returncode == 0
+    improved_report(ws["report"])            # live path overwritten, no history dir
+    closed = close_round(ws, ws["report"])
+    assert closed.returncode == 1
+    assert "pinned sha256" in closed.stderr
+    assert yaml.safe_load(ws["ledger"].read_text())[0]["verdict"] is None
+
+
+def test_close_round_refuses_the_opening_report_as_its_own_closure(workspace):
+    ws = workspace
+    assert run_targeting(ws).returncode == 0
+    closed = close_round(ws, ws["report"])   # byte-identical to the opening report
+    assert closed.returncode == 2
+    assert "cannot also close it" in closed.stderr
+    assert yaml.safe_load(ws["ledger"].read_text())[0]["verdict"] is None
+
+
 def test_supply_limited_null_closes_without_eval_spend(workspace):
     assert run_targeting(workspace).returncode == 0
     closed = close_round(workspace, None, "--closure", "supply-limited-null")
