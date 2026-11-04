@@ -116,6 +116,36 @@ def test_evaluator_gitignore_has_no_bare_artifacts_dir_rule():
     )
 
 
+# --- default-mode clean keeps loop memory --------------------------------------
+
+
+# The .gitignore negations only make loop memory COMMITTABLE; until it is
+# committed, each block's default-mode KEEP_DEFAULT is the only thing that
+# stops a plain between-runs `clean.sh` from deleting loop history.
+CLEAN_KEEP_CONTRACT = {
+    "curator": ("blocks/curator/scripts/clean.sh",
+                ["targeting", "decontam", "attach"]),
+    "evaluator": ("blocks/evaluator/scripts/clean.sh",
+                  ["loop", "weakness", "reserve", "response_matrix.jsonl",
+                   "bench_identity"]),
+    "tracer": ("blocks/tracer/scripts/clean.sh", ["scaffold_signal"]),
+}
+
+
+@pytest.mark.parametrize("block", sorted(CLEAN_KEEP_CONTRACT))
+def test_default_clean_keeps_loop_memory(block: str):
+    script, entries = CLEAN_KEEP_CONTRACT[block]
+    text = (REPO_ROOT / script).read_text()
+    m = re.search(r"KEEP_DEFAULT=\(([^)]*)\)", text, flags=re.S)
+    assert m, f"{script} lost its KEEP_DEFAULT list"
+    kept = m.group(1).split()
+    for entry in entries:
+        assert entry in kept, (
+            f"{script} KEEP_DEFAULT lacks '{entry}': a plain default-mode "
+            f"clean.sh would delete uncommitted loop memory"
+        )
+
+
 # --- block CLAUDE.md contract surfaces ----------------------------------------
 
 

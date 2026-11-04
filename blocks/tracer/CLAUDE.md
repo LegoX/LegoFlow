@@ -75,7 +75,7 @@ Generic lifecycle via the repo-wide `root` plugin: `/root:check tracer` to prefl
 | `/tracer:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh`, `convert_trajectories.sh` | Interactive HTML board (Analyze jobs, quality/pass slices, and trajectories) / Cloudflare online sync / SFT stats refresh. Sources are fixed under `artifacts/` (`tasks/`, `jobs/`, optional `sft_data/`, `index.yaml`) — never configured in `config.yaml`; the skill shows them and waits for confirmation before rendering |
 | `/tracer:run` | `dryrun.sh`, `start.sh`, `select_trajectories.py` (best-of-n), `merge_sft_data.py` (multi-scaffold) | Full pipeline: prepare_tasks → Harbor → optional convert (+ best-of-n selection for sample campaigns; + multi-scaffold merge for scaffold campaigns) + post-run bookkeeping |
 
-`scripts/clean.sh` (no flags) removes only a run's temporary output — LiteLLM state, logs, launch logs, `dashboard/site/`, `dashboard/.cache/`. It keeps the uv env, `jobs/`, `tasks/`, `sft_data/`, `agent-runtime/` and `processed_tasks.yaml`. `--all` wipes `artifacts/` entirely except git-tracked files and confirms twice. Tracer scripts need PyYAML in the runtime Python; on `ERROR: PyYAML is required`, `pip install pyyaml`.
+`scripts/clean.sh` (no flags) removes only a run's temporary output — LiteLLM state, logs, launch logs, `dashboard/site/`, `dashboard/.cache/`. It keeps the uv env, `jobs/`, `tasks/`, `sft_data/`, `agent-runtime/`, `processed_tasks.yaml`, and the RSI `scaffold_signal/` proposals. `--all` wipes `artifacts/` entirely except git-tracked files and confirms twice. Tracer scripts need PyYAML in the runtime Python; on `ERROR: PyYAML is required`, `pip install pyyaml`.
 
 ## Artifact archiving
 
