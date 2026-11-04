@@ -453,7 +453,7 @@ runtime_info:
   input:
     command_override: {command_override}
     llm_api:
-      api_key: harness-key
+      api_key: dummy-key
       api_base_url: http://127.0.0.1:9/v1
       model: openai/Harness-Model
     task_source:
