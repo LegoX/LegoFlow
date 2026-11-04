@@ -1107,6 +1107,46 @@ def audited_direction_block(row: dict[str, Any], args: argparse.Namespace) -> di
     return block
 
 
+def record_audit(args: argparse.Namespace) -> int:
+    """Record the agent-audit outcome on a round's ledger row — the audit gate
+    promises rejected directives are 'recorded back in the ledger, not
+    silently dropped', and this is the writer. Write-once while the verdict is
+    open: an audited-and-applied round then closes normally; a rejected round
+    still needs an explicit --close-round closure so round numbering stays
+    append-only."""
+    ledger_path = Path(args.ledger)
+    rows = load_ledger(ledger_path)
+    matching = [r for r in rows if r.get("round") == args.round]
+    if not matching:
+        die(f"round {args.round} not found in {ledger_path}")
+    row = matching[0]
+    if row.get("verdict") is not None:
+        die(f"round {args.round} is already closed; audit outcomes are recorded "
+            f"while the verdict is open")
+    if row.get("audit_outcome") is not None:
+        refuse(f"round {args.round} already has an audit outcome recorded "
+               f"({json.dumps(row['audit_outcome'])[:120]}…); ledger rows are "
+               f"append-only")
+    audit: dict[str, Any] = {"outcome": args.audit_outcome, "recorded_at": now_iso()}
+    if args.audit_note:
+        audit["note"] = args.audit_note
+    row["audit_outcome"] = audit
+    if args.applied_diff:
+        diff_path = Path(args.applied_diff)
+        try:
+            row["applied_config_diff"] = yaml.safe_load(diff_path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as exc:
+            die(f"cannot read --applied-diff {diff_path}: {exc}")
+    enforce_signal_firewall(row, "audit outcome")
+    save_ledger(ledger_path, rows)
+    print(f"Round {args.round} audit recorded as {args.audit_outcome}")
+    if args.audit_outcome == "rejected":
+        print("  close the round explicitly (--close-round --round "
+              f"{args.round} --closure supply-limited-null) once no create run "
+              "will act on it")
+    return 0
+
+
 def close_round(args: argparse.Namespace) -> int:
     ledger_path = Path(args.ledger)
     rows = load_ledger(ledger_path)
@@ -1360,6 +1400,17 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--closure", default=None,
                     choices=["supply-limited-null", "futility-freeze"],
                     help="with --close-round: close without a two-part verdict")
+    ap.add_argument("--record-audit", action="store_true",
+                    help="record the agent-audit outcome on a round's ledger row "
+                         "(write-once, while the verdict is open)")
+    ap.add_argument("--audit-outcome", default=None,
+                    choices=["applied", "rejected"],
+                    help="with --record-audit: what the audit decided")
+    ap.add_argument("--applied-diff", default=None, metavar="YAML",
+                    help="with --record-audit --audit-outcome applied: the config "
+                         "diff that was applied (stored as applied_config_diff)")
+    ap.add_argument("--audit-note", default=None, metavar="TEXT",
+                    help="with --record-audit: free-form audit evidence pointer")
     ap.add_argument("--verify", default=None, metavar="DIRECTIVES_YAML",
                     help="verify an existing directives file against --report "
                          "(re-hash source_report_sha256; refuse on divergence) "
@@ -1400,10 +1451,19 @@ def main() -> int:
         if not args.report:
             die("--verify requires --report <weakness_report.json>")
         return verify_directives(args)
+    if args.close_round and args.record_audit:
+        die("--record-audit and --close-round are separate steps: record the "
+            "audit outcome first, then close the round")
     if args.close_round:
         if args.round is None:
             die("--close-round requires --round N")
         return close_round(args)
+    if args.record_audit:
+        if args.round is None:
+            die("--record-audit requires --round N")
+        if not args.audit_outcome:
+            die("--record-audit requires --audit-outcome applied|rejected")
+        return record_audit(args)
     if not args.report:
         die("--report is required (or use --close-round / --verify)")
     if args.new_report or args.closure:

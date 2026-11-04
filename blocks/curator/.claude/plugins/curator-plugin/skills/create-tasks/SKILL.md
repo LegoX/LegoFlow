@@ -104,8 +104,13 @@ does anything touch `config.yaml`.
 3. Present the reviewable diff (quota vector + filter deltas + skip-file
    reference) and **wait for explicit user confirmation**. Only then apply
    the numbers to the **next run's** `config.yaml` or private profile —
-   one-shot semantics: never edit a config mid-run. Directives that fail the
-   audit are recorded back in the ledger, not silently dropped.
+   one-shot semantics: never edit a config mid-run. Either way, record the
+   audit outcome in the ledger (write-once, verdict still open):
+   `python3 scripts/apply_targeting.py --record-audit --round N
+   --audit-outcome applied --applied-diff <the applied yaml>` or
+   `--audit-outcome rejected --audit-note "why"` — rejected directives are
+   recorded, never silently dropped, and a rejected round is then closed
+   with `--close-round --closure supply-limited-null`.
 4. No directive round at all (`directives_blocked` empty, targeting disabled,
    or the report absent) is a normal outcome — proceed with the ordinary
    create flow and say so plainly.

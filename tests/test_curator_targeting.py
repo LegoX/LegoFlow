@@ -284,6 +284,53 @@ def test_language_and_cross_language_tags_map_to_quota_deltas(workspace):
     assert quotas["go"]["new_value"] == quotas["go"]["baseline"] + quotas["go"]["delta"]
 
 
+def test_record_audit_is_write_once_and_feeds_the_closure(tmp_path):
+    """The audit gate promises rejected directives are 'recorded back in the
+    ledger, not silently dropped' — --record-audit is that writer: write-once
+    while the verdict is open, optional applied-diff, refused after close or
+    on double record."""
+    ws = {"root": tmp_path, "pool": make_pool(tmp_path / "pool-root"),
+          "report": make_report(tmp_path / "weakness_report.json", DEFAULT_TAGS),
+          "ledger": tmp_path / "targeting" / "hypothesis_ledger.yaml",
+          "out_dir": tmp_path / "targeting"}
+    assert run_targeting(ws).returncode == 0
+
+    def record(*extra):
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--record-audit", "--round", "1",
+             "--ledger", str(ws["ledger"]), *extra],
+            capture_output=True, text=True)
+
+    missing = subprocess.run(
+        [sys.executable, str(SCRIPT), "--record-audit", "--round", "1",
+         "--ledger", str(ws["ledger"])],
+        capture_output=True, text=True)
+    assert missing.returncode == 1
+    assert "--audit-outcome" in missing.stderr
+
+    diff = tmp_path / "applied.yaml"
+    diff.write_text("languages:\n  py:\n    params:\n      max_verified_tasks: 40\n",
+                    encoding="utf-8")
+    ok = record("--audit-outcome", "applied", "--applied-diff", str(diff),
+                "--audit-note", "quota audited against report tags")
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+    row = yaml.safe_load(ws["ledger"].read_text())[0]
+    assert row["audit_outcome"]["outcome"] == "applied"
+    assert row["audit_outcome"]["note"] == "quota audited against report tags"
+    assert row["applied_config_diff"]["languages"]["py"]["params"][
+        "max_verified_tasks"] == 40
+
+    # Write-once: a second record is refused, and the round still closes.
+    again = record("--audit-outcome", "rejected")
+    assert again.returncode == 2
+    assert "append-only" in again.stderr
+    closed = close_round(ws, None, "--closure", "supply-limited-null")
+    assert closed.returncode == 0, closed.stdout + closed.stderr
+    after_close = record("--audit-outcome", "rejected")
+    assert after_close.returncode == 1
+    assert "already closed" in after_close.stderr
+
+
 def test_targeting_knobs_default_from_config(tmp_path, monkeypatch):
     """runtime_info.input.targeting owns the knobs: tuning config.yaml must
     take effect without mirroring every value into CLI flags, and explicit
