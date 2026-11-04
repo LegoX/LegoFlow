@@ -965,6 +965,8 @@ def _spawn_listener_holder(tmp_path: Path, port: int, script_name: str) -> subpr
     raise AssertionError("holder never started listening")
 
 
+@pytest.mark.skipif(shutil.which("lsof") is None,
+                    reason="the port guard needs lsof to identify holders")
 def test_foreign_listener_on_proxy_port_fails_loud(tmp_path):
     """wait_for_proxy probes TCP first, so a stale listener made it declare
     readiness while the fresh proxy died on bind — Harbor then routed (and
@@ -984,6 +986,8 @@ def test_foreign_listener_on_proxy_port_fails_loud(tmp_path):
         holder.wait()
 
 
+@pytest.mark.skipif(shutil.which("lsof") is None,
+                    reason="the port guard needs lsof to identify holders")
 def test_own_leaked_litellm_listener_is_swept(tmp_path):
     """A leftover litellm listener from a crashed earlier run is ours to
     sweep: the guard kills it and the run proceeds."""

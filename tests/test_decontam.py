@@ -759,6 +759,11 @@ def test_skip_file_is_consumed_by_every_create_launcher(tmp_path):
         assert '${SKIP_PR_ARGS[@]+"${SKIP_PR_ARGS[@]}"}' in src, (
             f"create_{lang}.sh does not forward SKIP_PR_ARGS — the durable "
             f"decontam exclusion is dead in this launcher")
+        # And consumes the min-source-files knob instead of hardcoding 2
+        # (the emission above is useless if the launchers ignore the var).
+        assert '--min-source-files "${MIN_SOURCE_FILES:-2}"' in src, (
+            f"create_{lang}.sh hardcodes --min-source-files and ignores "
+            f"MIN_SOURCE_FILES — the targeting directive key adjusts nothing")
 
 
 def test_stale_index_warn_fires_for_both_timestamp_formats(tmp_path, capsys):

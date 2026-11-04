@@ -146,6 +146,52 @@ def test_default_clean_keeps_loop_memory(block: str):
         )
 
 
+def _negated_top_segments(gitignore: Path, prefix: str) -> set[str]:
+    """Top-level artifacts/ segments re-included by negation rules under a
+    block path prefix — the loop-memory set the .gitignore declares."""
+    segments: set[str] = set()
+    for line in gitignore.read_text().splitlines():
+        line = line.strip()
+        if not line.startswith("!"):
+            continue
+        body = line[1:]
+        if not body.startswith(prefix):
+            continue
+        rest = body[len(prefix):].strip("/")
+        if rest and "/" not in rest:
+            segments.add(rest)
+    return segments
+
+
+def test_every_negated_loop_memory_path_is_kept_by_default_clean():
+    """Cross-derive the two halves of the durability contract: every top-level
+    loop-memory segment a .gitignore negation re-includes (making it
+    committable loop memory) must also survive default-mode clean.sh. A path
+    negated but not kept is exactly the C3 bug class — default clean deletes
+    it the moment it is not yet committed."""
+    evaluator_negations = _negated_top_segments(
+        REPO_ROOT / "blocks/evaluator/.gitignore", "artifacts/")
+    curator_negations = _negated_top_segments(
+        REPO_ROOT / ".gitignore", "blocks/curator/artifacts/")
+    for block, negations, keep_prefix in (
+        ("evaluator", evaluator_negations, "artifacts/"),
+        ("curator", curator_negations, "blocks/curator/artifacts/"),
+    ):
+        script, _ = CLEAN_KEEP_CONTRACT[block]
+        kept = re.search(
+            r"KEEP_DEFAULT=\(([^)]*)\)", (REPO_ROOT / script).read_text(),
+            flags=re.S).group(1).split()
+        # reserve/ and weakness/ are partially negated (only audit_slice.* /
+        # history/ are loop memory) but the whole segment must still be kept.
+        missing = {seg for seg in negations
+                   if seg not in kept and not seg.endswith((".json", ".jsonl", ".txt"))}
+        assert not missing, (
+            f"{script}: gitignore-negated loop-memory segment(s) {sorted(missing)} "
+            f"missing from KEEP_DEFAULT — default-mode clean.sh deletes them "
+            f"whenever they are not yet committed"
+        )
+
+
 # --- block CLAUDE.md contract surfaces ----------------------------------------
 
 
