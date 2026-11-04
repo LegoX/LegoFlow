@@ -164,18 +164,29 @@ def main(argv: list[str] | None = None) -> int:
         "\n".join(sorted(population)).encode("utf-8")).hexdigest()
 
     # Refuse silent slice changes before any file is written. slice_version
-    # drift needs --rotate; MEMBERSHIP drift (seed / n / strata / population)
-    # needs --refreeze: prior rounds' audit_excluded_ids_sha256 pin the exact
-    # slice they were measured against, and a silently redrawn slice breaks
-    # every longitudinal comparison. An older meta missing any membership field
-    # counts as drift — take one deliberate --refreeze when upgrading.
+    # drift needs --rotate; MEMBERSHIP drift (seed / n / strata / population /
+    # stratum allocation) needs --refreeze: prior rounds'
+    # audit_excluded_ids_sha256 pin the exact slice they were measured against,
+    # and a silently redrawn slice breaks every longitudinal comparison. An
+    # older meta missing any membership field — or a corrupt/non-mapping meta —
+    # counts as drift: fail CLOSED, and take one deliberate --refreeze when
+    # upgrading or repairing.
     meta_path = Path(args.meta) if args.meta else None
     if meta_path is not None and meta_path.is_file():
+        prev_meta = None
+        meta_error = None
         try:
             prev_meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            prev_meta = None
-        if isinstance(prev_meta, dict):
+        except (json.JSONDecodeError, OSError) as exc:
+            meta_error = exc
+        if not isinstance(prev_meta, dict):
+            if not args.refreeze:
+                print(f"ERROR: {meta_path} exists but is not readable meta "
+                      f"({meta_error or 'not a JSON object'}); refusing to "
+                      f"redraw the audit slice without --refreeze.",
+                      file=sys.stderr)
+                return 1
+        else:
             prev_version = prev_meta.get("slice_version", 1)
             if prev_version != args.slice_version and not args.rotate:
                 print(f"ERROR: {meta_path} records slice_version {prev_version}; "
@@ -183,13 +194,25 @@ def main(argv: list[str] | None = None) -> int:
                       f"without --rotate.", file=sys.stderr)
                 return 1
             incoming = {"seed": args.seed, "n": len(slice_ids),
-                        "strata": args.strata, "population_sha256": population_sha256}
+                        "strata": args.strata,
+                        "population_sha256": population_sha256,
+                        "sample_sizes": sample_sizes}
             drifted = [k for k, v in incoming.items() if prev_meta.get(k) != v]
             if drifted and not args.refreeze:
                 print(f"ERROR: {meta_path} was frozen with a different "
                       f"{', '.join(drifted)}; refusing to redraw the audit slice "
                       f"without --refreeze.", file=sys.stderr)
                 return 1
+    elif Path(args.out).is_file() and not args.refreeze:
+        # Meta-less invocation (the runbook always passes --meta; this is the
+        # robustness path): an existing frozen slice may not be silently
+        # rewritten either — refuse unless the redraw is byte-identical or
+        # --refreeze is explicit.
+        if Path(args.out).read_text(encoding="utf-8") != "\n".join(slice_ids) + "\n":
+            print(f"ERROR: {args.out} already holds a frozen slice and no --meta "
+                  f"was given to compare membership against; refusing to redraw "
+                  f"it without --refreeze.", file=sys.stderr)
+            return 1
 
     # Registry payload (frozen legoflow-audit Harbor registry) is built — and
     # its task dirs verified — BEFORE any file is written: a slice whose task

@@ -1033,6 +1033,75 @@ def test_audit_slice_membership_refuses_silent_redraw(tmp_path):
     assert json.loads(meta_path.read_text(encoding="utf-8"))["seed"] == 2
 
 
+def test_audit_slice_freeze_fails_closed_on_corrupt_meta_and_metaless_rewrite(tmp_path):
+    """A corrupt/non-mapping meta must DISABLE nothing silently — the freeze
+    fails closed and demands --refreeze; and a meta-less invocation may not
+    silently rewrite an existing frozen slice either."""
+    dataset_dir = write_slice_population(tmp_path, {"python": 4, "go": 2})
+    meta_path = tmp_path / "meta.json"
+    out = tmp_path / "slice.txt"
+    base = [sys.executable, str(SCRIPTS_DIR / "make_audit_slice.py"),
+            "--dataset-dir", str(dataset_dir), "--n", "2", "--seed", "1",
+            "--out", str(out)]
+    assert subprocess.run(base + ["--meta", str(meta_path)],
+                          capture_output=True, text=True).returncode == 0
+    frozen_ids = out.read_text(encoding="utf-8")
+
+    # Corrupt meta: refuse (fail closed), unlock only via --refreeze.
+    meta_path.write_text("{not json", encoding="utf-8")
+    corrupt = subprocess.run(base + ["--meta", str(meta_path), "--seed", "2"],
+                             capture_output=True, text=True)
+    assert corrupt.returncode == 1
+    assert "--refreeze" in corrupt.stderr
+    assert out.read_text(encoding="utf-8") == frozen_ids
+    repaired = subprocess.run(base + ["--meta", str(meta_path), "--seed", "2",
+                                      "--refreeze"],
+                              capture_output=True, text=True)
+    assert repaired.returncode == 0, repaired.stderr
+
+    # Meta-less invocation over an existing slice: byte-identical redraw is
+    # fine; a different draw is refused without --refreeze. (The repair run
+    # above redrew with seed 2, so THAT is the frozen content now.)
+    meta_path.unlink()
+    out2 = tmp_path / "slice2.txt"
+    shutil.copyfile(out, out2)
+    frozen_now = out2.read_text(encoding="utf-8")
+    nometa_same = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "make_audit_slice.py"),
+         "--dataset-dir", str(dataset_dir), "--n", "2", "--seed", "2",
+         "--out", str(out2)], capture_output=True, text=True)
+    assert nometa_same.returncode == 0, nometa_same.stderr
+    nometa_diff = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "make_audit_slice.py"),
+         "--dataset-dir", str(dataset_dir), "--n", "2", "--seed", "9",
+         "--out", str(out2)], capture_output=True, text=True)
+    assert nometa_diff.returncode == 1
+    assert "--refreeze" in nometa_diff.stderr
+    assert out2.read_text(encoding="utf-8") == frozen_now
+
+
+def test_audit_slice_refuses_stratum_label_drift(tmp_path):
+    """Membership is not just ids: a task whose stratum assignment changed
+    (tag edit) redraws the per-stratum allocation even with identical
+    seed/n/population — sample_sizes is part of the freeze."""
+    dataset_dir = write_slice_population(tmp_path, {"python": 4, "go": 2})
+    meta_path = tmp_path / "meta.json"
+    out = tmp_path / "slice.txt"
+    base = [sys.executable, str(SCRIPTS_DIR / "make_audit_slice.py"),
+            "--dataset-dir", str(dataset_dir), "--n", "3", "--seed", "1",
+            "--strata", "language", "--out", str(out), "--meta", str(meta_path)]
+    assert subprocess.run(base, capture_output=True, text=True).returncode == 0
+    frozen = out.read_text(encoding="utf-8")
+    # Relabel one python task as go: same ids, different strata allocation.
+    task = sorted(p for p in dataset_dir.iterdir() if p.name.startswith("python"))[0]
+    (task / "task.toml").write_text(
+        '[metadata]\ntags = ["go", "backend", "misc", "bug"]\n', encoding="utf-8")
+    drifted = subprocess.run(base, capture_output=True, text=True)
+    assert drifted.returncode == 1
+    assert "sample_sizes" in drifted.stderr
+    assert out.read_text(encoding="utf-8") == frozen
+
+
 def test_audit_slice_refuses_n_above_population(tmp_path):
     dataset_dir = write_slice_population(tmp_path, {"python": 3, "go": 2})
     proc = subprocess.run(
