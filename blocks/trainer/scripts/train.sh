@@ -780,6 +780,9 @@ try:
         "--checkpoint-path", checkpoint,
         "--out", str(receipt_path),
     ]
+    rsi_round = os.environ.get("LEGOFLOW_RSI_ROUND", "").strip()
+    if rsi_round:
+        receipt_cmd += ["--round", rsi_round]
     if lf_file_arg:
         receipt_cmd += ["--lf-file", lf_file_arg]
     proc = subprocess.run(receipt_cmd, capture_output=True, text=True)

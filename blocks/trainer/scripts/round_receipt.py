@@ -216,6 +216,14 @@ def resolve_round(value: int | None) -> int:
                 f"WARNING: {ROUND_ENV}={env!r} is not an integer; defaulting round to 1",
                 file=sys.stderr,
             )
+    # Silent default made every receipt read round: 1 — cross-round
+    # attribution then collapsed all rounds onto one number. Warn loudly.
+    print(
+        f"WARNING: {ROUND_ENV} is unset; stamping round 1. Set it to the RSI "
+        f"round this training serves (read the evaluator's loop ledger) so "
+        f"weakness-report rows and receipts key to the same round.",
+        file=sys.stderr,
+    )
     return 1
 
 

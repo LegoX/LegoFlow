@@ -70,8 +70,10 @@ terminal record to `artifacts/index.yaml`.
 `scripts/train.sh` STEP 3 writes a **round receipt**
 (`artifacts/model/<run>/round_receipt.json`, via
 `scripts/round_receipt.py`) alongside the `checkpoint_path` writeback —
-`{round, checkpoint_sha256, mix_manifest_sha, n_instances, tokens,
-final_loss}` pinning the run's plant identity. The receipt gives every
+`{round, checkpoint_sha256, mix_manifest_sha256, n_instances, tokens,
+final_loss}` pinning the run's plant identity. `round` comes from
+`LEGOFLOW_RSI_ROUND` (set it from the evaluator/targeting ledger round;
+unset, the receipt stamps round 1 with a loud warning). The receipt gives every
 downstream eval an attributable identity (which checkpoint + which data mix),
 and keys rows in evaluator's loop ledger. `checkpoint_path` feeds evaluator's
 optional `local_model_serving.from_trainer_checkpoint` edge (the `to:` mirror

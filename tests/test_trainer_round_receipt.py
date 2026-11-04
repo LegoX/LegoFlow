@@ -379,17 +379,30 @@ def test_round_resolution_flag_env_and_default(tmp_path):
     out = tmp_path / "receipt.json"
     base = ["--checkpoint-path", str(ckpt), "--out", str(out)]
 
-    assert run_receipt(*base).returncode == 0
-    assert load_receipt(out)["round"] == 1  # default
+    result = run_receipt(*base)
+    assert result.returncode == 0
+    assert load_receipt(out)["round"] == 1  # default — but never silently
+    assert f"{ROUND_ENV} is unset" in result.stderr
 
     assert run_receipt(*base, env_extra={ROUND_ENV: "3"}).returncode == 0
     assert load_receipt(out)["round"] == 3  # env
+    assert f"{ROUND_ENV} is unset" not in run_receipt(
+        *base, env_extra={ROUND_ENV: "3"}).stderr
 
     assert run_receipt(*base, "--round", "7", env_extra={ROUND_ENV: "3"}).returncode == 0
     assert load_receipt(out)["round"] == 7  # flag beats env
 
     assert run_receipt(*base, env_extra={ROUND_ENV: "not-a-number"}).returncode == 0
     assert load_receipt(out)["round"] == 1  # invalid env falls back with a warning
+
+
+def test_train_sh_passes_legoflow_rsi_round_through_to_the_receipt():
+    """The receipt's round comes from LEGOFLOW_RSI_ROUND; without the explicit
+    passthrough every receipt read round: 1 and cross-round attribution
+    collapsed all rounds onto one number."""
+    step3 = step3_section()
+    assert 'os.environ.get("LEGOFLOW_RSI_ROUND", "")' in step3
+    assert '"--round", rsi_round' in step3
 
 
 # ---------------------------------------------------------------------------

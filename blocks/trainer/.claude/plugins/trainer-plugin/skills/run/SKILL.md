@@ -184,8 +184,14 @@ For foreground runs, swap "Monitor" for the final exit code, final loss
 (`artifacts/model/<run>/round_receipt.json`) alongside the `checkpoint_path`
 writeback — `{round, checkpoint_sha256, mix_manifest_sha, n_instances,
 tokens, final_loss}` — pinning which checkpoint and which data mix this
-round produced, and keying the row in evaluator's loop ledger. In the
-report, surface the receipt path and the `mix_manifest_sha`
+round produced, and keying the row in evaluator's loop ledger. The round
+number comes from `LEGOFLOW_RSI_ROUND`: read the newest round in the
+evaluator's `artifacts/loop/ledger.yaml` (or the targeting ledger that
+opened the hypothesis this training serves) and export
+`LEGOFLOW_RSI_ROUND=<that round+1 for the checkpoint it produces>` before
+launching `train.sh` — unset, the receipt stamps round 1 with a loud
+warning and cross-round attribution silently degrades. In the
+report, surface the receipt path and the `mix_manifest_sha256`
 so the next eval can be tied to this run. `checkpoint_path` flows to
 evaluator's optional `local_model_serving.from_trainer_checkpoint` edge;
 serving is evaluator's `serve_local_model.sh`, not this block — never start
