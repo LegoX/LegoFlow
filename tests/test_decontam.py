@@ -217,6 +217,46 @@ def test_pool_stage_is_idempotent(env):
     assert env["skip"].read_text() == skip_after_first  # no duplicate skip lines
 
 
+def test_pool_stage_prunes_merged_and_stratified_exports(env, tmp_path):
+    """Quarantine is the taint authority: pool-stage hits must leave the derived
+    exports tracer consumes. extract_verified_tasks.py derives its manifest from
+    directory presence, so re-running it can never purge a copied task."""
+    merged = tmp_path / "merged_swe_tasks"
+    strat = tmp_path / "stratified_swe_tasks"
+    for tid in ("owner__exact-101", "owner__clean-111"):
+        (merged / tid).mkdir(parents=True)
+    (merged / "verifiable_tasks.txt").write_text(
+        "owner__clean-111\nowner__exact-101\n", encoding="utf-8")
+    strat.mkdir()
+    for tid in ("owner__exact-101", "owner__clean-111"):
+        (strat / tid).symlink_to(merged / tid)
+    (strat / "verifiable_tasks.txt").write_text(
+        "# selected by select_stratified_tasks\nowner__exact-101\nowner__clean-111\n",
+        encoding="utf-8")
+    result = run_pool(env, "--merged-dir", str(merged), "--stratified-dir", str(strat))
+    assert result.returncode == 0, result.stdout + result.stderr
+    # Merged: tainted dir removed, clean dir kept, manifest re-derived from presence.
+    assert not (merged / "owner__exact-101").exists()
+    assert (merged / "owner__clean-111").is_dir()
+    assert (merged / "verifiable_tasks.txt").read_text().strip() == "owner__clean-111"
+    # Stratified: tainted link removed, clean link and comment lines kept.
+    assert not (strat / "owner__exact-101").exists()
+    assert (strat / "owner__clean-111").is_symlink()
+    kept = (strat / "verifiable_tasks.txt").read_text()
+    assert "owner__exact-101" not in kept
+    assert "owner__clean-111" in kept and "# selected" in kept
+    assert "merged export pruned" in result.stdout
+    assert "select_stratified_tasks.py" in result.stdout
+
+
+def test_pool_stage_propagation_noops_when_exports_absent(env, tmp_path):
+    result = run_pool(env, "--merged-dir", str(tmp_path / "none"),
+                      "--stratified-dir", str(tmp_path / "none2"))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "export pruned" not in result.stdout
+    assert "pool stage: 5 task(s) quarantined" in result.stdout
+
+
 def test_pool_stage_missing_manifest_fails(env, tmp_path):
     empty_pool = tmp_path / "empty-cc"
     empty_pool.mkdir()

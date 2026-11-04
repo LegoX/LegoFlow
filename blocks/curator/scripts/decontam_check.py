@@ -5,7 +5,11 @@ Mined PRs and SWE-bench-style benchmarks are the same population — a mined tas
 can literally *be* a benchmark task, so n-gram checks are not enough. This gate
 matches the pool against the evaluator's benchmark identity index
 (`bench_identity/<base>.identity.json`, Edge 2) and quarantines every hit with
-full evidence; it never deletes a task directory and never silently filters.
+full evidence; in the per-language pool it never deletes a task directory and
+never silently filters — but pool-stage hits ARE removed from the derived
+merged/stratified exports tracer consumes (quarantine.yaml is the taint
+authority; re-running extract_verified_tasks.py alone can never purge them
+because its manifest is presence-derived).
 
 Two stages, both fail-closed on a missing/unparseable index:
 
@@ -51,6 +55,7 @@ import fcntl
 import hashlib
 import json
 import re
+import shutil
 import sys
 import tomllib
 from datetime import datetime, timezone
@@ -533,6 +538,67 @@ def rewrite_manifest(manifest: Path, survivors: list[str], known: set[str]) -> N
 # --- stages ---------------------------------------------------------------------------
 
 
+def _config_output_dir(key: str, default: str) -> Path:
+    """Output dir from config.yaml (runtime_info.output.<key>.path), falling
+    back to the block-relative historical default — the same resolution
+    extract_verified_tasks.py uses for the merged pool."""
+    try:
+        with open(BLOCK_DIR / "config.yaml", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+        p = (((data.get("runtime_info") or {}).get("output") or {}).get(key) or {}).get("path")
+    except OSError:
+        p = None
+    if not p:
+        return BLOCK_DIR / default
+    path = Path(str(p))
+    return path if path.is_absolute() else BLOCK_DIR / path
+
+
+def _remove_pool_entry(path: Path) -> bool:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+        return True
+    if path.is_dir():
+        shutil.rmtree(path)
+        return True
+    return False
+
+
+def scrub_derived_pools(quarantined_ids: list[str], merged_dir: Path,
+                        stratified_dir: Path) -> None:
+    """Propagate pool-stage quarantine into the derived exports tracer consumes.
+
+    extract_verified_tasks.py derives the merged manifest from DIRECTORY
+    PRESENCE (deliberately — see its own comment about the 28 lost tasks), so
+    it can never remove a quarantined task once copied; select_stratified_tasks
+    symlinks into merged. The scrub itself is therefore the one writer for
+    removals: delete each tainted id from both derived pools and rewrite their
+    manifests. No-ops for any derived pool that does not exist.
+    """
+    if merged_dir.is_dir():
+        removed = [tid for tid in quarantined_ids if _remove_pool_entry(merged_dir / tid)]
+        if removed:
+            present = sorted(p.name for p in merged_dir.iterdir() if p.is_dir())
+            (merged_dir / "verifiable_tasks.txt").write_text(
+                "\n".join(present) + "\n", encoding="utf-8")
+            print(f"            merged export pruned ({len(removed)} task dir(s)): "
+                  f"{merged_dir}")
+            print("            NOTE: active tracer staging symlinking a pruned task "
+                  "now dangles; re-stage before the next rollout", file=sys.stderr)
+    if stratified_dir.is_dir():
+        removed = [tid for tid in quarantined_ids if _remove_pool_entry(stratified_dir / tid)]
+        if removed:
+            manifest = stratified_dir / "verifiable_tasks.txt"
+            if manifest.is_file():
+                kept = [ln for ln in read_lines(manifest)
+                        if ln.startswith("#") or ln.strip() not in set(quarantined_ids)]
+                manifest.write_text("\n".join(kept) + "\n", encoding="utf-8")
+            print(f"            stratified export pruned ({len(removed)} link(s)): "
+                  f"{stratified_dir}")
+            print("            re-run scripts/select_stratified_tasks.py to re-derive "
+                  "quotas (selection_report.json counts are now stale)")
+
+
 def run_pr_ids(args: argparse.Namespace, index: IdentityIndex) -> int:
     pr_ids_path = Path(args.pr_ids)
     if not pr_ids_path.is_file():
@@ -650,6 +716,14 @@ def run_pool(args: argparse.Namespace, index: IdentityIndex) -> int:
         append_quarantine(quarantine, "pool", Path(args.index), index.dataset,
                           pool_dir.name, hits)
         added = append_skip_lines(skip_file, skip_lines)
+        merged_dir = getattr(args, "merged_dir", None)
+        stratified_dir = getattr(args, "stratified_dir", None)
+        scrub_derived_pools(
+            [h["task_id"] for h in hits],
+            Path(merged_dir) if merged_dir
+            else _config_output_dir("merged_tasks_dir", "artifacts/merged_swe_tasks"),
+            Path(stratified_dir) if stratified_dir
+            else _config_output_dir("stratified_tasks_dir", "artifacts/stratified_swe_tasks"))
         print(f"pool stage: {len(hits)} task(s) quarantined out of {len(task_ids)} listed")
         print(f"            manifest rewritten in place (order preserved, deduped): {manifest}")
         print(f"            quarantine {quarantine}; skip file {skip_file} (+{added} line(s))")
@@ -679,6 +753,13 @@ def build_parser() -> argparse.ArgumentParser:
                          "tmp+replace; passing --out is the recommended target so the "
                          "original stays recoverable as survivors + quarantine entries)")
     ap.add_argument("--pool-dir", help="[pool] e.g. artifacts/swe_tasks/py-cc")
+    ap.add_argument("--merged-dir", default=None,
+                    help="[pool] merged export to prune quarantined ids from (default: "
+                         "runtime_info.output.merged_tasks_dir.path)")
+    ap.add_argument("--stratified-dir", default=None,
+                    help="[pool] stratified export to prune quarantined ids from (default: "
+                         "runtime_info.output.stratified_tasks_dir.path or "
+                         "artifacts/stratified_swe_tasks)")
     ap.add_argument("--verifiable", default=None,
                     help="[pool] manifest path (default: <pool-dir>/verifiable_tasks.txt)")
     ap.add_argument("--quarantine", default=None,

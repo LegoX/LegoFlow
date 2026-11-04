@@ -245,16 +245,21 @@ After generation and Oracle/NOP verification append to
 `verifiable_tasks.txt`, run `python3 scripts/decontam_check.py --index
 <decontam.benchmark_index> --stage pool` to scrub any identity match that
 slipped through the PR-ID prefilter out of
-the manifests, re-run `scripts/extract_verified_tasks.py` if the merged pool
-already exists, and report the quarantined IDs with their match basis (repo+PR,
+the manifests, and report the quarantined IDs with their match basis (repo+PR,
 patch-path Jaccard, test-file overlap, or normalized patch hash) plus the
-pruned counts. Never delete task directories silently — quarantine evidence
+pruned counts. The scrub itself also prunes the quarantined ids from the
+derived `merged_swe_tasks/` and `stratified_swe_tasks/` exports tracer
+consumes — do NOT rely on re-running `scripts/extract_verified_tasks.py` to
+purge them (its manifest is presence-derived and can never remove a copied
+task); if the stratified pool is in use, re-run
+`scripts/select_stratified_tasks.py` afterwards to re-derive quotas. Never
+delete task directories silently — quarantine evidence
 goes to `artifacts/decontam/quarantine.yaml`; durable suppressions use
 `owner__repo-<PR>` lines (bare PR number, e.g. `owner__repo-101`) in the skip
 file consumed by `--skip-pr-files` — the form `cli.py` actually matches.
 Remind the user to `git add` the git-tracked loop-memory files
-(`artifacts/targeting/`, `artifacts/decontam/`) so `clean.sh --all` cannot
-wipe the hypothesis history.
+(`artifacts/targeting/`, `artifacts/decontam/`, `artifacts/attach/manifest.json`)
+so `clean.sh --all` cannot wipe the hypothesis history.
 
 ## Step 6 - Report and monitor
 
