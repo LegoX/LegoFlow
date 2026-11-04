@@ -777,10 +777,17 @@ def warn_stale_index(index_path: Path, data: dict[str, Any]) -> None:
     dataset next to it — if the gold dir has files newer than the index's
     generated_at, path/sha evidence may be outdated. Never fatal."""
     generated = str(data.get("generated_at") or "")
-    try:
-        stamp = datetime.strptime(generated, "%Y-%m-%dT%H:%M:%SZ").replace(
-            tzinfo=timezone.utc)
-    except ValueError:
+    # build_identity_index.py emits datetime.isoformat() (+00:00 suffix); the
+    # original %SZ-only parse never matched it, so this WARN was dead code.
+    stamp = None
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ"):
+        try:
+            parsed = datetime.strptime(generated, fmt)
+            stamp = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            break
+        except ValueError:
+            continue
+    if stamp is None:
         return
     base = index_path.stem
     if base.endswith(".identity"):

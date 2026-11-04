@@ -759,3 +759,32 @@ def test_skip_file_is_consumed_by_every_create_launcher(tmp_path):
         assert '${SKIP_PR_ARGS[@]+"${SKIP_PR_ARGS[@]}"}' in src, (
             f"create_{lang}.sh does not forward SKIP_PR_ARGS — the durable "
             f"decontam exclusion is dead in this launcher")
+
+
+def test_stale_index_warn_fires_for_both_timestamp_formats(tmp_path, capsys):
+    """build_identity_index.py emits +00:00 isoformat timestamps; the
+    staleness WARN parsed only a Z suffix, so it never fired against real
+    builder output — dead code that read as protection."""
+    import contextlib
+    import io
+
+    gold_dir = tmp_path / "datasets" / "bench"
+    task = gold_dir / "task-1"
+    task.mkdir(parents=True)
+    (task / "config.json").write_text("{}", encoding="utf-8")
+    index_path = tmp_path / "bench_identity" / "bench.identity.json"
+    index_path.parent.mkdir(parents=True)
+    for stamp in ("2020-01-01T00:00:00+00:00", "2020-01-01T00:00:00Z"):
+        data = {"entries": [], "generated_at": stamp}
+        index_path.write_text(json.dumps(data), encoding="utf-8")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            DC.warn_stale_index(index_path, data)
+        assert "predates the newest file" in err.getvalue(), (stamp, err.getvalue())
+    # Unparseable stamps stay best-effort silent; fresh indexes stay quiet.
+    fresh = {"entries": [], "generated_at": "2999-01-01T00:00:00+00:00"}
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        DC.warn_stale_index(index_path, {"entries": [], "generated_at": "garbage"})
+        DC.warn_stale_index(index_path, fresh)
+    assert err.getvalue() == ""
