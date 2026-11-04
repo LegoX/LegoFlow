@@ -684,6 +684,51 @@ cleanup_litellm() {
   fi
 }
 
+# Is anything already listening on the proxy port? Uses the plain python3 from
+# PATH on purpose: $EVAL_LITELLM_PYTHON is the stubbed proxy-readiness probe in
+# test harnesses, and the pre-start check must never be stubbed away.
+proxy_port_held() {
+  python3 - "$LITELLM_PORT_RESOLVED" <<'PY' >/dev/null 2>&1
+import socket
+import sys
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.settimeout(1.0)
+    sys.exit(0 if s.connect_ex(("127.0.0.1", int(sys.argv[1]))) == 0 else 1)
+PY
+}
+
+# A stale listener on the proxy port is never a usable proxy: wait_for_proxy
+# probes TCP first, so it would false-positive on the old listener while the
+# fresh proxy dies on bind — and Harbor would route (and trajectory-log, via
+# the fork-time-fixed root) through the WRONG repeat's proxy. After cleanup,
+# sweep only our own leaked litellm listeners and refuse anything else.
+ensure_proxy_port_free() {
+  proxy_port_held || return 0
+  local pids=() pid cmd _
+  if command -v lsof >/dev/null 2>&1; then
+    pids=($(lsof -t -iTCP:"$LITELLM_PORT_RESOLVED" -sTCP:LISTEN 2>/dev/null || true))
+  fi
+  if [[ ${#pids[@]} -eq 0 ]]; then
+    echo "ERROR: proxy port $LITELLM_PORT_RESOLVED is already held and lsof cannot identify the holder; free the port and retry." | tee -a "$LOG_FILE" >&2
+    return 1
+  fi
+  for pid in "${pids[@]}"; do
+    cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$cmd" != *litellm* && "$cmd" != *serve_litellm* ]]; then
+      echo "ERROR: proxy port $LITELLM_PORT_RESOLVED is held by a non-litellm process (pid $pid: ${cmd:0:80}); refusing to start." | tee -a "$LOG_FILE" >&2
+      return 1
+    fi
+  done
+  echo "WARNING: sweeping stale litellm listener(s) ${pids[*]} off port $LITELLM_PORT_RESOLVED" | tee -a "$LOG_FILE" >&2
+  kill "${pids[@]}" 2>/dev/null || true
+  for _ in {1..10}; do proxy_port_held || return 0; sleep 1; done
+  kill -9 "${pids[@]}" 2>/dev/null || true
+  for _ in {1..5}; do proxy_port_held || return 0; sleep 1; done
+  echo "ERROR: proxy port $LITELLM_PORT_RESOLVED is still held after sweeping." | tee -a "$LOG_FILE" >&2
+  return 1
+}
+
 start_litellm_proxy() {
   echo "=== starting LiteLLM proxy ===" | tee -a "$LOG_FILE"
   # Default to a single proxy worker. The eval proxy is pure async I/O in front of
@@ -693,12 +738,16 @@ start_litellm_proxy() {
   # multiprocess boot tolerance and every child dies ("Child process [...] died"),
   # so the port never serves. Override with LITELLM_NUM_WORKERS=N if needed.
   export LITELLM_NUM_WORKERS="${LITELLM_NUM_WORKERS:-1}"
-  # Detach the proxy into its own session where setsid exists (Linux eval
-  # nodes). macOS ships no setsid; there the tmux session already shields the
-  # proxy from terminal HUP, so run it as a plain background child instead of
-  # failing with "setsid: command not found" before the port ever binds.
+  # Detach the proxy into its own session so cleanup's negative-PID kill
+  # reaches the whole tree. Linux eval nodes have setsid; macOS ships none, so
+  # emulate it with python's os.setsid() (tracer's start.sh does the same). A
+  # plain background child would share the script's process group: the group
+  # kill would miss it, the wrapper-only SIGTERM would orphan the litellm tree,
+  # and it would leak past the run holding the port.
   DETACH=(setsid)
-  command -v setsid >/dev/null 2>&1 || DETACH=()
+  if ! command -v setsid >/dev/null 2>&1; then
+    DETACH=(python3 -c 'import os,sys;os.setsid();os.execvp(sys.argv[1],sys.argv[1:])')
+  fi
   ${DETACH[@]+"${DETACH[@]}"} bash -c '
     cd "$1"
     PATH="$(dirname "$EVAL_LITELLM_BIN"):$PATH" \
@@ -831,10 +880,12 @@ run_single_repeat() {
     echo "=== repeat ${repeat_index}/${REPEATS}: job ${REPEAT_JOB_NAME} ===" | tee -a "$LOG_FILE"
   fi
 
-  # Fresh proxy lifecycle per repeat: stop any previous proxy, then start a new
-  # one on the same port (the proxy's trajectory root is fixed at fork time, so
-  # a proxy from an earlier repeat must never be reused).
+  # Fresh proxy lifecycle per repeat: stop any previous proxy, make sure the
+  # port is actually free, then start a new one on the same port (the proxy's
+  # trajectory root is fixed at fork time, so a proxy from an earlier repeat
+  # must never be reused).
   cleanup_litellm || true
+  ensure_proxy_port_free || return 1
   start_litellm_proxy
   wait_for_proxy
 

@@ -858,11 +858,86 @@ def test_command_override_read_from_runtime_input_not_root():
 def test_proxy_launch_survives_missing_setsid():
     """Regression (found on a real local macOS run): the proxy launcher called
     setsid unconditionally; macOS has no setsid, so every local run died with
-    "setsid: command not found" before the proxy could bind. The launcher must
-    fall back to a plain background child when setsid is absent."""
+    "setsid: command not found" before the proxy could bind. When setsid is
+    absent the launcher must emulate it with python's os.setsid() so the child
+    leads its own session — a plain background child shares the script's
+    process group, cleanup's negative-PID kill misses it, and the litellm tree
+    leaks past the run holding the port."""
     src = (REPO_ROOT / "blocks" / "evaluator" / "scripts" / "start.sh").read_text(encoding="utf-8")
-    assert "command -v setsid >/dev/null 2>&1 || DETACH=()" in src
+    assert "if ! command -v setsid >/dev/null 2>&1; then" in src
+    assert "os.setsid();os.execvp(sys.argv[1],sys.argv[1:])" in src
     # The guarded bash-3.2-safe expansion must gate the launch line, and no
     # unguarded bare `setsid bash -c` may remain.
     assert 'setsid bash -c' not in src
     assert '${DETACH[@]+"${DETACH[@]}"} bash -c' in src
+
+
+def _free_port() -> int:
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _spawn_listener_holder(tmp_path: Path, port: int, script_name: str) -> subprocess.Popen:
+    """A real TCP listener whose ps command line contains script_name — so the
+    port guard's *litellm* command match can be exercised from outside."""
+    import socket
+    import time
+    holders = tmp_path / "holders"
+    holders.mkdir(exist_ok=True)
+    script = holders / script_name
+    script.write_text(
+        "import socket, sys, time\n"
+        "s = socket.socket()\n"
+        "s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
+        "s.bind(('127.0.0.1', int(sys.argv[1])))\n"
+        "s.listen(1)\n"
+        "time.sleep(120)\n",
+        encoding="utf-8")
+    proc = subprocess.Popen([sys.executable, str(script), str(port)])
+    for _ in range(50):
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                return proc
+        except OSError:
+            time.sleep(0.1)
+    proc.kill()
+    proc.wait()
+    raise AssertionError("holder never started listening")
+
+
+def test_foreign_listener_on_proxy_port_fails_loud(tmp_path):
+    """wait_for_proxy probes TCP first, so a stale listener made it declare
+    readiness while the fresh proxy died on bind — Harbor then routed (and
+    trajectory-logged) through the WRONG proxy. A non-litellm holder must
+    refuse the run instead."""
+    block, state = make_stub_tree(tmp_path, repeats=1, command_override="exit 0")
+    port = _free_port()
+    holder = _spawn_listener_holder(tmp_path, port, "unrelated-holder.py")
+    try:
+        proc = run_start_sh(block, state, extra_env={"LITELLM_PORT": str(port)})
+        assert proc.returncode != 0
+        combined = proc.stdout + proc.stderr
+        assert "non-litellm process" in combined
+        assert str(port) in combined
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+def test_own_leaked_litellm_listener_is_swept(tmp_path):
+    """A leftover litellm listener from a crashed earlier run is ours to
+    sweep: the guard kills it and the run proceeds."""
+    import time
+    block, state = make_stub_tree(tmp_path, repeats=1, command_override="exit 0")
+    port = _free_port()
+    holder = _spawn_listener_holder(tmp_path, port, "litellm-leftover.py")
+    try:
+        proc = run_start_sh(block, state, extra_env={"LITELLM_PORT": str(port)})
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "sweeping stale litellm listener" in proc.stdout + proc.stderr
+        assert holder.poll() is not None or holder.wait(timeout=5) is None
+    finally:
+        holder.kill()
+        holder.wait()
