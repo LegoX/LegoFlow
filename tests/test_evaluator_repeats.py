@@ -148,6 +148,10 @@ def test_weakness_report_builder_invocation_matches_contract():
     assert re.search(r'\[\[ -f "\$1/round_receipt\.json" \]\]', region)
     assert re.search(r'--receipt "\$1/round_receipt\.json"', region)
     assert re.search(r'\$\{receipt_flag\[@\]\+"\$\{receipt_flag\[@\]\}"\}', region)
+    # PREV_DIRECTIVES (the curator's newest directives yaml) is forwarded so the
+    # ledger row stamps directives_sha256; a stale path warns, never fails.
+    assert "--prev-directives" in region
+    assert "PREV_DIRECTIVES" in region
     # Absent audit slice is tolerated with a warning, and a failed build is
     # non-fatal (never fails the eval run).
     assert re.search(r"\[\[ ! -f \"\$audit_slice\" \]\]", region)
@@ -673,6 +677,34 @@ def test_harness_builder_failure_is_non_fatal(tmp_path):
     assert len(builder_calls(state)) == 1
     assert "weakness report build failed" in proc.stdout
     assert "unaffected" in proc.stdout
+
+
+def test_harness_prev_directives_reaches_builder_and_missing_warns(tmp_path):
+    """The ledger row's directives_sha256 provenance comes from
+    PREV_DIRECTIVES; unset, start.sh must not pass the flag (row records
+    null), set to a real file it must reach the builder argv, and a stale
+    path warns without failing the run."""
+    block, state = make_stub_tree(tmp_path, repeats=2, command_override="")
+
+    base = run_start_sh(block, state)
+    assert base.returncode == 0, base.stdout + base.stderr
+    assert "--prev-directives" not in builder_calls(state)[-1]
+
+    directives = tmp_path / "directives_round_001.yaml"
+    directives.write_text("language_quotas: []\n", encoding="utf-8")
+    block2, state2 = make_stub_tree(tmp_path / "second", repeats=2, command_override="")
+    ok = run_start_sh(block2, state2, extra_env={"PREV_DIRECTIVES": str(directives)})
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+    call = builder_calls(state2)[-1]
+    i = call.index("--prev-directives")
+    assert call[i + 1] == str(directives)
+
+    block3, state3 = make_stub_tree(tmp_path / "third", repeats=2, command_override="")
+    stale = run_start_sh(block3, state3,
+                         extra_env={"PREV_DIRECTIVES": str(tmp_path / "gone.yaml")})
+    assert stale.returncode == 0, stale.stdout + stale.stderr
+    assert "PREV_DIRECTIVES" in stale.stdout and "not found" in stale.stdout
+    assert "--prev-directives" not in builder_calls(state3)[-1]
 
 
 def test_harness_firewall_refusal_quarantines_stale_live_report(tmp_path):

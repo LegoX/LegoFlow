@@ -830,6 +830,18 @@ build_weakness_report() {
   if [[ -f "$1/round_receipt.json" ]]; then
     receipt_flag=(--receipt "$1/round_receipt.json")
   fi
+  # Provenance for which directives the measured checkpoint acted under: the
+  # skill/runbook exports PREV_DIRECTIVES pointing at the curator's newest
+  # directives yaml (hypothesis_ledger.directives_file). Unset -> the ledger
+  # row records directives_sha256: null.
+  local prev_directives_flag=()
+  if [[ -n "${PREV_DIRECTIVES:-}" ]]; then
+    if [[ -f "$PREV_DIRECTIVES" ]]; then
+      prev_directives_flag=(--prev-directives "$PREV_DIRECTIVES")
+    else
+      echo "WARNING: PREV_DIRECTIVES=$PREV_DIRECTIVES not found; ledger row will record directives_sha256: null." | tee -a "$LOG_FILE"
+    fi
+  fi
   echo "=== building weakness report from $# repeat job dir(s) ===" | tee -a "$LOG_FILE"
   local build_rc=0
   if ! python3 "$builder" \
@@ -840,7 +852,8 @@ build_weakness_report() {
       --history-dir "$out_dir/history" \
       --response-matrix "$EVAL_ARTIFACTS_DIR/response_matrix.jsonl" \
       --ledger "$EVAL_ARTIFACTS_DIR/loop/ledger.yaml" \
-      ${receipt_flag[@]+"${receipt_flag[@]}"} 2>&1 | tee -a "$LOG_FILE"; then
+      ${receipt_flag[@]+"${receipt_flag[@]}"} \
+      ${prev_directives_flag[@]+"${prev_directives_flag[@]}"} 2>&1 | tee -a "$LOG_FILE"; then
     build_rc="${PIPESTATUS[0]}"
   fi
   if [[ "$build_rc" -eq 0 ]]; then

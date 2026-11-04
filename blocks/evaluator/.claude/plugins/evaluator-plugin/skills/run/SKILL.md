@@ -69,7 +69,14 @@ block** — no child blocks — so this skill runs `scripts/start.sh` directly
    "do not actuate" is the loop's expected steady state, not a failure. Remind
    the user to `git add` the git-tracked loop-memory files
    (`artifacts/loop/`, `artifacts/weakness/history/`, the two audit-slice
-   files) so `clean.sh --all` cannot wipe loop history. For a placebo-arm
+   files, `artifacts/response_matrix.jsonl`) so `clean.sh --all` cannot wipe
+   loop history. When this eval measures a checkpoint produced under curator
+   targeting directives, export `PREV_DIRECTIVES=<curator
+   artifacts/targeting/directives_round_NNN.yaml>` (the newest
+   `directives_file` in the hypothesis ledger) before launching — the ledger
+   row then stamps `directives_sha256` and the round is attributable to its
+   actuation; without it the row records null and the loop loses that
+   provenance. For a placebo-arm
    round, the report was built with `scripts/build_weakness_report.py
    --placebo <seed>` — keep the arm assignment blinded in the summary.
    Build the identity index yourself (agent-side; `start.sh` never runs it):
