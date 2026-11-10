@@ -34,14 +34,22 @@ def test_final_integrity_check_stops_harbor_after_proxy_warmup(tmp_path, mutate_
         (pool / "tc-final/instruction.md").write_text("Changed during proxy warmup.\n")
     source = (ROOT / "blocks/evaluator/scripts/start.sh").read_text()
     # Select the actual launch boundary rather than reproducing its shell logic.
-    before_harbor = source.index('\n(cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND")')
-    boundary = source.index('\necho "=== evaluator start ==="')
-    end = source.index('\nHARBOR_RC=', before_harbor)
+    # The launch section lives inside run_single_repeat(), so the markers are
+    # matched without a line-start anchor (indentation-tolerant).
+    before_harbor = source.index('(cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND")')
+    boundary = source.index('echo "=== evaluator start ==="')
+    end = source.index('HARBOR_RC=', before_harbor)
     marker = tmp_path / "harbor-started"
     env = {**os.environ, "BLOCK_DIR": str(ROOT / "blocks/evaluator"),
            "DATASET_NAME": "terminal-curator", "REGISTRY_ABS": str(pool / "registry.json"),
            "HARBOR_DIR": str(tmp_path), "RUN_COMMAND": "touch " + shlex.quote(str(marker)),
            "LOG_FILE": str(tmp_path / "launch.log")}
+    # NOTE: the snippet re-runs under an explicit top-level `set -eo pipefail`,
+    # which no longer matches the shipped invocation context — inside start.sh
+    # this section lives in run_single_repeat(), invoked as
+    # `run_single_repeat "$REPEAT_INDEX" || REPEAT_RC=$?` (errexit suspended
+    # for the function body); the in-function guards (`|| return $?` on the
+    # publication freeze and the cfg read) restore the same abort semantics.
     result = subprocess.run(["bash", "-c", "set -eo pipefail\n" + source[boundary:end]],
                             env=env, text=True, capture_output=True, timeout=30)
     if mutate_after_preflight:
@@ -107,7 +115,10 @@ def test_only_terminal_registry_is_frozen_when_publication_changes_before_execut
         'public.unlink()\npublic.symlink_to(os.environ["TEST_NEXT_BATCH"])\n'
     )
     env = {**os.environ, "EVAL_CONFIG": "config.local.yaml",
-           "TEST_PUBLICATION": str(public), "TEST_NEXT_BATCH": str(second)}
+           "TEST_PUBLICATION": str(public), "TEST_NEXT_BATCH": str(second),
+           # macOS lacks `hostname -I`; pin the host IP so the full-script
+           # --dry-run-command pass reaches the assertions on every platform.
+           "LITELLM_HOST_IP": "127.0.0.1"}
     for name in ("OPENAI_MODEL", "ANTHROPIC_MODEL", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
                  "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_BASE_URL", "OPENAI_BASE_URL"):
         env.pop(name, None)

@@ -85,12 +85,38 @@ python scripts/extract_verified_tasks.py
 
 where all tasks will be merged to `artifacts/merged_swe_tasks/<task_id>/`. This is convenient for Tracer since it expects a single task directory.
 
+### Stratified sub-pool (optional)
+
+The merged pool stages every verified task; which tasks a tracer run actually
+sees is otherwise decided by Harbor's directory order. To pick an explicit,
+coverage-first subset instead, run
+
+```bash
+python3 scripts/select_stratified_tasks.py            # uses selection.count from config.yaml
+python3 scripts/select_stratified_tasks.py --count 120 --dry-run   # preview only
+```
+
+Selection is stratified by difficulty bin × language (read from each task's own
+`task.toml`): every stratum gets one slot first, then every repo, and the
+remaining budget is split proportional to √(stratum size). Tasks with unknown
+difficulty or missing tags land in an explicit `unknown` stratum — never
+silently dropped. The output
+`artifacts/stratified_swe_tasks/` holds one symlink per selected task plus its
+own `verifiable_tasks.txt` and a `selection_report.json` (stratum coverage,
+repos covered, manifest sha256). Selection is deterministic: re-running over an
+unchanged pool reproduces the same manifest.
+
+Tracer consumes this pool by setting `task_source.pool: stratified` in its
+config (`task_source.stratified_dataset_dir` defaults to this block's
+`artifacts/stratified_swe_tasks`; override it only if the pool lives
+elsewhere); the default `pool: merged` behavior is unchanged.
+
 <Callout title="Handing over to Tracer" type="info">
 Tracer should consume Curator outputs through the verified manifest, not by
 scanning every task directory. The stable handoff is
 `artifacts/swe_tasks/<lang>-cc/verifiable_tasks.txt`, or
 `artifacts/merged_swe_tasks/` when you intentionally export a flat verified
-task root.
+task root — or `artifacts/stratified_swe_tasks/` for the stratified sub-pool.
 </Callout>
 
 

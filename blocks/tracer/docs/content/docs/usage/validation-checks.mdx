@@ -38,6 +38,8 @@ are reported but do not fail the suite.
 | `06_litellm_port.sh` | LiteLLM proxy port. | The configured port is free or already held by the current user. |
 | `07_runtime_image.sh` | Agent runtime image cache. | Configured image is already present, or a cold cache is skipped. Docker access failures still fail. |
 | `09_dashboard_regressions.sh` | Public dashboard export behavior. | Exports avoid full trajectories, read R2 JSONL shards, show latest archives, and keep smoke config aligned. |
+| `10_best_of_n.sh` | Best-of-n campaign selection. | `samples_per_task` defaults to 1; `select_trajectories.py` dedups, ranks, caps, and fails loudly on synthetic sample jobs. |
+| `11_multi_scaffold.sh` | Multi-scaffold campaign knob and merge. | `agent.scaffolds` defaults off; `merge_sft_data.py` concat/cap/stats/manifest behave; `start.sh` and `validate_scaffolds.py` fail loud on invalid campaigns. |
 
 ## Smoke run
 

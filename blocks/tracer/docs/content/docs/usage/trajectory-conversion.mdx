@@ -63,6 +63,40 @@ Adaptive mode keeps useful reasoning while filtering records whose reasoning
 content ratio looks suspicious for downstream training. Terminus-2 does not use
 this filter because its trajectory structure separates reasoning differently.
 
+## Best-of-n selection
+
+When a rollout campaign ran several sample jobs per task
+(`harbor_job.samples_per_task >= 2`), each sample job converts into its own
+`artifacts/sft_data/<job>/` directory and the same task can appear several
+times. `scripts/select_trajectories.py` merges those directories into one
+dataset: records are grouped by `_instance_id`, behaviorally identical
+duplicates are dropped, and the distinct trajectories are ranked by
+`composite_score` so you can keep the best few per task.
+
+```bash
+python3 scripts/select_trajectories.py \
+  --jobs <job>-s1,<job>-s2,<job>-s3 \
+  --per-task-cap 2
+```
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `--jobs` | (required) | Comma-separated sample job names resolved under `--sft-root`. |
+| `--sft-root` | `artifacts/sft_data` | Root the sample job directories resolve under. |
+| `--out-dir` | `artifacts/sft_data/selected` | Output directory for `lf.json`, `lf.stats.json`, and `selection_manifest.json`. |
+| `--per-task-cap` | `2` | Keep at most this many distinct trajectories per task; `0` keeps all. |
+
+Duplicates are detected with a behavioral fingerprint — the ordered tool-call
+names from `im.jsonl` plus whitespace-normalized assistant text — not raw JSON
+equality, so a re-sampled identical run still dedups even when its tokens or
+metadata differ. Ties and ranking are fully deterministic (composite score
+descending, then fingerprint, then instance id). The output `lf.stats.json`
+uses the converter's stats field names, which is what keeps the progress
+dashboard rendering the `selected` directory as a normal SFT dataset;
+`selection_manifest.json` records which job each kept record came from, the
+per-task ranks, and the sha256 of the `lf.json` bytes. The script exits
+non-zero on unknown jobs, zero selected records, or a malformed record.
+
 ## Idempotent refresh
 
 The converter writes `.convert_sig.json` next to the outputs. The signature is
@@ -70,6 +104,41 @@ computed from the resolved reward-1.0 instance set and conversion inputs:
 scaffold, tokenizer, max instance cap, exclude file, and reasoning filter
 settings. When the signature is unchanged, dashboard refresh can skip
 reconversion safely.
+
+## Merging a multi-scaffold campaign
+
+A campaign (`agent.scaffolds`, see
+[Supported Scaffolds](/docs/blocks/tracer/usage/scaffolds)) leaves one
+`artifacts/sft_data/<job>/lf.json` per scaffold. `scripts/merge_sft_data.py`
+concatenates them into one campaign dataset:
+
+```bash
+python3 scripts/merge_sft_data.py \
+  --jobs merged_swe_tasks-custom-claude-code-2.1.118-<model>-<ts>,merged_swe_tasks-custom-opencode-1.18.7-<model>-<ts>
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--jobs` | required | Comma-separated job names, resolved under `--sft-root` (each must have `lf.json`). |
+| `--sft-root` | `artifacts/sft_data` | Root the job names resolve under. |
+| `--out-dir` | `artifacts/sft_data/merged` | Output directory (written under the block dir when relative). |
+| `--per-task-cap` | `0` | Keep at most N records per `_instance_id`, ranked by `_score.composite_score` descending (missing scores count as 0; ties break on `_agent_type`, then source job). `0` = no cap, i.e. plain concatenation. |
+
+The merge is a plain concatenation by design — cross-scaffold trajectories for
+the same task are different rollouts, not duplicates, so nothing is deduped
+unless you ask for a cap. Provenance survives in each record's own
+`meta_info.unique_info._agent_type`.
+
+Outputs in `--out-dir`:
+
+| File | Contents |
+| --- | --- |
+| `lf.json` | Selected records in deterministic order (`_instance_id`, then rank). Consumed by Trainer via `trainer.source.type: local_lf`. |
+| `lf.stats.json` | Dashboard-compatible stats (`count`, `token_lens` with min/mean/max, `n_turns`, `scores`, `total_tokens`, `tool_call_errors` with `error_rate`) derived from the records' `meta_info`, so the merged dataset appears on the progress board like any converted job. |
+| `merge_manifest.json` | Provenance: `jobs`, `per_task_cap`, `selected_count`, `per_scaffold_counts`, per-task selection with ranks, `sha256_lf`, `generated_at`, and the exact `command`. |
+
+Unknown job names, malformed records, a zero-record result, and negative caps
+all exit non-zero with a clear message.
 
 For dashboard-driven refreshes, use `/tracer:dashboard`. For the core rollout
 path, set:

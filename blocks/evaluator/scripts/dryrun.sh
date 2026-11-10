@@ -221,7 +221,7 @@ if [[ $FAIL -eq 0 ]]; then
   fi
   MODEL_API_INPUT_COST="$(cfg runtime_info.input.llm_api.input_cost_per_token)"
   MODEL_API_OUTPUT_COST="$(cfg runtime_info.input.llm_api.output_cost_per_token)"
-  RUN_COMMAND="$(cfg command_override)"
+  RUN_COMMAND="$(cfg runtime_info.input.command_override)"
 else
   HARBOR_URL=""
   HARBOR_BRANCH=""
@@ -496,6 +496,42 @@ for key in \
     ok "$key = $value"
   fi
 done
+
+# RSI loop: harbor_job.repeats — k variance-gated repeats per start.sh run.
+# Validated here, acted on only by start.sh (which restarts the per-job LiteLLM
+# proxy per repeat and suffixes job dirs -r1..-rk). Missing leaf = single pass.
+# Strict type check: a quoted "3" in YAML would pass a value-based check but
+# break the integer arithmetic in start.sh, so require a real positive int.
+REPEATS_STATUS="$(python3 - "$CONFIG" <<'PY'
+import sys
+import yaml
+data = yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}
+value = data
+for part in "runtime_info.input.harbor_job.repeats".split("."):
+    value = value.get(part) if isinstance(value, dict) else None
+if value is None:
+    print("missing")
+elif isinstance(value, bool) or not isinstance(value, int) or value < 1:
+    print(f"bad:{value!r}")
+else:
+    print(f"int:{value}")
+PY
+)"
+case "$REPEATS_STATUS" in
+  int:*)
+    REPEATS_VALUE="${REPEATS_STATUS#int:}"
+    ok "harbor_job.repeats = $REPEATS_VALUE"
+    if [[ "$REPEATS_VALUE" -gt 1 ]]; then
+      info "start.sh will run $REPEATS_VALUE sequential repeats (job dirs suffixed -r1..-r$REPEATS_VALUE, fresh LiteLLM proxy per repeat, then a joined weakness report)"
+    fi
+    ;;
+  missing)
+    warn "harbor_job.repeats not set; treating as 1 (single pass)"
+    ;;
+  *)
+    fail "harbor_job.repeats must be a positive integer (got ${REPEATS_STATUS#bad:})"
+    ;;
+esac
 
 PROVIDER="$(cfg runtime_info.input.task_source.provider)"
 case "$PROVIDER" in
