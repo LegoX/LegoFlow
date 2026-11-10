@@ -615,11 +615,22 @@ echo ""
 echo "============================================================"
 echo "STEP 3: Update config.yaml runtime_info.output"
 echo "============================================================"
-"$LF_PYTHON" - "$BLOCK_DIR" "$ABS_OUTPUT_DIR" "$TRAIN_LOG" "$CONFIG" <<'PYEOF'
+# Exact LF file this run trained on, for the round receipt; empty when the
+# dataset was loaded from the Hub at train time (REGISTER_MODE=hf_hub).
+LF_FILE_FOR_RECEIPT=""
+if [[ "$REGISTER_MODE" == "file" ]]; then
+    if [[ "$SOURCE_TYPE" == "harbor_job" ]]; then
+        LF_FILE_FOR_RECEIPT="$LF_OUTPUT"
+    else
+        LF_FILE_FOR_RECEIPT="$(abspath "$REGISTER_VALUE")"
+    fi
+fi
+"$LF_PYTHON" - "$BLOCK_DIR" "$ABS_OUTPUT_DIR" "$TRAIN_LOG" "$CONFIG" "$LF_FILE_FOR_RECEIPT" <<'PYEOF'
 import fcntl
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -629,6 +640,7 @@ import yaml
 # config_path comes from $CONFIG (honors the SFT_CONFIG override) so a smoke /
 # alt run writes runtime_info.output into ITS config, never the canonical one.
 block_dir, output_dir, train_log, config_path_arg = sys.argv[1:5]
+lf_file_arg = sys.argv[5] if len(sys.argv) > 5 else ""
 config_path = Path(config_path_arg)
 # The fcntl sidecar is scratch state, so it belongs under artifacts/, not next
 # to the config in the block root. Name it after the config so an alternate
@@ -755,6 +767,35 @@ print(f"    log: {artifacts.get('training_log')}")
 print(f"    final_loss: {metrics_value.get('final_loss')}")
 print(f"    total_steps: {metrics_value.get('total_steps')}")
 print(f"    train_runtime: {metrics_value.get('train_runtime')}")
+
+# Round receipt (RSI loop graft): stamp the plant identity — checkpoint
+# manifest hash, LF mix hash, instance/token counts, final loss — next to the
+# run output for cross-round attribution. Strictly advisory: any failure only
+# warns and must never turn a finished training run into a failed one.
+try:
+    receipt_path = out / "round_receipt.json"
+    receipt_cmd = [
+        sys.executable,
+        str(Path(block_dir) / "scripts" / "round_receipt.py"),
+        "--checkpoint-path", checkpoint,
+        "--out", str(receipt_path),
+    ]
+    rsi_round = os.environ.get("LEGOFLOW_RSI_ROUND", "").strip()
+    if rsi_round:
+        receipt_cmd += ["--round", rsi_round]
+    if lf_file_arg:
+        receipt_cmd += ["--lf-file", lf_file_arg]
+    proc = subprocess.run(receipt_cmd, capture_output=True, text=True)
+    for line in proc.stdout.splitlines():
+        print(f"    {line}")
+    if proc.returncode == 0:
+        print(f"=== Round receipt written: {receipt_path} ===")
+    else:
+        print(f"WARNING: round receipt failed (rc={proc.returncode}); training result is unaffected")
+        for line in proc.stderr.splitlines():
+            print(f"    {line}")
+except Exception as exc:  # advisory only — never fail training on a receipt
+    print(f"WARNING: round receipt not generated ({exc}); training result is unaffected")
 PYEOF
 
 echo "=== Training done. Log: $TRAIN_LOG ==="

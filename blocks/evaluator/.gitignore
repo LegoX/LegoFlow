@@ -4,7 +4,27 @@ repos/harbor/
 
 # Runtime artifacts can contain config snapshots, trajectories, logs, host
 # paths, endpoint details, and credentials. Never publish them.
-artifacts/
+# `artifacts/*` (direct children) instead of a bare `artifacts/`: a bare
+# directory pattern excludes artifacts/ itself, which would make every child
+# negation below a silent no-op (git cannot re-include under an excluded dir).
+artifacts/*
+# RSI loop memory — git-tracked so scripts/clean.sh --all (keeps tracked files
+# only) never wipes the loop's history: the measurement ledger, immutable
+# weakness-report history copies, the frozen audit slice, and the response
+# matrix. Everything else under artifacts/ (jobs, trajectories, analysis)
+# stays ignored.
+!artifacts/loop/
+!artifacts/weakness/
+artifacts/weakness/*
+!artifacts/weakness/history/
+!artifacts/reserve/
+artifacts/reserve/*
+!artifacts/reserve/audit_slice.meta.json
+!artifacts/reserve/audit_slice.txt
+# Response matrix (plan §10 fix 10 / §6.2 M2 seed): appended once per round by
+# build_weakness_report.py, never regenerated — losing it loses the
+# longitudinal (checkpoint x task) IRT history.
+!artifacts/response_matrix.jsonl
 
 # Local Claude Code settings (not shared).
 .claude/settings.local.json

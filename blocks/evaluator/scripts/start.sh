@@ -258,7 +258,7 @@ if [[ "$PRINT_COMMAND_ONLY" != "1" ]]; then
 fi
 
 HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
-RUN_COMMAND="$(cfg command_override)"
+COMMAND_OVERRIDE="$(cfg runtime_info.input.command_override)"
 UV_PROJECT_ENVIRONMENT_RAW="$(cfg meta_info.environment.harbor_uv)"
 LITELLM_UV_RAW="$(cfg meta_info.environment.litellm_uv)"
 HARBOR_JOBS_DIR_RAW="$(cfg runtime_info.input.harbor_job.jobs_dir)"
@@ -297,6 +297,7 @@ N_CONCURRENT="$(cfg runtime_info.input.harbor_job.n_concurrent)"
 N_TASKS="$(cfg runtime_info.input.harbor_job.n_tasks)"
 MAX_RETRIES="$(cfg runtime_info.input.harbor_job.max_retries)"
 TIMEOUT_MULTIPLIER="$(cfg runtime_info.input.harbor_job.timeout_multiplier)"
+REPEATS_RAW="$(cfg runtime_info.input.harbor_job.repeats)"
 MAX_TURNS="$(cfg runtime_info.input.agent.max_turns)"
 TEMPERATURE="$(cfg runtime_info.input.agent.temperature)"
 
@@ -310,6 +311,23 @@ TEMPERATURE="$(cfg runtime_info.input.agent.temperature)"
 [[ -n "$N_CONCURRENT" ]] || { echo "ERROR: runtime_info.input.harbor_job.n_concurrent is empty" >&2; exit 1; }
 [[ -n "$MAX_RETRIES" ]] || { echo "ERROR: runtime_info.input.harbor_job.max_retries is empty" >&2; exit 1; }
 [[ -n "$TIMEOUT_MULTIPLIER" ]] || { echo "ERROR: runtime_info.input.harbor_job.timeout_multiplier is empty" >&2; exit 1; }
+
+# RSI loop: harbor_job.repeats = k variance-gated repeats.
+# k=1 keeps the pre-loop single-pass behavior exactly (job naming, artifacts,
+# exit codes); k>1 reruns the Harbor + analysis section once per repeat with a
+# fresh per-job LiteLLM proxy and -rN-suffixed job dirs, then joins the k job
+# dirs into a weakness report. REPEAT_JOB_DIRS collects the completed repeat
+# job dirs (run + analysis finished) that the report may be built from.
+REPEATS="${REPEATS_RAW:-1}"
+if ! [[ "$REPEATS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: runtime_info.input.harbor_job.repeats must be a positive integer (got '${REPEATS_RAW}')" >&2
+  exit 1
+fi
+REPEAT_JOB_DIRS=()
+LITELLM_PID=""
+if [[ "$REPEATS" -gt 1 && -n "$(cfg job_dir)" ]]; then
+  echo "NOTE: repeats=$REPEATS with an explicit job_dir — each repeat's job dir gets its -rN suffix appended." >&2
+fi
 
 HARBOR_DIR="$(abspath "$HARBOR_PATH_RAW")"
 [[ -e "$HARBOR_DIR/.git" ]] || { echo "ERROR: $HARBOR_PATH_RAW missing; run bash scripts/update_repos.sh" >&2; exit 1; }
@@ -364,6 +382,19 @@ if [[ -z "$JOB_DIR_RAW" ]]; then
   JOB_DIR_RAW="${HARBOR_JOBS_DIR_RAW%/}/$JOB_NAME"
 fi
 [[ -n "$JOB_DIR_RAW" ]] || { echo "ERROR: job_dir is empty" >&2; exit 1; }
+
+# Suffix for one repeat's job name/dir: empty for a single pass (k=1 keeps the
+# historical job naming byte-for-byte), "-r<i>" (1-based) for each repeat of a
+# k>1 loop so the k job dirs stay distinct.
+repeat_job_suffix() {
+  local repeats="$1"
+  local index="$2"
+  if [[ "$repeats" -le 1 ]]; then
+    printf ''
+  else
+    printf -- '-r%d' "$index"
+  fi
+}
 if [[ -n "$UV_PROJECT_ENVIRONMENT_RAW" ]]; then
   export UV_PROJECT_ENVIRONMENT="$(abspath "$UV_PROJECT_ENVIRONMENT_RAW")"
 fi
@@ -401,10 +432,7 @@ export EVAL_AGENT_MODEL_NAME="$AGENT_MODEL_NAME"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/evaluator_$(date +%Y-%m-%d_%H-%M-%S).log"
 
-JOB_DIR="$(abspath "$JOB_DIR_RAW")"
 HARBOR_JOBS_DIR="$(abspath "$HARBOR_JOBS_DIR_RAW")"
-mkdir -p "$HARBOR_JOBS_DIR" "$JOB_DIR"
-python3 "$BLOCK_DIR/../../scripts/redact_archive_config.py" "$CONFIG" "$JOB_DIR/config.yaml"
 
 export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
 export EVAL_ARTIFACTS_DIR="$BLOCK_DIR/artifacts"
@@ -412,10 +440,13 @@ export EVAL_HARBOR_DATASET_NAME="$DATASET_NAME"
 export EVAL_HARBOR_DATASET_VERSION="$DATASET_VERSION"
 export EVAL_HARBOR_REGISTRY_PATH="$REGISTRY_ABS"
 export EVAL_HARBOR_JOBS_DIR="$HARBOR_JOBS_DIR"
-export EVAL_JOB_NAME="$JOB_NAME"
+# The proxy's trajectory_logger routes "<job>/<trial>/agent/litellm-trajectory.jsonl"
+# relative to TRAJECTORY_JOB_ROOT; without this export it falls back to the
+# Harbor checkout's own jobs/ dir — a parents[2] coincidence that only matches
+# the default --jobs-dir. Exported before any proxy start so every repeat's
+# proxy inherits it.
+export TRAJECTORY_JOB_ROOT="$HARBOR_JOBS_DIR"
 export EVAL_JOB_NAME_PREFIX="$JOB_NAME_PREFIX"
-export EVAL_JOB_DIR="$JOB_DIR"
-export EVAL_TRAJECTORY_FILE_PATTERN="$JOB_DIR/<task-id>/agent/litellm-trajectory.jsonl"
 export EVAL_RUNTIME_ROOT="$(cfg runtime_info.input.runtime_mount.container_runtime_root)"
 if [[ -z "$EVAL_RUNTIME_ROOT" ]]; then
   case "$AGENT_NAME" in
@@ -461,7 +492,18 @@ while IFS= read -r env_line; do
   [[ -n "$env_line" ]] && export "$env_line"
 done < <(export_run_environment)
 
-if [[ -z "$RUN_COMMAND" ]]; then
+# Build RUN_COMMAND (the default Harbor command) for one repeat's job name.
+# command_override, when configured, is used verbatim and wins over the default.
+build_run_command() {
+  local job_name="$1"
+  # Reset from the configured override on every call: with no override the
+  # default below is rebuilt per repeat so each Harbor run embeds its own
+  # --job-name (a command frozen at repeat 1 would rerun the -r1 job for
+  # repeats 2..k and leave their job dirs empty).
+  RUN_COMMAND="$COMMAND_OVERRIDE"
+  if [[ -n "$RUN_COMMAND" ]]; then
+    return 0
+  fi
   [[ -n "$EVAL_AGENT_IMPORT_PATH" ]] || { echo "ERROR: runtime_info.input.agent.import_path is empty and no default is defined for agent.name=$AGENT_NAME" >&2; exit 1; }
   EXTRA_ARGS=""
   if [[ -n "$N_TASKS" ]]; then
@@ -556,7 +598,7 @@ print(json.dumps({
     *)
       echo "ERROR: no default agent flags for agent.name=$AGENT_NAME (set command_override or extend start.sh)" >&2; exit 1 ;;
   esac
-  RUN_COMMAND="uv run harbor run --dataset $(printf '%q' "$HARBOR_DATASET_SPEC") --registry-path $(printf '%q' "$EVAL_HARBOR_REGISTRY_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$EVAL_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$EVAL_JOB_NAME") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'
+  RUN_COMMAND="uv run harbor run --dataset $(printf '%q' "$HARBOR_DATASET_SPEC") --registry-path $(printf '%q' "$EVAL_HARBOR_REGISTRY_PATH") --jobs-dir $(printf '%q' "$HARBOR_JOBS_DIR") --agent-import-path $(printf '%q' "$EVAL_AGENT_IMPORT_PATH") --job-name $(printf '%q' "$job_name") --mounts-json \"\$($(printf '%q' "$HARBOR_PYTHON") - <<'PY'
 import json
 import os
 host_path = os.environ.get('EVAL_RUNTIME_HOST_PATH', '')
@@ -578,7 +620,7 @@ else:
 print(json.dumps(mounts))
 PY
 )\" --model $(printf '%q' "$HARBOR_MODEL_NAME") --n-concurrent $(printf '%q' "$N_CONCURRENT")${EXTRA_ARGS} --timeout-multiplier $(printf '%q' "$TIMEOUT_MULTIPLIER") --max-retries $(printf '%q' "$MAX_RETRIES") --ak version=$(printf '%q' "$AGENT_VERSION")${AGENT_FLAGS}"
-fi
+}
 
 LITELLM_TEMPLATE_RAW="$(cfg runtime_info.input.litellm_proxy.config_template)"
 [[ -n "$LITELLM_TEMPLATE_RAW" ]] || { echo "ERROR: runtime_info.input.litellm_proxy.config_template is empty" >&2; exit 1; }
@@ -591,62 +633,143 @@ fi
 LITELLM_CONFIG_NAME="$(basename "$LITELLM_TEMPLATE_RAW")"
 LITELLM_CONFIG_NAME="${LITELLM_CONFIG_NAME%.example.yaml}"
 LITELLM_CONFIG_NAME="${LITELLM_CONFIG_NAME}_evaluator"
-LITELLM_ARTIFACT_DIR="$BLOCK_DIR/artifacts/litellm/$JOB_NAME"
-mkdir -p "$LITELLM_ARTIFACT_DIR"
-LITELLM_CONFIG_PATH="$LITELLM_ARTIFACT_DIR/${LITELLM_CONFIG_NAME}.yaml"
 TRAJECTORY_LOGGER_SOURCE="$HARBOR_DIR/scripts/serve_llm/trajectory_logger.py"
 [[ -f "$TRAJECTORY_LOGGER_SOURCE" ]] || { echo "ERROR: trajectory_logger.py not found in Harbor checkout" >&2; exit 1; }
-cp "$TRAJECTORY_LOGGER_SOURCE" "$LITELLM_ARTIFACT_DIR/trajectory_logger.py"
-write_litellm_config "$LITELLM_CONFIG_PATH" "$LITELLM_TEMPLATE_PATH"
-export EVAL_LITELLM_CONFIG="$LITELLM_CONFIG_PATH"
 
-if [[ "$PRINT_COMMAND_ONLY" == "1" ]]; then
-  echo "=== evaluator generated command ==="
-  echo "LiteLLM config: $LITELLM_CONFIG_PATH"
-  echo "$RUN_COMMAND"
-  exit 0
-fi
+# Set up one repeat's job dir, LiteLLM config, and exported job identity.
+# Every repeat gets its own artifacts/litellm/<job>/ dir because the proxy's
+# trajectory output root is fixed when the proxy process forks.
+prepare_repeat() {
+  local repeat_index="$1"
+  local suffix
+  suffix="$(repeat_job_suffix "$REPEATS" "$repeat_index")"
+  REPEAT_JOB_NAME="${JOB_NAME}${suffix}"
+  REPEAT_JOB_DIR_RAW="${JOB_DIR_RAW}${suffix}"
+  REPEAT_JOB_DIR="$(abspath "$REPEAT_JOB_DIR_RAW")"
+  export EVAL_JOB_NAME="$REPEAT_JOB_NAME"
+  export EVAL_JOB_DIR="$REPEAT_JOB_DIR"
+  export EVAL_TRAJECTORY_FILE_PATTERN="$REPEAT_JOB_DIR/<task-id>/agent/litellm-trajectory.jsonl"
 
-echo "=== starting LiteLLM proxy ===" | tee "$LOG_FILE"
-# Default to a single proxy worker. The eval proxy is pure async I/O in front of
-# one upstream backend, so 1 worker comfortably serves n_concurrent tasks. More
-# importantly, multi-worker boot crash-loops on slow/network filesystems: each
-# worker re-imports LiteLLM slowly on a cold networked filesystem, which exceeds uvicorn's
-# multiprocess boot tolerance and every child dies ("Child process [...] died"),
-# so the port never serves. Override with LITELLM_NUM_WORKERS=N if needed.
-export LITELLM_NUM_WORKERS="${LITELLM_NUM_WORKERS:-1}"
-setsid bash -c '
-  cd "$1"
-  PATH="$(dirname "$EVAL_LITELLM_BIN"):$PATH" \
-    LITELLM_CONFIG="$2" \
-    LITELLM_LOG_FOLDER="$3/logs" \
-    LITELLM_PORT="$4" \
-    API_KEY="$5" \
-    LITELLM_NUM_WORKERS="$6" \
-    bash scripts/serve_llm/serve_litellm.sh
-' bash "$HARBOR_DIR" "$LITELLM_CONFIG_PATH" "$LITELLM_ARTIFACT_DIR" "${LITELLM_PORT:-$(cfg runtime_info.input.litellm_proxy.port)}" "$EVAL_LITELLM_MASTER_KEY" "$LITELLM_NUM_WORKERS" >>"$LOG_FILE" 2>&1 &
-LITELLM_PID="$!"
+  mkdir -p "$HARBOR_JOBS_DIR" "$REPEAT_JOB_DIR" || { echo "ERROR: cannot create job dir $REPEAT_JOB_DIR_RAW" >&2; return 1; }
+  python3 "$BLOCK_DIR/../../scripts/redact_archive_config.py" "$CONFIG" "$REPEAT_JOB_DIR/config.yaml" || return 1
+
+  # RSI loop contract 8: pin the trainer round receipt (train.sh writes it
+  # next to the checkpoint) into this job dir so build_weakness_report.py's
+  # load_checkpoint_ref can key the measurement row to checkpoint_sha.
+  local trainer_ckpt receipt_src
+  trainer_ckpt="$(cfg runtime_info.input.local_model_serving.from_trainer_checkpoint)"
+  if [[ -n "$trainer_ckpt" ]]; then
+    receipt_src="$(dirname "$(abspath "$trainer_ckpt")")/round_receipt.json"
+    if [[ -f "$receipt_src" ]]; then
+      cp "$receipt_src" "$REPEAT_JOB_DIR/round_receipt.json" || return 1
+    else
+      echo "WARNING: no round_receipt.json next to from_trainer_checkpoint ($trainer_ckpt); checkpoint identity will degrade to 'unknown' in the weakness report." >&2
+    fi
+  fi
+
+  LITELLM_ARTIFACT_DIR="$BLOCK_DIR/artifacts/litellm/$REPEAT_JOB_NAME"
+  LITELLM_CONFIG_PATH="$LITELLM_ARTIFACT_DIR/${LITELLM_CONFIG_NAME}.yaml"
+  mkdir -p "$LITELLM_ARTIFACT_DIR" || return 1
+  cp "$TRAJECTORY_LOGGER_SOURCE" "$LITELLM_ARTIFACT_DIR/trajectory_logger.py" || return 1
+  write_litellm_config "$LITELLM_CONFIG_PATH" "$LITELLM_TEMPLATE_PATH" || return 1
+  export EVAL_LITELLM_CONFIG="$LITELLM_CONFIG_PATH"
+
+  build_run_command "$REPEAT_JOB_NAME"
+}
+
 cleanup_litellm() {
-  if kill -0 "$LITELLM_PID" >/dev/null 2>&1; then
+  if [[ -n "${LITELLM_PID:-}" ]] && kill -0 "$LITELLM_PID" >/dev/null 2>&1; then
     kill -- "-$LITELLM_PID" >/dev/null 2>&1 || kill "$LITELLM_PID" >/dev/null 2>&1 || true
     wait "$LITELLM_PID" >/dev/null 2>&1 || true
   fi
 }
-_archive_run_on_exit() {
-    local rc=$?
-    cleanup_litellm || true
-    bash "$BLOCK_DIR/scripts/archive_run.sh" "$rc" "$RUN_STARTED_AT" || true
-    exit $rc
+
+# Is anything already listening on the proxy port? Uses the plain python3 from
+# PATH on purpose: $EVAL_LITELLM_PYTHON is the stubbed proxy-readiness probe in
+# test harnesses, and the pre-start check must never be stubbed away.
+proxy_port_held() {
+  python3 - "$LITELLM_PORT_RESOLVED" <<'PY' >/dev/null 2>&1
+import socket
+import sys
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.settimeout(1.0)
+    sys.exit(0 if s.connect_ex(("127.0.0.1", int(sys.argv[1]))) == 0 else 1)
+PY
 }
-trap _archive_run_on_exit EXIT
+
+# A stale listener on the proxy port is never a usable proxy: wait_for_proxy
+# probes TCP first, so it would false-positive on the old listener while the
+# fresh proxy dies on bind — and Harbor would route (and trajectory-log, via
+# the fork-time-fixed root) through the WRONG repeat's proxy. After cleanup,
+# sweep only our own leaked litellm listeners and refuse anything else.
+ensure_proxy_port_free() {
+  proxy_port_held || return 0
+  local pids=() pid cmd _
+  if command -v lsof >/dev/null 2>&1; then
+    pids=($(lsof -t -iTCP:"$LITELLM_PORT_RESOLVED" -sTCP:LISTEN 2>/dev/null || true))
+  fi
+  if [[ ${#pids[@]} -eq 0 ]]; then
+    echo "ERROR: proxy port $LITELLM_PORT_RESOLVED is already held and lsof cannot identify the holder; free the port and retry." | tee -a "$LOG_FILE" >&2
+    return 1
+  fi
+  for pid in "${pids[@]}"; do
+    cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$cmd" != *litellm* && "$cmd" != *serve_litellm* ]]; then
+      echo "ERROR: proxy port $LITELLM_PORT_RESOLVED is held by a non-litellm process (pid $pid: ${cmd:0:80}); refusing to start." | tee -a "$LOG_FILE" >&2
+      return 1
+    fi
+  done
+  echo "WARNING: sweeping stale litellm listener(s) ${pids[*]} off port $LITELLM_PORT_RESOLVED" | tee -a "$LOG_FILE" >&2
+  kill "${pids[@]}" 2>/dev/null || true
+  for _ in {1..10}; do proxy_port_held || return 0; sleep 1; done
+  kill -9 "${pids[@]}" 2>/dev/null || true
+  for _ in {1..5}; do proxy_port_held || return 0; sleep 1; done
+  echo "ERROR: proxy port $LITELLM_PORT_RESOLVED is still held after sweeping." | tee -a "$LOG_FILE" >&2
+  return 1
+}
+
+start_litellm_proxy() {
+  echo "=== starting LiteLLM proxy ===" | tee -a "$LOG_FILE"
+  # Default to a single proxy worker. The eval proxy is pure async I/O in front of
+  # one upstream backend, so 1 worker comfortably serves n_concurrent tasks. More
+  # importantly, multi-worker boot crash-loops on slow/network filesystems: each
+  # worker re-imports LiteLLM slowly on a cold networked filesystem, which exceeds uvicorn's
+  # multiprocess boot tolerance and every child dies ("Child process [...] died"),
+  # so the port never serves. Override with LITELLM_NUM_WORKERS=N if needed.
+  export LITELLM_NUM_WORKERS="${LITELLM_NUM_WORKERS:-1}"
+  # Detach the proxy into its own session so cleanup's negative-PID kill
+  # reaches the whole tree. Linux eval nodes have setsid; macOS ships none, so
+  # emulate it with python's os.setsid() (tracer's start.sh does the same). A
+  # plain background child would share the script's process group: the group
+  # kill would miss it, the wrapper-only SIGTERM would orphan the litellm tree,
+  # and it would leak past the run holding the port.
+  DETACH=(setsid)
+  if ! command -v setsid >/dev/null 2>&1; then
+    DETACH=(python3 -c 'import os,sys;os.setsid();os.execvp(sys.argv[1],sys.argv[1:])')
+  fi
+  ${DETACH[@]+"${DETACH[@]}"} bash -c '
+    cd "$1"
+    PATH="$(dirname "$EVAL_LITELLM_BIN"):$PATH" \
+      LITELLM_CONFIG="$2" \
+      LITELLM_LOG_FOLDER="$3/logs" \
+      LITELLM_PORT="$4" \
+      API_KEY="$5" \
+      LITELLM_NUM_WORKERS="$6" \
+      bash scripts/serve_llm/serve_litellm.sh
+  ' bash "$HARBOR_DIR" "$LITELLM_CONFIG_PATH" "$LITELLM_ARTIFACT_DIR" "$LITELLM_PORT_RESOLVED" "$EVAL_LITELLM_MASTER_KEY" "$LITELLM_NUM_WORKERS" >>"$LOG_FILE" 2>&1 &
+  LITELLM_PID="$!"
+}
 
 # The LiteLLM proxy must be listening before Harbor launches, otherwise the
 # first task's LLM call hits a dead port. Importing litellm can take ~30-60s on
 # cold/network filesystems, so wait generously (and fail loudly if the proxy
 # never binds — never fall through to Harbor against a dead proxy).
-PROXY_READY=0
-for _ in {1..120}; do
-  if "$EVAL_LITELLM_PYTHON" - "$EVAL_LITELLM_ANTHROPIC_BASE_URL" <<'PY' >/dev/null 2>&1
+wait_for_proxy() {
+  local PROXY_READY=0
+  local _
+  for _ in {1..120}; do
+    if "$EVAL_LITELLM_PYTHON" - "$EVAL_LITELLM_ANTHROPIC_BASE_URL" <<'PY' >/dev/null 2>&1
 import socket
 import sys
 from urllib.parse import urlparse
@@ -657,79 +780,259 @@ port = u.port or (443 if u.scheme == "https" else 80)
 with socket.create_connection((host, port), timeout=2):
     pass
 PY
-  then
-    PROXY_READY=1
-    break
-  fi
-  if ! kill -0 "$LITELLM_PID" >/dev/null 2>&1; then
-    echo "ERROR: LiteLLM proxy exited before Harbor job started" | tee -a "$LOG_FILE"
+    then
+      PROXY_READY=1
+      break
+    fi
+    if ! kill -0 "$LITELLM_PID" >/dev/null 2>&1; then
+      echo "ERROR: LiteLLM proxy exited before Harbor job started" | tee -a "$LOG_FILE"
+      echo "       See proxy log under: $LITELLM_ARTIFACT_DIR/logs" | tee -a "$LOG_FILE"
+      exit 1
+    fi
+    sleep 1
+  done
+  if [[ "$PROXY_READY" != "1" ]]; then
+    echo "ERROR: LiteLLM proxy did not start listening on $EVAL_LITELLM_ANTHROPIC_BASE_URL in time" | tee -a "$LOG_FILE"
     echo "       See proxy log under: $LITELLM_ARTIFACT_DIR/logs" | tee -a "$LOG_FILE"
     exit 1
   fi
-  sleep 1
+  echo "LiteLLM proxy is listening on $EVAL_LITELLM_ANTHROPIC_BASE_URL" | tee -a "$LOG_FILE"
+}
+
+# Join the repeat job dirs into the RSI-loop weakness report
+# (legoflow.weakness.v1). Best-effort by design — a
+# failed build must never fail the eval run (same policy as analyze_job.sh).
+build_weakness_report() {
+  WEAKNESS_REPORT_ATTEMPTED=1
+  local builder="$BLOCK_DIR/scripts/build_weakness_report.py"
+  local out_dir="$EVAL_ARTIFACTS_DIR/weakness"
+  local audit_slice="$EVAL_ARTIFACTS_DIR/reserve/audit_slice.txt"
+  if [[ ! -f "$builder" ]]; then
+    echo "WARNING: $builder not found; skipping weakness report. Eval results are unaffected." | tee -a "$LOG_FILE"
+    return 0
+  fi
+  if [[ $# -lt 1 ]]; then
+    echo "WARNING: no completed repeat job dirs; skipping weakness report." | tee -a "$LOG_FILE"
+    return 0
+  fi
+  if [[ ! -f "$audit_slice" ]]; then
+    echo "WARNING: audit slice absent at $audit_slice — report built without audit exclusions." | tee -a "$LOG_FILE"
+  fi
+  mkdir -p "$out_dir" "$out_dir/history" "$EVAL_ARTIFACTS_DIR/loop" || {
+    echo "WARNING: cannot create $out_dir / $EVAL_ARTIFACTS_DIR/loop; skipping weakness report." | tee -a "$LOG_FILE"
+    return 0
+  }
+  # Contract 8: prepare_repeat pins the trainer round receipt into each job
+  # dir; hand the copy to the builder so the row is keyed to checkpoint_sha
+  # even when only some job dirs carry it. Absent receipt keeps the builder's
+  # own per-job fallback probes (and its 'unknown' warning).
+  local receipt_flag=()
+  if [[ -f "$1/round_receipt.json" ]]; then
+    receipt_flag=(--receipt "$1/round_receipt.json")
+  fi
+  # Provenance for which directives the measured checkpoint acted under: the
+  # skill/runbook exports PREV_DIRECTIVES pointing at the curator's newest
+  # directives yaml (hypothesis_ledger.directives_file). Unset -> the ledger
+  # row records directives_sha256: null.
+  local prev_directives_flag=()
+  if [[ -n "${PREV_DIRECTIVES:-}" ]]; then
+    if [[ -f "$PREV_DIRECTIVES" ]]; then
+      prev_directives_flag=(--prev-directives "$PREV_DIRECTIVES")
+    else
+      echo "WARNING: PREV_DIRECTIVES=$PREV_DIRECTIVES not found; ledger row will record directives_sha256: null." | tee -a "$LOG_FILE"
+    fi
+  fi
+  echo "=== building weakness report from $# repeat job dir(s) ===" | tee -a "$LOG_FILE"
+  local build_rc=0
+  if ! python3 "$builder" \
+      --jobs "$@" \
+      --dataset "$SOURCE_DATASET_NAME" \
+      --audit-slice "$audit_slice" \
+      --out "$out_dir/weakness_report.json" \
+      --history-dir "$out_dir/history" \
+      --response-matrix "$EVAL_ARTIFACTS_DIR/response_matrix.jsonl" \
+      --ledger "$EVAL_ARTIFACTS_DIR/loop/ledger.yaml" \
+      ${receipt_flag[@]+"${receipt_flag[@]}"} \
+      ${prev_directives_flag[@]+"${prev_directives_flag[@]}"} 2>&1 | tee -a "$LOG_FILE"; then
+    build_rc="${PIPESTATUS[0]}"
+  fi
+  if [[ "$build_rc" -eq 0 ]]; then
+    echo "weakness report: $out_dir/weakness_report.json" | tee -a "$LOG_FILE"
+  elif [[ "$build_rc" -eq 3 ]]; then
+    # Exit 3 is exclusively the signal-firewall refusal (guard_payloads aborts
+    # BEFORE any write), so the live --out copy still holds the PREVIOUS round
+    # and would keep feeding curator's directives_path as if current. Quarantine
+    # the stale copy and stamp a marker: the next apply_targeting then dies
+    # 'weakness report not found' (fail-closed) instead of silently consuming
+    # round N-1's data. The run itself stays non-fatal by policy — the salvage
+    # path calls this function under `|| true`.
+    echo "ERROR: signal firewall refused the weakness-report payloads (builder exit 3)." | tee -a "$LOG_FILE" >&2
+    if [[ -f "$out_dir/weakness_report.json" ]]; then
+      mv -f "$out_dir/weakness_report.json" "$out_dir/weakness_report.refused.json"
+      echo "ERROR: stale live report quarantined to $out_dir/weakness_report.refused.json — no live report is served until the payload/policy conflict is fixed and the builder re-run." | tee -a "$LOG_FILE" >&2
+    fi
+    printf '{"refused_at": "%s", "builder_exit": 3, "reason": "signal_firewall"}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$out_dir/weakness_refused.json"
+  else
+    echo "WARNING: weakness report build failed (builder exit $build_rc); eval results are unaffected. See log above." | tee -a "$LOG_FILE"
+  fi
+  return 0
+}
+
+# EXIT-trap salvage: when the script dies
+# mid-round, still try to report from whatever complete repeat job dirs exist.
+# Guarded end-to-end so it can never mask the original exit code.
+weakness_report_salvage() {
+  if [[ "${WEAKNESS_REPORT_ATTEMPTED:-0}" == "1" ]]; then
+    return 0
+  fi
+  if [[ "${REPEATS:-1}" -le 1 ]]; then
+    return 0
+  fi
+  local completed="${#REPEAT_JOB_DIRS[@]}"
+  if [[ "$completed" -lt 1 ]]; then
+    echo "WARNING: exit before any repeat completed; no weakness report salvaged." >&2
+    return 0
+  fi
+  echo "WARNING: exit mid-round — building weakness report best-effort from $completed completed repeat job dir(s)." >&2
+  build_weakness_report ${REPEAT_JOB_DIRS[@]+"${REPEAT_JOB_DIRS[@]}"} || true
+  return 0
+}
+
+# One full Harbor pass: fresh LiteLLM proxy lifecycle (stop any previous proxy,
+# start a new one on the same port), the Harbor run, and the post-eval job
+# analysis. Returns the run's exit code; a repeat whose run+analysis section
+# finished is recorded in REPEAT_JOB_DIRS even if Harbor itself failed (its
+# partial per-trial results are still report input).
+run_single_repeat() {
+  local repeat_index="$1"
+  prepare_repeat "$repeat_index" || return 1
+
+  if [[ "$REPEATS" -gt 1 ]]; then
+    echo "=== repeat ${repeat_index}/${REPEATS}: job ${REPEAT_JOB_NAME} ===" | tee -a "$LOG_FILE"
+  fi
+
+  # Fresh proxy lifecycle per repeat: stop any previous proxy, make sure the
+  # port is actually free, then start a new one on the same port (the proxy's
+  # trajectory root is fixed at fork time, so a proxy from an earlier repeat
+  # must never be reused).
+  cleanup_litellm || true
+  ensure_proxy_port_free || return 1
+  start_litellm_proxy
+  wait_for_proxy
+
+  echo "=== evaluator start ===" | tee -a "$LOG_FILE"
+  echo "Harbor dir: $HARBOR_PATH_RAW" | tee -a "$LOG_FILE"
+  echo "Producer:   $PRODUCER_BLOCK" | tee -a "$LOG_FILE"
+  echo "Format:     $OUTPUT_FORMAT" | tee -a "$LOG_FILE"
+  echo "Dataset:    $HARBOR_DATASET_SPEC" | tee -a "$LOG_FILE"
+  echo "Registry:   $REGISTRY_RAW" | tee -a "$LOG_FILE"
+  echo "Jobs dir:   $HARBOR_JOBS_DIR_RAW" | tee -a "$LOG_FILE"
+  echo "Job prefix: $JOB_NAME_PREFIX" | tee -a "$LOG_FILE"
+  echo "Job dir:    $REPEAT_JOB_DIR_RAW" | tee -a "$LOG_FILE"
+  echo "Traj files: $EVAL_TRAJECTORY_FILE_PATTERN" | tee -a "$LOG_FILE"
+  echo "Config:     $REPEAT_JOB_DIR_RAW/config.yaml" | tee -a "$LOG_FILE"
+  echo "Command:    $RUN_COMMAND" | tee -a "$LOG_FILE"
+  echo "" | tee -a "$LOG_FILE"
+
+  if [[ "$DATASET_NAME" == terminal-curator ]]; then
+    # run_single_repeat is invoked as `... || REPEAT_RC=$?`, which suspends
+    # errexit for the whole function body — guard explicitly (master aborted
+    # here under set -e) so a failed publication freeze still stops the run
+    # with publication.py's own exit code.
+    python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --registry "$REGISTRY_ABS" || return $?
+  fi
+
+  set +e
+  (cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
+  PIPE_STATUS=("${PIPESTATUS[@]}")
+  set -e
+  HARBOR_RC="${PIPE_STATUS[0]:-1}"
+  TEE_RC="${PIPE_STATUS[1]:-1}"
+  RUN_RC="$HARBOR_RC"
+  [[ "$RUN_RC" == "0" && "$TEE_RC" != "0" ]] && RUN_RC="$TEE_RC"
+
+  echo "" | tee -a "$LOG_FILE"
+  if [[ "$RUN_RC" == "0" ]]; then
+    echo "evaluator complete. Expected job dir: $REPEAT_JOB_DIR_RAW" | tee -a "$LOG_FILE"
+  else
+    echo "WARNING: Harbor command exited with rc=$HARBOR_RC (tee rc=$TEE_RC); analyzing any partial results before exit." | tee -a "$LOG_FILE"
+  fi
+  echo "Expected trajectory files: $EVAL_TRAJECTORY_FILE_PATTERN" | tee -a "$LOG_FILE"
+
+  # Post-hoc job analysis: write attribution/scoring into <job_dir>/analysis/ so the
+  # dashboard can render it. Opt-out via runtime_info.input.job_analysis.enabled: false.
+  # Non-fatal by design — a failed analysis must never fail a completed eval run.
+  JOB_ANALYSIS_ENABLED="$(cfg runtime_info.input.job_analysis.enabled)" || return $?
+  if [[ "$JOB_ANALYSIS_ENABLED" == "false" ]]; then
+    echo "" | tee -a "$LOG_FILE"
+    echo "job analysis disabled (runtime_info.input.job_analysis.enabled: false); skipping" | tee -a "$LOG_FILE"
+  elif [[ "$RUN_RC" != "0" ]] \
+      && [[ -z "$(find "$REPEAT_JOB_DIR" -mindepth 2 -maxdepth 2 -type f -name result.json -print -quit 2>/dev/null)" ]]; then
+    echo "" | tee -a "$LOG_FILE"
+    echo "job analysis skipped: Harbor failed before any per-trial result was written" | tee -a "$LOG_FILE"
+  else
+    echo "" | tee -a "$LOG_FILE"
+    echo "=== running post-eval job analysis ===" | tee -a "$LOG_FILE"
+    # Partial-result analysis must not turn a failed Harbor run into an expensive
+    # full dataset download/tagging job. It may reuse existing gold only.
+    [[ "$RUN_RC" == "0" ]] || export JOB_ANALYSIS_PREPARE_DATASET=0
+    bash "$BLOCK_DIR/scripts/analyze_job.sh" "$REPEAT_JOB_DIR" 2>&1 | tee -a "$LOG_FILE" || \
+      echo "WARNING: job analysis failed; eval results are unaffected. See log above." | tee -a "$LOG_FILE"
+  fi
+
+  # A repeat that wrote no per-trial result.json contributes nothing usable to
+  # the report and must not be joined (a fabricated 0.0 rate would poison the
+  # noise floor — build_weakness_report.py excludes no-data repeats too).
+  # k=1 keeps the pre-loop single-pass output exactly, so the repeat framing
+  # and join bookkeeping are k>1-only; REPEAT_JOB_DIRS is never read at k=1.
+  if [[ "$REPEATS" -gt 1 ]]; then
+    if [[ -n "$(find "$REPEAT_JOB_DIR" -mindepth 2 -maxdepth 2 -type f -name result.json -print -quit 2>/dev/null)" ]]; then
+      REPEAT_JOB_DIRS+=("$REPEAT_JOB_DIR")
+    else
+      echo "WARNING: repeat ${repeat_index}/${REPEATS} wrote no per-trial result.json; excluded from the weakness report" | tee -a "$LOG_FILE"
+    fi
+  fi
+  cleanup_litellm || true
+  return "$RUN_RC"
+}
+
+if [[ "$PRINT_COMMAND_ONLY" == "1" ]]; then
+  prepare_repeat 1
+  echo "=== evaluator generated command ==="
+  echo "LiteLLM config: $LITELLM_CONFIG_PATH"
+  echo "$RUN_COMMAND"
+  exit 0
+fi
+
+_archive_run_on_exit() {
+    local rc=$?
+    cleanup_litellm || true
+    weakness_report_salvage || true
+    bash "$BLOCK_DIR/scripts/archive_run.sh" "$rc" "$RUN_STARTED_AT" || true
+    exit $rc
+}
+trap _archive_run_on_exit EXIT
+
+REPEAT_INDEX=1
+while [[ "$REPEAT_INDEX" -le "$REPEATS" ]]; do
+  REPEAT_RC=0
+  run_single_repeat "$REPEAT_INDEX" || REPEAT_RC=$?
+  if [[ "$REPEAT_RC" -ne 0 ]]; then
+    # For k=1 the Harbor-failure warning above already covers this; the extra
+    # repeat framing is only meaningful (and only printed) for k>1.
+    if [[ "$REPEATS" -gt 1 ]]; then
+      echo "" | tee -a "$LOG_FILE"
+      echo "WARNING: repeat ${REPEAT_INDEX}/${REPEATS} exited rc=${REPEAT_RC}; stopping after ${#REPEAT_JOB_DIRS[@]} completed repeat(s)." | tee -a "$LOG_FILE"
+    fi
+    exit "$REPEAT_RC"
+  fi
+  REPEAT_INDEX=$((REPEAT_INDEX + 1))
 done
-if [[ "$PROXY_READY" != "1" ]]; then
-  echo "ERROR: LiteLLM proxy did not start listening on $EVAL_LITELLM_ANTHROPIC_BASE_URL in time" | tee -a "$LOG_FILE"
-  echo "       See proxy log under: $LITELLM_ARTIFACT_DIR/logs" | tee -a "$LOG_FILE"
-  exit 1
-fi
-echo "LiteLLM proxy is listening on $EVAL_LITELLM_ANTHROPIC_BASE_URL" | tee -a "$LOG_FILE"
 
-echo "=== evaluator start ===" | tee -a "$LOG_FILE"
-echo "Harbor dir: $HARBOR_PATH_RAW" | tee -a "$LOG_FILE"
-echo "Producer:   $PRODUCER_BLOCK" | tee -a "$LOG_FILE"
-echo "Format:     $OUTPUT_FORMAT" | tee -a "$LOG_FILE"
-echo "Dataset:    $HARBOR_DATASET_SPEC" | tee -a "$LOG_FILE"
-echo "Registry:   $REGISTRY_RAW" | tee -a "$LOG_FILE"
-echo "Jobs dir:   $HARBOR_JOBS_DIR_RAW" | tee -a "$LOG_FILE"
-echo "Job prefix: $JOB_NAME_PREFIX" | tee -a "$LOG_FILE"
-echo "Job dir:    $JOB_DIR_RAW" | tee -a "$LOG_FILE"
-echo "Traj files: $EVAL_TRAJECTORY_FILE_PATTERN" | tee -a "$LOG_FILE"
-echo "Config:     $JOB_DIR_RAW/config.yaml" | tee -a "$LOG_FILE"
-echo "Command:    $RUN_COMMAND" | tee -a "$LOG_FILE"
-echo "" | tee -a "$LOG_FILE"
-
-if [[ "$DATASET_NAME" == terminal-curator ]]; then
-  python3 "$BLOCK_DIR/../terminal-curator/scripts/publication.py" --registry "$REGISTRY_ABS"
-fi
-set +e
-(cd "$HARBOR_DIR" && bash -c "$RUN_COMMAND") 2>&1 | tee -a "$LOG_FILE"
-PIPE_STATUS=("${PIPESTATUS[@]}")
-set -e
-HARBOR_RC="${PIPE_STATUS[0]:-1}"
-TEE_RC="${PIPE_STATUS[1]:-1}"
-RUN_RC="$HARBOR_RC"
-[[ "$RUN_RC" == "0" && "$TEE_RC" != "0" ]] && RUN_RC="$TEE_RC"
-
-echo "" | tee -a "$LOG_FILE"
-if [[ "$RUN_RC" == "0" ]]; then
-  echo "evaluator complete. Expected job dir: $JOB_DIR_RAW" | tee -a "$LOG_FILE"
-else
-  echo "WARNING: Harbor command exited with rc=$HARBOR_RC (tee rc=$TEE_RC); analyzing any partial results before exit." | tee -a "$LOG_FILE"
-fi
-echo "Expected trajectory files: $EVAL_TRAJECTORY_FILE_PATTERN" | tee -a "$LOG_FILE"
-
-# Post-hoc job analysis: write attribution/scoring into <job_dir>/analysis/ so the
-# dashboard can render it. Opt-out via runtime_info.input.job_analysis.enabled: false.
-# Non-fatal by design — a failed analysis must never fail a completed eval run.
-JOB_ANALYSIS_ENABLED="$(cfg runtime_info.input.job_analysis.enabled)"
-if [[ "$JOB_ANALYSIS_ENABLED" == "false" ]]; then
+# All k repeats completed — join them into the weakness report. k=1 keeps the
+# pre-loop single-pass behavior (no report, no extra artifacts).
+if [[ "$REPEATS" -gt 1 ]]; then
   echo "" | tee -a "$LOG_FILE"
-  echo "job analysis disabled (runtime_info.input.job_analysis.enabled: false); skipping" | tee -a "$LOG_FILE"
-elif [[ "$RUN_RC" != "0" ]] \
-    && [[ -z "$(find "$JOB_DIR" -mindepth 2 -maxdepth 2 -type f -name result.json -print -quit 2>/dev/null)" ]]; then
-  echo "" | tee -a "$LOG_FILE"
-  echo "job analysis skipped: Harbor failed before any per-trial result was written" | tee -a "$LOG_FILE"
-else
-  echo "" | tee -a "$LOG_FILE"
-  echo "=== running post-eval job analysis ===" | tee -a "$LOG_FILE"
-  # Partial-result analysis must not turn a failed Harbor run into an expensive
-  # full dataset download/tagging job. It may reuse existing gold only.
-  [[ "$RUN_RC" == "0" ]] || export JOB_ANALYSIS_PREPARE_DATASET=0
-  bash "$BLOCK_DIR/scripts/analyze_job.sh" "$JOB_DIR" 2>&1 | tee -a "$LOG_FILE" || \
-    echo "WARNING: job analysis failed; eval results are unaffected. See log above." | tee -a "$LOG_FILE"
-fi
-
-if [[ "$RUN_RC" != "0" ]]; then
-  exit "$RUN_RC"
+  build_weakness_report ${REPEAT_JOB_DIRS[@]+"${REPEAT_JOB_DIRS[@]}"}
 fi

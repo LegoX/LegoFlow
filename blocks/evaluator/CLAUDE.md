@@ -96,7 +96,7 @@ generate the local dataset/registry if missing, then passes
 (verifier stays public). Currently supports `swebench-verified` only — the
 `-100` subset is rejected (cap a smoke run with `harbor_job.n_tasks` instead).
 Refresh with `NOHACK_REFRESH=1`. Details: Harbor `docs_dev/network-policy-nohack.md`
-and docs page [Select Benchmark](docs/content/docs/run-jobs/select-benchmark.mdx).
+and docs page [Select Benchmark](docs/content/docs/usage/select-benchmark.mdx).
 
 For smoke runs you can either pick a `-100` subset above, or set
 `runtime_info.input.harbor_job.n_tasks` to a small integer (Harbor will cap the run).
@@ -188,7 +188,7 @@ Steps:
 - `scripts/prepare_nohack.sh`: generate the local `swebench-verified-nohack` dataset + registry (called by `start.sh` when `no_hack` is true; `NOHACK_REFRESH=1` forces regenerate).
 - `scripts/analyze_job.sh [<job_dir>]`: run the Harbor `job_analysis` pipeline on a completed job and write results into `<job_dir>/analysis/` (the layout the dashboard reads). No arg → newest job under `jobs_dir`. Safe to re-run and to run on old jobs. `start.sh` calls this automatically after each eval (non-fatal). If the gold dataset is missing it auto-invokes `prepare_dataset.sh` first (disable with `JOB_ANALYSIS_PREPARE_DATASET=0`).
 - `scripts/prepare_dataset.sh [<dataset_name>]`: generate a Harbor gold dataset under `artifacts/datasets/<gold_base>/` for analysis — step 1 runs the matching `repos/harbor/adapters/<name>` adapter (from HuggingFace) to produce `tests/config.json` gold; step 2 runs `repos/harbor/scripts/task_analysis/tag_task_metadata.py` to complete each `task.toml`'s `[language, area, topic, bug_class]` + difficulty tags via an LLM. Idempotent (skips populated datasets unless `PREP_FORCE=1`). Tagging is best-effort: gold is still produced if it fails.
-- `scripts/clean.sh`: remove disposable logs and generated proxy state while preserving jobs, prepared datasets, runtime extractions, environments, archives, and `index.yaml`. `--all` wipes `artifacts/` entirely except git-tracked files, confirming twice.
+- `scripts/clean.sh`: remove disposable logs and generated proxy state while preserving jobs, prepared datasets, runtime extractions, environments, archives, `index.yaml`, and the RSI loop memory (`loop/`, `weakness/`, `reserve/`, `response_matrix.jsonl`, `bench_identity/`). `--all` wipes `artifacts/` entirely except git-tracked files (commit loop memory each round — uncommitted loop memory does not survive `--all`), confirming twice.
 
 Evaluator scripts need PyYAML in the runtime Python (used by inline `python3 -` config readers). If you see `ERROR: PyYAML is required`, `pip install pyyaml` into the active interpreter.
 
@@ -231,6 +231,56 @@ self-contained `analysis_config.yaml`.
   (apache/druid, lucene, …) domain falls back to `other`. Any local customization
   of that classifier is overwritten by `update_repos.sh` — keep such tweaks out of
   the read-only repo.
+
+## RSI Loop (repeats, weakness report, identity index — default off)
+
+Evaluator is the loop's measurement point:
+
+- **`runtime_info.input.harbor_job.repeats`** (default `1`): `k > 1` runs the
+  Harbor + analyze section k times sequentially, **restarting the LiteLLM
+  proxy per repeat** (its trajectory root is fixed at fork time) — stochastic
+  repeats at agent temperature 1.0 that feed the variance-gated decision rule:
+  a tag directive fires only when its delta clears the measured between-repeat
+  noise floor. Join per-task rewards across repeats by `result.json`'s
+  `task_name`, never by trial-directory prefix.
+- **Post-run builders** (CPU-only, zero tokens): `scripts/build_weakness_report.py`
+  writes `artifacts/weakness/weakness_report.json` (`legoflow.weakness.v1`:
+  noise floor, per-tag pass rates with Wilson CIs, `failure_mix` from
+  online-eligible fields only, `directives_blocked`), appends an immutable
+  copy under `artifacts/weakness/history/`, a measurement row to
+  `artifacts/loop/ledger.yaml`, and rows to `artifacts/response_matrix.jsonl`.
+  `--placebo <seed>` emits a schema-identical permuted report for blinded
+  control arms. Only the weakness report is wired into `start.sh` (the k>1
+  repeat loop plus the EXIT-trap salvage path), so a partial round still
+  reports; `scripts/build_identity_index.py` writes
+  `artifacts/bench_identity/<base>.identity.json` for curator-side
+  decontamination and is rebuilt by `prepare_dataset.sh` itself: its
+  `rebuild_identity_index()` runs at all three completion paths (full tagged
+  build, `PREP_SKIP_TAGGING=1` gold-only exit, no-LLM-endpoint gold-only
+  exit), best-effort so a failed rebuild warns and leaves decontamination
+  fail-closed rather than losing the gold (covered by
+  `test_prepare_dataset_wires_identity_index_rebuild` in
+  `tests/test_evaluator_weakness.py`).
+- **Audit slice**: `scripts/make_audit_slice.py` freezes a seeded stratified
+  slice (`artifacts/reserve/audit_slice.txt` + `audit_slice.meta.json`,
+  git-tracked; served through the frozen `legoflow-audit` Harbor registry).
+  Audit-slice IDs are excluded from every directive-feeding aggregate and are
+  the only readout promotion decisions trust.
+- **Outputs `weakness_report` and `benchmark_identity_index`** feed curator
+  conditionally (the `to:` mirrors activate only while curator enables
+  `targeting` / `decontam`). **`local_model_serving.from_trainer_checkpoint`**
+  (optional edge from `trainer.output.checkpoint_path`) is preferred by
+  `serve_local_model.sh` when non-empty; `model_path` remains the live
+  external knob for checkpoints outside the loop.
+
+`artifacts/loop/`, `artifacts/weakness/history/`, the two audit-slice files,
+and the per-round `artifacts/response_matrix.jsonl` (M2's IRT seed) are
+git-tracked loop memory (un-ignored in this block's `.gitignore`) so
+`scripts/clean.sh --all` — which keeps only git-tracked files — cannot wipe
+loop history once the files are committed (commit them after every round;
+uncommitted loop memory does not survive `--all`); default-mode `clean.sh`
+keeps them unconditionally. Everything else under `artifacts/` stays
+ignored.
 
 ## Repository Policy
 

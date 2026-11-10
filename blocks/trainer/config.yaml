@@ -9,7 +9,8 @@ meta_info:
       source.job_dir:
         from: tracer.output.raw_trajectories_dir
         when: {source.type: harbor_job}
-    to: {}   # nothing currently declares a dependency on trainer's outputs
+    to:
+      checkpoint_path: evaluator.input.local_model_serving.from_trainer_checkpoint   # RSI loop edge 3; optional until train.sh writes the value back
 
   resources:
     ip: local

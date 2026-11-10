@@ -53,6 +53,15 @@ def main():
     # the wrapper must OMIT the flag; emitting "" made ${VAR:-5000} cap it at 5000.
     max_verified = params.get("max_verified_tasks", 10)
     print(f"MAX_VERIFIED_TASKS={'all' if max_verified == 'all' else max_verified}")
+    # The yield/difficulty knob targeting directives adjust
+    # (filter_overrides['languages.params.min_source_files']); hardcoded 2 in
+    # the launchers made that directive key dead. Defaults to the historical 2.
+    min_source_files = params.get("min_source_files", 2)
+    if not isinstance(min_source_files, int) or min_source_files < 0:
+        print(f"Error: languages.{args.lang}.params.min_source_files must be a "
+              f"non-negative int (got {min_source_files!r})", file=sys.stderr)
+        sys.exit(1)
+    print(f"MIN_SOURCE_FILES={min_source_files}")
 
     # Emitted resolved so create_<lang>.sh uses the declared output pool
     # instead of hardcoding artifacts/swe_tasks.
@@ -63,6 +72,24 @@ def main():
     if not resolved.is_absolute():
         resolved = yaml_path.resolve().parent / resolved
     print(f"SWE_TASKS_DIR={shlex.quote(str(resolved))}")
+
+    # Durable decontam exclusion: when decontam_check.py has written the skip
+    # file with content, emit an eval-able array so every create_<lang>.sh
+    # passes --skip-pr-files (owner__repo-N task-id lines — the form cli.py
+    # actually matches). Absent/empty -> flag omitted: no exclusion in force.
+    skip_file = (yaml_path.resolve().parent / "artifacts" / "decontam"
+                 / "eval_overlap_pr_ids.txt")
+    if skip_file.is_file():
+        # An unreadable skip file is LOUD, never a silent exclusion drop.
+        try:
+            has_content = bool(skip_file.read_text(encoding="utf-8").strip())
+        except OSError as exc:
+            print(f"Error: cannot read skip file {skip_file}: {exc} — fix or remove "
+                  f"it; refusing to launch create without the durable decontam "
+                  f"exclusion", file=sys.stderr)
+            sys.exit(1)
+        if has_content:
+            print(f"SKIP_PR_ARGS=(--skip-pr-files {shlex.quote(str(skip_file))})")
 
 
 if __name__ == "__main__":

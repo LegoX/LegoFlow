@@ -278,6 +278,59 @@ python3 scripts/select_stratified_tasks.py --count 120 --dry-run   # preview the
 
 Tracer consumes it by setting `task_source.pool: stratified` in its config; its `task_source.stratified_dataset_dir` defaults to this block's `artifacts/stratified_swe_tasks`. Deterministic — re-running over an unchanged pool reproduces the same manifest.
 
+## RSI Loop (targeting + decontamination, default off)
+
+Curator is the actuation point of the RSI loop — evaluator feedback becomes
+next-run curation knobs here. Two default-off input
+groups arrive through conditional, `required: false` dependency edges (their
+optionality is the cycle-breaker that keeps `/root:run` dispatch deadlock-free):
+
+- **`runtime_info.input.targeting`** (`enabled: false` by default;
+  `directives_path` → evaluator's `artifacts/weakness/weakness_report.json`;
+  `min_tag_n: 20`, `noise_gate_multiplier: 2.0`,
+  `supply_satisfaction_threshold: 40`): `python3 scripts/apply_targeting.py`
+  turns a weakness report into `artifacts/targeting/directives_round_NNN.yaml`
+  — bounded per-language quota deltas (`languages.<lang>.params.max_verified_tasks`),
+  `pr_collection.filters` tweaks, and a skip-file reference for the **next**
+  run. It refuses to run while any prior verdict in
+  `artifacts/targeting/hypothesis_ledger.yaml` is still open, refuses
+  weak-but-already-supplied tags and sub-noise deltas, ranks survivors by
+  learning progress, and pre-registers the hypothesis before anything is
+  actuated. Directives reach `config.yaml` only through the
+  `/curator:create-tasks` agent gate: the agent audits the directives, the
+  user confirms, then the numbers are applied to the next-run config/profile
+  as a reviewable diff — the terminal-curator semantic-audit pattern.
+- **`runtime_info.input.decontam`** (`enabled: false` until the evaluator's
+  identity index exists; `benchmark_index` →
+  `../evaluator/artifacts/bench_identity/<base>.identity.json`):
+  `python3 scripts/decontam_check.py --index <benchmark_index> --stage pr_ids`
+  filters `artifacts/collected_prs/{lang}_pr_ids.txt` **before** `create`
+  (skips the expensive Docker Oracle/NOP minutes) and `--stage pool` scrubs
+  `verifiable_tasks.txt` post-hoc. Matching is identity-based (repo+PR exact →
+  patch-path Jaccard → test-file overlap → normalized patch hash), fail-closed
+  on a missing index; every hit lands in `artifacts/decontam/quarantine.yaml`
+  with its match basis and similarity, never a silent boolean. The durable
+  skip file uses `owner__repo-<PR>` task-ID lines (double underscore, bare PR
+  number, e.g. `owner__repo-101`) — the exact form
+  `legoflow-curator --skip-pr-files` actually matches: `cli.py` parses a task
+  id as `owner__repo-<PR>`, so a literal `owner__repo-pr-101` line would parse
+  its repo as `repo-pr` and never suppress anything. `owner/repo:pr-N` and
+  `owner__repo-pr-N` lines are accepted on input and normalized. Pool-stage
+hits are also pruned from the derived `merged_swe_tasks/` /
+`stratified_swe_tasks/` exports tracer consumes — re-running
+`extract_verified_tasks.py` alone can never purge them (its manifest is
+presence-derived); re-run `select_stratified_tasks.py` if the stratified pool
+is in use. The skip file is passed automatically by every
+`scripts/create_<lang>.sh` whenever it exists with content.
+
+`artifacts/targeting/`, `artifacts/decontam/`, and
+`artifacts/attach/manifest.json` are git-tracked loop memory (un-ignored in
+the root `.gitignore`) so `scripts/clean.sh --all` — which keeps only
+git-tracked files — cannot wipe the hypothesis history once they are
+committed; default-mode `clean.sh` keeps them unconditionally. Commit them
+after every round. Both groups stay
+disabled in the committed config; enable them per run profile only.
+
 ## Downstream Agent Interface
 
 Downstream agents consume verified SWE tasks for trajectory inference. The **authoritative consumer contract** is the manifest file:
@@ -333,13 +386,14 @@ artifacts/
 
 ## Per-Language Parameters
 
-`config.yaml -> runtime_info.input.languages.<lang>.params` holds three knobs per language:
+`config.yaml -> runtime_info.input.languages.<lang>.params` holds four knobs per language:
 
 | Field | Meaning |
 |---|---|
 | `timeout` | per-task overall timeout (seconds) |
 | `cc_timeout` | Claude Code SDK session timeout (seconds) |
 | `n_concurrent` | concurrent task workers |
+| `min_source_files` | yield/difficulty tradeoff passed as `--min-source-files` (default `2`; the knob targeting directives adjust) |
 
 `scripts/create_<lang>.sh` reads these via `scripts/read_params.py` before launching `legoflow-curator create`. Edit them in `config.yaml`; no auto-tuning is performed.
 The all-language launcher honors `enabled`; set it to `false` to drop a

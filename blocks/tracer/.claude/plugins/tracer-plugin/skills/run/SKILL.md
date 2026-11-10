@@ -6,7 +6,11 @@ description: >
   the per-job LiteLLM proxy, run Harbor trajectories, clean up the proxy,
   inspect the job artifacts, update processed_tasks.yaml (the single
   exclusion source), and optionally produce LF-format SFT data under
-  the per-job artifacts/sft_data folder. Long-running. Triggers on phrases like
+  the per-job artifacts/sft_data folder. After a multi-scaffold campaign,
+  also runs the RSI loop's post-campaign scaffold-disagreement step
+  (`scripts/scaffold_disagreement.py`) whose proposals are applied to
+  git-tracked `excluded_tasks.txt` only after agent review and user
+  confirmation. Long-running. Triggers on phrases like
   "run tracer", "run a tracer job", "launch tracer", "generate
   trajectories", "kick off the harbor jobs", "start the tracer pipeline",
   or "launch harbor for tracer".
@@ -198,6 +202,27 @@ python3 scripts/merge_sft_data.py --jobs <job1>,<job2>,<job3>
 
 Then record in the run notes which jobs were merged and the
 `per_scaffold_counts` from `artifacts/sft_data/merged/merge_manifest.json`.
+
+## Step 6b — RSI loop: scaffold disagreement (multi-scaffold campaigns)
+
+After a multi-scaffold campaign's jobs are merged, run the loop's free
+frontier signal (zero extra rollouts):
+
+```bash
+python3 scripts/scaffold_disagreement.py --jobs <job_dir_scaffold_A> <job_dir_scaffold_B> ...
+```
+
+It compares per-task outcome vectors across the campaign's scaffold jobs and
+writes proposals under `artifacts/scaffold_signal/` — `saturated` (every
+scaffold solves → retire to the eval reserve), `flaky` (mixed + high variance
++ exceptions → reject candidate), `reaudit` (none solves although Oracle
+passed at curation → instruction-ambiguity audit), `frontier` (mixed → keep
+mining). The proposals are **advice only**: review them with the user, then
+append accepted retirements/rejections to git-tracked `excluded_tasks.txt`
+(the existing `HARBOR_EXCLUDE_TASKS` namespace — do not invent a second
+exclusion mechanism, and never apply a flag silently). Summarize per-flag
+counts in the run notes so the next round's curator gate can see the
+frontier shape.
 
 ## Step 7 — Optional dashboard/SFT refresh
 

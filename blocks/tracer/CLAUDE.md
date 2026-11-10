@@ -44,6 +44,19 @@ Terminal tasks must complete the producer skill's instruction/tests/reference-so
 
 Operating detail for the run + post-run bookkeeping is in the `/tracer:run` skill.
 
+## RSI Loop (post-campaign scaffold signal)
+
+No config change — one post-run step. After a multi-scaffold campaign,
+`python3 scripts/scaffold_disagreement.py` compares per-task outcome vectors
+across the campaign's scaffold jobs (zero extra rollouts) and writes proposals
+under `artifacts/scaffold_signal/`: `saturated` (every scaffold solves →
+retire to the eval reserve), `flaky` (mixed + high variance + exceptions →
+reject candidate), `reaudit` (none solves although Oracle passed at curation →
+instruction-ambiguity audit), `frontier` (mixed → keep mining). Proposals are
+**advice only**: the `/tracer:run` agent reviews them with the user, and
+accepted retirements are appended to git-tracked `excluded_tasks.txt` — the
+existing `HARBOR_EXCLUDE_TASKS` namespace — never acted on silently.
+
 ## Repos
 
 - `repos/harbor/` — trajectory generation runtime (managed local-only dependency, gitignored, read-only after checkout)
@@ -62,7 +75,7 @@ Generic lifecycle via the repo-wide `root` plugin: `/root:check tracer` to prefl
 | `/tracer:dashboard` | `dashboard/progress_monitor.py`, `dashboard/run_cloudflare_pages_sync.sh`, `convert_trajectories.sh` | Interactive HTML board (Analyze jobs, quality/pass slices, and trajectories) / Cloudflare online sync / SFT stats refresh. Sources are fixed under `artifacts/` (`tasks/`, `jobs/`, optional `sft_data/`, `index.yaml`) — never configured in `config.yaml`; the skill shows them and waits for confirmation before rendering |
 | `/tracer:run` | `dryrun.sh`, `start.sh`, `select_trajectories.py` (best-of-n), `merge_sft_data.py` (multi-scaffold) | Full pipeline: prepare_tasks → Harbor → optional convert (+ best-of-n selection for sample campaigns; + multi-scaffold merge for scaffold campaigns) + post-run bookkeeping |
 
-`scripts/clean.sh` (no flags) removes only a run's temporary output — LiteLLM state, logs, launch logs, `dashboard/site/`, `dashboard/.cache/`. It keeps the uv env, `jobs/`, `tasks/`, `sft_data/`, `agent-runtime/` and `processed_tasks.yaml`. `--all` wipes `artifacts/` entirely except git-tracked files and confirms twice. Tracer scripts need PyYAML in the runtime Python; on `ERROR: PyYAML is required`, `pip install pyyaml`.
+`scripts/clean.sh` (no flags) removes only a run's temporary output — LiteLLM state, logs, launch logs, `dashboard/site/`, `dashboard/.cache/`. It keeps the uv env, `jobs/`, `tasks/`, `sft_data/`, `agent-runtime/`, `processed_tasks.yaml`, and the RSI `scaffold_signal/` proposals. `--all` wipes `artifacts/` entirely except git-tracked files and confirms twice. Tracer scripts need PyYAML in the runtime Python; on `ERROR: PyYAML is required`, `pip install pyyaml`.
 
 ## Artifact archiving
 
