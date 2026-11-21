@@ -47,7 +47,7 @@ export function baseOptions(): BaseLayoutProps {
       },
       {
         type: "icon",
-        url: "https://www.legox.net",
+        url: "https://intellegox.net/",
         text: "LegoX",
         label: "LegoX",
         icon: <LegoXIcon />,

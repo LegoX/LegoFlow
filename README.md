@@ -8,13 +8,13 @@
 <p align="center"><b>Easy and Interactive Code Data Engineering</b></p>
 
 <p align="center">
-  <a href="https://legoflow-docs.legox.net/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
+  <a href="https://legoflow-docs.pages.dev/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
   &nbsp;·&nbsp;
   <a href="https://huggingface.co/Lego-X"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
   &nbsp;·&nbsp;
-  <a href="https://www.legox.net/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
+  <a href="https://intellegox.net/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
   &nbsp;·&nbsp;
-  <a href="https://www.legox.net/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
+  <a href="https://intellegox.net/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
   &nbsp;·&nbsp;
   <a href="LICENSE"><img src="docs/public/figures/icon-license.svg" height="15" alt=""> License</a>
   &nbsp;·&nbsp;
@@ -50,15 +50,15 @@ LegoFlow follows the tree structure of **blocks**. The root orchestrates five ch
 
 | Block | Role |
 | ----- | ---- |
-| [`curator`](https://legoflow-docs.legox.net/docs/blocks/curator/getting-started) | Curates verified SWE tasks from GitHub pull requests |
+| [`curator`](https://legoflow-docs.pages.dev/docs/blocks/curator/getting-started) | Curates verified SWE tasks from GitHub pull requests |
 | [`terminal-curator`](blocks/terminal-curator/README.md) | Builds bounded Harbor terminal-task batches from Stack Overflow, questions JSON, or local candidates; requires Oracle=1 and NOP=0 before Tracer or Evaluator hand-off |
-| [`tracer`](https://legoflow-docs.legox.net/docs/blocks/tracer/getting-started) | Collects high-quality trajectories with verified rewards, across multiple coding scaffolds |
-| [`trainer`](https://legoflow-docs.legox.net/docs/blocks/trainer/getting-started) | Converts rollout traces into training-ready formats and launches end-to-end training |
-| [`evaluator`](https://legoflow-docs.legox.net/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis |
+| [`tracer`](https://legoflow-docs.pages.dev/docs/blocks/tracer/getting-started) | Collects high-quality trajectories with verified rewards, across multiple coding scaffolds |
+| [`trainer`](https://legoflow-docs.pages.dev/docs/blocks/trainer/getting-started) | Converts rollout traces into training-ready formats and launches end-to-end training |
+| [`evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) | Measures checkpoints on coding benchmarks, with rubric and tag level analysis |
 
 
 > [!NOTE]
-> We have a clear definition of **block**. It plays a particular role in the workflow, following the same layout and file structure. A block maintains the relevant repositories (`repos/`), configuration (`config.yaml`) and run scripts (`scripts/`), manages its output in `artifacts/`, and communicates with its adjacent blocks. See [What is a Block](https://legoflow-docs.legox.net/docs/development/block-design) for more details.
+> We have a clear definition of **block**. It plays a particular role in the workflow, following the same layout and file structure. A block maintains the relevant repositories (`repos/`), configuration (`config.yaml`) and run scripts (`scripts/`), manages its output in `artifacts/`, and communicates with its adjacent blocks. See [What is a Block](https://legoflow-docs.pages.dev/docs/development/block-design) for more details.
 
 ## Released Datasets
 
@@ -78,7 +78,7 @@ We will keep this section updated as LegoFlow releases new tasks and trajectorie
 - **A GPU node** — only if you train, or serve a checkpoint yourself. Validated on one node with 8× H800 80GB; multi-node is not wired up.
 - **Docker and Cloudflare credentials** — optional, for authenticated image pulls and for publishing dashboards.
 
-What each one is for is spelled out in [Getting Started](https://legoflow-docs.legox.net/docs/getting-started). Each block has its own dependent environment, which can be set up automatically following the corresponding guides.
+What each one is for is spelled out in [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started). Each block has its own dependent environment, which can be set up automatically following the corresponding guides.
 
 ### Environment Setup
 
@@ -109,7 +109,7 @@ claude plugin install trainer@trainer-block
 claude plugin install evaluator@evaluator-block
 ```
 
-Run `/reload-plugins` afterwards so the skills load. See [Getting Started](https://legoflow-docs.legox.net/docs/getting-started) for the complete usage guide.
+Run `/reload-plugins` afterwards so the skills load. See [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started) for the complete usage guide.
 
 ##### Codex
 
@@ -144,7 +144,7 @@ Every block has clear roles and functions. Users can easily trigger these blocks
 
 The setup skill prepares dependencies and fills in `config.yaml`; check validates the configuration and performs a preflight; run does the work and archives intermediate output to `artifacts/`; and dashboard helps monitor progress and status.
 
-The detailed guides to each individual block can be found at [docs](https://legoflow-docs.legox.net/docs/running-blocks/block-by-block).
+The detailed guides to each individual block can be found at [docs](https://legoflow-docs.pages.dev/docs/running-blocks/block-by-block).
 
 For terminal tasks, fill `blocks/terminal-curator/config.yaml` and use
 `/terminal-curator:{setup,check,run,dashboard}` in Claude Code or the matching
@@ -174,13 +174,13 @@ for the complete task-source snippet.
 
 #### Running Multiple Blocks
 
-Users can also customize the workflow by running multiple blocks. Step-by-step guidance is in [Running the Full Pipeline](https://legoflow-docs.legox.net/docs/running-blocks/full-pipeline).
+Users can also customize the workflow by running multiple blocks. Step-by-step guidance is in [Running the Full Pipeline](https://legoflow-docs.pages.dev/docs/running-blocks/full-pipeline).
 
-For example, our previous run with all four blocks shows that Curator built 4,166 verified Python tasks, Tracer solved 915 of them, 512 trajectories were selected for training, and the resulting fine-tune lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified. More details are recorded in the [blog](https://www.legox.net/blog/legoflow/).
+For example, our previous run with all four blocks shows that Curator built 4,166 verified Python tasks, Tracer solved 915 of them, 512 trajectories were selected for training, and the resulting fine-tune lifted `Qwen3.5-35B-A3B-Base` from **7.6% to 64.4%** on SWE-bench Verified. More details are recorded in the [blog](https://intellegox.net/blog/legoflow/).
 
 ## Contributing
 
-We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/LegoFlow). For more details, please refer to the [Development guide](https://legoflow-docs.legox.net/docs/development).
+We welcome all developers to use, improve and contribute to LegoFlow. Issues and pull requests go on [GitHub](https://github.com/LegoX/LegoFlow). For more details, please refer to the [Development guide](https://legoflow-docs.pages.dev/docs/development).
 
 ## Citation
 
@@ -189,7 +189,7 @@ We welcome all developers to use, improve and contribute to LegoFlow. Issues and
   title  = {LegoFlow: Easy and Interactive Code Data Engineering},
   author = {LegoX Team},
   year   = {2026},
-  url    = {https://www.legox.net/blog/legoflow/}
+  url    = {https://intellegox.net/blog/legoflow/}
 }
 ```
 
@@ -205,7 +205,7 @@ and [Fumadocs](https://fumadocs.dev/) for the documentation site.
 
 ## Roadmap
 
-- [ ] **TerminalBench**: Extend the `terminal-curator` integration of [Terminal-Lego](https://www.legox.net/blog/terminal-lego/) with broader task sources and coverage for [Terminal-Bench 3.0](https://www.tbench.ai/news/terminal-bench-3-0) and [Terminal-Bench 4.0](https://www.tbench.ai/news/terminal-bench-4-0).
+- [ ] **TerminalBench**: Extend the `terminal-curator` integration of [Terminal-Lego](https://intellegox.net/blog/terminal-lego/) with broader task sources and coverage for [Terminal-Bench 3.0](https://www.tbench.ai/news/terminal-bench-3-0) and [Terminal-Bench 4.0](https://www.tbench.ai/news/terminal-bench-4-0).
 - [ ] **ProgramBench and NL2Repo**: Mine more complex, long-horizon software-engineering tasks that begin with either an executable program or a natural-language requirement.
 - [ ] **Recursive self-improvement**: Use block execution feedback to support more general, long-running self-improving systems.
 

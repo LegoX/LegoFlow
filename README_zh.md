@@ -8,13 +8,13 @@
 <p align="center"><b>简单、可交互的代码数据工程</b></p>
 
 <p align="center">
-  <a href="https://legoflow-docs.legox.net/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
+  <a href="https://legoflow-docs.pages.dev/docs"><img src="docs/public/figures/icon-docs.svg" height="15" alt=""> Docs</a>
   &nbsp;·&nbsp;
   <a href="https://huggingface.co/Lego-X"><img src="docs/public/figures/icon-huggingface.svg" height="15" alt=""> HuggingFace</a>
   &nbsp;·&nbsp;
-  <a href="https://www.legox.net/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
+  <a href="https://intellegox.net/blog/legoflow/"><img src="docs/public/figures/icon-blog.svg" height="15" alt=""> Blog</a>
   &nbsp;·&nbsp;
-  <a href="https://www.legox.net/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
+  <a href="https://intellegox.net/"><img src="docs/public/figures/icon-legox.svg" height="15" alt=""> LegoX</a>
   &nbsp;·&nbsp;
   <a href="LICENSE"><img src="docs/public/figures/icon-license.svg" height="15" alt=""> License</a>
   &nbsp;·&nbsp;
@@ -48,15 +48,15 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排五个子 block，SW
 
 | Block | 职责 |
 | ----- | ---- |
-| [`curator`](https://legoflow-docs.legox.net/docs/blocks/curator/getting-started) | 从 GitHub pull request 构建已验证的 SWE 任务 |
+| [`curator`](https://legoflow-docs.pages.dev/docs/blocks/curator/getting-started) | 从 GitHub pull request 构建已验证的 SWE 任务 |
 | [`terminal-curator`](blocks/terminal-curator/README.md) | 从有限的 Stack Overflow、问题 JSON 或本地候选批次构建 Harbor terminal 任务，通过 Oracle=1、NOP=0 后交付 Tracer 或 Evaluator |
-| [`tracer`](https://legoflow-docs.legox.net/docs/blocks/tracer/getting-started) | 采集带可验证奖励的高质量轨迹，支持多种编程 scaffold |
-| [`trainer`](https://legoflow-docs.legox.net/docs/blocks/trainer/getting-started) | 把 rollout 轨迹转成可训练格式，并启动端到端训练 |
-| [`evaluator`](https://legoflow-docs.legox.net/docs/blocks/evaluator/getting-started) | 在编程 benchmark 上评测 checkpoint，并支持按 rubric 与标签做细粒度分析 |
+| [`tracer`](https://legoflow-docs.pages.dev/docs/blocks/tracer/getting-started) | 采集带可验证奖励的高质量轨迹，支持多种编程 scaffold |
+| [`trainer`](https://legoflow-docs.pages.dev/docs/blocks/trainer/getting-started) | 把 rollout 轨迹转成可训练格式，并启动端到端训练 |
+| [`evaluator`](https://legoflow-docs.pages.dev/docs/blocks/evaluator/getting-started) | 在编程 benchmark 上评测 checkpoint，并支持按 rubric 与标签做细粒度分析 |
 
 
 > [!NOTE]
-> 我们对 **block** 有明确的定义：它在工作流中承担特定职责，并遵循统一的目录与文件结构。一个 block 维护自己相关的仓库（`repos/`）、配置（`config.yaml`）与运行脚本（`scripts/`），在 `artifacts/` 中管理产物，并与相邻的 block 通信。更多细节见 [What is a Block](https://legoflow-docs.legox.net/docs/development/block-design)。
+> 我们对 **block** 有明确的定义：它在工作流中承担特定职责，并遵循统一的目录与文件结构。一个 block 维护自己相关的仓库（`repos/`）、配置（`config.yaml`）与运行脚本（`scripts/`），在 `artifacts/` 中管理产物，并与相邻的 block 通信。更多细节见 [What is a Block](https://legoflow-docs.pages.dev/docs/development/block-design)。
 
 ## 已发布数据集
 
@@ -76,7 +76,7 @@ LegoFlow 采用 **block** 的树形结构。根 block 编排五个子 block，SW
 - **GPU 节点** —— 仅在你要训练或自行部署 checkpoint 时需要。已验证配置为单节点 8× H800 80GB，多机训练尚未接通。
 - **Docker 与 Cloudflare 凭据** —— 可选，分别用于认证镜像拉取和发布看板。
 
-每一项的具体用途见 [Getting Started](https://legoflow-docs.legox.net/docs/getting-started)。每个 block 有各自依赖的环境，可以按对应指引自动完成安装。
+每一项的具体用途见 [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started)。每个 block 有各自依赖的环境，可以按对应指引自动完成安装。
 
 ### 环境准备
 
@@ -107,7 +107,7 @@ claude plugin install trainer@trainer-block
 claude plugin install evaluator@evaluator-block
 ```
 
-安装完成后执行 `/reload-plugins` 以加载这些 skills。完整使用说明见 [Getting Started](https://legoflow-docs.legox.net/docs/getting-started)。
+安装完成后执行 `/reload-plugins` 以加载这些 skills。完整使用说明见 [Getting Started](https://legoflow-docs.pages.dev/docs/getting-started)。
 
 ##### Codex
 
@@ -142,7 +142,7 @@ codex plugin add evaluator@legoflow
 
 setup skill 用于准备依赖并填写 `config.yaml`；check 用于校验配置并执行预检；run 用于执行任务并把中间产物归档到 `artifacts/`；dashboard 用于监控运行进度与状态。
 
-各个 block 的详细指引见 [docs](https://legoflow-docs.legox.net/docs/running-blocks/block-by-block)。
+各个 block 的详细指引见 [docs](https://legoflow-docs.pages.dev/docs/running-blocks/block-by-block)。
 
 构建 terminal 任务时，填写 `blocks/terminal-curator/config.yaml`，然后在
 Claude Code 中使用 `/terminal-curator:{setup,check,run,dashboard}`，或在
@@ -170,13 +170,13 @@ SWE shell helper 保留原有 Python `create_py.sh` 启动方式。root skills �
 
 #### 运行多个 Block
 
-用户也可以通过运行多个 block 来定制工作流。分步指引见 [Running the Full Pipeline](https://legoflow-docs.legox.net/docs/running-blocks/full-pipeline)。
+用户也可以通过运行多个 block 来定制工作流。分步指引见 [Running the Full Pipeline](https://legoflow-docs.pages.dev/docs/running-blocks/full-pipeline)。
 
-例如，我们此前一次四个 block 全链路的运行显示：Curator 构建了 4,166 个已验证的 Python 任务，Tracer 成功解决其中 915 个，筛选出 512 条轨迹用于训练，最终微调把 `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上从 **7.6% 提升到 64.4%**。更多细节记录在[博客](https://www.legox.net/blog/legoflow/)中。
+例如，我们此前一次四个 block 全链路的运行显示：Curator 构建了 4,166 个已验证的 Python 任务，Tracer 成功解决其中 915 个，筛选出 512 条轨迹用于训练，最终微调把 `Qwen3.5-35B-A3B-Base` 在 SWE-bench Verified 上从 **7.6% 提升到 64.4%**。更多细节记录在[博客](https://intellegox.net/blog/legoflow/)中。
 
 ## 参与贡献
 
-我们欢迎所有开发者使用、改进 LegoFlow 并为之贡献。issue 和 pull request 请提交到 [GitHub](https://github.com/LegoX/LegoFlow)。更多细节请参阅 [Development guide](https://legoflow-docs.legox.net/docs/development)。
+我们欢迎所有开发者使用、改进 LegoFlow 并为之贡献。issue 和 pull request 请提交到 [GitHub](https://github.com/LegoX/LegoFlow)。更多细节请参阅 [Development guide](https://legoflow-docs.pages.dev/docs/development)。
 
 ## 引用
 
@@ -201,7 +201,7 @@ LegoFlow 构建在以下项目之上：[Harbor](https://www.harborframework.com/
 
 ## Roadmap
 
-- [ ] **TerminalBench**：在 `terminal-curator` 集成 [Terminal-Lego](https://www.legox.net/blog/terminal-lego/) 的基础上扩展任务来源与覆盖范围，以适配 [Terminal-Bench 3.0](https://www.tbench.ai/news/terminal-bench-3-0) 和 [Terminal-Bench 4.0](https://www.tbench.ai/news/terminal-bench-4-0)。
+- [ ] **TerminalBench**：在 `terminal-curator` 集成 [Terminal-Lego](https://intellegox.net/blog/terminal-lego/) 的基础上扩展任务来源与覆盖范围，以适配 [Terminal-Bench 3.0](https://www.tbench.ai/news/terminal-bench-3-0) 和 [Terminal-Bench 4.0](https://www.tbench.ai/news/terminal-bench-4-0)。
 - [ ] **ProgramBench 与 NL2Repo**：挖掘更加复杂的长程软件工程任务，这些任务从一个可执行程序或自然语言需求开始。
 - [ ] **递归自我改进**：利用 block 的执行反馈，支持更加通用、可长期运行的自我改进系统。
 
