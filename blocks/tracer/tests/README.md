@@ -35,7 +35,9 @@ Per-test exit codes: `0` pass · `77` skip · anything else fail.
 | 07 | runtime image | reports whether `${agent.runtime_image}` is pre-pulled (SKIP when the runner cache is cold) | <1 s |
 | 08 | processed-tasks ledger | ledger parses and every entry has a valid status; `HARBOR_EXCLUDE_TASKS` resolves through it | <1 s |
 | 09 | dashboard regressions | public/no-sample exports omit full trajectories, latest archived run is shown, R2 reads every JSONL shard, smoke config matches production | <1 s |
-| 10 | **10-HF-task demo** *(smoke)* | swap config + `start.sh` against 10 HF tasks; ≥1 trial resolves within 30 min | up to 30 min |
+| 10 | best-of-n selection | `samples_per_task` config default; `select_trajectories.py` dedup/rank/cap, stats schema, manifest, loud failures on synthetic sample jobs | ~10 s |
+| 11 | multi-scaffold campaign | `agent.scaffolds` defaults off; `merge_sft_data.py` concat/cap/manifest/stats; `start.sh` fails loud on unknown scaffold names and prints distinct per-scaffold job names | <5 s |
+| smoke | **10-HF-task demo** *(smoke)* | swap config + `start.sh` against 10 HF tasks; ≥1 trial resolves within 30 min | up to 30 min |
 
 The 10-HF-task demo runs only with `--with-smoke` and is gated to `push`
 events on `dev`/`main` and manual `workflow_dispatch` runs
@@ -163,6 +165,32 @@ isn't on PATH.
 configured `DOCKER_HOST`. A present image passes; a cold runner cache skips
 because CI must not pay a multi-GB pull mid-job. Missing Docker access still
 fails as a runner configuration error.
+</details>
+
+<details>
+<summary><code>cases/10_best_of_n.sh</code> — best-of-n campaign selection</summary>
+
+Asserts `harbor_job.samples_per_task` defaults to `1` in `config.yaml`, then
+exercises `scripts/select_trajectories.py` on synthetic two-job fixtures:
+behavioral dedup keeps the higher-composite copy, `--per-task-cap 1` ranks by
+composite, fingerprints distinguish tool-call order, `lf.stats.json` matches
+the converter's field names, `selection_manifest.json` carries the lf.json
+sha256, and unknown job names fail loudly.
+</details>
+
+<details>
+<summary><code>cases/11_multi_scaffold.sh</code> — multi-scaffold campaign</summary>
+
+Asserts `agent.scaffolds` defaults to null (single-agent mode), then exercises
+`merge_sft_data.py` on synthetic two-job fixtures: plain concat keeps every
+record, per-scaffold counts derive labels the way the dashboard does
+(`_score.scaffold`, falling back to the job name), `--per-task-cap 1` breaks
+ties on the scaffold label then source job, stats match the converter's field
+names, and unknown jobs / malformed records / negative caps fail loudly.
+Finally drives `start.sh --dry-run-command` and `validate_scaffolds.py`
+through `TRAJGEN_CONFIG` sandboxes: unknown or duplicated scaffold names,
+missing identity fields, and float versions fail before any side effect;
+empty `runtime_host_path` (mount from the image) validates.
 </details>
 
 <details>

@@ -9,7 +9,18 @@ meta_info:
       task_source.registry_path:
         from: terminal-curator.output.eval_registry
         when: {task_source.dataset_name: terminal-curator}
-    to: {}
+      local_model_serving.from_trainer_checkpoint:
+        from: trainer.output.checkpoint_path
+        required: false    # WARN until train.sh writes the value back; never blocks an eval run
+    to:
+      # RSI loop feedback edges to curator — inactive while curator keeps
+      # targeting/decontam disabled (conditions live on curator's own input).
+      weakness_report:
+        to: curator.input.targeting.directives_path
+        when: {curator.input.targeting.enabled: true}
+      benchmark_identity_index:
+        to: curator.input.decontam.benchmark_index
+        when: {curator.input.decontam.enabled: true}
 
   resources:
     ip: local
@@ -51,6 +62,8 @@ runtime_info:
     local_model_serving:                       # read by scripts/serve_local_model.sh; ignored for remote APIs
       model_path: artifacts/models/Qwen3.5-35B-A3B
       model_name: Qwen3.5-35B-A3B              # must match basename of llm_api.model
+      from_trainer_checkpoint: ""              # RSI loop: trainer.output.checkpoint_path writeback; serve_local_model.sh
+                                               # prefers it when non-empty (model_path stays the live external knob)
 
     litellm_proxy:
       config_template: scripts/serve_llm/litellm_config.example.yaml
@@ -72,6 +85,8 @@ runtime_info:
       n_tasks: null                            # null = full benchmark; int = smoke cap
       max_retries: 2
       timeout_multiplier: 1
+      repeats: 1                               # RSI loop: k variance-gated repeats of the same (checkpoint, dataset);
+                                               # 1 = pre-loop single pass
 
     job_analysis:
       enabled: true                            # post-eval analysis via scripts/analyze_job.sh
@@ -100,3 +115,9 @@ runtime_info:
       job_layout: "artifacts/jobs/<job>/<task>/{agent,verifier}/"
       trajectory_format: "artifacts/jobs/<job>/<task>/agent/litellm-trajectory.jsonl"
       results_summary_format: "artifacts/jobs/<job>/result.json"
+    weakness_report:
+      description: RSI loop weakness report (legoflow.weakness.v1; noise floor, per-tag pass rates, directives_blocked) built by scripts/build_weakness_report.py from the k repeat jobs — consumed conditionally by curator's targeting
+      path: artifacts/weakness
+    benchmark_identity_index:
+      description: Identity decontamination index (per-benchmark task identity keyed on owner__repo-pr-N; built by scripts/build_identity_index.py) — consumed conditionally by curator's decontam
+      path: artifacts/bench_identity

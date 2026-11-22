@@ -26,7 +26,7 @@ conversion enabled. This gives you a complete mini-run that can hand data to
 Trainer.
 
 <ConfigSnippet title="blocks/tracer/config.yaml">
-{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      model: openai/Qwen3.6-35B-A3B\n\n    task_source:\n      provider: local\n      dataset_name: ../curator/artifacts/merged_swe_tasks\n      split: train\n\n    harbor_job:\n      jobs_dir: artifacts/jobs\n      n_concurrent: 4\n      n_tasks: 10\n      max_retries: 2\n      timeout_multiplier: 5\n\n    agent:\n      name: custom-claude-code\n      version: 2.1.118\n      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1\n      runtime_host_path: artifacts/agent-runtime/claude-code\n      max_turns: 80\n      temperature: 0.7\n\n    sft_conversion:\n      enabled: true\n      scaffold: auto\n      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base\n      out_dir: artifacts/sft_data"}
+{"runtime_info:\n  input:\n    llm_api:\n      api_key: <YOUR_API_KEY>\n      api_base_url: https://your-openai-compatible-endpoint/v1\n      model: openai/Qwen3.6-35B-A3B\n\n    task_source:\n      provider: local\n      dataset_name: ../curator/artifacts/merged_swe_tasks\n      split: train\n      pool: merged\n      stratified_dataset_dir: ../curator/artifacts/stratified_swe_tasks\n\n    harbor_job:\n      jobs_dir: artifacts/jobs\n      n_concurrent: 4\n      n_tasks: 10\n      max_retries: 2\n      timeout_multiplier: 5\n      samples_per_task: 1\n\n    agent:\n      name: custom-claude-code\n      version: 2.1.118\n      runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1\n      runtime_host_path: artifacts/agent-runtime/claude-code\n      max_turns: 80\n      temperature: 0.7\n\n    sft_conversion:\n      enabled: true\n      scaffold: auto\n      tokenizer_name: Qwen/Qwen3.5-35B-A3B-Base\n      out_dir: artifacts/sft_data"}
 </ConfigSnippet>
 
 Use `/tracer:check` after editing. It catches missing task sources, bad model
@@ -141,6 +141,25 @@ Use `auto` for a fresh run that uses the same `agent.name` in the current
 config. Use an explicit scaffold key when reconverting an older job whose
 scaffold may differ from the current config.
 
+### Multi-scaffold campaign
+
+Set `agent.scaffolds` to run every supported scaffold over the same staged
+batch as one sequential campaign instead of picking a single row above. Each
+entry mirrors the single-agent identity fields; `agent.max_turns` and
+`agent.temperature` stay global for every scaffold. Leave the knob `null` (the
+default) for ordinary single-agent runs — the launch path is unchanged.
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    agent:\n      scaffolds:\n        - name: custom-claude-code\n          version: 2.1.118\n          runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1\n          runtime_host_path: artifacts/agent-runtime/claude-code\n        - name: custom-opencode\n          version: 1.18.7\n          runtime_image: docker.io/jierun/c-oc-1.18.7:v0.1\n          runtime_host_path: artifacts/agent-runtime/opencode\n        - name: custom-openhands-sdk\n          version: 1.33.0\n          runtime_image: docker.io/jierun/c-oh-sdk-1.33.0:v0.1\n          runtime_host_path: artifacts/agent-runtime/openhands-sdk"}
+</ConfigSnippet>
+
+Unknown scaffold names, missing identity fields, duplicate names,
+`command_override`, and `harbor_job.job_name_prefix` all fail validation before
+anything is staged. See [Supported Scaffolds](/docs/blocks/tracer/usage/scaffolds)
+for the campaign semantics (sequential jobs, ledger suppression, per-scaffold
+conversion) and [Trajectory Conversion](/docs/blocks/tracer/usage/trajectory-conversion)
+for the merge step.
+
 ## Handoff with neighboring blocks
 
 Tracer normally receives tasks from Curator and sends converted LF data to
@@ -153,7 +172,7 @@ entry documents that this value comes from Curator's `merged_tasks_dir`, so
 root-level checks can validate the handoff.
 
 <ConfigSnippet title="blocks/tracer/config.yaml">
-{"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:\n        from: curator.output.merged_tasks_dir\n        when: {task_source.provider: local, task_source.local_block: curator}\n\nruntime_info:\n  input:\n    task_source:\n      provider: local\n      dataset_name: ../curator/artifacts/merged_swe_tasks"}
+{"meta_info:\n  dependencies:\n    from:\n      task_source.dataset_name:\n        from: curator.output.merged_tasks_dir\n        when: {task_source.provider: local, task_source.local_block: curator}\n\nruntime_info:\n  input:\n    task_source:\n      provider: local\n      dataset_name: ../curator/artifacts/merged_swe_tasks\n      pool: merged"}
 </ConfigSnippet>
 
 ### Produce Trainer-ready data
@@ -177,14 +196,19 @@ when Tracer should produce that file after rollout.
 | `task_source.local_block` | For local | `curator` | Choose `curator`, `terminal-curator`, or `external`; omission alone defaults to curator. |
 | `task_source.terminal_tasks_dir` | For terminal | `../terminal-curator/artifacts/tasks` | Path to the terminal producer publication and manifest. |
 | `task_source.dataset_name` | Except terminal | `../curator/artifacts/merged_swe_tasks` | Change to another local task directory or dataset id. |
+
+| `task_source.pool` | No | `merged` | `stratified` stages Curator's stratified sub-pool (generated by curator's `scripts/select_stratified_tasks.py`) instead of the whole merged pool. |
+| `task_source.stratified_dataset_dir` | When `pool: stratified` | `../curator/artifacts/stratified_swe_tasks` | Path to curator's stratified sub-pool (generated by `scripts/select_stratified_tasks.py`); the default mirrors curator's declared output path — override only if the pool lives elsewhere. |
 | `harbor_job.n_concurrent` | Yes | `8` | Tune for endpoint capacity, Docker capacity, and API rate limits. |
 | `harbor_job.n_tasks` | No | `40` | Use `5` or `10` for smoke runs; use `null` to run all staged tasks. |
 | `harbor_job.max_retries` | Yes | `2` | Lower for fast checks; raise only for unstable infrastructure. |
 | `harbor_job.timeout_multiplier` | Yes | `5` | Increase when agents time out on valid tasks. This is a multiplier, not seconds. |
+| `harbor_job.samples_per_task` | No | `1` | Set `>= 2` for a best-of-n campaign: that many sequential sample jobs re-run every staged task (cost multiplies linearly); dedup and rank the results with `scripts/select_trajectories.py`. |
 | `agent.name` | Yes | `custom-claude-code` | Switch coding scaffold. Change the full agent row together. |
 | `agent.version` | Yes | `2.1.118` | Must match the selected scaffold and runtime image tag. |
 | `agent.runtime_image` | Yes | `docker.io/jierun/c-cc-2.1.118:v0.1` | Must match the selected scaffold and version. |
 | `agent.runtime_host_path` | Recommended | `artifacts/agent-runtime/claude-code` | Use the pre-extracted runtime path when available. |
+| `agent.scaffolds` | No | `null` | Set to a list of `{name, version, runtime_image, runtime_host_path}` mappings to run one sequential job per supported scaffold over the same staged batch (multi-scaffold campaign); `null` keeps single-agent mode. |
 | `sft_conversion.enabled` | Yes | `true` | Keep `true` when Trainer will consume Tracer output. |
 | `sft_conversion.scaffold` | Yes | `auto` | Keep `auto` for fresh runs; set explicit key when reconverting old jobs. |
 | `sft_conversion.tokenizer_name` | Yes | `Qwen/Qwen3.5-35B-A3B-Base` | Align with the Trainer base model. |

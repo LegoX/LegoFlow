@@ -25,8 +25,13 @@ ARTIFACTS_DIR="$BLOCK_DIR/artifacts"
 #   claude-config    — CLAUDE_CONFIG_DIR prepared by setup
 #   state            — legoflow-curator's per-language --state-dir; it is what lets a run
 #                      resume instead of re-processing every PR from scratch
+#   targeting / decontam / attach — RSI loop memory (hypothesis ledger +
+#   directives, quarantine + durable skip file, attach provenance manifest).
+#   Same rule as the evaluator's loop memory: the .gitignore negations only
+#   make them committable — this keep-list protects them between commits.
 KEEP_DEFAULT=(env envs index.yaml archives
-              collected_prs swe_tasks merged_swe_tasks claude-config state)
+              collected_prs swe_tasks merged_swe_tasks claude-config state
+              targeting decontam attach)
 
 MODE=default
 DRY_RUN=0
@@ -79,7 +84,9 @@ if [[ "$MODE" == "all" && "$DRY_RUN" == "0" && "$ASSUME_YES" == "0" ]]; then
     echo "  CLEAN ALL — $BLOCK_NAME: wipes $ARTIFACTS_DIR entirely,"
     echo "  keeping only git-tracked files. This deletes the venv, the"
     echo "  collected PR ids (~1.4 GB, days of GitHub API collection),"
-    echo "  every generated and verified SWE task, and all run archives."
+    echo "  every generated and verified SWE task, and all run archives"
+    echo "  — AND any uncommitted RSI loop memory (targeting ledger,"
+    echo "  decontam quarantine, attach manifest)."
     echo ""
     echo "  Make sure no legoflow-curator create/collect job is running."
     echo "############################################################"

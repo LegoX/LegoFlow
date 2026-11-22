@@ -231,6 +231,8 @@ PY
 PROVIDER="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field provider)"
 DATASET_NAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_name)"
 SPLIT="$(cfg runtime_info.input.task_source.split)"
+POOL="$(cfg runtime_info.input.task_source.pool)"
+STRATIFIED_DIR="$(cfg runtime_info.input.task_source.stratified_dataset_dir)"
 HARBOR_PATH_RAW="$(cfg meta_info.repositories.harbor.path)"
 HARBOR_UV_RAW="$(cfg meta_info.environment.harbor_uv)"
 TARGET_RAW="$(cfg runtime_info.input.harbor_job.dataset_path)"
@@ -240,9 +242,34 @@ TARGET_RAW="$(cfg runtime_info.input.harbor_job.dataset_path)"
 [[ -n "$HARBOR_PATH_RAW" ]] || { echo "ERROR: meta_info.repositories.harbor.path is empty" >&2; exit 1; }
 [[ -n "$HARBOR_UV_RAW" ]] || { echo "ERROR: meta_info.environment.harbor_uv is empty" >&2; exit 1; }
 
+# Stratified mode: stage curator's stratified sub-pool instead of the whole
+# merged pool. The sub-pool carries its own verifiable_tasks.txt, so manifest
+# filtering below applies unchanged; its distinct basename gives the staging
+# target (artifacts/tasks/stratified_swe_tasks) its own directory, which is
+# always re-linked below so a regenerated selection is picked up.
+case "$POOL" in
+  merged|"") ;;
+  stratified)
+    # The sub-pool is a local curator directory; the huggingface branch below
+    # would hand its path to snapshot_download as a repo id.
+    [[ "$PROVIDER" == "local" ]] || { echo "ERROR: task_source.pool is stratified but task_source.provider is '$PROVIDER' — the stratified sub-pool is a local curator directory; set task_source.provider: local" >&2; exit 1; }
+    [[ -n "$STRATIFIED_DIR" ]] || { echo "ERROR: task_source.pool is stratified but task_source.stratified_dataset_dir is empty (set it in config.yaml; generate the pool: python3 ../curator/scripts/select_stratified_tasks.py)" >&2; exit 1; }
+    DATASET_NAME="$STRATIFIED_DIR"
+    echo "Pool:     stratified ($DATASET_NAME)"
+    ;;
+  *)
+    echo "ERROR: unsupported task_source.pool: $POOL (merged|stratified)" >&2
+    exit 1
+    ;;
+esac
+
 DATASET_BASENAME="$(cfg runtime_info.input.harbor_job.dataset)"
 if [[ -z "$DATASET_BASENAME" ]]; then
-  DATASET_BASENAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_id)"
+  if [[ "$POOL" == "stratified" ]]; then
+    DATASET_BASENAME="$(basename "$DATASET_NAME")"
+  else
+    DATASET_BASENAME="$(python3 "$BLOCK_DIR/scripts/task_source.py" --config "$CONFIG" --field dataset_id)"
+  fi
 fi
 if [[ -z "$TARGET_RAW" ]]; then
   TARGET_RAW="artifacts/tasks/$DATASET_BASENAME"

@@ -35,6 +35,53 @@ This is convenient for new jobs, but be careful with old jobs. A historical job
 may have been produced by a scaffold different from the current config. In that
 case, refresh conversion with the explicit scaffold key.
 
+## Multi-scaffold campaigns
+
+Instead of one scaffold per run, `runtime_info.input.agent.scaffolds` opts into
+a campaign: `scripts/start.sh` runs **one sequential Harbor job per scaffold**
+over the same staged batch, converts each job with its matching scaffold key,
+and the per-scaffold LF files are merged into one campaign dataset with
+`scripts/merge_sft_data.py`. The knob is default-off — unset or `null` keeps
+the single-agent behavior above, byte for byte.
+
+<ConfigSnippet title="blocks/tracer/config.yaml">
+{"runtime_info:\n  input:\n    agent:\n      # name/version/runtime_image/runtime_host_path above stay as the\n      # single-agent identity; max_turns/temperature stay GLOBAL for every scaffold.\n      scaffolds:\n        - name: custom-claude-code\n          version: 2.1.118\n          runtime_image: docker.io/jierun/c-cc-2.1.118:v0.1\n          runtime_host_path: artifacts/agent-runtime/claude-code\n        - name: custom-opencode\n          version: 1.18.7\n          runtime_image: docker.io/jierun/c-oc-1.18.7:v0.1\n          runtime_host_path: artifacts/agent-runtime/opencode"}
+</ConfigSnippet>
+
+Semantics worth knowing before you launch one:
+
+- **Validation fails loud.** Every entry must name one of the three supported
+  scaffolds and carry non-empty `name`, `version`, and `runtime_image`, with no
+  duplicate names; `runtime_host_path` may be empty (mount the runtime from
+  the image instead of a pre-extracted host directory). An unknown name errors
+  out before staging — it would otherwise silently fall into the claude-code
+  default branch of `start.sh`'s per-scaffold dispatches and launch the wrong
+  agent. `command_override`, `harbor_job.job_name_prefix`, `job_dir`,
+  `agent.import_path`, and `agent.api_protocol` are refused in campaign mode
+  because one explicit job name, directory, import path, or protocol would
+  collide across scaffolds.
+- **Jobs run sequentially.** Each scaffold job starts its own per-job LiteLLM
+  proxy on the shared `litellm_proxy.port`; concurrent jobs would cross-write
+  trajectories, so the campaign loop is deliberately not parallel. The loop
+  also fails fast: a scaffold job that exits non-zero aborts the campaign —
+  earlier jobs' results and conversions are kept, later scaffolds never run
+  (re-run `start.sh` to retry from that scaffold).
+- **Every scaffold re-runs the whole staged batch.** The processed-tasks ledger
+  is keyed by task id, so scaffold job #2 would otherwise exclude everything
+  job #1 recorded. Campaign jobs force `HARBOR_LEDGER_EXCLUDE=0`;
+  `excluded_tasks.txt` (human retirements) still applies to every job.
+- **Job names stay distinct automatically** — each carries its scaffold's
+  `name` and `version`, e.g.
+  `merged_swe_tasks-custom-opencode-1.18.7-<model>-<timestamp>`.
+- **Each job converts with its own scaffold.** `start.sh` passes the matching
+  `--scaffold` (`claude_code`, `open_code`, `openhands_sdk`) to
+  `convert_trajectories.sh` per job, so auto-derivation from the single-agent
+  `agent.name` never picks the wrong converter.
+
+After the last job, the campaign summary prints the exact merge command; see
+[Trajectory Conversion](/docs/blocks/tracer/usage/trajectory-conversion) for
+the merge step.
+
 ## What the Converter Normalizes
 
 Each converter produces one shared IM shape:

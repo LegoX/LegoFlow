@@ -40,9 +40,10 @@ legoflow-curator create \
   --n-concurrent "${N_CONCURRENT}" \
   --output "${SWE_TASKS_DIR}/go-cc" \
   --state-dir "$STATE_DIR" \
+  ${SKIP_PR_ARGS[@]+"${SKIP_PR_ARGS[@]}"} \
   --timeout "${TIMEOUT}" \
   --cc-timeout "${CC_TIMEOUT}" \
   --no-require-issue \
-  --min-source-files 2 \
+  --min-source-files "${MIN_SOURCE_FILES:-2}" \
   --max-source-files 10 \
   2>&1 | tee "${PROJECT_ROOT}/artifacts/logs/legoflow-curator-create/cc_go_$(date -u +%Y%m%dT%H%M%SZ).txt"

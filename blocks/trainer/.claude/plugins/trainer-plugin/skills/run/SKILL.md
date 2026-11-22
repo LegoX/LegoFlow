@@ -7,7 +7,9 @@ description: >
   scripts/start.sh — which runs dryrun.sh, then train.sh (obtain/convert LF
   data, dataset registration, LLaMA-Factory + DeepSpeed ZeRO-3
   training on 8× GPU, WandB tracking), and on exit archives the run via
-  scripts/archive_run.sh. Background by default — training is long-running.
+  scripts/archive_run.sh. train.sh STEP 3 also writes the RSI loop round
+  receipt (checkpoint + data-mix identity) alongside the checkpoint_path
+  writeback. Background by default — training is long-running.
   train.sh itself writes runtime_info.output; archive_run.sh appends to
   artifacts/index.yaml. Triggers on phrases like "run trainer", "launch trainer
   training", "start the trainer block", "kick off the supervised fine-tuning",
@@ -177,6 +179,23 @@ Stop:
 
 For foreground runs, swap "Monitor" for the final exit code, final loss
 (from `runtime_info.output.training_metrics`), and the training-log tail.
+
+**RSI loop round receipt.** `train.sh` STEP 3 writes the round receipt
+(`artifacts/model/<run>/round_receipt.json`) alongside the `checkpoint_path`
+writeback — `{round, checkpoint_sha256, mix_manifest_sha256, n_instances,
+tokens, final_loss}` — pinning which checkpoint and which data mix this
+round produced, and keying the row in evaluator's loop ledger. The round
+number comes from `LEGOFLOW_RSI_ROUND`: read the newest round in the
+evaluator's `artifacts/loop/ledger.yaml` (or the targeting ledger that
+opened the hypothesis this training serves) and export
+`LEGOFLOW_RSI_ROUND=<that round+1 for the checkpoint it produces>` before
+launching `train.sh` — unset, the receipt stamps round 1 with a loud
+warning and cross-round attribution silently degrades. In the
+report, surface the receipt path and the `mix_manifest_sha256`
+so the next eval can be tied to this run. `checkpoint_path` flows to
+evaluator's optional `local_model_serving.from_trainer_checkpoint` edge;
+serving is evaluator's `serve_local_model.sh`, not this block — never start
+vLLM from here.
 
 ## What this skill must NOT do
 

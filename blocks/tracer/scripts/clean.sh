@@ -23,7 +23,7 @@ ARTIFACTS_DIR="$BLOCK_DIR/artifacts"
 #   agent-runtime           — extracted agent runtime (~360 MB), costly to rebuild
 #   jobs / tasks / sft_data — the block's declared outputs, consumed downstream
 KEEP_DEFAULT=(env envs index.yaml archives jobs tasks sft_data
-              processed_tasks.yaml agent-runtime)
+              processed_tasks.yaml agent-runtime scaffold_signal)
 
 # Generator output living outside artifacts/; disposable in both modes.
 EXTRA_PATHS=("$BLOCK_DIR/dashboard/site" "$BLOCK_DIR/dashboard/.cache")

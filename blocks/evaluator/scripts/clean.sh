@@ -21,7 +21,14 @@ ARTIFACTS_DIR="${EVAL_ARTIFACTS_DIR:-$BLOCK_DIR/artifacts}"
 #   jobs     — per-task eval results and trajectories; rerunning costs tokens
 #   datasets — prepared Harbor gold datasets (adapter + LLM tagging)
 #   runtime  — extracted agent runtimes
-KEEP_DEFAULT=(env envs index.yaml archives jobs datasets runtime)
+#   RSI loop memory — measurement ledger, weakness history, frozen audit slice,
+#   response matrix (append-only longitudinal IRT history; regenerating it
+#   destroys the record) and the benchmark identity index. The .gitignore
+#   negations only make these COMMITTABLE; until they are committed, this
+#   keep-list is the only thing standing between `clean.sh` (no flags) and
+#   losing the loop's history. Commit them after every round.
+KEEP_DEFAULT=(env envs index.yaml archives jobs datasets runtime
+              loop weakness reserve response_matrix.jsonl bench_identity)
 # Concurrency-control files, never data. Kept in BOTH modes so a clean-all cannot
 # break the mutual exclusion that protects a running smoke.
 KEEP_ALWAYS=(.archive.lock .smoke.lock)
@@ -87,7 +94,9 @@ else
         echo "  keeping only git-tracked files. This deletes the Harbor uv"
         echo "  env and LiteLLM venv, every eval job result and trajectory,"
         echo "  the prepared gold datasets, the extracted agent runtimes,"
-        echo "  and all run archives."
+        echo "  and all run archives — AND any RSI loop memory (ledger,"
+        echo "  weakness history, audit slice, response matrix) that has"
+        echo "  not been git-committed yet."
         echo ""
         echo "  Make sure no eval job is running."
         echo "############################################################"

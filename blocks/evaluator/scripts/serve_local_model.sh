@@ -64,6 +64,17 @@ print("" if value is None else value)
 PY
 }
 
+# RSI loop Edge 3: prefer the trainer checkpoint
+# writeback when set. Env MODEL_PATH still wins for one-off runs; the external
+# model_path knob is used only when the checkpoint leaf is empty.
+if [[ -z "${MODEL_PATH:-}" ]]; then
+  TRAINER_CKPT="$(cfg runtime_info.input.local_model_serving.from_trainer_checkpoint)"
+  if [[ -n "$TRAINER_CKPT" ]]; then
+    [[ "$TRAINER_CKPT" != /* ]] && TRAINER_CKPT="$BLOCK_DIR/$TRAINER_CKPT"
+    MODEL_PATH="$TRAINER_CKPT"
+    echo "Serving trainer checkpoint (local_model_serving.from_trainer_checkpoint): $MODEL_PATH"
+  fi
+fi
 if [[ -z "${MODEL_PATH:-}" ]]; then
   MODEL_PATH="$(cfg runtime_info.input.local_model_serving.model_path)"
   if [[ -n "$MODEL_PATH" && "$MODEL_PATH" != /* ]]; then
@@ -74,7 +85,7 @@ MODEL_NAME="${MODEL_NAME:-$(cfg runtime_info.input.local_model_serving.model_nam
 TOOL_CALL_PARSER="${TOOL_CALL_PARSER-qwen3_coder}"
 REASONING_PARSER="${REASONING_PARSER:-}"
 
-[[ -n "$MODEL_PATH" ]] || { echo "ERROR: model path not set. Add it to config.yaml -> runtime_info.input.local_model_serving.model_path, or pass MODEL_PATH=..." >&2; exit 1; }
+[[ -n "$MODEL_PATH" ]] || { echo "ERROR: model path not set. Set config.yaml -> runtime_info.input.local_model_serving.from_trainer_checkpoint (trainer writeback) or .model_path, or pass MODEL_PATH=..." >&2; exit 1; }
 [[ -n "$MODEL_NAME" ]] || { echo "ERROR: model name not set. Add it to config.yaml -> runtime_info.input.local_model_serving.model_name, or pass MODEL_NAME=..." >&2; exit 1; }
 
 # ------------------------------------------------------------------------------

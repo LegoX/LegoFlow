@@ -6,7 +6,11 @@ description: >
   `runtime_info.input.litellm_proxy`, start the LiteLLM proxy on the
   configured port, then run the Harbor job with
   the configured dataset/version and registry path, together with any
-  `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS`. Long-running.
+  `--exclude-task-name` flags from `HARBOR_EXCLUDE_TASKS`. With
+  `harbor_job.repeats > 1` the Harbor+analyze section runs k stochastic
+  repeats (proxy restarted per repeat); the post-run RSI loop builder wired
+  into `start.sh` emits the weakness report only — the identity index and
+  audit slice are agent-invoked after the run (step 5). Long-running.
   Stamps live state into `artifacts/index.yaml` via
   `scripts/archive_run.sh`. Triggers on phrases like "run evaluator",
   "launch evaluator", "run swebench", "evaluate the model", "kick off the
@@ -54,6 +58,39 @@ block** — no child blocks — so this skill runs `scripts/start.sh` directly
    `artifacts/index.yaml` and snapshots config + scripts under
    `artifacts/archives/run_NNN/`. Do not write `index.yaml` from this
    skill.
+5. **RSI loop artifacts (when `harbor_job.repeats > 1` or a loop round is
+   active)** — after the run, verify and report the loop outputs:
+   `artifacts/weakness/weakness_report.json` (+ its immutable
+   `weakness/history/` copy), the `artifacts/loop/ledger.yaml` measurement
+   row, `artifacts/response_matrix.jsonl` rows, and — if this round built or
+   rotated it — `artifacts/reserve/audit_slice.txt` +
+   `audit_slice.meta.json`. Surface `directives_blocked` entries (tags
+   blocked for `n < min_tag_n` or sub-noise deltas) as first-class outcomes:
+   "do not actuate" is the loop's expected steady state, not a failure. If
+   `artifacts/weakness/weakness_refused.json` exists (signal firewall refused
+   the payloads, builder exit 3), report the refusal as the round's outcome:
+   the stale live report was quarantined to `weakness_report.refused.json`,
+   NO live report is served, and the fix is payload/policy + a builder
+   re-run — not an eval re-run. Remind
+   the user to `git add` the git-tracked loop-memory files
+   (`artifacts/loop/`, `artifacts/weakness/history/`, the two audit-slice
+   files, `artifacts/response_matrix.jsonl`) so `clean.sh --all` cannot wipe
+   loop history. When this eval measures a checkpoint produced under curator
+   targeting directives, export `PREV_DIRECTIVES=<curator
+   artifacts/targeting/directives_round_NNN.yaml>` (the newest
+   `directives_file` in the hypothesis ledger) before launching — the ledger
+   row then stamps `directives_sha256` and the round is attributable to its
+   actuation; without it the row records null and the loop loses that
+   provenance. For a placebo-arm
+   round, the report was built with `scripts/build_weakness_report.py
+   --placebo <seed>` — keep the arm assignment blinded in the summary.
+   Build the identity index yourself (agent-side; `start.sh` never runs it):
+   once the gold dataset exists under `artifacts/datasets/<base>/` (`-100`
+   subsets map to the same base; it is auto-built by `analyze_job.sh`'s
+   `prepare_dataset` step when `job_analysis` is enabled), run
+   `python3 scripts/build_identity_index.py --dataset <base> --dataset-dir artifacts/datasets/<base> --out artifacts/bench_identity/<base>.identity.json`
+   and report the entry count. This index is curator's decontam input (the
+   `benchmark_identity_index` output edge).
 
 ## What `scripts/start.sh` does internally
 
@@ -76,7 +113,22 @@ block** — no child blocks — so this skill runs `scripts/start.sh` directly
    with per-agent flags, `--retry-exclude AgentTimeoutError`, and one
    `--exclude-task-name` per entry in `HARBOR_EXCLUDE_TASKS`, then runs
    it inside `repos/harbor`, teeing to `artifacts/logs/evaluator_<ts>.log`.
-6. **Post-eval job analysis** (unless
+   With `runtime_info.input.harbor_job.repeats: k > 1` (RSI loop), this
+   Harbor section — proxy start, run, proxy stop — repeats k times
+   **sequentially**, one fresh LiteLLM proxy per repeat (~30–60 s restart
+   each; the proxy's trajectory root is fixed at fork time, so a single
+   proxy must never be reused across repeats), yielding one job dir per
+   repeat of the same `(checkpoint, dataset)` pair.
+6. **RSI loop builder** (when `harbor_job.repeats > 1`; wired into the
+   EXIT-trap path so a partial round still reports): after the repeat jobs,
+   `scripts/build_weakness_report.py` joins the k repeat jobs by
+   `result.json`'s `task_name` (never the 32-char trial-dir prefix),
+   excludes audit-slice IDs from every aggregate, and writes
+   `artifacts/weakness/weakness_report.json` (+ immutable `history/` copy,
+   `artifacts/loop/ledger.yaml` row, `artifacts/response_matrix.jsonl` rows).
+   CPU-only, zero tokens. The identity index is not built here — it is an
+   agent-side step (procedure step 5).
+7. **Post-eval job analysis** (unless
    `runtime_info.input.job_analysis.enabled: false`): calls
    `scripts/analyze_job.sh "$JOB_DIR"` to write `<job_dir>/analysis/` —
    the attribution/scoring artifacts the dashboard reads. **Non-fatal**: a
@@ -125,6 +177,18 @@ the confirm step.
   `--retry-exclude AgentTimeoutError`; a task that times out will time
   out again and only burns budget. If a task repeatedly times out, add it
   to `HARBOR_EXCLUDE_TASKS`.
+- **Repeats are config, not flags.** `harbor_job.repeats` sets k; repeats
+  multiply wall-clock and tokens ~linearly — surface that in the confirm
+  step. Cross-repeat joins use `result.json`'s `task_name`; deltas that do
+  not clear the measured noise floor are reported via `directives_blocked`,
+  never actuated.
+- **The audit slice is quarantined.** IDs in
+  `artifacts/reserve/audit_slice.txt` never feed directive-deriving
+  aggregates; promotion readouts read the slice only. Rotate it per the
+  `slice_version` policy, do not grow it ad hoc.
+- **Placebo arms stay blind.** When a round runs
+  `build_weakness_report.py --placebo <seed>`, do not reveal which report
+  was permuted in run summaries; unblinding is pre-registered.
 - **Custom local model: vLLM must be up first.** When `llm_api.api_base_url`
   points at a local vLLM endpoint (a custom checkpoint, not a remote API),
   that vLLM must already be serving on the GPU node — start it with

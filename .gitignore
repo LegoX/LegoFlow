@@ -60,10 +60,22 @@ blocks/*/artifacts/index.yaml
 
 # LegoFlow Curator block — generated data and virtual env
 blocks/curator/artifacts/*
+# RSI loop memory (hypothesis/verdict ledger, directives, decontam quarantine,
+# attach-mode manifest) is git-tracked so scripts/clean.sh --all (keeps
+# tracked files only) never wipes the loop's history. `artifacts/*` ignores
+# direct children only, so these directory negations re-include the dirs and
+# everything inside them.
+!blocks/curator/artifacts/targeting/
+!blocks/curator/artifacts/decontam/
+!blocks/curator/artifacts/attach/
+# The attach lock is live mutex state (kernel-released flock), never provenance.
+blocks/curator/artifacts/attach/.manifest.lock
+# Crash-leftover atomic-replace temp of the attach manifest.
+blocks/curator/artifacts/attach/manifest.json.tmp
 blocks/curator/scripts/jobs/*
 blocks/curator/scripts/.legoflow-curator-*/
 
-# Tracer block — runtime mount + per-run artifacts (kept manifest yamls tracked)
+# Tracer block — runtime mount and per-run artifacts
 blocks/tracer/artifacts/*
 
 # Dashboard transient runtime output
